@@ -1,0 +1,15 @@
+@extends('layouts.app')
+
+@section('title', 'Reporting and Analysis')
+
+@section('content')
+<div class="row">
+    <div class="col-12">
+        <div class="card bg-white border border-white rounded-10 p-20">
+            <h3 class="mb-20">Reporting and Analysis</h3>
+            <p>Reporting and Analysis page will be here.</p>
+        </div>
+    </div>
+</div>
+@endsection
+

@@ -1,0 +1,1095 @@
+@extends('layouts.app')
+
+@section('title', 'Accountant')
+
+@section('content')
+<div class="row">
+    <!-- Summary Cards Section -->
+    <div class="row mb-3">
+        <div class="col-md-4 mb-2">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
+                <div class="card-body p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                    <div>
+                        <h6 class="text-white-50 mb-1" style="font-size: 11px; font-weight: 500;">Total Accountants</h6>
+                        <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $totalAccountants }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4 mb-2">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
+                <div class="card-body p-3" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                    <div>
+                        <h6 class="text-white mb-1" style="font-size: 11px; font-weight: 500; opacity: 0.9;">Active Accountants</h6>
+                        <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $activeAccountants }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4 mb-2">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
+                <div class="card-body p-3" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                    <div>
+                        <h6 class="text-white mb-1" style="font-size: 11px; font-weight: 500; opacity: 0.9;">Restricted Accountants</h6>
+                        <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $restrictedAccountants }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card bg-white border border-white rounded-10 p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0 fs-16 fw-semibold">Accountants</h4>
+                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 accountant-add-btn" data-bs-toggle="modal" data-bs-target="#accountantModal" onclick="resetForm()">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+                    <span>Add New Accountant</span>
+                </button>
+            </div>
+
+            @if(session('success'))
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    {{ session('success') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+
+            @if(session('error'))
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    {{ session('error') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+
+            <!-- Table Toolbar -->
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
+                <!-- Left Side -->
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="entriesPerPage" class="mb-0 fs-13 fw-medium text-dark">Show:</label>
+                        <select id="entriesPerPage" class="form-select form-select-sm" style="width: auto; min-width: 70px;" onchange="updateEntriesPerPage(this.value)">
+                            <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
+                            <option value="25" {{ request('per_page', 25) == 25 ? 'selected' : '' }}>25</option>
+                            <option value="50" {{ request('per_page', 50) == 50 ? 'selected' : '' }}>50</option>
+                            <option value="100" {{ request('per_page', 100) == 100 ? 'selected' : '' }}>100</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Right Side -->
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <!-- Export Buttons -->
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('accountants.export', ['format' => 'excel']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
+                            <span>Excel</span>
+                        </a>
+                        <a href="{{ route('accountants.export', ['format' => 'csv']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">file_present</span>
+                            <span>CSV</span>
+                        </a>
+                        <a href="{{ route('accountants.export', ['format' => 'pdf']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <button type="button" class="btn btn-sm px-2 py-1 export-btn print-btn" onclick="printTable()">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                            <span>Print</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Search -->
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="searchInput" class="mb-0 fs-13 fw-medium text-dark">Search:</label>
+                        <div class="input-group input-group-sm search-input-group" style="width: 280px;">
+                            <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
+                                <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
+                            </span>
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by name, email, campus..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 13px;">
+                            @if(request('search'))
+                                <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
+                                </button>
+                            @endif
+                            <button class="btn btn-sm search-btn" type="button" onclick="performSearch()" title="Search" style="padding: 4px 10px;">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">search</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Header -->
+            <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">account_circle</span>
+                    <span>Manage Accountants</span>
+                </h5>
+            </div>
+
+            <!-- Search Results Info -->
+            @if(request('search'))
+                <div class="search-results-info">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">search</span>
+                    <strong>Search Results:</strong> Showing results for "<strong>{{ request('search') }}</strong>" 
+                    ({{ $accountants->total() }} {{ Str::plural('result', $accountants->total()) }} found)
+                    <a href="{{ route('accountants') }}" class="text-decoration-none ms-2" style="color: #003471;">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span>
+                        Clear
+                    </a>
+                </div>
+            @endif
+
+            <div class="default-table-area" style="margin-top: 0;">
+                <div class="table-responsive">
+                    <table class="table accountant-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Acc. ID</th>
+                                <th>Photo</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Campus</th>
+                                <th>App Login</th>
+                                <th>Web Login</th>
+                                <th>Options</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($accountants as $accountant)
+                                <tr>
+                                    <td>{{ $loop->iteration + (($accountants->currentPage() - 1) * $accountants->perPage()) }}</td>
+                                    <td>{{ $accountant->id }}</td>
+                                    <td>
+                                        <div class="accountant-photo-placeholder">
+                                            <span class="material-symbols-outlined">person</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <strong class="text-dark">{{ $accountant->name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted">{{ $accountant->email }}</span>
+                                    </td>
+                                    <td>
+                                        @if($accountant->campus)
+                                            <span class="badge bg-light text-dark border">{{ $accountant->campus }}</span>
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <label class="toggle-switch-wrapper">
+                                            <input class="toggle-switch-input app-login-switch" type="checkbox" id="appLoginSwitch{{ $accountant->id }}" {{ $accountant->app_login_enabled ? 'checked' : '' }} onchange="toggleAppLogin({{ $accountant->id }})">
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </td>
+                                    <td class="text-center">
+                                        <label class="toggle-switch-wrapper">
+                                            <input class="toggle-switch-input web-login-switch" type="checkbox" id="webLoginSwitch{{ $accountant->id }}" {{ $accountant->web_login_enabled ? 'checked' : '' }} onchange="toggleWebLogin({{ $accountant->id }})">
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </td>
+                                    <td>
+                                        <div class="d-inline-flex gap-1 align-items-center">
+                                            <button type="button" class="btn btn-sm option-btn key-btn" onclick="editAccountant({{ $accountant->id }})" title="Edit">
+                                                <span class="material-symbols-outlined" style="font-size: 16px;">key</span>
+                                            </button>
+                                            <button type="button" class="btn btn-sm option-btn lock-btn" onclick="viewAccountant({{ $accountant->id }})" title="View Details">
+                                                <span class="material-symbols-outlined" style="font-size: 16px;">lock</span>
+                                            </button>
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm option-btn dropdown-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More Options">
+                                                    <span class="material-symbols-outlined" style="font-size: 16px;">arrow_drop_down</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" onclick="editAccountant({{ $accountant->id }}); return false;">
+                                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">edit</span>
+                                                            Edit
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <form action="{{ route('accountants.destroy', $accountant->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this accountant?');">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button type="submit" class="dropdown-item text-danger">
+                                                                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">delete</span>
+                                                                Delete
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-5">
+                                        <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
+                                        <p class="mt-2 mb-0">No accountants found.</p>
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if($accountants->hasPages())
+                <div class="mt-3">
+                    {{ $accountants->links() }}
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
+
+<!-- Accountant Modal -->
+<div class="modal fade" id="accountantModal" tabindex="-1" aria-labelledby="accountantModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="accountantModalLabel">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
+                    <span>Add New Accountant</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <form id="accountantForm" method="POST" action="{{ route('accountants.store') }}">
+                @csrf
+                <div id="methodField"></div>
+                <div class="modal-body p-3">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Name <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm accountant-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">person</span>
+                                </span>
+                                <input type="text" class="form-control accountant-input" name="name" id="name" placeholder="Enter name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Email <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm accountant-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">email</span>
+                                </span>
+                                <input type="email" class="form-control accountant-input" name="email" id="email" placeholder="Enter email" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                            <div class="input-group input-group-sm accountant-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
+                                </span>
+                                <select class="form-select accountant-input" name="campus" id="campus" style="border: none; border-left: 1px solid #e0e7ff;">
+                                    <option value="">Select Campus</option>
+                                    <option value="Main Campus">Main Campus</option>
+                                    <option value="Branch Campus 1">Branch Campus 1</option>
+                                    <option value="Branch Campus 2">Branch Campus 2</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Password <span class="text-danger" id="passwordRequired">*</span></label>
+                            <div class="input-group input-group-sm accountant-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
+                                </span>
+                                <input type="password" class="form-control accountant-input" name="password" id="password" placeholder="Enter password" required>
+                            </div>
+                            <small class="text-muted" id="passwordHint" style="font-size: 11px; display: none;">Leave blank to keep current password when editing</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                    <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none; transition: all 0.3s ease;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 accountant-submit-btn">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+                        Save Accountant
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Accountant Form Styling */
+    #accountantModal .accountant-input-group {
+        height: 36px;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        border: 1px solid #dee2e6;
+    }
+    
+    #accountantModal .accountant-input-group:focus-within {
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+        border-color: #003471;
+    }
+    
+    #accountantModal .accountant-input {
+        height: 36px;
+        font-size: 13px;
+        padding: 0.5rem 0.75rem;
+        border: none;
+        border-left: 1px solid #e0e7ff;
+        border-radius: 0 8px 8px 0;
+        transition: all 0.3s ease;
+    }
+    
+    #accountantModal .accountant-input:focus {
+        border-left-color: #003471;
+        box-shadow: none;
+        outline: none;
+    }
+    
+    #accountantModal .input-group-text {
+        height: 36px;
+        padding: 0 0.75rem;
+        display: flex;
+        align-items: center;
+        border: none;
+        border-right: 1px solid #e0e7ff;
+        border-radius: 8px 0 0 8px;
+        transition: all 0.3s ease;
+    }
+    
+    #accountantModal .accountant-input-group:focus-within .input-group-text {
+        background-color: #003471 !important;
+        color: white !important;
+        border-right-color: #003471;
+    }
+    
+    #accountantModal .form-label {
+        margin-bottom: 0.4rem;
+        line-height: 1.3;
+    }
+    
+    #accountantModal .accountant-submit-btn {
+        background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0, 52, 113, 0.25);
+    }
+    
+    #accountantModal .accountant-submit-btn:hover {
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 52, 113, 0.35);
+    }
+    
+    .accountant-add-btn {
+        background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0, 52, 113, 0.25);
+    }
+    
+    .accountant-add-btn:hover {
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 52, 113, 0.35);
+        color: white;
+    }
+    
+    /* Action Buttons */
+    .action-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        font-size: 0;
+        transition: all 0.3s ease;
+    }
+    
+    .action-btn .material-symbols-outlined {
+        font-size: 16px;
+    }
+    
+    .edit-btn {
+        background-color: #0d6efd;
+        color: white;
+    }
+    
+    .edit-btn:hover {
+        background-color: #0b5ed7;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(13, 110, 253, 0.4);
+        color: white;
+    }
+    
+    .delete-btn {
+        background-color: #dc3545;
+    }
+    
+    .delete-btn:hover {
+        background-color: #bb2d3b;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(220, 53, 69, 0.4);
+    }
+    
+    /* Toggle Switches */
+    /* Toggle Switch Design */
+    .toggle-switch-wrapper {
+        position: relative;
+        display: inline-block;
+        width: 36px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .toggle-switch-input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+    }
+    
+    .toggle-switch-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #dc3545;
+        transition: 0.3s;
+        border-radius: 18px;
+    }
+    
+    .toggle-switch-slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 2px;
+        bottom: 2px;
+        background-color: white;
+        transition: 0.3s;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    
+    .toggle-switch-input:checked + .toggle-switch-slider {
+        background-color: #28a745;
+    }
+    
+    .toggle-switch-input:checked + .toggle-switch-slider:before {
+        transform: translateX(18px);
+    }
+    
+    .toggle-switch-input:focus + .toggle-switch-slider {
+        box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.25);
+    }
+    
+    .toggle-switch-input:checked:focus + .toggle-switch-slider {
+        box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.25);
+    }
+    
+    .toggle-switch-input:not(:checked):focus + .toggle-switch-slider {
+        box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.25);
+    }
+    
+    .toggle-switch-wrapper:hover .toggle-switch-slider {
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+    }
+    
+    .search-results-info {
+        padding: 10px 15px;
+        background-color: #f0f4ff;
+        border-left: 4px solid #003471;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-size: 13px;
+        color: #495057;
+    }
+    
+    .search-input-group {
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #dee2e6;
+        transition: all 0.3s ease;
+        height: 32px;
+    }
+    
+    .search-input-group:focus-within {
+        border-color: #003471;
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    }
+    
+    .search-input-group .form-control {
+        border: none;
+        font-size: 13px;
+        height: 32px;
+        line-height: 1.4;
+    }
+    
+    .search-input-group .form-control:focus {
+        box-shadow: none;
+        border: none;
+    }
+    
+    .search-input-group .input-group-text {
+        height: 32px;
+        padding: 4px 8px;
+        display: flex;
+        align-items: center;
+    }
+    
+    .search-btn {
+        background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+        color: white;
+        border: none;
+        padding: 4px 10px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+    }
+    
+    .search-btn:hover {
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 52, 113, 0.3);
+    }
+    
+    .search-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    
+    /* Export Buttons */
+    .export-btn {
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        font-size: 13px;
+    }
+    
+    .excel-btn {
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .excel-btn:hover {
+        background-color: #218838;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+    }
+    
+    .csv-btn {
+        background-color: #ff9800;
+        color: white;
+    }
+    
+    .csv-btn:hover {
+        background-color: #f57c00;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+    }
+    
+    .pdf-btn {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .pdf-btn:hover {
+        background-color: #c82333;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+    }
+    
+    .print-btn {
+        background-color: #2196f3;
+        color: white;
+    }
+    
+    .print-btn:hover {
+        background-color: #0b7dda;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+    }
+    
+    .export-btn:active {
+        transform: translateY(0);
+    }
+    
+    /* Table Styling */
+    .accountant-table {
+        margin-bottom: 0;
+        font-size: 10px;
+        border: 1px solid #dee2e6;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 4px;
+        overflow: hidden;
+        background-color: white;
+    }
+    
+    .accountant-table thead {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .accountant-table thead th {
+        padding: 3px 6px;
+        font-size: 10px;
+        font-weight: 600;
+        vertical-align: middle;
+        line-height: 1.2;
+        height: 24px;
+        white-space: nowrap;
+        border: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+        color: #495057;
+        text-transform: uppercase;
+    }
+    
+    .accountant-table thead th:first-child {
+        border-left: 1px solid #dee2e6;
+        padding-left: 8px;
+    }
+    
+    .accountant-table thead th:last-child {
+        border-right: 1px solid #dee2e6;
+        padding-right: 8px;
+    }
+    
+    .accountant-table tbody td {
+        padding: 3px 6px;
+        font-size: 10px;
+        vertical-align: middle;
+        line-height: 1.2;
+        border: 1px solid #dee2e6;
+        background-color: white;
+        height: 32px;
+    }
+    
+    .accountant-table tbody td:first-child {
+        border-left: 1px solid #dee2e6;
+        padding-left: 8px;
+    }
+    
+    .accountant-table tbody td:last-child {
+        border-right: 1px solid #dee2e6;
+        padding-right: 8px;
+    }
+    
+    .accountant-table tbody tr:last-child td {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .accountant-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .accountant-table tbody tr:hover td {
+        background-color: #f8f9fa;
+    }
+    
+    .accountant-table thead th:first-child,
+    .accountant-table tbody td:first-child {
+        padding-left: 8px;
+    }
+    
+    .accountant-table thead th:last-child,
+    .accountant-table tbody td:last-child {
+        padding-right: 8px;
+    }
+    
+    /* Photo Placeholder */
+    .accountant-photo-placeholder {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1.5px solid #90caf9;
+    }
+    
+    .accountant-photo-placeholder .material-symbols-outlined {
+        font-size: 16px;
+        color: #1976d2;
+    }
+    
+    /* Options Buttons */
+    .option-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        transition: all 0.3s ease;
+    }
+    
+    .option-btn .material-symbols-outlined {
+        font-size: 16px;
+    }
+    
+    .key-btn {
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .key-btn:hover {
+        background-color: #218838;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(40, 167, 69, 0.4);
+    }
+    
+    .lock-btn {
+        background-color: #fd7e14;
+        color: white;
+    }
+    
+    .lock-btn:hover {
+        background-color: #e86800;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(253, 126, 20, 0.4);
+    }
+    
+    .dropdown-btn {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .dropdown-btn:hover {
+        background-color: #5a6268;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(108, 117, 125, 0.4);
+    }
+    
+    .dropdown-btn::after {
+        display: none;
+    }
+    
+    .dropdown-menu {
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border: 1px solid #e9ecef;
+    }
+    
+    .dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+    
+    .dropdown-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .dropdown-item .material-symbols-outlined {
+        font-size: 16px;
+    }
+</style>
+
+<script>
+function resetForm() {
+    document.getElementById('accountantForm').reset();
+    document.getElementById('methodField').innerHTML = '';
+    document.getElementById('accountantModalLabel').innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
+        <span>Add New Accountant</span>
+    `;
+    document.getElementById('password').required = true;
+    document.getElementById('passwordRequired').style.display = 'inline';
+    document.getElementById('passwordHint').style.display = 'none';
+    document.getElementById('accountantForm').action = '{{ route('accountants.store') }}';
+}
+
+function editAccountant(id) {
+    fetch(`{{ url('/accountants') }}/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('name').value = data.name;
+            document.getElementById('email').value = data.email;
+            document.getElementById('campus').value = data.campus || '';
+            document.getElementById('password').required = false;
+            document.getElementById('passwordRequired').style.display = 'none';
+            document.getElementById('passwordHint').style.display = 'block';
+            document.getElementById('password').placeholder = 'Leave blank to keep current password';
+            document.getElementById('accountantModalLabel').innerHTML = `
+                <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
+                <span>Edit Accountant</span>
+            `;
+            document.getElementById('methodField').innerHTML = '<input type="hidden" name="_method" value="PUT">';
+            document.getElementById('accountantForm').action = `{{ url('/accountants') }}/${id}`;
+            new bootstrap.Modal(document.getElementById('accountantModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error fetching accountant data');
+        });
+}
+
+function viewAccountant(id) {
+    fetch(`{{ url('/accountants') }}/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            alert('Accountant Details:\n\nName: ' + data.name + '\nEmail: ' + data.email + '\nCampus: ' + (data.campus || 'N/A'));
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error fetching accountant data');
+        });
+}
+
+function toggleAppLogin(id) {
+    const checkbox = document.getElementById('appLoginSwitch' + id);
+    const originalState = checkbox.checked;
+    
+    fetch(`{{ url('/accountants') }}/${id}/toggle-app-login`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            checkbox.checked = data.app_login_enabled;
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                ${data.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.card').insertBefore(alertDiv, document.querySelector('.card').firstChild);
+            setTimeout(() => alertDiv.remove(), 3000);
+        } else {
+            checkbox.checked = originalState;
+            alert('Error updating app login status');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        checkbox.checked = originalState;
+        alert('Error updating app login status');
+    });
+}
+
+function toggleWebLogin(id) {
+    const checkbox = document.getElementById('webLoginSwitch' + id);
+    const originalState = checkbox.checked;
+    
+    fetch(`{{ url('/accountants') }}/${id}/toggle-web-login`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            checkbox.checked = data.web_login_enabled;
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                ${data.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.card').insertBefore(alertDiv, document.querySelector('.card').firstChild);
+            setTimeout(() => alertDiv.remove(), 3000);
+        } else {
+            checkbox.checked = originalState;
+            alert('Error updating web login status');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        checkbox.checked = originalState;
+        alert('Error updating web login status');
+    });
+}
+
+function updateEntriesPerPage(value) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('per_page', value);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+
+function handleSearchKeyPress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        performSearch();
+    }
+}
+
+function handleSearchInput(event) {
+    if (event.target.value === '') {
+        performSearch();
+    }
+}
+
+function performSearch() {
+    const searchValue = document.getElementById('searchInput').value;
+    const url = new URL(window.location.href);
+    if (searchValue) {
+        url.searchParams.set('search', searchValue);
+    } else {
+        url.searchParams.delete('search');
+    }
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    performSearch();
+}
+
+function printTable() {
+    const printContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Accountants List - Print</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 20px;
+                    color: #333;
+                }
+                h1 {
+                    color: #003471;
+                    text-align: center;
+                    border-bottom: 3px solid #003471;
+                    padding-bottom: 10px;
+                    margin-bottom: 20px;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                }
+                th {
+                    background-color: #003471;
+                    color: white;
+                    padding: 12px;
+                    text-align: left;
+                    font-weight: bold;
+                    border: 1px solid #ddd;
+                }
+                td {
+                    padding: 10px;
+                    border: 1px solid #ddd;
+                }
+                tr:nth-child(even) {
+                    background-color: #f8f9fa;
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #666;
+                    font-size: 12px;
+                }
+                @media print {
+                    body {
+                        margin: 0;
+                    }
+                    @page {
+                        margin: 1cm;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Accountants List</h1>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Acc. ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Campus</th>
+                        <th>App Login</th>
+                        <th>Web Login</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Array.from(document.querySelectorAll('.accountant-table tbody tr')).map((row, index) => {
+                        const cells = row.querySelectorAll('td');
+                        const accId = cells[1]?.textContent.trim() || '';
+                        const name = cells[3]?.textContent.trim() || '';
+                        const email = cells[4]?.textContent.trim() || '';
+                        const campus = cells[5]?.textContent.trim() || '';
+                        const appLoginSwitch = cells[6]?.querySelector('.toggle-switch-input.app-login-switch');
+                        const webLoginSwitch = cells[7]?.querySelector('.toggle-switch-input.web-login-switch');
+                        return `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${accId}</td>
+                                <td>${name}</td>
+                                <td>${email}</td>
+                                <td>${campus}</td>
+                                <td>${appLoginSwitch?.checked ? 'Enabled' : 'Disabled'}</td>
+                                <td>${webLoginSwitch?.checked ? 'Enabled' : 'Disabled'}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            <div class="footer">
+                <p>Generated on: ${new Date().toLocaleString()}</p>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.onload = function() {
+        printWindow.print();
+    };
+}
+</script>
+@endsection

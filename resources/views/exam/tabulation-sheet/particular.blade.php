@@ -1,0 +1,15 @@
+@extends('layouts.app')
+
+@section('title', 'Tabulation Sheet - For Particular Exam')
+
+@section('content')
+<div class="row">
+    <div class="col-12">
+        <div class="card bg-white border border-white rounded-10 p-20">
+            <h3 class="mb-20">Tabulation Sheet - For Particular Exam</h3>
+            <p>Tabulation Sheet for Particular Exam page will be here.</p>
+        </div>
+    </div>
+</div>
+@endsection
+
