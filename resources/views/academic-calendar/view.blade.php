@@ -5,11 +5,293 @@
 @section('content')
 <div class="row">
     <div class="col-12">
-        <div class="card bg-white border border-white rounded-10 p-20">
-            <h3 class="mb-20">View Calendar</h3>
-            <p>View Calendar page will be here.</p>
+        <div class="card bg-white border border-white rounded-10 p-4 mb-4" style="box-shadow: 0 2px 10px rgba(0,0,0,0.08);">
+            <!-- Header Section -->
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+                <div class="calendar-header" style="background: linear-gradient(135deg, #ff9800 0%, #ff6b9d 100%); padding: 20px 40px; border-radius: 12px; width: 100%; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.3);">
+                    <h2 class="mb-0 text-white fw-bold text-center" style="font-size: 28px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                        <span class="material-symbols-outlined" style="font-size: 32px; vertical-align: middle; margin-right: 10px;">calendar_month</span>
+                        Academic Calendar {{ $year ?? date('Y') }}
+                    </h2>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ route('academic-calendar.manage-events') }}" class="btn btn-sm px-3 py-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 52, 113, 0.3);">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">add</span>
+                        Manage Events
+                    </a>
+                    <button type="button" class="btn btn-sm btn-primary px-3 py-2" onclick="window.print()" style="white-space: nowrap; box-shadow: 0 2px 8px rgba(15, 121, 243, 0.3);">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">print</span>
+                        Print Calendar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Year Selector -->
+            <div class="mb-4 text-center">
+                <div class="d-inline-flex align-items-center gap-2 p-2 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
+                    <label for="year" class="mb-0 fw-semibold" style="color: #003471;">Select Year:</label>
+                    <form method="GET" action="{{ route('academic-calendar.view') }}" class="d-inline">
+                        <select name="year" id="year" class="form-select form-select-sm" style="width: auto; min-width: 100px; border-color: #003471;" onchange="this.form.submit()">
+                            @for($y = date('Y') - 2; $y <= date('Y') + 5; $y++)
+                                <option value="{{ $y }}" {{ ($year ?? date('Y')) == $y ? 'selected' : '' }}>{{ $y }}</option>
+                            @endfor
+                        </select>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Calendar Grid -->
+            <div class="calendar-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px;">
+                @php
+                    $months = [
+                        1 => ['name' => 'Jan', 'full' => 'January'],
+                        2 => ['name' => 'Feb', 'full' => 'February'],
+                        3 => ['name' => 'Mar', 'full' => 'March'],
+                        4 => ['name' => 'Apr', 'full' => 'April'],
+                        5 => ['name' => 'May', 'full' => 'May'],
+                        6 => ['name' => 'Jun', 'full' => 'June'],
+                        7 => ['name' => 'Jul', 'full' => 'July'],
+                        8 => ['name' => 'Aug', 'full' => 'August'],
+                        9 => ['name' => 'Sep', 'full' => 'September'],
+                        10 => ['name' => 'Oct', 'full' => 'October'],
+                        11 => ['name' => 'Nov', 'full' => 'November'],
+                        12 => ['name' => 'Dec', 'full' => 'December']
+                    ];
+                @endphp
+
+                @foreach($months as $monthNum => $monthData)
+                    @php
+                        $monthEvents = $eventsByMonth[$monthNum] ?? [];
+                        $eventCount = count($monthEvents);
+                    @endphp
+                    <div class="month-box" style="border: 2px solid #28a745; border-radius: 12px; overflow: hidden; min-height: 220px; display: flex; flex-direction: column; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.3s ease;">
+                        <!-- Month Header -->
+                        <div class="month-header" style="background: linear-gradient(135deg, #a8e6cf 0%, #88d8a3 100%); padding: 14px; text-align: center; border-bottom: 2px solid #28a745;">
+                            <h5 class="mb-0 fw-bold" style="color: #155724; font-size: 18px; text-shadow: 0 1px 2px rgba(255,255,255,0.5);">
+                                {{ $monthData['name'] }}
+                                @if($eventCount > 0)
+                                    <span class="badge bg-danger ms-2" style="font-size: 10px; padding: 2px 6px;">{{ $eventCount }}</span>
+                                @endif
+                            </h5>
+                        </div>
+                        
+                        <!-- Month Content -->
+                        <div class="month-content" style="background: linear-gradient(to bottom, #e7f3ff 0%, #d6e9f5 100%); padding: 12px; flex: 1; min-height: 160px; overflow-y: auto; max-height: 300px;">
+                            @if(count($monthEvents) > 0)
+                                @foreach($monthEvents as $event)
+                                    <div class="event-item mb-2" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); border-radius: 8px; padding: 10px; color: white; box-shadow: 0 2px 6px rgba(220, 53, 69, 0.4); border-left: 3px solid #ff9800;">
+                                        <div class="event-title" style="font-weight: 700; font-size: 13px; margin-bottom: 6px; line-height: 1.3;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">event</span>
+                                            {{ $event->event_title }}
+                                        </div>
+                                        @if($event->event_details)
+                                            <div class="event-details" style="font-size: 11px; opacity: 0.95; margin-bottom: 6px; line-height: 1.4;">
+                                                {{ Str::limit($event->event_details, 35) }}
+                                            </div>
+                                        @endif
+                                        @if($event->event_type)
+                                            <div class="event-type mb-2" style="display: inline-block;">
+                                                <span class="badge" style="background-color: rgba(255,255,255,0.3); color: white; font-size: 9px; padding: 2px 6px;">
+                                                    {{ $event->event_type }}
+                                                </span>
+                                            </div>
+                                        @endif
+                                        <div class="event-date" style="background: linear-gradient(135deg, #ff9800 0%, #ff6b00 100%); border-radius: 5px; padding: 5px 10px; display: inline-block; font-size: 10px; font-weight: 700; color: #000; box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);">
+                                            <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle; margin-right: 2px;">calendar_today</span>
+                                            {{ $event->event_date->format('d-M-Y') }}
+                                        </div>
+                                    </div>
+                                @endforeach
+                            @else
+                                <div class="text-center text-muted d-flex flex-column align-items-center justify-content-center" style="padding-top: 50px; font-size: 12px; min-height: 160px;">
+                                    <span class="material-symbols-outlined" style="font-size: 32px; opacity: 0.3; margin-bottom: 8px;">event_busy</span>
+                                    <span>No events</span>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
+            <!-- Summary Section -->
+            @php
+                $totalEvents = count($eventsByMonth) > 0 ? array_sum(array_map('count', $eventsByMonth)) : 0;
+            @endphp
+            @if($totalEvents > 0)
+                <div class="mt-4 p-3 rounded-8 text-center" style="background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%); border: 1px solid #c2cada;">
+                    <p class="mb-0 fw-semibold" style="color: #003471;">
+                        <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle; margin-right: 5px;">info</span>
+                        Total Events in {{ $year ?? date('Y') }}: <strong style="color: #dc3545;">{{ $totalEvents }}</strong>
+                    </p>
+                </div>
+            @endif
         </div>
     </div>
 </div>
-@endsection
 
+<style>
+    /* Print Styles */
+    @media print {
+        .btn, .calendar-header button, .calendar-header a, .year-selector {
+            display: none !important;
+        }
+        
+        .month-box {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        
+        .calendar-grid {
+            gap: 10px !important;
+        }
+
+        .calendar-header {
+            margin-bottom: 15px !important;
+        }
+
+        .month-content {
+            max-height: none !important;
+        }
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1400px) {
+        .calendar-grid {
+            grid-template-columns: repeat(4, 1fr) !important;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .calendar-grid {
+            grid-template-columns: repeat(3, 1fr) !important;
+        }
+        
+        .calendar-header {
+            padding: 15px 25px !important;
+        }
+        
+        .calendar-header h2 {
+            font-size: 24px !important;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .calendar-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 15px !important;
+        }
+        
+        .calendar-header {
+            padding: 12px 20px !important;
+        }
+        
+        .calendar-header h2 {
+            font-size: 20px !important;
+        }
+
+        .calendar-header h2 .material-symbols-outlined {
+            font-size: 24px !important;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .calendar-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 12px !important;
+        }
+
+        .month-box {
+            min-height: 180px !important;
+        }
+
+        .month-content {
+            min-height: 140px !important;
+        }
+    }
+
+    /* Hover Effects */
+    .month-box {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        cursor: pointer;
+    }
+
+    .month-box:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15) !important;
+        border-color: #20c997 !important;
+    }
+
+    .event-item {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .event-item:hover {
+        transform: scale(1.03);
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.5) !important;
+    }
+
+    /* Scrollbar Styling */
+    .month-content::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .month-content::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+
+    .month-content::-webkit-scrollbar-thumb {
+        background: #28a745;
+        border-radius: 10px;
+    }
+
+    .month-content::-webkit-scrollbar-thumb:hover {
+        background: #20c997;
+    }
+
+    /* Animation */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .month-box {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .month-box:nth-child(1) { animation-delay: 0.05s; }
+    .month-box:nth-child(2) { animation-delay: 0.1s; }
+    .month-box:nth-child(3) { animation-delay: 0.15s; }
+    .month-box:nth-child(4) { animation-delay: 0.2s; }
+    .month-box:nth-child(5) { animation-delay: 0.25s; }
+    .month-box:nth-child(6) { animation-delay: 0.3s; }
+    .month-box:nth-child(7) { animation-delay: 0.35s; }
+    .month-box:nth-child(8) { animation-delay: 0.4s; }
+    .month-box:nth-child(9) { animation-delay: 0.45s; }
+    .month-box:nth-child(10) { animation-delay: 0.5s; }
+    .month-box:nth-child(11) { animation-delay: 0.55s; }
+    .month-box:nth-child(12) { animation-delay: 0.6s; }
+
+    /* Button Hover Effects */
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+    }
+
+    /* Year Selector Styling */
+    #year {
+        transition: all 0.3s ease;
+    }
+
+    #year:focus {
+        border-color: #003471 !important;
+        box-shadow: 0 0 0 0.2rem rgba(0, 52, 113, 0.25) !important;
+    }
+</style>
+@endsection

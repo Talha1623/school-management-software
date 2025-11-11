@@ -21,8 +21,8 @@
             <li class="menu-title small text-uppercase">
                 <span class="menu-title-text">MAIN</span>
             </li>
-                   <li class="menu-item {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('biometric.devices') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'open' : '' }}">
-                       <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('biometric.devices') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'active' : '' }}">
+                   <li class="menu-item {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'open' : '' }}">
+                       <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">dashboard</span>
                     <span class="title">Dashboard</span>
                     <span class="count">11</span>
@@ -204,6 +204,16 @@
                             <li class="menu-item">
                                 <a href="{{ route('accounting.fee-type') }}" class="menu-link {{ request()->routeIs('accounting.fee-type') ? 'active' : '' }}">
                                     Fee Type / Fee Head
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('accounting.family-fee-calculator') }}" class="menu-link {{ request()->routeIs('accounting.family-fee-calculator') ? 'active' : '' }}">
+                                    Family Fee Calculator
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('accounting.manage-advance-fee.index') }}" class="menu-link {{ request()->routeIs('accounting.manage-advance-fee*') ? 'active' : '' }}">
+                                    Manage Advance Fee
                                 </a>
                             </li>
                             <li class="menu-item">
@@ -555,6 +565,11 @@
                                 </a>
                             </li>
                             <li class="menu-item">
+                                <a href="{{ route('reports.fee-discount') }}" class="menu-link {{ request()->routeIs('reports.fee-discount') ? 'active' : '' }}">
+                                    Fee Discount
+                                </a>
+                            </li>
+                            <li class="menu-item">
                                 <a href="{{ route('reports.accounts-summary') }}" class="menu-link {{ request()->routeIs('reports.accounts-summary') ? 'active' : '' }}">
                                     Accounts Summary Reports
                                 </a>
@@ -599,6 +614,11 @@
                             <li class="menu-item">
                                 <a href="{{ route('stock.manage-categories') }}" class="menu-link {{ request()->routeIs('stock.manage-categories') ? 'active' : '' }}">
                                     Manage Categories
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('stock.products') }}" class="menu-link {{ request()->routeIs('stock.products*') ? 'active' : '' }}">
+                                    Products & Stock
                                 </a>
                             </li>
                             <li class="menu-item">
@@ -1087,11 +1107,6 @@
                         </ul>
                     </li>
                     <li class="menu-item">
-                        <a href="{{ route('robobuddy.whatsapp-bot') }}" class="menu-link {{ request()->routeIs('robobuddy.whatsapp-bot') ? 'active' : '' }}">
-                            roboBuddy-whatsapp bot
-                        </a>
-                    </li>
-                    <li class="menu-item">
                         <a href="{{ route('whatsapp.template') }}" class="menu-link {{ request()->routeIs('whatsapp.template') ? 'active' : '' }}">
                             Send/WhatsApp Template
                         </a>
@@ -1144,11 +1159,6 @@
                                 </a>
                             </li>
                         </ul>
-                    </li>
-                    <li class="menu-item">
-                        <a href="{{ route('biometric.devices') }}" class="menu-link {{ request()->routeIs('biometric.devices') ? 'active' : '' }}">
-                            Manage Biometric Devices
-                        </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('website-management*') ? 'active' : '' }}">

@@ -238,7 +238,7 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a class="dropdown-item admin-item-link d-flex align-items-center text-body" href="#" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                                        <a class="dropdown-item admin-item-link d-flex align-items-center text-body" href="#" onclick="event.preventDefault(); handleLogout();">
                                             <i class="material-symbols-outlined">logout</i>
                                             <span class="ms-2">Logout</span>
                                         </a>
@@ -254,7 +254,32 @@
 </header>
 <!-- End Header Area -->
 
-<form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
-    @csrf
-</form>
+@if(Auth::guard('admin')->check())
+    <form id="admin-logout-form" action="{{ route('admin.logout') }}" method="POST" style="display: none;">
+        @csrf
+    </form>
+@endif
+@if(Auth::guard('web')->check())
+    <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
+        @csrf
+    </form>
+@endif
+
+<script>
+function handleLogout() {
+    // Check for admin logout form first
+    var adminForm = document.getElementById('admin-logout-form');
+    if (adminForm) {
+        adminForm.submit();
+        return;
+    }
+    
+    // Check for regular logout form
+    var logoutForm = document.getElementById('logout-form');
+    if (logoutForm) {
+        logoutForm.submit();
+        return;
+    }
+}
+</script>
 

@@ -5,11 +5,152 @@
 @section('content')
 <div class="row">
     <div class="col-12">
-        <div class="card bg-white border border-white rounded-10 p-20">
-            <h3 class="mb-20">Marks Entry</h3>
-            <p>Marks Entry page will be here.</p>
+        <div class="card bg-white border border-white rounded-10 p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0 fs-16 fw-semibold">Marks Entry</h4>
+            </div>
+
+            <!-- Filter Form -->
+            <form action="{{ route('exam.marks-entry') }}" method="GET" id="filterForm">
+                <div class="row g-2 mb-3 align-items-end">
+                    <!-- Exam -->
+                    <div class="col-md-3">
+                        <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam</label>
+                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;">
+                            <option value="">All Exams</option>
+                            @foreach($exams as $examName)
+                                <option value="{{ $examName }}" {{ $filterExam == $examName ? 'selected' : '' }}>{{ $examName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- Class -->
+                    <div class="col-md-3">
+                        <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
+                            <option value="">All Classes</option>
+                            @foreach($classes as $className)
+                                <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- Section -->
+                    <div class="col-md-3">
+                        <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                            <option value="">All Sections</option>
+                            @foreach($sections as $sectionName)
+                                <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- Subject -->
+                    <div class="col-md-3">
+                        <label for="filter_subject" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Subject</label>
+                        <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;">
+                            <option value="">All Subjects</option>
+                            @foreach($subjects as $subjectName)
+                                <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Filter Button -->
+                <div class="row">
+                    <div class="col-md-12 text-end">
+                        <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn" style="height: 32px;">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_alt</span>
+                            <span style="font-size: 12px;">Filter</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 </div>
-@endsection
 
+<style>
+.filter-btn {
+    background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+    color: white;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.filter-btn:hover {
+    background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+    const subjectSelect = document.getElementById('filter_subject');
+
+    function loadSections(selectedClass) {
+        if (selectedClass) {
+            sectionSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('exam.marks-entry.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+                .then(response => response.json())
+                .then(data => {
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                    data.forEach(section => {
+                        sectionSelect.innerHTML += `<option value="${section}">${section}</option>`;
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading sections:', error);
+                    sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                });
+            
+            // Reset subject
+            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+        } else {
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+        }
+    }
+
+    function loadSubjects(selectedClass, selectedSection) {
+        if (selectedClass) {
+            subjectSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            const params = new URLSearchParams();
+            if (selectedClass) params.append('class', selectedClass);
+            if (selectedSection) params.append('section', selectedSection);
+            
+            fetch(`{{ route('exam.marks-entry.get-subjects') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                    data.forEach(subject => {
+                        subjectSelect.innerHTML += `<option value="${subject}">${subject}</option>`;
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading subjects:', error);
+                    subjectSelect.innerHTML = '<option value="">Error loading subjects</option>';
+                });
+        } else {
+            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+        }
+    }
+
+    classSelect.addEventListener('change', function() {
+        loadSections(this.value);
+        loadSubjects(this.value, sectionSelect.value);
+    });
+
+    sectionSelect.addEventListener('change', function() {
+        loadSubjects(classSelect.value, this.value);
+    });
+});
+</script>
+@endsection

@@ -37,5 +37,21 @@ class Staff extends Model
     protected $hidden = [
         'password',
     ];
+
+    /**
+     * Get the salaries for the staff member.
+     */
+    public function salaries()
+    {
+        return $this->hasMany(Salary::class);
+    }
+
+    /**
+     * Get the loans for the staff member.
+     */
+    public function loans()
+    {
+        return $this->hasMany(Loan::class);
+    }
 }
 

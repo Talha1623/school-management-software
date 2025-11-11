@@ -9,6 +9,18 @@ Route::get('/', function () {
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+// Admin Authentication Routes
+Route::prefix('admin')->name('admin.')->group(function () {
+    Route::get('/login', [App\Http\Controllers\AdminAuthController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [App\Http\Controllers\AdminAuthController::class, 'login'])->name('login');
+    Route::post('/logout', [App\Http\Controllers\AdminAuthController::class, 'logout'])->name('logout');
+    
+    // Protected Admin Routes
+    Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\AdminAuthController::class, 'dashboard'])->name('dashboard');
+    });
+});
+
 // Admission Management Routes
 Route::get('/admission/admit-student', [App\Http\Controllers\AdmissionController::class, 'create'])->name('admission.admit-student');
 Route::post('/admission/admit-student', [App\Http\Controllers\AdmissionController::class, 'store'])->name('admission.admit-student.store');
@@ -133,21 +145,35 @@ Route::get('/accountants/export/{format}', [App\Http\Controllers\AccountantContr
 Route::get('/dashboard/hr-management', [DashboardController::class, 'hrManagement'])->name('dashboard.hr-management');
 
 // Accounting Routes
-Route::get('/accounting/generate-monthly-fee', function () {
-    return view('accounting.generate-monthly-fee');
-})->name('accounting.generate-monthly-fee');
+Route::get('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'create'])->name('accounting.generate-monthly-fee');
+Route::post('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'store'])->name('accounting.generate-monthly-fee.store');
 
-Route::get('/accounting/generate-custom-fee', function () {
-    return view('accounting.generate-custom-fee');
-})->name('accounting.generate-custom-fee');
+Route::get('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'create'])->name('accounting.generate-custom-fee');
+Route::post('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'store'])->name('accounting.generate-custom-fee.store');
 
-Route::get('/accounting/generate-transport-fee', function () {
-    return view('accounting.generate-transport-fee');
-})->name('accounting.generate-transport-fee');
+Route::get('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'create'])->name('accounting.generate-transport-fee');
+Route::post('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'store'])->name('accounting.generate-transport-fee.store');
 
-Route::get('/accounting/fee-type', function () {
-    return view('accounting.fee-type');
-})->name('accounting.fee-type');
+// Fee Type Routes
+Route::get('/accounting/fee-type', [App\Http\Controllers\FeeTypeController::class, 'index'])->name('accounting.fee-type');
+Route::post('/accounting/fee-type', [App\Http\Controllers\FeeTypeController::class, 'store'])->name('accounting.fee-type.store');
+Route::get('/accounting/fee-type/export/{format}', [App\Http\Controllers\FeeTypeController::class, 'export'])->name('accounting.fee-type.export');
+Route::get('/accounting/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'show'])->name('accounting.fee-type.show');
+Route::put('/accounting/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'update'])->name('accounting.fee-type.update');
+Route::delete('/accounting/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'destroy'])->name('accounting.fee-type.destroy');
+
+// Family Fee Calculator Route
+Route::get('/accounting/family-fee-calculator', function () {
+    return view('accounting.family-fee-calculator');
+})->name('accounting.family-fee-calculator');
+
+// Manage Advance Fee Routes
+Route::get('/accounting/manage-advance-fee', [App\Http\Controllers\AdvanceFeeController::class, 'index'])->name('accounting.manage-advance-fee.index');
+Route::post('/accounting/manage-advance-fee', [App\Http\Controllers\AdvanceFeeController::class, 'store'])->name('accounting.manage-advance-fee.store');
+Route::get('/accounting/manage-advance-fee/export/{format}', [App\Http\Controllers\AdvanceFeeController::class, 'export'])->name('accounting.manage-advance-fee.export');
+Route::get('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controllers\AdvanceFeeController::class, 'show'])->name('accounting.manage-advance-fee.show');
+Route::put('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controllers\AdvanceFeeController::class, 'update'])->name('accounting.manage-advance-fee.update');
+Route::delete('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controllers\AdvanceFeeController::class, 'destroy'])->name('accounting.manage-advance-fee.destroy');
 
 // Parent Wallet System Routes
 Route::get('/accounting/parent-wallet/installments', function () {
@@ -183,40 +209,30 @@ Route::get('/accounting/parent-wallet/online-rejected-payments', function () {
 })->name('accounting.parent-wallet.online-rejected-payments');
 
 // Direct Payment Routes
-Route::get('/accounting/direct-payment/student', function () {
-    return view('accounting.direct-payment.student');
-})->name('accounting.direct-payment.student');
+Route::get('/accounting/direct-payment/student', [App\Http\Controllers\StudentPaymentController::class, 'create'])->name('accounting.direct-payment.student');
+Route::post('/accounting/direct-payment/student', [App\Http\Controllers\StudentPaymentController::class, 'store'])->name('accounting.direct-payment.student.store');
 
-Route::get('/accounting/direct-payment/custom', function () {
-    return view('accounting.direct-payment.custom');
-})->name('accounting.direct-payment.custom');
+Route::get('/accounting/direct-payment/custom', [App\Http\Controllers\CustomPaymentController::class, 'create'])->name('accounting.direct-payment.custom');
+Route::post('/accounting/direct-payment/custom', [App\Http\Controllers\CustomPaymentController::class, 'store'])->name('accounting.direct-payment.custom.store');
 
 // Fee Increment Routes
-Route::get('/accounting/fee-increment/percentage', function () {
-    return view('accounting.fee-increment.percentage');
-})->name('accounting.fee-increment.percentage');
+Route::get('/accounting/fee-increment/percentage', [App\Http\Controllers\FeeIncrementPercentageController::class, 'create'])->name('accounting.fee-increment.percentage');
+Route::post('/accounting/fee-increment/percentage', [App\Http\Controllers\FeeIncrementPercentageController::class, 'store'])->name('accounting.fee-increment.percentage.store');
 
-Route::get('/accounting/fee-increment/amount', function () {
-    return view('accounting.fee-increment.amount');
-})->name('accounting.fee-increment.amount');
+Route::get('/accounting/fee-increment/amount', [App\Http\Controllers\FeeIncrementAmountController::class, 'create'])->name('accounting.fee-increment.amount');
+Route::post('/accounting/fee-increment/amount', [App\Http\Controllers\FeeIncrementAmountController::class, 'store'])->name('accounting.fee-increment.amount.store');
 
 // Fee Document Routes
-Route::get('/accounting/fee-document/decrement-percentage', function () {
-    return view('accounting.fee-document.decrement-percentage');
-})->name('accounting.fee-document.decrement-percentage');
+Route::get('/accounting/fee-document/decrement-percentage', [App\Http\Controllers\FeeDecrementPercentageController::class, 'create'])->name('accounting.fee-document.decrement-percentage');
+Route::post('/accounting/fee-document/decrement-percentage', [App\Http\Controllers\FeeDecrementPercentageController::class, 'store'])->name('accounting.fee-document.decrement-percentage.store');
 
-Route::get('/accounting/fee-document/decrement-amount', function () {
-    return view('accounting.fee-document.decrement-amount');
-})->name('accounting.fee-document.decrement-amount');
+Route::get('/accounting/fee-document/decrement-amount', [App\Http\Controllers\FeeDecrementAmountController::class, 'create'])->name('accounting.fee-document.decrement-amount');
+Route::post('/accounting/fee-document/decrement-amount', [App\Http\Controllers\FeeDecrementAmountController::class, 'store'])->name('accounting.fee-document.decrement-amount.store');
 
 // Fee Voucher Routes
-Route::get('/accounting/fee-voucher/student', function () {
-    return view('accounting.fee-voucher.student');
-})->name('accounting.fee-voucher.student');
+Route::get('/accounting/fee-voucher/student', [App\Http\Controllers\StudentVoucherController::class, 'index'])->name('accounting.fee-voucher.student');
 
-Route::get('/accounting/fee-voucher/family', function () {
-    return view('accounting.fee-voucher.family');
-})->name('accounting.fee-voucher.family');
+Route::get('/accounting/fee-voucher/family', [App\Http\Controllers\FamilyVoucherController::class, 'index'])->name('accounting.fee-voucher.family');
 
 // Parent Complain Route
 Route::get('/parent-complain', function () {
@@ -289,14 +305,21 @@ Route::post('/timetable/add', [App\Http\Controllers\TimetableController::class, 
 
 Route::get('/timetable/manage', [App\Http\Controllers\TimetableController::class, 'index'])->name('timetable.manage');
 
-// Academic Holiday Calendar Routes
-Route::get('/academic-calendar/manage-events', function () {
-    return view('academic-calendar.manage-events');
-})->name('academic-calendar.manage-events');
+// Events Management Routes
+Route::prefix('events')->name('events.')->group(function () {
+    Route::get('/manage', [App\Http\Controllers\EventController::class, 'index'])->name('manage');
+    Route::post('/', [App\Http\Controllers\EventController::class, 'store'])->name('store');
+    Route::get('/{event}', [App\Http\Controllers\EventController::class, 'show'])->name('show');
+    Route::put('/{event}', [App\Http\Controllers\EventController::class, 'update'])->name('update');
+    Route::delete('/{event}', [App\Http\Controllers\EventController::class, 'destroy'])->name('destroy');
+    Route::get('/export/{format}', [App\Http\Controllers\EventController::class, 'export'])->name('export');
+});
 
-Route::get('/academic-calendar/view', function () {
-    return view('academic-calendar.view');
-})->name('academic-calendar.view');
+// Academic Holiday Calendar Routes
+Route::prefix('academic-calendar')->name('academic-calendar.')->group(function () {
+    Route::get('/manage-events', [App\Http\Controllers\EventController::class, 'index'])->name('manage-events');
+    Route::get('/view', [App\Http\Controllers\EventController::class, 'calendarView'])->name('view');
+});
 
 // Fee Management Route
 Route::get('/fee-management', function () {
@@ -309,52 +332,53 @@ Route::get('/fee-payment', function () {
 })->name('fee-payment');
 
 // Expense Management Routes
-Route::get('/expense-management/add', function () {
-    return view('expense-management.add');
-})->name('expense-management.add');
+Route::get('/expense-management/add', [App\Http\Controllers\ManagementExpenseController::class, 'index'])->name('expense-management.add');
+Route::post('/expense-management/add', [App\Http\Controllers\ManagementExpenseController::class, 'store'])->name('expense-management.add.store');
+Route::put('/expense-management/add/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'update'])->name('expense-management.add.update');
+Route::delete('/expense-management/add/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'destroy'])->name('expense-management.add.destroy');
+Route::get('/expense-management/add/export/{format}', [App\Http\Controllers\ManagementExpenseController::class, 'export'])->name('expense-management.add.export');
 
-Route::get('/expense-management/categories', function () {
-    return view('expense-management.categories');
-})->name('expense-management.categories');
+Route::get('/expense-management/categories', [App\Http\Controllers\ExpenseCategoryController::class, 'index'])->name('expense-management.categories');
+Route::post('/expense-management/categories', [App\Http\Controllers\ExpenseCategoryController::class, 'store'])->name('expense-management.categories.store');
+Route::put('/expense-management/categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'update'])->name('expense-management.categories.update');
+Route::delete('/expense-management/categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'destroy'])->name('expense-management.categories.destroy');
+Route::get('/expense-management/categories/export/{format}', [App\Http\Controllers\ExpenseCategoryController::class, 'export'])->name('expense-management.categories.export');
 
 // Salary and Loan Management Routes
-Route::get('/salary-loan/generate-salary', function () {
-    return view('salary-loan.generate-salary');
-})->name('salary-loan.generate-salary');
+Route::get('/salary-loan/generate-salary', [App\Http\Controllers\GenerateSalaryController::class, 'index'])->name('salary-loan.generate-salary');
+Route::post('/salary-loan/generate-salary', [App\Http\Controllers\GenerateSalaryController::class, 'store'])->name('salary-loan.generate-salary.store');
 
-Route::get('/salary-loan/manage-salaries', function () {
-    return view('salary-loan.manage-salaries');
-})->name('salary-loan.manage-salaries');
+Route::get('/salary-loan/manage-salaries', [App\Http\Controllers\ManageSalariesController::class, 'index'])->name('salary-loan.manage-salaries');
+Route::put('/salary-loan/manage-salaries/{salary}/status', [App\Http\Controllers\ManageSalariesController::class, 'updateStatus'])->name('salary-loan.manage-salaries.status');
+Route::delete('/salary-loan/manage-salaries/{salary}', [App\Http\Controllers\ManageSalariesController::class, 'destroy'])->name('salary-loan.manage-salaries.destroy');
+Route::get('/salary-loan/manage-salaries/export/{format}', [App\Http\Controllers\ManageSalariesController::class, 'export'])->name('salary-loan.manage-salaries.export');
 
-Route::get('/salary-loan/loan-management', function () {
-    return view('salary-loan.loan-management');
-})->name('salary-loan.loan-management');
+Route::get('/salary-loan/loan-management', [App\Http\Controllers\LoanManagementController::class, 'index'])->name('salary-loan.loan-management');
+Route::post('/salary-loan/loan-management', [App\Http\Controllers\LoanManagementController::class, 'store'])->name('salary-loan.loan-management.store');
+Route::put('/salary-loan/loan-management/{loan}', [App\Http\Controllers\LoanManagementController::class, 'update'])->name('salary-loan.loan-management.update');
+Route::delete('/salary-loan/loan-management/{loan}', [App\Http\Controllers\LoanManagementController::class, 'destroy'])->name('salary-loan.loan-management.destroy');
+Route::get('/salary-loan/loan-management/export/{format}', [App\Http\Controllers\LoanManagementController::class, 'export'])->name('salary-loan.loan-management.export');
 
-Route::get('/salary-loan/salary-setting', function () {
-    return view('salary-loan.salary-setting');
-})->name('salary-loan.salary-setting');
+Route::get('/salary-loan/salary-setting', [App\Http\Controllers\SalarySettingController::class, 'index'])->name('salary-loan.salary-setting');
+Route::put('/salary-loan/salary-setting', [App\Http\Controllers\SalarySettingController::class, 'update'])->name('salary-loan.salary-setting.update');
 
 Route::get('/salary-loan/report', function () {
     return view('salary-loan.report');
 })->name('salary-loan.report');
 
 // Salary Increment Routes
-Route::get('/salary-loan/increment/percentage', function () {
-    return view('salary-loan.increment.percentage');
-})->name('salary-loan.increment.percentage');
+Route::get('/salary-loan/increment/percentage', [App\Http\Controllers\SalaryIncrementPercentageController::class, 'index'])->name('salary-loan.increment.percentage');
+Route::post('/salary-loan/increment/percentage', [App\Http\Controllers\SalaryIncrementPercentageController::class, 'store'])->name('salary-loan.increment.percentage.store');
 
-Route::get('/salary-loan/increment/amount', function () {
-    return view('salary-loan.increment.amount');
-})->name('salary-loan.increment.amount');
+Route::get('/salary-loan/increment/amount', [App\Http\Controllers\SalaryIncrementAmountController::class, 'index'])->name('salary-loan.increment.amount');
+Route::post('/salary-loan/increment/amount', [App\Http\Controllers\SalaryIncrementAmountController::class, 'store'])->name('salary-loan.increment.amount.store');
 
 // Salary Decrement Routes
-Route::get('/salary-loan/decrement/percentage', function () {
-    return view('salary-loan.decrement.percentage');
-})->name('salary-loan.decrement.percentage');
+Route::get('/salary-loan/decrement/percentage', [App\Http\Controllers\SalaryDecrementPercentageController::class, 'index'])->name('salary-loan.decrement.percentage');
+Route::post('/salary-loan/decrement/percentage', [App\Http\Controllers\SalaryDecrementPercentageController::class, 'store'])->name('salary-loan.decrement.percentage.store');
 
-Route::get('/salary-loan/decrement/amount', function () {
-    return view('salary-loan.decrement.amount');
-})->name('salary-loan.decrement.amount');
+Route::get('/salary-loan/decrement/amount', [App\Http\Controllers\SalaryDecrementAmountController::class, 'index'])->name('salary-loan.decrement.amount');
+Route::post('/salary-loan/decrement/amount', [App\Http\Controllers\SalaryDecrementAmountController::class, 'store'])->name('salary-loan.decrement.amount.store');
 
 Route::get('/dashboard/school', [DashboardController::class, 'school'])->name('dashboard.school');
 Route::get('/dashboard/marketing', [DashboardController::class, 'marketing'])->name('dashboard.marketing');
@@ -363,83 +387,69 @@ Route::get('/dashboard/hospital', [DashboardController::class, 'hospital'])->nam
 Route::get('/dashboard/finance', [DashboardController::class, 'finance'])->name('dashboard.finance');
 
 // Reporting Routes
-Route::get('/reports/fee-default', function () {
-    return view('reports.fee-default');
-})->name('reports.fee-default');
+Route::get('/reports/fee-default', [App\Http\Controllers\FeeDefaultReportController::class, 'index'])->name('reports.fee-default');
 
 Route::get('/reports/head-wise-dues', function () {
     return view('reports.head-wise-dues');
 })->name('reports.head-wise-dues');
 
-Route::get('/reports/income-expense', function () {
-    return view('reports.income-expense');
-})->name('reports.income-expense');
+Route::get('/reports/income-expense', [App\Http\Controllers\IncomeExpenseReportController::class, 'index'])->name('reports.income-expense');
 
-Route::get('/reports/debit-credit', function () {
-    return view('reports.debit-credit');
-})->name('reports.debit-credit');
+Route::get('/reports/debit-credit', [App\Http\Controllers\DebitCreditStatementController::class, 'index'])->name('reports.debit-credit');
 
-Route::get('/reports/unpaid-invoices', function () {
-    return view('reports.unpaid-invoices');
-})->name('reports.unpaid-invoices');
+Route::get('/reports/unpaid-invoices', [App\Http\Controllers\UnpaidInvoicesController::class, 'index'])->name('reports.unpaid-invoices');
 
-Route::get('/reports/accounts-summary', function () {
-    return view('reports.accounts-summary');
-})->name('reports.accounts-summary');
+Route::get('/reports/fee-discount', [App\Http\Controllers\FeeDiscountController::class, 'index'])->name('reports.fee-discount');
 
-Route::get('/reports/detailed-income', function () {
-    return view('reports.detailed-income');
-})->name('reports.detailed-income');
+Route::get('/reports/accounts-summary', [App\Http\Controllers\AccountsSummaryController::class, 'index'])->name('reports.accounts-summary');
 
-Route::get('/reports/detailed-expense', function () {
-    return view('reports.detailed-expense');
-})->name('reports.detailed-expense');
+Route::get('/reports/detailed-income', [App\Http\Controllers\DetailedIncomeController::class, 'index'])->name('reports.detailed-income');
 
-Route::get('/reports/staff-salary', function () {
-    return view('reports.staff-salary');
-})->name('reports.staff-salary');
+Route::get('/reports/detailed-expense', [App\Http\Controllers\DetailedExpenseController::class, 'index'])->name('reports.detailed-expense');
 
-Route::get('/reports/balance-sheet', function () {
-    return view('reports.balance-sheet');
-})->name('reports.balance-sheet');
+Route::get('/reports/staff-salary', [App\Http\Controllers\StaffSalaryReportController::class, 'index'])->name('reports.staff-salary');
 
-Route::get('/reports/admission-data', function () {
-    return view('reports.admission-data');
-})->name('reports.admission-data');
+Route::get('/reports/balance-sheet', [App\Http\Controllers\BalanceSheetController::class, 'index'])->name('reports.balance-sheet');
+
+Route::get('/reports/admission-data', [App\Http\Controllers\AdmissionDataReportController::class, 'index'])->name('reports.admission-data');
 
 // Stock & Inventory Routes
 Route::get('/stock/point-of-sale', function () {
     return view('stock.point-of-sale');
 })->name('stock.point-of-sale');
 
-Route::get('/stock/manage-categories', function () {
-    return view('stock.manage-categories');
-})->name('stock.manage-categories');
+Route::get('/stock/manage-categories', [App\Http\Controllers\StockCategoryController::class, 'index'])->name('stock.manage-categories');
+Route::post('/stock/manage-categories', [App\Http\Controllers\StockCategoryController::class, 'store'])->name('stock.manage-categories.store');
+Route::put('/stock/manage-categories/{stockCategory}', [App\Http\Controllers\StockCategoryController::class, 'update'])->name('stock.manage-categories.update');
+Route::delete('/stock/manage-categories/{stockCategory}', [App\Http\Controllers\StockCategoryController::class, 'destroy'])->name('stock.manage-categories.destroy');
+Route::get('/stock/manage-categories/export/{format}', [App\Http\Controllers\StockCategoryController::class, 'export'])->name('stock.manage-categories.export');
 
-Route::get('/stock/add-bulk-products', function () {
-    return view('stock.add-bulk-products');
-})->name('stock.add-bulk-products');
+Route::get('/stock/products', [App\Http\Controllers\ProductController::class, 'index'])->name('stock.products');
+Route::post('/stock/products', [App\Http\Controllers\ProductController::class, 'store'])->name('stock.products.store');
+Route::put('/stock/products/{product}', [App\Http\Controllers\ProductController::class, 'update'])->name('stock.products.update');
+Route::delete('/stock/products/{product}', [App\Http\Controllers\ProductController::class, 'destroy'])->name('stock.products.destroy');
+Route::get('/stock/products/export/{format}', [App\Http\Controllers\ProductController::class, 'export'])->name('stock.products.export');
 
-Route::get('/stock/manage-sale-records', function () {
-    return view('stock.manage-sale-records');
-})->name('stock.manage-sale-records');
+Route::get('/stock/add-bulk-products', [App\Http\Controllers\BulkProductController::class, 'index'])->name('stock.add-bulk-products');
+Route::post('/stock/add-bulk-products', [App\Http\Controllers\BulkProductController::class, 'store'])->name('stock.add-bulk-products.store');
+Route::get('/stock/add-bulk-products/download-template', [App\Http\Controllers\BulkProductController::class, 'downloadTemplate'])->name('stock.add-bulk-products.download-template');
+
+Route::get('/stock/manage-sale-records', [App\Http\Controllers\SaleRecordController::class, 'index'])->name('stock.manage-sale-records');
 
 Route::get('/stock/sale-reports', function () {
     return view('stock.sale-reports');
 })->name('stock.sale-reports');
 
 // Student Behavior Management Routes
-Route::get('/student-behavior/recording', function () {
-    return view('student-behavior.recording');
-})->name('student-behavior.recording');
+Route::get('/student-behavior/recording', [App\Http\Controllers\BehaviorRecordingController::class, 'index'])->name('student-behavior.recording');
 
-Route::get('/student-behavior/categories', function () {
-    return view('student-behavior.categories');
-})->name('student-behavior.categories');
+Route::get('/student-behavior/categories', [App\Http\Controllers\BehaviorCategoryController::class, 'index'])->name('student-behavior.categories');
+Route::post('/student-behavior/categories', [App\Http\Controllers\BehaviorCategoryController::class, 'store'])->name('student-behavior.categories.store');
+Route::put('/student-behavior/categories/{behaviorCategory}', [App\Http\Controllers\BehaviorCategoryController::class, 'update'])->name('student-behavior.categories.update');
+Route::delete('/student-behavior/categories/{behaviorCategory}', [App\Http\Controllers\BehaviorCategoryController::class, 'destroy'])->name('student-behavior.categories.destroy');
+Route::get('/student-behavior/categories/export/{format}', [App\Http\Controllers\BehaviorCategoryController::class, 'export'])->name('student-behavior.categories.export');
 
-Route::get('/student-behavior/progress-tracking', function () {
-    return view('student-behavior.progress-tracking');
-})->name('student-behavior.progress-tracking');
+Route::get('/student-behavior/progress-tracking', [App\Http\Controllers\ProgressTrackingController::class, 'index'])->name('student-behavior.progress-tracking');
 
 Route::get('/student-behavior/reporting-analysis', function () {
     return view('student-behavior.reporting-analysis');
@@ -459,62 +469,48 @@ Route::get('/question-paper/generate', function () {
 })->name('question-paper.generate');
 
 // Test Management Routes
-Route::get('/test/list', function () {
-    return view('test.list');
-})->name('test.list');
+Route::get('/test/list', [App\Http\Controllers\TestController::class, 'index'])->name('test.list');
+Route::post('/test/list', [App\Http\Controllers\TestController::class, 'store'])->name('test.list.store');
+Route::put('/test/list/{test}', [App\Http\Controllers\TestController::class, 'update'])->name('test.list.update');
+Route::delete('/test/list/{test}', [App\Http\Controllers\TestController::class, 'destroy'])->name('test.list.destroy');
+Route::get('/test/list/export/{format}', [App\Http\Controllers\TestController::class, 'export'])->name('test.list.export');
 
-Route::get('/test/marks-entry', function () {
-    return view('test.marks-entry');
-})->name('test.marks-entry');
+Route::get('/test/marks-entry', [App\Http\Controllers\MarksEntryController::class, 'index'])->name('test.marks-entry');
 
-Route::get('/test/schedule', function () {
-    return view('test.schedule');
-})->name('test.schedule');
+Route::get('/test/schedule', [App\Http\Controllers\TestScheduleController::class, 'index'])->name('test.schedule');
 
 // Test Reports - Assign Grades
-Route::get('/test/assign-grades/particular', function () {
-    return view('test.assign-grades.particular');
-})->name('test.assign-grades.particular');
+Route::get('/test/assign-grades/particular', [App\Http\Controllers\AssignGradesController::class, 'particular'])->name('test.assign-grades.particular');
 
-Route::get('/test/assign-grades/combined', function () {
-    return view('test.assign-grades.combined');
-})->name('test.assign-grades.combined');
+Route::get('/test/assign-grades/combined', [App\Http\Controllers\AssignGradesController::class, 'combined'])->name('test.assign-grades.combined');
+Route::post('/test/assign-grades/combined', [App\Http\Controllers\AssignGradesController::class, 'storeCombined'])->name('test.assign-grades.combined.store');
+Route::put('/test/assign-grades/combined/{combinedResultGrade}', [App\Http\Controllers\AssignGradesController::class, 'updateCombined'])->name('test.assign-grades.combined.update');
+Route::delete('/test/assign-grades/combined/{combinedResultGrade}', [App\Http\Controllers\AssignGradesController::class, 'destroyCombined'])->name('test.assign-grades.combined.destroy');
+Route::get('/test/assign-grades/combined/export/{format}', [App\Http\Controllers\AssignGradesController::class, 'exportCombined'])->name('test.assign-grades.combined.export');
 
 // Test Reports - Teacher Remarks
-Route::get('/test/teacher-remarks/practical', function () {
-    return view('test.teacher-remarks.practical');
-})->name('test.teacher-remarks.practical');
+Route::get('/test/teacher-remarks/practical', [App\Http\Controllers\TeacherRemarksController::class, 'practical'])->name('test.teacher-remarks.practical');
 
-Route::get('/test/teacher-remarks/combined', function () {
-    return view('test.teacher-remarks.combined');
-})->name('test.teacher-remarks.combined');
+Route::get('/test/teacher-remarks/combined', [App\Http\Controllers\TeacherRemarksController::class, 'combined'])->name('test.teacher-remarks.combined');
 
 // Test Reports - Tabulation Sheet
-Route::get('/test/tabulation-sheet/practical', function () {
-    return view('test.tabulation-sheet.practical');
-})->name('test.tabulation-sheet.practical');
+Route::get('/test/tabulation-sheet/practical', [App\Http\Controllers\TabulationSheetController::class, 'practical'])->name('test.tabulation-sheet.practical');
 
-Route::get('/test/tabulation-sheet/combine', function () {
-    return view('test.tabulation-sheet.combine');
-})->name('test.tabulation-sheet.combine');
+Route::get('/test/tabulation-sheet/combine', [App\Http\Controllers\TabulationSheetController::class, 'combine'])->name('test.tabulation-sheet.combine');
 
 // Test Reports - Position Holder
-Route::get('/test/position-holder/practical', function () {
-    return view('test.position-holder.practical');
-})->name('test.position-holder.practical');
+Route::get('/test/position-holder/practical', [App\Http\Controllers\PositionHolderController::class, 'practical'])->name('test.position-holder.practical');
 
-Route::get('/test/position-holder/combine', function () {
-    return view('test.position-holder.combine');
-})->name('test.position-holder.combine');
+Route::get('/test/position-holder/combine', [App\Http\Controllers\PositionHolderController::class, 'combine'])->name('test.position-holder.combine');
 
 // Test Reports - Send Marks to Parents
-Route::get('/test/send-marks/practical', function () {
-    return view('test.send-marks.practical');
-})->name('test.send-marks.practical');
+Route::get('/test/send-marks/practical', [App\Http\Controllers\SendMarksController::class, 'practical'])->name('test.send-marks.practical');
+Route::get('/test/send-marks/get-sections', [App\Http\Controllers\SendMarksController::class, 'getSections'])->name('test.send-marks.get-sections');
+Route::get('/test/send-marks/get-subjects', [App\Http\Controllers\SendMarksController::class, 'getSubjects'])->name('test.send-marks.get-subjects');
+Route::get('/test/send-marks/get-tests', [App\Http\Controllers\SendMarksController::class, 'getTests'])->name('test.send-marks.get-tests');
 
-Route::get('/test/send-marks/combined', function () {
-    return view('test.send-marks.combined');
-})->name('test.send-marks.combined');
+Route::get('/test/send-marks/combined', [App\Http\Controllers\SendMarksController::class, 'combined'])->name('test.send-marks.combined');
+Route::get('/test/send-marks/get-sections-combined', [App\Http\Controllers\SendMarksController::class, 'getSectionsCombined'])->name('test.send-marks.get-sections-combined');
 
 // Test Reports - Send Marksheet via WA
 Route::get('/test/send-marksheet/practical', function () {
@@ -526,75 +522,69 @@ Route::get('/test/send-marksheet/combine', function () {
 })->name('test.send-marksheet.combine');
 
 // Test Reports - Print Marksheets
-Route::get('/test/print-marksheets/practical', function () {
-    return view('test.print-marksheets.practical');
-})->name('test.print-marksheets.practical');
+Route::get('/test/print-marksheets/practical', [App\Http\Controllers\PrintMarksheetsController::class, 'practical'])->name('test.print-marksheets.practical');
+Route::get('/test/print-marksheets/get-sections', [App\Http\Controllers\PrintMarksheetsController::class, 'getSections'])->name('test.print-marksheets.get-sections');
+Route::get('/test/print-marksheets/get-subjects', [App\Http\Controllers\PrintMarksheetsController::class, 'getSubjects'])->name('test.print-marksheets.get-subjects');
+Route::get('/test/print-marksheets/get-tests', [App\Http\Controllers\PrintMarksheetsController::class, 'getTests'])->name('test.print-marksheets.get-tests');
 
 Route::get('/test/print-marksheets/combine', function () {
     return view('test.print-marksheets.combine');
 })->name('test.print-marksheets.combine');
 
 // Exam Management Routes
-Route::get('/exam/list', function () {
-    return view('exam.list');
-})->name('exam.list');
+Route::get('/exam/list', [App\Http\Controllers\ExamController::class, 'index'])->name('exam.list');
+Route::post('/exam/list', [App\Http\Controllers\ExamController::class, 'store'])->name('exam.list.store');
+Route::put('/exam/list/{exam}', [App\Http\Controllers\ExamController::class, 'update'])->name('exam.list.update');
+Route::delete('/exam/list/{exam}', [App\Http\Controllers\ExamController::class, 'destroy'])->name('exam.list.destroy');
+Route::get('/exam/list/export/{format}', [App\Http\Controllers\ExamController::class, 'export'])->name('exam.list.export');
 
-Route::get('/exam/marks-entry', function () {
-    return view('exam.marks-entry');
-})->name('exam.marks-entry');
+Route::get('/exam/marks-entry', [App\Http\Controllers\ExamController::class, 'marksEntry'])->name('exam.marks-entry');
+Route::get('/exam/marks-entry/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForMarksEntry'])->name('exam.marks-entry.get-sections');
+Route::get('/exam/marks-entry/get-subjects', [App\Http\Controllers\ExamController::class, 'getSubjectsForMarksEntry'])->name('exam.marks-entry.get-subjects');
 
-Route::get('/exam/print-admit-cards', function () {
-    return view('exam.print-admit-cards');
-})->name('exam.print-admit-cards');
+Route::get('/exam/print-admit-cards', [App\Http\Controllers\ExamController::class, 'printAdmitCards'])->name('exam.print-admit-cards');
+Route::get('/exam/print-admit-cards/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForPrintAdmitCards'])->name('exam.print-admit-cards.get-exams');
 
 Route::get('/exam/send-admit-cards', function () {
     return view('exam.send-admit-cards');
 })->name('exam.send-admit-cards');
 
 // Exam Grades
-Route::get('/exam/grades/particular', function () {
-    return view('exam.grades.particular');
-})->name('exam.grades.particular');
+Route::get('/exam/grades/particular', [App\Http\Controllers\ExamController::class, 'gradesParticular'])->name('exam.grades.particular');
+Route::get('/exam/grades/get-exams', [App\Http\Controllers\ExamController::class, 'getExams'])->name('exam.grades.get-exams');
 
-Route::get('/exam/grades/final', function () {
-    return view('exam.grades.final');
-})->name('exam.grades.final');
+Route::get('/exam/grades/final', [App\Http\Controllers\FinalExamGradeController::class, 'index'])->name('exam.grades.final');
+Route::post('/exam/grades/final', [App\Http\Controllers\FinalExamGradeController::class, 'store'])->name('exam.grades.final.store');
+Route::put('/exam/grades/final/{finalExamGrade}', [App\Http\Controllers\FinalExamGradeController::class, 'update'])->name('exam.grades.final.update');
+Route::delete('/exam/grades/final/{finalExamGrade}', [App\Http\Controllers\FinalExamGradeController::class, 'destroy'])->name('exam.grades.final.destroy');
+Route::get('/exam/grades/final/export/{format}', [App\Http\Controllers\FinalExamGradeController::class, 'export'])->name('exam.grades.final.export');
 
 // Teacher Remarks
-Route::get('/exam/teacher-remarks/particular', function () {
-    return view('exam.teacher-remarks.particular');
-})->name('exam.teacher-remarks.particular');
+Route::get('/exam/teacher-remarks/particular', [App\Http\Controllers\ExamController::class, 'teacherRemarksParticular'])->name('exam.teacher-remarks.particular');
+Route::get('/exam/teacher-remarks/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForTeacherRemarks'])->name('exam.teacher-remarks.get-exams');
+Route::get('/exam/teacher-remarks/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForTeacherRemarks'])->name('exam.teacher-remarks.get-sections');
 
-Route::get('/exam/teacher-remarks/final', function () {
-    return view('exam.teacher-remarks.final');
-})->name('exam.teacher-remarks.final');
+Route::get('/exam/teacher-remarks/final', [App\Http\Controllers\ExamController::class, 'teacherRemarksFinal'])->name('exam.teacher-remarks.final');
 
 // Exam Timetable
-Route::get('/exam/timetable/add', function () {
-    return view('exam.timetable.add');
-})->name('exam.timetable.add');
+Route::get('/exam/timetable/add', [App\Http\Controllers\ExamController::class, 'addTimetable'])->name('exam.timetable.add');
+Route::get('/exam/timetable/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForTimetable'])->name('exam.timetable.get-sections');
+Route::get('/exam/timetable/get-subjects', [App\Http\Controllers\ExamController::class, 'getSubjectsForTimetable'])->name('exam.timetable.get-subjects');
 
-Route::get('/exam/timetable/manage', function () {
-    return view('exam.timetable.manage');
-})->name('exam.timetable.manage');
+Route::get('/exam/timetable/manage', [App\Http\Controllers\ExamController::class, 'manageTimetable'])->name('exam.timetable.manage');
+Route::get('/exam/timetable/get-exams-manage', [App\Http\Controllers\ExamController::class, 'getExamsForManageTimetable'])->name('exam.timetable.get-exams-manage');
 
 // Tabulation Sheet
-Route::get('/exam/tabulation-sheet/particular', function () {
-    return view('exam.tabulation-sheet.particular');
-})->name('exam.tabulation-sheet.particular');
+Route::get('/exam/tabulation-sheet/particular', [App\Http\Controllers\ExamController::class, 'tabulationSheetParticular'])->name('exam.tabulation-sheet.particular');
+Route::get('/exam/tabulation-sheet/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForTabulationSheet'])->name('exam.tabulation-sheet.get-exams');
 
-Route::get('/exam/tabulation-sheet/final', function () {
-    return view('exam.tabulation-sheet.final');
-})->name('exam.tabulation-sheet.final');
+Route::get('/exam/tabulation-sheet/final', [App\Http\Controllers\ExamController::class, 'tabulationSheetFinal'])->name('exam.tabulation-sheet.final');
 
 // Position Holders
-Route::get('/exam/position-holders/particular', function () {
-    return view('exam.position-holders.particular');
-})->name('exam.position-holders.particular');
+Route::get('/exam/position-holders/particular', [App\Http\Controllers\ExamController::class, 'positionHoldersParticular'])->name('exam.position-holders.particular');
+Route::get('/exam/position-holders/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForPositionHolders'])->name('exam.position-holders.get-exams');
 
-Route::get('/exam/position-holders/final', function () {
-    return view('exam.position-holders.final');
-})->name('exam.position-holders.final');
+Route::get('/exam/position-holders/final', [App\Http\Controllers\ExamController::class, 'positionHoldersFinal'])->name('exam.position-holders.final');
 
 // Send Marks to Parents
 Route::get('/exam/send-marks/particular', function () {
@@ -615,32 +605,26 @@ Route::get('/exam/print-marksheet/final', function () {
 })->name('exam.print-marksheet.final');
 
 // Quiz Management Routes
-Route::get('/quiz/manage', function () {
-    return view('quiz.manage');
-})->name('quiz.manage');
+Route::get('/quiz/manage', [App\Http\Controllers\QuizController::class, 'index'])->name('quiz.manage');
+Route::post('/quiz/manage', [App\Http\Controllers\QuizController::class, 'store'])->name('quiz.manage.store');
+Route::put('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'update'])->name('quiz.manage.update');
+Route::delete('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'destroy'])->name('quiz.manage.destroy');
+Route::get('/quiz/manage/export/{format}', [App\Http\Controllers\QuizController::class, 'export'])->name('quiz.manage.export');
 
 // Certification Routes
-Route::get('/certification/student', function () {
-    return view('certification.student');
-})->name('certification.student');
+Route::get('/certification/student', [App\Http\Controllers\CertificationController::class, 'student'])->name('certification.student');
 
-Route::get('/certification/staff', function () {
-    return view('certification.staff');
-})->name('certification.staff');
+Route::get('/certification/staff', [App\Http\Controllers\CertificationController::class, 'staff'])->name('certification.staff');
 
 // Daily Homework Diary Routes
-Route::get('/homework-diary/manage', function () {
-    return view('homework-diary.manage');
-})->name('homework-diary.manage');
+Route::get('/homework-diary/manage', [App\Http\Controllers\HomeworkDiaryController::class, 'manage'])->name('homework-diary.manage');
 
 Route::get('/homework-diary/send-sms', function () {
     return view('homework-diary.send-sms');
 })->name('homework-diary.send-sms');
 
 // Study Material - LMS Route
-Route::get('/study-material/lms', function () {
-    return view('study-material.lms');
-})->name('study-material.lms');
+Route::get('/study-material/lms', [App\Http\Controllers\StudyMaterialController::class, 'lms'])->name('study-material.lms');
 
 // Leave Management Route
 Route::get('/leave-management', function () {
@@ -648,56 +632,29 @@ Route::get('/leave-management', function () {
 })->name('leave-management');
 
 // SMS Management Routes
-Route::get('/sms/parent', function () {
-    return view('sms.parent');
-})->name('sms.parent');
+Route::get('/sms/parent', [App\Http\Controllers\SmsController::class, 'parent'])->name('sms.parent');
 
-Route::get('/sms/staff', function () {
-    return view('sms.staff');
-})->name('sms.staff');
+Route::get('/sms/staff', [App\Http\Controllers\SmsController::class, 'staff'])->name('sms.staff');
 
-Route::get('/sms/specific-number', function () {
-    return view('sms.specific-number');
-})->name('sms.specific-number');
+Route::get('/sms/specific-number', [App\Http\Controllers\SmsController::class, 'specificNumber'])->name('sms.specific-number');
 
-Route::get('/sms/history', function () {
-    return view('sms.history');
-})->name('sms.history');
+Route::get('/sms/history', [App\Http\Controllers\SmsController::class, 'history'])->name('sms.history');
 
 // Mobile App Notification Routes
-Route::get('/notification/parent', function () {
-    return view('notification.parent');
-})->name('notification.parent');
+Route::get('/notification/parent', [App\Http\Controllers\NotificationController::class, 'parent'])->name('notification.parent');
 
-Route::get('/notification/staff', function () {
-    return view('notification.staff');
-})->name('notification.staff');
+Route::get('/notification/staff', [App\Http\Controllers\NotificationController::class, 'staff'])->name('notification.staff');
 
-Route::get('/notification/student', function () {
-    return view('notification.student');
-})->name('notification.student');
+Route::get('/notification/student', [App\Http\Controllers\NotificationController::class, 'student'])->name('notification.student');
 
-Route::get('/notification/history', function () {
-    return view('notification.history');
-})->name('notification.history');
+Route::get('/notification/history', [App\Http\Controllers\NotificationController::class, 'history'])->name('notification.history');
 
 // WhatsApp Notification Routes
-Route::get('/whatsapp/parent', function () {
-    return view('whatsapp.parent');
-})->name('whatsapp.parent');
+Route::get('/whatsapp/parent', [App\Http\Controllers\WhatsAppController::class, 'parent'])->name('whatsapp.parent');
 
-Route::get('/whatsapp/staff', function () {
-    return view('whatsapp.staff');
-})->name('whatsapp.staff');
+Route::get('/whatsapp/staff', [App\Http\Controllers\WhatsAppController::class, 'staff'])->name('whatsapp.staff');
 
-Route::get('/whatsapp/history', function () {
-    return view('whatsapp.history');
-})->name('whatsapp.history');
-
-// roboBuddy-whatsapp bot Route
-Route::get('/robobuddy/whatsapp-bot', function () {
-    return view('robobuddy.whatsapp-bot');
-})->name('robobuddy.whatsapp-bot');
+Route::get('/whatsapp/history', [App\Http\Controllers\WhatsAppController::class, 'history'])->name('whatsapp.history');
 
 // Send/WhatsApp Template Route
 Route::get('/whatsapp/template', function () {
@@ -705,33 +662,37 @@ Route::get('/whatsapp/template', function () {
 })->name('whatsapp.template');
 
 // Email Alerts Routes
-Route::get('/email-alerts/specific', function () {
-    return view('email-alerts.specific');
-})->name('email-alerts.specific');
+Route::get('/email-alerts/specific', [App\Http\Controllers\EmailAlertsController::class, 'specific'])->name('email-alerts.specific');
 
-Route::get('/email-alerts/history', function () {
-    return view('email-alerts.history');
-})->name('email-alerts.history');
+Route::get('/email-alerts/history', [App\Http\Controllers\EmailAlertsController::class, 'history'])->name('email-alerts.history');
 
-// School Noticeboard Route
-Route::get('/school/noticeboard', function () {
-    return view('school.noticeboard');
-})->name('school.noticeboard');
+// School Noticeboard Routes
+Route::get('/school/noticeboard', [App\Http\Controllers\NoticeboardController::class, 'index'])->name('school.noticeboard');
+Route::post('/school/noticeboard', [App\Http\Controllers\NoticeboardController::class, 'store'])->name('school.noticeboard.store');
+Route::put('/school/noticeboard/{noticeboard}', [App\Http\Controllers\NoticeboardController::class, 'update'])->name('school.noticeboard.update');
+Route::delete('/school/noticeboard/{noticeboard}', [App\Http\Controllers\NoticeboardController::class, 'destroy'])->name('school.noticeboard.destroy');
+Route::get('/school/noticeboard/export/{format}', [App\Http\Controllers\NoticeboardController::class, 'export'])->name('school.noticeboard.export');
 
-// Manage Campuses Route
-Route::get('/manage/campuses', function () {
-    return view('manage.campuses');
-})->name('manage.campuses');
+// Manage Campuses Routes
+Route::get('/manage/campuses', [App\Http\Controllers\CampusController::class, 'index'])->name('manage.campuses');
+Route::post('/manage/campuses', [App\Http\Controllers\CampusController::class, 'store'])->name('manage.campuses.store');
+Route::put('/manage/campuses/{campus}', [App\Http\Controllers\CampusController::class, 'update'])->name('manage.campuses.update');
+Route::delete('/manage/campuses/{campus}', [App\Http\Controllers\CampusController::class, 'destroy'])->name('manage.campuses.destroy');
+Route::get('/manage/campuses/export/{format}', [App\Http\Controllers\CampusController::class, 'export'])->name('manage.campuses.export');
 
-// Admin Roles Management Route
-Route::get('/admin/roles-management', function () {
-    return view('admin.roles-management');
-})->name('admin.roles-management');
+// Admin Roles Management Routes
+Route::get('/admin/roles-management', [App\Http\Controllers\AdminRoleController::class, 'index'])->name('admin.roles-management');
+Route::post('/admin/roles-management', [App\Http\Controllers\AdminRoleController::class, 'store'])->name('admin.roles-management.store');
+Route::put('/admin/roles-management/{adminRole}', [App\Http\Controllers\AdminRoleController::class, 'update'])->name('admin.roles-management.update');
+Route::delete('/admin/roles-management/{adminRole}', [App\Http\Controllers\AdminRoleController::class, 'destroy'])->name('admin.roles-management.destroy');
+Route::get('/admin/roles-management/export/{format}', [App\Http\Controllers\AdminRoleController::class, 'export'])->name('admin.roles-management.export');
 
 // Transport Routes
-Route::get('/transport/manage', function () {
-    return view('transport.manage');
-})->name('transport.manage');
+Route::get('/transport/manage', [App\Http\Controllers\TransportController::class, 'index'])->name('transport.manage');
+Route::post('/transport/manage', [App\Http\Controllers\TransportController::class, 'store'])->name('transport.manage.store');
+Route::put('/transport/manage/{transport}', [App\Http\Controllers\TransportController::class, 'update'])->name('transport.manage.update');
+Route::delete('/transport/manage/{transport}', [App\Http\Controllers\TransportController::class, 'destroy'])->name('transport.manage.destroy');
+Route::get('/transport/manage/export/{format}', [App\Http\Controllers\TransportController::class, 'export'])->name('transport.manage.export');
 
 Route::get('/transport/reports', function () {
     return view('transport.reports');
@@ -1125,9 +1086,9 @@ Route::get('/book-appointments', function () {
     return view('blank-page');
 })->name('book-appointments');
 
-// Events Routes
+// Events Routes (Legacy - kept for compatibility, redirects to manage)
 Route::get('/events', function () {
-    return view('blank-page');
+    return redirect()->route('events.manage');
 })->name('events');
 
 Route::get('/event-details', function () {

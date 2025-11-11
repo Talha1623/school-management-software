@@ -5,11 +5,228 @@
 @section('content')
 <div class="row">
     <div class="col-12">
-        <div class="card bg-white border border-white rounded-10 p-20">
-            <h3 class="mb-20">Income & Expense Reports</h3>
-            <p>Income & Expense Reports page will be here.</p>
+        <div class="card bg-white border border-white rounded-10 p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0 fs-16 fw-semibold">Income & Expense Reports</h4>
+            </div>
+
+            <!-- Filter Form -->
+            <form action="{{ route('reports.income-expense') }}" method="GET" id="filterForm">
+                <div class="row g-2 mb-3 align-items-end">
+                    <!-- Campus -->
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- User Type -->
+                    <div class="col-md-2">
+                        <label for="filter_user_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">User Type</label>
+                        <select class="form-select form-select-sm" id="filter_user_type" name="filter_user_type" style="height: 32px;">
+                            <option value="">All Types</option>
+                            @foreach($userTypeOptions as $userType)
+                                <option value="{{ $userType }}" {{ $filterUserType == $userType ? 'selected' : '' }}>{{ $userType }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- User -->
+                    <div class="col-md-2">
+                        <label for="filter_user" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">User</label>
+                        <select class="form-select form-select-sm" id="filter_user" name="filter_user" style="height: 32px;">
+                            <option value="">All Users</option>
+                            @foreach($users as $user)
+                                <option value="{{ $user }}" {{ $filterUser == $user ? 'selected' : '' }}>{{ $user }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- From Date -->
+                    <div class="col-md-2">
+                        <label for="filter_from_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">From Date</label>
+                        <input type="date" class="form-control form-control-sm" id="filter_from_date" name="filter_from_date" value="{{ $filterFromDate }}" style="height: 32px;">
+                    </div>
+
+                    <!-- To Date -->
+                    <div class="col-md-2">
+                        <label for="filter_to_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">To Date</label>
+                        <input type="date" class="form-control form-control-sm" id="filter_to_date" name="filter_to_date" value="{{ $filterToDate }}" style="height: 32px;">
+                    </div>
+
+                    <!-- Filter Button -->
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn w-100" style="height: 32px;">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_alt</span>
+                            <span style="font-size: 12px;">Filter</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Results Table -->
+            @if(request()->hasAny(['filter_campus', 'filter_user_type', 'filter_user', 'filter_from_date', 'filter_to_date']))
+            <div class="mt-3">
+                <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                    <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
+                        <span>Income & Expense Reports</span>
+                    </h5>
+                </div>
+
+                <div class="default-table-area" style="margin-top: 0;">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Type</th>
+                                    <th>Source</th>
+                                    <th>User</th>
+                                    <th>Campus</th>
+                                    <th>Title</th>
+                                    <th>Amount</th>
+                                    <th>Date</th>
+                                    <th>Method</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($incomeRecords as $index => $record)
+                                <tr>
+                                    <td>{{ $index + 1 }}</td>
+                                    <td>
+                                        @if($record['type'] == 'Income')
+                                            <span class="badge bg-success">Income</span>
+                                        @else
+                                            <span class="badge bg-danger">Expense</span>
+                                        @endif
+                                    </td>
+                                    <td>{{ $record['source'] }}</td>
+                                    <td>{{ $record['user'] }}</td>
+                                    <td>{{ $record['campus'] ?? 'N/A' }}</td>
+                                    <td>{{ $record['title'] }}</td>
+                                    <td>
+                                        @if($record['type'] == 'Income')
+                                            <span class="text-success fw-semibold">+{{ number_format($record['amount'], 2) }}</span>
+                                        @else
+                                            <span class="text-danger fw-semibold">-{{ number_format($record['amount'], 2) }}</span>
+                                        @endif
+                                    </td>
+                                    <td>{{ date('d M Y', strtotime($record['date'])) }}</td>
+                                    <td>{{ $record['method'] }}</td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="9" class="text-center py-4">
+                                        <div class="d-flex flex-column align-items-center">
+                                            <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
+                                            <p class="text-muted mt-2 mb-0">No records found</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                            @if($incomeRecords->count() > 0)
+                            <tfoot>
+                                <tr class="fw-bold" style="background-color: #f8f9fa;">
+                                    <td colspan="6" class="text-end">Total Income:</td>
+                                    <td class="text-success">
+                                        {{ number_format($incomeRecords->where('type', 'Income')->sum('amount'), 2) }}
+                                    </td>
+                                    <td colspan="2"></td>
+                                </tr>
+                                <tr class="fw-bold" style="background-color: #f8f9fa;">
+                                    <td colspan="6" class="text-end">Total Expense:</td>
+                                    <td class="text-danger">
+                                        {{ number_format($incomeRecords->where('type', 'Expense')->sum('amount'), 2) }}
+                                    </td>
+                                    <td colspan="2"></td>
+                                </tr>
+                                <tr class="fw-bold" style="background-color: #e3f2fd;">
+                                    <td colspan="6" class="text-end">Net Amount:</td>
+                                    <td>
+                                        @php
+                                            $totalIncome = $incomeRecords->where('type', 'Income')->sum('amount');
+                                            $totalExpense = $incomeRecords->where('type', 'Expense')->sum('amount');
+                                            $netAmount = $totalIncome - $totalExpense;
+                                        @endphp
+                                        @if($netAmount >= 0)
+                                            <span class="text-success">+{{ number_format($netAmount, 2) }}</span>
+                                        @else
+                                            <span class="text-danger">{{ number_format($netAmount, 2) }}</span>
+                                        @endif
+                                    </td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                            @endif
+                        </table>
+                    </div>
+                </div>
+            </div>
+            @else
+            <div class="text-center py-5">
+                <span class="material-symbols-outlined text-muted" style="font-size: 64px;">filter_alt</span>
+                <p class="text-muted mt-3 mb-0">Please apply filters to view reports</p>
+            </div>
+            @endif
         </div>
     </div>
 </div>
-@endsection
 
+<style>
+.filter-btn {
+    background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+    color: white;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.filter-btn:hover {
+    background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
+}
+
+.default-table-area {
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.default-table-area table {
+    margin-bottom: 0;
+}
+
+.default-table-area thead {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.default-table-area thead th {
+    font-weight: 600;
+    font-size: 13px;
+    color: #003471;
+    border-bottom: 2px solid #dee2e6;
+    padding: 12px;
+}
+
+.default-table-area tbody td {
+    font-size: 13px;
+    padding: 12px;
+    vertical-align: middle;
+}
+
+.default-table-area tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.badge {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+</style>
+@endsection
