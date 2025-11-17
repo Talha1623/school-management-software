@@ -111,7 +111,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -133,32 +133,32 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($advanceFees->currentPage() - 1) * $advanceFees->perPage()) }}</td>
                                         <td>
-                                            <strong class="text-primary">{{ $advanceFee->parent_id ?? 'N/A' }}</strong>
+                                            <strong class="text-primary" style="font-size: 13px;">{{ $advanceFee->parent_id ?? 'N/A' }}</strong>
                                         </td>
                                         <td>
-                                            <strong>{{ $advanceFee->name }}</strong>
+                                            <strong class="text-dark" style="font-size: 13px;">{{ $advanceFee->name }}</strong>
                                         </td>
-                                        <td>{{ $advanceFee->email ?? 'N/A' }}</td>
-                                        <td>{{ $advanceFee->phone ?? 'N/A' }}</td>
-                                        <td>{{ $advanceFee->id_card_number ?? 'N/A' }}</td>
+                                        <td style="font-size: 13px;">{{ $advanceFee->email ?? 'N/A' }}</td>
+                                        <td style="font-size: 13px;">{{ $advanceFee->phone ?? 'N/A' }}</td>
+                                        <td style="font-size: 13px;">{{ $advanceFee->id_card_number ?? 'N/A' }}</td>
                                         <td>
-                                            <span class="badge bg-success text-white">{{ number_format($advanceFee->available_credit, 2) }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-info text-white">{{ number_format($advanceFee->increase, 2) }}</span>
+                                            <span class="badge bg-success text-white" style="font-size: 11px; padding: 3px 6px;">{{ number_format($advanceFee->available_credit, 2) }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-warning text-white">{{ number_format($advanceFee->decrease, 2) }}</span>
+                                            <span class="badge bg-info text-white" style="font-size: 11px; padding: 3px 6px;">{{ number_format($advanceFee->increase, 2) }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-primary text-white">{{ $advanceFee->childs }}</span>
+                                            <span class="badge bg-warning text-white" style="font-size: 11px; padding: 3px 6px;">{{ number_format($advanceFee->decrease, 2) }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-primary text-white" style="font-size: 11px; padding: 3px 6px;">{{ $advanceFee->childs }}</span>
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editAdvanceFee({{ $advanceFee->id }})">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editAdvanceFee({{ $advanceFee->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this record?')) { document.getElementById('delete-form-{{ $advanceFee->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this record?')) { document.getElementById('delete-form-{{ $advanceFee->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $advanceFee->id }}" action="{{ route('accounting.manage-advance-fee.destroy', $advanceFee) }}" method="POST" class="d-none">
@@ -203,9 +203,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="advanceFeeModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">account_balance_wallet</span>
-                    <span>Add New Advance Fee Record</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="advanceFeeModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">account_balance_wallet</span>
+                    <span style="color: white !important;">Add New Advance Fee Record</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -424,55 +424,63 @@
         font-size: 12px;
         font-weight: 500;
         transition: all 0.3s ease;
-        border: 1px solid #dee2e6;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
     }
     
     .excel-btn {
         background-color: #28a745;
         color: white;
-        border-color: #28a745;
     }
     
     .excel-btn:hover {
         background-color: #218838;
         color: white;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
     
     .csv-btn {
-        background-color: #17a2b8;
+        background-color: #ff9800;
         color: white;
-        border-color: #17a2b8;
     }
     
     .csv-btn:hover {
-        background-color: #138496;
+        background-color: #f57c00;
         color: white;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
     }
     
     .pdf-btn {
         background-color: #dc3545;
         color: white;
-        border-color: #dc3545;
     }
     
     .pdf-btn:hover {
         background-color: #c82333;
         color: white;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
     }
     
     .print-btn {
-        background-color: #6c757d;
+        background-color: #2196f3;
         color: white;
-        border-color: #6c757d;
     }
     
     .print-btn:hover {
-        background-color: #5a6268;
+        background-color: #0b7dda;
         color: white;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+    }
+    
+    .export-btn:active {
+        transform: translateY(0);
     }
     
     .default-table-area {
@@ -493,18 +501,20 @@
     
     .default-table-area table thead th {
         border: none;
-        padding: 12px 15px;
+        padding: 8px 12px;
         font-weight: 600;
         font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        white-space: nowrap;
     }
     
     .default-table-area table tbody td {
-        padding: 12px 15px;
+        padding: 8px 12px;
         font-size: 13px;
         vertical-align: middle;
         border-bottom: 1px solid #e9ecef;
+        line-height: 1.4;
     }
     
     .default-table-area table tbody tr:hover {
@@ -523,8 +533,8 @@
     
     .default-table-area .btn-sm {
         font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        padding: 3px 6px;
+        min-height: auto;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
@@ -537,6 +547,11 @@
     .default-table-area .btn-danger .material-symbols-outlined {
         color: white !important;
     }
+    
+    .default-table-area table tbody td strong {
+        font-size: 13px;
+        font-weight: 600;
+    }
 </style>
 
 <script>
@@ -546,8 +561,8 @@ function resetForm() {
     document.getElementById('advanceFeeForm').action = "{{ route('accounting.manage-advance-fee.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('advanceFeeModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">account_balance_wallet</span>
-        <span>Add New Advance Fee Record</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">account_balance_wallet</span>
+        <span style="color: white !important;">Add New Advance Fee Record</span>
     `;
     document.querySelector('.advance-fee-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -563,8 +578,8 @@ function editAdvanceFee(id) {
             document.getElementById('advanceFeeForm').action = '{{ route('accounting.manage-advance-fee.update', ':id') }}'.replace(':id', id);
             document.getElementById('methodField').innerHTML = '@method("PUT")';
             document.getElementById('advanceFeeModalLabel').innerHTML = `
-                <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-                <span>Edit Advance Fee Record</span>
+                <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">edit</span>
+                <span style="color: white !important;">Edit Advance Fee Record</span>
             `;
             document.querySelector('.advance-fee-submit-btn').innerHTML = `
                 <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>

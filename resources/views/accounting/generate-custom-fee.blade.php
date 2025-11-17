@@ -39,16 +39,8 @@
                                 <label for="campus" class="form-label mb-0 fs-13 fw-medium">Campus <span class="text-danger">*</span></label>
                                 <select class="form-select form-select-sm py-1" id="campus" name="campus" required style="height: 32px;">
                                     <option value="">Select Campus</option>
-                                    @php
-                                        $campuses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                                        $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
-                                        $allCampuses = $campuses->merge($campusesFromSections)->unique()->sort()->values();
-                                        if ($allCampuses->isEmpty()) {
-                                            $allCampuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-                                        }
-                                    @endphp
-                                    @foreach($allCampuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -63,14 +55,8 @@
                                 <label for="class" class="form-label mb-0 fs-13 fw-medium">Class <span class="text-danger">*</span></label>
                                 <select class="form-select form-select-sm py-1" id="class" name="class" required style="height: 32px;">
                                     <option value="">Select Class</option>
-                                    @php
-                                        $classes = \App\Models\ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort();
-                                        if ($classes->isEmpty()) {
-                                            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
-                                        }
-                                    @endphp
-                                    @foreach($classes as $className)
-                                        <option value="{{ $className }}">{{ $className }}</option>
+                                    @foreach($classes as $classItem)
+                                        <option value="{{ $classItem->class_name ?? $classItem }}">{{ $classItem->class_name ?? $classItem }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -83,17 +69,8 @@
                             
                             <div class="mb-1">
                                 <label for="section" class="form-label mb-0 fs-13 fw-medium">Section <span class="text-danger">*</span></label>
-                                <select class="form-select form-select-sm py-1" id="section" name="section" required style="height: 32px;">
-                                    <option value="">Select Section</option>
-                                    @php
-                                        $sections = \App\Models\Section::whereNotNull('name')->distinct()->pluck('name')->sort();
-                                        if ($sections->isEmpty()) {
-                                            $sections = collect(['A', 'B', 'C', 'D', 'E']);
-                                        }
-                                    @endphp
-                                    @foreach($sections as $sectionName)
-                                        <option value="{{ $sectionName }}">{{ $sectionName }}</option>
-                                    @endforeach
+                                <select class="form-select form-select-sm py-1" id="section" name="section" required style="height: 32px;" disabled>
+                                    <option value="">Select Class First</option>
                                 </select>
                             </div>
                         </div>
@@ -108,7 +85,16 @@
                             
                             <div class="mb-1">
                                 <label for="fee_type" class="form-label mb-0 fs-13 fw-medium">Fee Type <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control form-control-sm py-1" id="fee_type" name="fee_type" placeholder="Enter fee type (e.g., Library Fee, Sports Fee, etc.)" required style="height: 32px;">
+                                @if(isset($feeTypes) && $feeTypes->count() > 0)
+                                    <select class="form-select form-select-sm py-1" id="fee_type" name="fee_type" required style="height: 32px;">
+                                        <option value="">Select Fee Type</option>
+                                        @foreach($feeTypes as $feeType)
+                                            <option value="{{ $feeType }}">{{ $feeType }}</option>
+                                        @endforeach
+                                    </select>
+                                @else
+                                    <input type="text" class="form-control form-control-sm py-1" id="fee_type" name="fee_type" placeholder="Enter fee type (e.g., Library Fee, Sports Fee, etc.)" required style="height: 32px;">
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -129,7 +115,7 @@
                 <div class="row mb-2">
                     <div class="col-12">
                         <div class="d-flex justify-content-end gap-2">
-                            <button type="reset" class="btn btn-sm btn-secondary px-4 py-2">
+                            <button type="reset" class="btn btn-sm btn-secondary px-4 py-2" onclick="resetForm()">
                                 <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">refresh</span>
                                 Reset
                             </button>
@@ -165,4 +151,70 @@
         color: #495057;
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('class');
+    const sectionSelect = document.getElementById('section');
+    
+    classSelect.addEventListener('change', function() {
+        const selectedClass = this.value;
+        
+        // Reset section dropdown
+        sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
+        sectionSelect.disabled = true;
+        
+        if (!selectedClass) {
+            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+            return;
+        }
+        
+        // Fetch sections for selected class
+        fetch(`{{ route('accounting.custom-fee.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section.name;
+                    option.textContent = section.name;
+                    sectionSelect.appendChild(option);
+                });
+                sectionSelect.disabled = false;
+            } else {
+                sectionSelect.innerHTML = '<option value="">No sections found</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching sections:', error);
+            sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+        });
+    });
+    
+    // Also handle form reset event
+    document.getElementById('custom-fee-form').addEventListener('reset', function() {
+        setTimeout(function() {
+            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+            sectionSelect.disabled = true;
+        }, 10);
+    });
+});
+
+// Global function for reset button
+function resetForm() {
+    const sectionSelect = document.getElementById('section');
+    if (sectionSelect) {
+        sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+        sectionSelect.disabled = true;
+    }
+    document.getElementById('custom-fee-form').reset();
+}
+</script>
 @endsection

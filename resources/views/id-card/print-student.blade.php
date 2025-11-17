@@ -37,10 +37,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="type" id="type">
                                     <option value="">All Types</option>
-                                    <option value="Regular">Regular</option>
-                                    <option value="Scholarship">Scholarship</option>
-                                    <option value="Merit">Merit</option>
-                                    <option value="VIP">VIP</option>
+                                    @foreach($types as $type)
+                                        <option value="{{ $type }}" {{ request('type') == $type ? 'selected' : '' }}>{{ $type }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -51,20 +50,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="class" id="class">
                                     <option value="">All Classes</option>
-                                    <option value="Nursery">Nursery</option>
-                                    <option value="KG">KG</option>
-                                    <option value="1st">1st</option>
-                                    <option value="2nd">2nd</option>
-                                    <option value="3rd">3rd</option>
-                                    <option value="4th">4th</option>
-                                    <option value="5th">5th</option>
-                                    <option value="6th">6th</option>
-                                    <option value="7th">7th</option>
-                                    <option value="8th">8th</option>
-                                    <option value="9th">9th</option>
-                                    <option value="10th">10th</option>
-                                    <option value="11th">11th</option>
-                                    <option value="12th">12th</option>
+                                    @foreach($classes as $class)
+                                        <option value="{{ $class }}" {{ request('class') == $class ? 'selected' : '' }}>{{ $class }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -75,12 +63,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="section" id="section">
                                     <option value="">All Sections</option>
-                                    <option value="A">A</option>
-                                    <option value="B">B</option>
-                                    <option value="C">C</option>
-                                    <option value="D">D</option>
-                                    <option value="E">E</option>
-                                    <option value="F">F</option>
+                                    @foreach($sections as $section)
+                                        <option value="{{ $section }}" {{ request('section') == $section ? 'selected' : '' }}>{{ $section }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -91,10 +76,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="session" id="session">
                                     <option value="">All Sessions</option>
-                                    <option value="2024-2025">2024-2025</option>
-                                    <option value="2025-2026">2025-2026</option>
-                                    <option value="2026-2027">2026-2027</option>
-                                    <option value="2027-2028">2027-2028</option>
+                                    @foreach($sessions as $session)
+                                        <option value="{{ $session }}" {{ request('session') == $session ? 'selected' : '' }}>{{ $session }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -176,11 +160,97 @@
 </style>
 
 <script>
-// Form submission
+// Function to load sections for a class
+function loadSectionsForClass(classValue) {
+    const sectionSelect = document.getElementById('section');
+    const currentSection = sectionSelect.value; // Preserve current selection
+    
+    // Clear existing options except "All Sections"
+    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+    
+    if (classValue) {
+        // Fetch sections for selected class
+        fetch(`{{ route('id-card.print-student') }}?class=${classValue}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    if (section === currentSection) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+        });
+    } else {
+        // If no class selected, load all sections
+        fetch(`{{ route('id-card.print-student') }}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    if (section === currentSection) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+        });
+    }
+}
+
+// Load sections when class changes
+document.getElementById('class').addEventListener('change', function() {
+    loadSectionsForClass(this.value);
+});
+
+// Load sections on page load if class is already selected
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('class');
+    if (classSelect.value) {
+        loadSectionsForClass(classSelect.value);
+    }
+});
+
+// Form submission - open print view in new tab
 document.getElementById('studentCardForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    // Filter logic will be implemented here
-    alert('Filter functionality will be implemented here');
+    
+    const formData = new FormData(this);
+    const params = new URLSearchParams();
+    
+    // Add form values to params
+    for (const [key, value] of formData.entries()) {
+        if (value) {
+            params.append(key, value);
+        }
+    }
+    
+    // Open print view in new tab
+    const printUrl = `{{ route('id-card.print-student.print') }}?${params.toString()}`;
+    window.open(printUrl, '_blank');
 });
 </script>
 @endsection

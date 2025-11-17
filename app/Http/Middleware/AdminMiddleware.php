@@ -20,14 +20,7 @@ class AdminMiddleware
             return redirect()->route('admin.login')->with('error', 'Please login to access this page.');
         }
 
-        $admin = Auth::guard('admin')->user();
-
-        // Check if super admin (optional - remove if you want regular admins too)
-        if (!$admin->isSuperAdmin()) {
-            Auth::guard('admin')->logout();
-            return redirect()->route('admin.login')->with('error', 'Access denied. Super Admin access required.');
-        }
-
+        // Allow both Super Admin and normal Admin to access
         return $next($request);
     }
 }

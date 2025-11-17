@@ -50,14 +50,7 @@ class AdminAuthController extends Controller
             ])->onlyInput('email');
         }
 
-        // Check if super admin
-        if (!$admin->isSuperAdmin()) {
-            return back()->withErrors([
-                'email' => 'Only Super Admins can access this login.',
-            ])->onlyInput('email');
-        }
-
-        // Login the admin
+        // Login the admin (both Super Admin and normal Admin can login)
         Auth::guard('admin')->login($admin, $request->filled('remember'));
 
         $request->session()->regenerate();

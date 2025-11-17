@@ -163,6 +163,9 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
+                                                <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Make Payment" onclick="openPaymentModal({{ $salary->id }})">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">payments</span>
+                                                </button>
                                                 <div class="dropdown">
                                                     <button class="btn btn-sm btn-secondary px-2 py-0 dropdown-toggle" type="button" id="statusDropdown{{ $salary->id }}" data-bs-toggle="dropdown" aria-expanded="false" title="Status">
                                                         <span class="material-symbols-outlined" style="font-size: 14px; color: white;">more_vert</span>
@@ -230,6 +233,204 @@
                     {{ $salaries->links() }}
                 </div>
             @endif
+        </div>
+    </div>
+</div>
+
+<!-- Make Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border-radius: 12px 12px 0 0; border: none; padding: 20px;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="paymentModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">payments</span>
+                    <span style="color: white !important;">Make Payment</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="paymentForm" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="modal-body p-4" style="background-color: #f8f9fa;">
+                    <div class="row g-3">
+                        <!-- Campus -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Campus</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">location_on</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_campus" name="campus" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Employee -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Employee</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">person</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_employee" name="employee" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Month -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Month</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">calendar_month</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_month" name="month" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Generated Salary -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Generated Salary</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_generated_salary" name="generated_salary" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Amount Paid -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Amount Paid <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">payments</span>
+                                </span>
+                                <input type="number" class="form-control" id="payment_amount_paid" name="amount_paid" step="0.01" min="0" required>
+                            </div>
+                        </div>
+
+                        <!-- Loan Repayment -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Loan Repayment</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">account_balance</span>
+                                </span>
+                                <input type="number" class="form-control" id="payment_loan_repayment" name="loan_repayment" step="0.01" min="0" value="0">
+                            </div>
+                        </div>
+
+                        <!-- Bonus Title -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Bonus Title</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">stars</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_bonus_title" name="bonus_title" placeholder="Enter bonus title">
+                            </div>
+                        </div>
+
+                        <!-- Bonus Amount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Bonus Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
+                                </span>
+                                <input type="number" class="form-control" id="payment_bonus_amount" name="bonus_amount" step="0.01" min="0" value="0">
+                            </div>
+                        </div>
+
+                        <!-- Deduction Title -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Deduction Title</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">remove_circle</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_deduction_title" name="deduction_title" placeholder="Enter deduction title">
+                            </div>
+                        </div>
+
+                        <!-- Deduction Amount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Deduction Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
+                                </span>
+                                <input type="number" class="form-control" id="payment_deduction_amount" name="deduction_amount" step="0.01" min="0" value="0">
+                            </div>
+                        </div>
+
+                        <!-- Payment Method -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Payment Method <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">payment</span>
+                                </span>
+                                <select class="form-control" id="payment_method" name="payment_method" required>
+                                    <option value="">Select Payment Method</option>
+                                    <option value="Bank">Bank</option>
+                                    <option value="Wallet">Wallet</option>
+                                    <option value="Transfer">Transfer</option>
+                                    <option value="Card">Card</option>
+                                    <option value="Check">Check</option>
+                                    <option value="Deposit">Deposit</option>
+                                    <option value="Cash">Cash</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Fully Paid? -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Fully Paid?</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
+                                </span>
+                                <select class="form-control" id="payment_fully_paid" name="fully_paid">
+                                    <option value="0">No</option>
+                                    <option value="1">Yes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Payment Date -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Payment Date <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">calendar_today</span>
+                                </span>
+                                <input type="date" class="form-control" id="payment_date" name="payment_date" required value="{{ date('Y-m-d') }}">
+                            </div>
+                        </div>
+
+                        <!-- Notify Employee -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Notify Employee</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">notifications</span>
+                                </span>
+                                <select class="form-control" id="payment_notify_employee" name="notify_employee">
+                                    <option value="0">No</option>
+                                    <option value="1">Yes</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 12px 12px; padding: 15px 20px;">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" style="border-radius: 6px;">Cancel</button>
+                    <button type="submit" class="btn btn-sm" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; border-radius: 6px; padding: 6px 20px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+                        Save Payment
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -546,6 +747,45 @@ function printTable() {
     window.print();
     document.body.innerHTML = originalContents;
     window.location.reload();
+}
+
+// Open Payment Modal
+function openPaymentModal(salaryId) {
+    // Fetch salary data
+    fetch(`{{ url('/salary-loan/manage-salaries') }}/${salaryId}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Set form action
+        document.getElementById('paymentForm').action = `{{ url('/salary-loan/manage-salaries') }}/${salaryId}/payment`;
+        
+        // Populate form fields
+        document.getElementById('payment_campus').value = data.staff?.campus || 'N/A';
+        document.getElementById('payment_employee').value = data.staff?.name || 'N/A';
+        document.getElementById('payment_month').value = `${data.salary_month} ${data.year}`;
+        document.getElementById('payment_generated_salary').value = `₹${parseFloat(data.salary_generated || 0).toFixed(2)}`;
+        document.getElementById('payment_amount_paid').value = data.amount_paid || 0;
+        document.getElementById('payment_loan_repayment').value = data.loan_repayment || 0;
+        document.getElementById('payment_bonus_title').value = '';
+        document.getElementById('payment_bonus_amount').value = 0;
+        document.getElementById('payment_deduction_title').value = '';
+        document.getElementById('payment_deduction_amount').value = 0;
+        document.getElementById('payment_method').value = '';
+        document.getElementById('payment_fully_paid').value = data.status === 'Paid' ? '1' : '0';
+        document.getElementById('payment_date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('payment_notify_employee').value = '0';
+        
+        // Show modal
+        new bootstrap.Modal(document.getElementById('paymentModal')).show();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading salary data');
+    });
 }
 </script>
 @endsection

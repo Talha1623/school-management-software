@@ -181,9 +181,9 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="categoryModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">category</span>
-                    <span>Add New Category</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="categoryModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">category</span>
+                    <span style="color: white !important;">Add New Category</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -218,9 +218,11 @@
                                 </span>
                                 <select class="form-control category-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Campus</option>
-                                    @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
-                                    @endforeach
+                                    @if(isset($campuses) && $campuses->count() > 0)
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                        @endforeach
+                                    @endif
                                 </select>
                             </div>
                         </div>
@@ -244,6 +246,7 @@
 <style>
     /* Category Form Styling */
     #categoryModal .category-input-group {
+        height: 32px;
         border-radius: 8px;
         overflow: hidden;
         transition: all 0.3s ease;
@@ -256,8 +259,9 @@
     }
     
     #categoryModal .category-input {
+        height: 32px;
         font-size: 13px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.35rem 0.65rem;
         border: none;
         border-left: 1px solid #e0e7ff;
         border-radius: 0 8px 8px 0;
@@ -270,8 +274,16 @@
         outline: none;
     }
     
+    #categoryModal textarea.category-input {
+        height: auto;
+        min-height: 32px;
+        padding-top: 0.35rem;
+        padding-bottom: 0.35rem;
+    }
+    
     #categoryModal .input-group-text {
-        padding: 0 0.75rem;
+        height: 32px;
+        padding: 0 0.65rem;
         display: flex;
         align-items: center;
         border: none;
@@ -323,12 +335,17 @@
         color: white;
     }
     
-    /* Export Buttons */
+    /* Export Buttons Styling */
     .export-btn {
         border: none;
         font-weight: 500;
         transition: all 0.3s ease;
-        font-size: 12px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        font-size: 13px;
     }
     
     .excel-btn {
@@ -340,6 +357,7 @@
         background-color: #218838;
         color: white;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
     
     .pdf-btn {
@@ -351,28 +369,49 @@
         background-color: #c82333;
         color: white;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
     }
     
     .print-btn {
-        background-color: #6c757d;
+        background-color: #2196f3;
         color: white;
     }
     
     .print-btn:hover {
-        background-color: #5a6268;
+        background-color: #0b7dda;
         color: white;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
     }
     
+    .export-btn:active {
+        transform: translateY(0);
+    }
+    
+    /* Search Input Group Styling */
     .search-input-group {
         border-radius: 8px;
         overflow: hidden;
         border: 1px solid #dee2e6;
+        transition: all 0.3s ease;
+        height: 32px;
+    }
+    
+    .search-input-group:focus-within {
+        border-color: #003471;
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
     }
     
     .search-input-group .form-control {
         border: none;
         font-size: 13px;
+        height: 32px;
+        line-height: 1.4;
+    }
+    
+    .search-input-group .form-control:focus {
+        box-shadow: none;
+        border: none;
     }
     
     .search-input-group .input-group-text {
@@ -399,6 +438,11 @@
         color: white;
         transform: translateY(-1px);
         box-shadow: 0 2px 6px rgba(0, 52, 113, 0.3);
+    }
+    
+    .search-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
     }
     
     .search-results-info {
@@ -446,6 +490,14 @@
         padding: 3px 6px;
         font-weight: 500;
     }
+    
+    #categoryModal select.category-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23003471' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        padding-right: 2.5rem;
+    }
 </style>
 
 <script>
@@ -455,8 +507,8 @@ function resetForm() {
     document.getElementById('categoryForm').action = "{{ route('stock.manage-categories.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('categoryModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">category</span>
-        <span>Add New Category</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">category</span>
+        <span style="color: white !important;">Add New Category</span>
     `;
     document.querySelector('.category-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -472,8 +524,8 @@ function editCategory(id, categoryName, description, campus) {
     document.getElementById('categoryForm').action = "{{ url('stock/manage-categories') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
     document.getElementById('categoryModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-        <span>Edit Category</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">edit</span>
+        <span style="color: white !important;">Edit Category</span>
     `;
     document.querySelector('.category-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>

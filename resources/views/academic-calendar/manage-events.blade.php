@@ -15,16 +15,22 @@
             </div>
 
             @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-success alert-dismissible fade show success-toast" role="alert" id="successAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">check_circle</span>
+                        <span>{{ session('success') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-danger alert-dismissible fade show error-toast" role="alert" id="errorAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">error</span>
+                        <span>{{ session('error') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
@@ -192,12 +198,12 @@
 <div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="eventModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">event</span>
-                    <span>Add New Event</span>
+            <div class="modal-header p-3" style="background-color: white; border-bottom: 1px solid #e9ecef;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="eventModalLabel" style="color: #003471;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: #003471;">event</span>
+                    <span style="color: #003471;">Add New Event</span>
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
             <form id="eventForm" method="POST" action="{{ route('events.store') }}">
                 @csrf
@@ -231,12 +237,9 @@
                                 </span>
                                 <select class="form-control event-input" name="event_type" id="event_type">
                                     <option value="">Select Event Type</option>
-                                    <option value="Academic">Academic</option>
-                                    <option value="Sports">Sports</option>
-                                    <option value="Cultural">Cultural</option>
-                                    <option value="Holiday">Holiday</option>
-                                    <option value="Meeting">Meeting</option>
-                                    <option value="Other">Other</option>
+                                    <option value="holiday">Holiday</option>
+                                    <option value="event">Event</option>
+                                    <option value="other">Other</option>
                                 </select>
                             </div>
                         </div>
@@ -644,6 +647,96 @@
     .default-table-area .btn-success .material-symbols-outlined {
         color: white !important;
     }
+    
+    /* Success/Error Toast Styling */
+    .success-toast,
+    .error-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 350px;
+        max-width: 500px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border: none;
+        border-radius: 8px;
+        padding: 16px 20px;
+        animation: slideInDown 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    
+    .success-toast {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+    }
+    
+    .error-toast {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+    }
+    
+    .success-toast .btn-close,
+    .error-toast .btn-close {
+        filter: brightness(0) invert(1);
+        opacity: 0.9;
+        padding: 0;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-left: auto;
+    }
+    
+    .success-toast .btn-close:hover,
+    .error-toast .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .success-toast .material-symbols-outlined,
+    .error-toast .material-symbols-outlined {
+        font-size: 24px;
+        flex-shrink: 0;
+    }
+    
+    .success-toast > div,
+    .error-toast > div {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+    }
+    
+    @keyframes slideInDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOutUp {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+    }
+    
+    .success-toast.fade-out,
+    .error-toast.fade-out {
+        animation: slideOutUp 0.3s ease-in forwards;
+    }
 </style>
 
 <script>
@@ -653,8 +746,8 @@ function resetForm() {
     document.getElementById('eventForm').action = "{{ route('events.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('eventModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">event</span>
-        <span>Add New Event</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: #003471;">event</span>
+        <span style="color: #003471;">Add New Event</span>
     `;
     document.querySelector('.event-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -670,8 +763,8 @@ function editEvent(id) {
             document.getElementById('eventForm').action = '{{ route('events.update', ':id') }}'.replace(':id', id);
             document.getElementById('methodField').innerHTML = '@method("PUT")';
             document.getElementById('eventModalLabel').innerHTML = `
-                <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-                <span>Edit Event</span>
+                <span class="material-symbols-outlined" style="font-size: 20px; color: #003471;">edit</span>
+                <span style="color: #003471;">Edit Event</span>
             `;
             document.querySelector('.event-submit-btn').innerHTML = `
                 <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -781,6 +874,33 @@ function printTable() {
     document.body.innerHTML = originalContents;
     window.location.reload();
 }
+
+// Auto-dismiss success/error messages after 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    
+    function dismissAlert(alert) {
+        if (alert) {
+            alert.classList.add('fade-out');
+            setTimeout(() => {
+                alert.remove();
+            }, 300);
+        }
+    }
+    
+    if (successAlert) {
+        setTimeout(() => {
+            dismissAlert(successAlert);
+        }, 5000);
+    }
+    
+    if (errorAlert) {
+        setTimeout(() => {
+            dismissAlert(errorAlert);
+        }, 5000);
+    }
+});
 </script>
 @endsection
 

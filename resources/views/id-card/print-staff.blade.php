@@ -37,9 +37,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="campus" id="campus">
                                     <option value="">All Campus</option>
-                                    <option value="Main Campus">Main Campus</option>
-                                    <option value="Branch Campus 1">Branch Campus 1</option>
-                                    <option value="Branch Campus 2">Branch Campus 2</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}" {{ request('campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -50,14 +50,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="staff_type" id="staff_type">
                                     <option value="">All Types</option>
-                                    <option value="Teacher">Teacher</option>
-                                    <option value="Principal">Principal</option>
-                                    <option value="Vice Principal">Vice Principal</option>
-                                    <option value="Administrator">Administrator</option>
-                                    <option value="Accountant">Accountant</option>
-                                    <option value="Receptionist">Receptionist</option>
-                                    <option value="Security">Security</option>
-                                    <option value="Cleaner">Cleaner</option>
+                                    @foreach($staffTypes as $type)
+                                        <option value="{{ $type }}" {{ request('staff_type') == $type ? 'selected' : '' }}>{{ $type }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -68,10 +63,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="session" id="session">
                                     <option value="">All Sessions</option>
-                                    <option value="2024-2025">2024-2025</option>
-                                    <option value="2025-2026">2025-2026</option>
-                                    <option value="2026-2027">2026-2027</option>
-                                    <option value="2027-2028">2027-2028</option>
+                                    @foreach($sessions as $session)
+                                        <option value="{{ $session }}" {{ request('session') == $session ? 'selected' : '' }}>{{ $session }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -82,9 +76,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="card_type" id="card_type">
                                     <option value="">All Types</option>
-                                    <option value="Regular">Regular</option>
-                                    <option value="VIP">VIP</option>
-                                    <option value="Premium">Premium</option>
+                                    @foreach($cardTypes as $cardType)
+                                        <option value="{{ $cardType }}" {{ request('card_type') == $cardType ? 'selected' : '' }}>{{ $cardType }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -166,11 +160,23 @@
 </style>
 
 <script>
-// Form submission
+// Form submission - open print view in new tab
 document.getElementById('staffCardForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    // Filter logic will be implemented here
-    alert('Filter functionality will be implemented here');
+    
+    const formData = new FormData(this);
+    const params = new URLSearchParams();
+    
+    // Add form values to params
+    for (const [key, value] of formData.entries()) {
+        if (value) {
+            params.append(key, value);
+        }
+    }
+    
+    // Open print view in new tab
+    const printUrl = `{{ route('id-card.print-staff.print') }}?${params.toString()}`;
+    window.open(printUrl, '_blank');
 });
 </script>
 @endsection

@@ -13,7 +13,21 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    'name' => env('APP_NAME', 'ICMS'),
+    
+    /*
+    |--------------------------------------------------------------------------
+    | School Contact Information
+    |--------------------------------------------------------------------------
+    |
+    | These values are used for displaying school contact information
+    | in reports and other documents.
+    |
+    */
+    
+    'phone' => env('SCHOOL_PHONE', '+923316074246'),
+    'email' => env('SCHOOL_EMAIL', 'arainabdurrehman3@gmail.com'),
+    'address' => env('SCHOOL_ADDRESS', 'Defence View'),
 
     /*
     |--------------------------------------------------------------------------

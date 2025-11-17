@@ -123,11 +123,11 @@
                     <!-- Search -->
                     <div class="d-flex align-items-center gap-2">
                         <label for="searchInput" class="mb-0 fs-13 fw-medium text-dark">Search:</label>
-                        <div class="input-group input-group-sm search-input-group" style="min-width: 200px; max-width: 350px; flex: 1;">
+                        <div class="input-group input-group-sm search-input-group" style="width: 280px;">
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search tasks..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" style="padding: 4px 8px; font-size: 12px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by title, description, type..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" style="padding: 4px 8px; font-size: 12px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -163,39 +163,46 @@
             @endif
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table">
+                <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
+                    <table class="table table-sm table-hover" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Task Title</th>
-                                <th>Description</th>
-                                <th>Type</th>
-                                <th>Assign To</th>
-                                <th>Created At</th>
-                                <th class="text-end">Actions</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">#</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Task Title</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Description</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Type</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Assign To</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Status</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Created At</th>
+                                <th style="padding: 12px 15px; font-size: 14px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($tasks as $task)
                                 <tr>
-                                    <td>{{ $loop->iteration + (($tasks->currentPage() - 1) * $tasks->perPage()) }}</td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">{{ $loop->iteration + (($tasks->currentPage() - 1) * $tasks->perPage()) }}</td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <strong class="text-primary">{{ $task->task_title }}</strong>
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <span class="text-muted">{{ Str::limit($task->description ?? 'N/A', 50) }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($task->type)
-                                            <span class="badge bg-info text-white">{{ $task->type }}</span>
+                                            @if(strtolower($task->type) == 'urgent')
+                                                <span class="badge bg-danger text-white" style="font-size: 11px;">Urgent</span>
+                                            @elseif(strtolower($task->type) == 'normal')
+                                                <span class="badge bg-info text-white" style="font-size: 11px;">Normal</span>
+                                            @else
+                                                <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $task->type }}</span>
+                                            @endif
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($task->assign_to)
-                                            <span class="badge bg-success text-white">
+                                            <span class="badge bg-success text-white" style="font-size: 11px;">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">person</span>
                                                 {{ $task->assign_to }}
                                             </span>
@@ -203,19 +210,55 @@
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
+                                        <div class="dropdown">
+                                            @php
+                                                $status = $task->status ?? 'Pending';
+                                                $statusColors = [
+                                                    'Pending' => 'status-pending',
+                                                    'Accepted' => 'status-accepted',
+                                                    'Returned' => 'status-returned',
+                                                    'Completed' => 'status-completed'
+                                                ];
+                                                $statusClass = $statusColors[$status] ?? 'status-pending';
+                                            @endphp
+                                            <button class="status-btn {{ $statusClass }}" type="button" id="statusDropdown{{ $task->id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <span class="status-text">{{ $status }}</span>
+                                                <span class="material-symbols-outlined status-icon">arrow_drop_down</span>
+                                            </button>
+                                            <ul class="dropdown-menu status-dropdown-menu" aria-labelledby="statusDropdown{{ $task->id }}">
+                                                <li><a class="dropdown-item status-option" href="#" onclick="updateTaskStatus({{ $task->id }}, 'Pending'); return false;">
+                                                    <span class="status-indicator status-pending-indicator"></span>
+                                                    <span>Pending</span>
+                                                </a></li>
+                                                <li><a class="dropdown-item status-option" href="#" onclick="updateTaskStatus({{ $task->id }}, 'Accepted'); return false;">
+                                                    <span class="status-indicator status-accepted-indicator"></span>
+                                                    <span>Accept Task</span>
+                                                </a></li>
+                                                <li><a class="dropdown-item status-option" href="#" onclick="updateTaskStatus({{ $task->id }}, 'Returned'); return false;">
+                                                    <span class="status-indicator status-returned-indicator"></span>
+                                                    <span>Return/Cancel</span>
+                                                </a></li>
+                                                <li><a class="dropdown-item status-option" href="#" onclick="updateTaskStatus({{ $task->id }}, 'Completed'); return false;">
+                                                    <span class="status-indicator status-completed-indicator"></span>
+                                                    <span>Mark as Complete</span>
+                                                </a></li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <span class="text-muted">{{ $task->created_at ? $task->created_at->format('Y-m-d') : 'N/A' }}</span>
                                     </td>
-                                    <td class="text-end">
-                                        <div class="d-inline-flex gap-1 align-items-center">
-                                            <button type="button" class="btn action-btn edit-btn" onclick="editTask({{ $task->id }})" title="Edit">
-                                                <span class="material-symbols-outlined">edit</span>
+                                    <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
+                                        <div class="d-inline-flex gap-1">
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editTask({{ $task->id }})" title="Edit">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </button>
-                                            <form action="{{ route('task-management.destroy', $task) }}" method="POST" class="d-inline m-0" onsubmit="return confirm('Are you sure you want to delete this task?');">
+                                            <form action="{{ route('task-management.destroy', $task) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this task?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn action-btn delete-btn" title="Delete">
-                                                    <span class="material-symbols-outlined">delete</span>
+                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                             </form>
                                         </div>
@@ -223,7 +266,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
+                                    <td colspan="8" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No tasks found.</p>
                                     </td>
@@ -248,9 +291,9 @@
     <div class="modal-dialog modal-dialog-centered" style="max-width: 600px;">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="taskModalLabel" style="font-size: 14px;">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">task_alt</span>
-                    <span>Add New Task</span>
+                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="taskModalLabel" style="font-size: 14px; color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: white;">task_alt</span>
+                    <span style="color: white;">Add New Task</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -288,7 +331,11 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">category</span>
                                 </span>
-                                <input type="text" class="form-control task-input" name="type" id="type" placeholder="Enter task type" style="font-size: 12px;">
+                                <select class="form-control task-input" name="type" id="type" style="font-size: 12px; border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Type</option>
+                                    <option value="normal">Normal</option>
+                                    <option value="urgent">Urgent</option>
+                                </select>
                             </div>
                         </div>
 
@@ -299,7 +346,30 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">person</span>
                                 </span>
-                                <input type="text" class="form-control task-input" name="assign_to" id="assign_to" placeholder="Enter assignee name" style="font-size: 12px;">
+                                <select class="form-control task-input" name="assign_to" id="assign_to" style="font-size: 12px; border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Person</option>
+                                    @if($admins->count() > 0)
+                                        <optgroup label="Admins">
+                                            @foreach($admins as $admin)
+                                                <option value="{{ $admin->name }}">{{ $admin->name }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                    @if($accountants->count() > 0)
+                                        <optgroup label="Accountants">
+                                            @foreach($accountants as $accountant)
+                                                <option value="{{ $accountant->name }}">{{ $accountant->name }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                    @if($staff->count() > 0)
+                                        <optgroup label="Staff">
+                                            @foreach($staff as $staffMember)
+                                                <option value="{{ $staffMember->name }}">{{ $staffMember->name }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -494,25 +564,7 @@
         overflow: hidden;
         border: 1px solid #dee2e6;
         transition: all 0.3s ease;
-        height: 28px;
-        width: 100%;
-    }
-    
-    .search-input-group .form-control {
-        height: 28px;
-        padding: 2px 6px;
-        font-size: 11px;
-    }
-    
-    .search-input-group .input-group-text {
-        height: 28px;
-        padding: 2px 8px;
-    }
-    
-    .search-input-group .btn {
-        height: 28px;
-        padding: 2px 8px;
-        font-size: 11px;
+        height: 32px;
     }
     
     .search-input-group:focus-within {
@@ -520,10 +572,42 @@
         box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
     }
     
+    .search-input-group .form-control {
+        border: none;
+        font-size: 12px;
+        height: 32px;
+        line-height: 1.4;
+    }
+    
+    .search-input-group .form-control:focus {
+        box-shadow: none;
+        border: none;
+    }
+    
+    .search-input-group .input-group-text {
+        height: 32px;
+        padding: 4px 8px;
+        display: flex;
+        align-items: center;
+    }
+    
     .search-btn {
         background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
         color: white;
         border: none;
+        padding: 4px 10px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+    }
+    
+    .search-btn:hover {
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 52, 113, 0.3);
     }
     
     .search-results-info {
@@ -535,76 +619,198 @@
         font-size: 13px;
     }
 
-    /* Table Compact Styling */
+    /* Table Styling */
     .default-table-area table {
         margin-bottom: 0;
+        border-spacing: 0;
+        border-collapse: collapse;
         border: 1px solid #dee2e6;
     }
     
+    .default-table-area table thead {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
-        height: 32px;
+        vertical-align: middle;
+        line-height: 1.5;
+        white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
+    .default-table-area table thead th:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
+        vertical-align: middle;
+        line-height: 1.5;
         border: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody tr:last-child td {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:first-child,
+    .default-table-area table tbody td:first-child {
+        padding-left: 15px;
+    }
+    
+    .default-table-area table thead th:last-child,
+    .default-table-area table tbody td:last-child {
+        padding-right: 15px;
+    }
+    
+    .default-table-area table tbody tr:first-child td {
+        border-top: none;
     }
     
     .default-table-area .badge {
         font-size: 11px;
-        padding: 3px 6px;
+        padding: 4px 8px;
     }
     
-    /* Action Buttons */
-    .action-btn {
-        width: 28px;
-        height: 28px;
-        padding: 0;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: none;
-        border-radius: 6px;
-        transition: all 0.3s ease;
-        font-size: 0;
-    }
-    
-    .action-btn .material-symbols-outlined {
-        font-size: 16px;
-        color: white;
-        line-height: 1;
-    }
-    
-    .edit-btn {
-        background-color: #0d6efd;
-    }
-    
-    .edit-btn:hover {
-        background-color: #0b5ed7;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 6px rgba(13, 110, 253, 0.4);
-    }
-    
-    .delete-btn {
-        background-color: #dc3545;
-    }
-    
-    .delete-btn:hover {
-        background-color: #bb2d3b;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 6px rgba(220, 53, 69, 0.4);
+    .default-table-area .btn-sm .material-symbols-outlined {
+        font-size: 14px !important;
+        color: white !important;
     }
     
     #taskModal .form-control,
     #taskModal .form-select,
     #taskModal select {
         font-size: 12px !important;
+    }
+
+    /* Status Button Styling */
+    .status-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border: none;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .status-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    }
+
+    .status-btn:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.2);
+    }
+
+    .status-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none !important;
+    }
+
+    .status-text {
+        font-size: 10px;
+        letter-spacing: 0.3px;
+    }
+
+    .status-icon {
+        font-size: 14px !important;
+        line-height: 1;
+        margin-left: 2px;
+    }
+
+    /* Status Colors */
+    .status-pending {
+        background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+        color: #000;
+    }
+
+    .status-accepted {
+        background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%);
+        color: #fff;
+    }
+
+    .status-returned {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: #fff;
+    }
+
+    .status-completed {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: #fff;
+    }
+
+    /* Dropdown Menu Styling */
+    .status-dropdown-menu {
+        min-width: 160px;
+        padding: 4px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border: 1px solid #e9ecef;
+    }
+
+    .status-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        font-size: 12px;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        margin: 2px 0;
+    }
+
+    .status-option:hover {
+        background-color: #f8f9fa;
+        transform: translateX(2px);
+    }
+
+    .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    .status-pending-indicator {
+        background-color: #ffc107;
+    }
+
+    .status-accepted-indicator {
+        background-color: #0d6efd;
+    }
+
+    .status-returned-indicator {
+        background-color: #dc3545;
+    }
+
+    .status-completed-indicator {
+        background-color: #28a745;
     }
 </style>
 
@@ -613,16 +819,28 @@ function resetForm() {
     document.getElementById('taskForm').action = '{{ route('task-management.store') }}';
     document.getElementById('taskForm').reset();
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('taskModalLabel').textContent = 'Add New Task';
+    const modalLabel = document.getElementById('taskModalLabel');
+    modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">task_alt</span><span style="color: white;">Add New Task</span>';
 }
 
 function editTask(id) {
-    fetch(`{{ url('/task-management') }}/${id}`)
-        .then(response => response.json())
+    fetch(`{{ url('/task-management') }}/${id}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             document.getElementById('taskForm').action = '{{ route('task-management.update', ':id') }}'.replace(':id', id);
             document.getElementById('methodField').innerHTML = '@method('PUT')';
-            document.getElementById('taskModalLabel').textContent = 'Edit Task';
+            const modalLabel = document.getElementById('taskModalLabel');
+            modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">task_alt</span><span style="color: white;">Edit Task</span>';
             
             document.getElementById('task_title').value = data.task_title || '';
             document.getElementById('description').value = data.description || '';
@@ -687,6 +905,75 @@ function printTable() {
     window.print();
     document.body.innerHTML = originalContents;
     window.location.reload();
+}
+
+function updateTaskStatus(taskId, status) {
+    if (!confirm(`Are you sure you want to change status to "${status}"?`)) {
+        return;
+    }
+    
+    // Disable button during request
+    const button = document.querySelector(`#statusDropdown${taskId}`);
+    const originalContent = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="status-text">Updating...</span>';
+    
+    fetch(`{{ route('task-management.update-status', ':id') }}`.replace(':id', taskId), {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.message || 'Failed to update status');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Update the badge color and text
+            const statusClasses = {
+                'Pending': 'status-pending',
+                'Accepted': 'status-accepted',
+                'Returned': 'status-returned',
+                'Completed': 'status-completed'
+            };
+            
+            // Remove old status classes
+            button.classList.remove('status-pending', 'status-accepted', 'status-returned', 'status-completed');
+            // Add new status class
+            button.classList.add(statusClasses[data.status]);
+            // Update text
+            button.innerHTML = `<span class="status-text">${data.status}</span><span class="material-symbols-outlined status-icon">arrow_drop_down</span>`;
+            button.disabled = false;
+            
+            // Close dropdown
+            const dropdown = bootstrap.Dropdown.getInstance(button);
+            if (dropdown) {
+                dropdown.hide();
+            }
+            
+            // Show success message
+            alert('Task status updated successfully!');
+        } else {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+            alert('Error: ' + (data.message || 'Failed to update task status'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        button.innerHTML = originalContent;
+        button.disabled = false;
+        alert('Error: ' + (error.message || 'Failed to update task status. Please try again.'));
+    });
 }
 </script>
 @endsection

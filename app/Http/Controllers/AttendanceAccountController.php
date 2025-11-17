@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceAccount;
 use App\Models\ClassModel;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -35,10 +36,30 @@ class AttendanceAccountController extends Controller
         
         $accounts = $query->orderBy('created_at', 'desc')->paginate($perPage)->withQueryString();
         
-        // Get unique campuses for dropdown
-        $campuses = ClassModel::distinct()->pluck('campus')->filter()->sort()->values()->toArray();
-        if (empty($campuses)) {
-            $campuses = ['Main Campus']; // Default value
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or attendance accounts
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromAccounts = AttendanceAccount::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromAccounts)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
         }
         
         return view('attendance.account', compact('accounts', 'campuses'));

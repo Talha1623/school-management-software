@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Student;
+use App\Models\Campus;
+use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +18,89 @@ class AdmissionController extends Controller
      */
     public function create(): View
     {
-        return view('admission.admit-student');
+        // Get campuses from campuses table
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
+        if ($campuses->isEmpty()) {
+            // Fallback to other sources if campuses table is empty
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            if ($campuses->isEmpty()) {
+                $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            }
+        }
+
+        // Get classes
+        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        if ($classes->isEmpty()) {
+            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        }
+
+        // Get sections (will be loaded via AJAX based on class)
+        $sections = collect();
+
+        // Generate next student code
+        $nextStudentCode = $this->generateNextStudentCode();
+
+        return view('admission.admit-student', compact('campuses', 'classes', 'sections', 'nextStudentCode'));
+    }
+
+    /**
+     * Generate next student code in format ST0001-1, ST0001-2, etc.
+     */
+    private function generateNextStudentCode(): string
+    {
+        // Get all students with pattern ST0001-X
+        $students = Student::where('student_code', 'like', 'ST0001-%')
+            ->whereNotNull('student_code')
+            ->pluck('student_code')
+            ->toArray();
+
+        if (empty($students)) {
+            // If no student code found, start with ST0001-1
+            return 'ST0001-1';
+        }
+
+        // Extract numbers and find the maximum
+        $maxNumber = 0;
+        foreach ($students as $code) {
+            $parts = explode('-', $code);
+            if (count($parts) == 2 && $parts[0] == 'ST0001') {
+                $number = (int) $parts[1];
+                if ($number > $maxNumber) {
+                    $maxNumber = $number;
+                }
+            }
+        }
+
+        // Return next number
+        return 'ST0001-' . ($maxNumber + 1);
+    }
+
+    /**
+     * Get sections for a specific class (AJAX endpoint).
+     */
+    public function getSections(Request $request)
+    {
+        $class = $request->get('class');
+        
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+        
+        $sections = Section::where('class', $class)
+            ->whereNotNull('name')
+            ->distinct()
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        if ($sections->isEmpty()) {
+            $sections = collect(['A', 'B', 'C', 'D', 'E']);
+        }
+        
+        return response()->json(['sections' => $sections]);
     }
 
     /**

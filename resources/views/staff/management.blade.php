@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@php
+use Illuminate\Support\Facades\Storage;
+@endphp
+
 @section('title', 'Staff Management')
 
 @section('content')
@@ -9,63 +13,60 @@
         <div class="row mb-2">
             <div class="col-md-4 mb-2">
                 <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
-                    <div class="card-body p-2" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="card-body p-4" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                        <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <h6 class="text-white-50 mb-0" style="font-size: 11px; font-weight: 500;">Total Teachers</h6>
-                                <h3 class="text-white mb-0" style="font-size: 20px; font-weight: 700;">{{ $totalTeachers }}</h3>
+                                <h6 class="text-white-50 mb-2" style="font-size: 13px; font-weight: 500;">Total Teachers</h6>
+                                <h3 class="text-white mb-0" style="font-size: 32px; font-weight: 700;">{{ $totalTeachers }}</h3>
                             </div>
-                            <span class="material-symbols-outlined text-white" style="font-size: 24px;">groups</span>
+                            <span class="material-symbols-outlined text-white" style="font-size: 36px;">groups</span>
                         </div>
-                        <button class="btn btn-sm btn-light text-dark" style="font-size: 10px; padding: 2px 8px;">
-                            View Report
-                        </button>
                     </div>
                 </div>
             </div>
             
             <div class="col-md-4 mb-2">
                 <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
-                    <div class="card-body p-2" style="background: linear-gradient(135deg, #28a745 0%, #218838 100%);">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="card-body p-4" style="background: linear-gradient(135deg, #28a745 0%, #218838 100%);">
+                        <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <h6 class="text-white-50 mb-0" style="font-size: 11px; font-weight: 500;">Present Today</h6>
-                                <h3 class="text-white mb-0" style="font-size: 20px; font-weight: 700;">{{ $presentToday }}</h3>
+                                <h6 class="text-white-50 mb-2" style="font-size: 13px; font-weight: 500;">Present Today</h6>
+                                <h3 class="text-white mb-0" style="font-size: 32px; font-weight: 700;">{{ $presentToday }}</h3>
                             </div>
-                            <span class="material-symbols-outlined text-white" style="font-size: 24px;">person_check</span>
+                            <span class="material-symbols-outlined text-white" style="font-size: 36px;">person_check</span>
                         </div>
-                        <button class="btn btn-sm btn-light text-dark" style="font-size: 10px; padding: 2px 8px;">
-                            View Report
-                        </button>
                     </div>
                 </div>
             </div>
             
             <div class="col-md-4 mb-2">
                 <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
-                    <div class="card-body p-2" style="background: linear-gradient(135deg, #fd7e14 0%, #e86800 100%);">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="card-body p-4" style="background: linear-gradient(135deg, #fd7e14 0%, #e86800 100%);">
+                        <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <h6 class="text-white-50 mb-0" style="font-size: 11px; font-weight: 500;">Absent Today</h6>
-                                <h3 class="text-white mb-0" style="font-size: 20px; font-weight: 700;">{{ $absentToday }}</h3>
+                                <h6 class="text-white-50 mb-2" style="font-size: 13px; font-weight: 500;">Absent Today</h6>
+                                <h3 class="text-white mb-0" style="font-size: 32px; font-weight: 700;">{{ $absentToday }}</h3>
                             </div>
-                            <span class="material-symbols-outlined text-white" style="font-size: 24px;">person_off</span>
+                            <span class="material-symbols-outlined text-white" style="font-size: 36px;">person_off</span>
                         </div>
-                        <button class="btn btn-sm btn-light text-dark" style="font-size: 10px; padding: 2px 8px;">
-                            View Report
-                        </button>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex justify-content-between align-items-start mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Staff Management</h4>
-                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-add-btn" data-bs-toggle="modal" data-bs-target="#staffModal" onclick="resetForm()">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Staff</span>
-                </button>
+                <div class="d-flex flex-column gap-2 align-items-end">
+                    <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-add-btn" data-bs-toggle="modal" data-bs-target="#staffModal" onclick="resetForm()">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+                        <span>Add New Staff</span>
+                    </button>
+                    <a href="{{ route('reports.staff-salary-summarized') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">receipt_long</span>
+                        <span>Staff Salary Report</span>
+                    </a>
+                </div>
             </div>
 
             @if(session('success'))
@@ -134,7 +135,7 @@
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search staff..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" style="padding: 4px 8px; font-size: 12px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by name, email, phone, emp ID..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" style="padding: 4px 8px; font-size: 12px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -170,63 +171,63 @@
             @endif
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table">
+                <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
+                    <table class="table table-sm table-hover" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Photo</th>
-                                <th>Name</th>
-                                <th>Emp. ID</th>
-                                <th>Designation</th>
-                                <th>Campus</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>Gender</th>
-                                <th class="text-end">Actions</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">#</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Photo</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Name</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Emp. ID</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Designation</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Campus</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Email</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Phone</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Gender</th>
+                                <th style="padding: 12px 15px; font-size: 14px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($staff as $member)
                                 <tr>
-                                    <td>{{ $loop->iteration + (($staff->currentPage() - 1) * $staff->perPage()) }}</td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">{{ $loop->iteration + (($staff->currentPage() - 1) * $staff->perPage()) }}</td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->photo)
-                                            <img src="{{ asset('storage/' . $member->photo) }}" alt="Staff" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">
+                                            <img src="{{ Storage::url($member->photo) }}" alt="Staff" class="rounded-circle" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #e9ecef;">
                                         @else
-                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                                <span class="material-symbols-outlined text-muted" style="font-size: 20px;">person</span>
+                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 45px; height: 45px; border: 2px solid #e9ecef;">
+                                                <span class="material-symbols-outlined text-muted" style="font-size: 22px;">person</span>
                                             </div>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <strong class="text-primary">{{ $member->name }}</strong>
                                         @if($member->father_husband_name)
-                                            <br><small class="text-muted">{{ $member->father_husband_name }}</small>
+                                            <br><small class="text-muted" style="font-size: 12px;">{{ $member->father_husband_name }}</small>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->emp_id)
-                                            <span class="badge bg-info text-white">{{ $member->emp_id }}</span>
+                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $member->emp_id }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->designation)
-                                            <span class="badge bg-secondary text-white">{{ $member->designation }}</span>
+                                            <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $member->designation }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->campus)
                                             <span class="text-muted">{{ $member->campus }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->email)
                                             <span class="text-muted">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span>
@@ -236,9 +237,9 @@
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->phone)
-                                            <span class="badge bg-light text-dark">
+                                            <span class="badge bg-light text-dark" style="font-size: 11px;">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">phone</span>
                                                 {{ $member->phone }}
                                             </span>
@@ -246,24 +247,27 @@
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->gender)
-                                            <span class="badge {{ $member->gender == 'Male' ? 'bg-primary' : ($member->gender == 'Female' ? 'bg-danger' : 'bg-secondary') }} text-white">
+                                            <span class="badge {{ $member->gender == 'Male' ? 'bg-primary' : ($member->gender == 'Female' ? 'bg-danger' : 'bg-secondary') }} text-white" style="font-size: 11px;">
                                                 {{ $member->gender }}
                                             </span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td class="text-end">
+                                    <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
                                         <div class="d-inline-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-primary px-2 py-0" onclick="editStaff({{ $member->id }})" title="Edit">
+                                            <a href="{{ route('staff.management.show', $member) }}" class="btn btn-sm btn-info px-2 py-1" title="View">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editStaff({{ $member->id }})" title="Edit">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </button>
                                             <form action="{{ route('staff.management.destroy', $member) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this staff member?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-0" title="Delete">
+                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                             </form>
@@ -297,9 +301,9 @@
     <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="staffModalLabel" style="font-size: 14px;">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span>
-                    <span>Add New Staff</span>
+                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="staffModalLabel" style="font-size: 14px; color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: white;">person_add</span>
+                    <span style="color: white;">Add New Staff</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -337,7 +341,12 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">business</span>
                                 </span>
-                                <input type="text" class="form-control staff-input" name="campus" id="campus" placeholder="Enter campus">
+                                <select class="form-control staff-input" name="campus" id="campus" style="font-size: 12px;">
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name }}">{{ $campus->campus_name }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                         </div>
 
@@ -370,12 +379,12 @@
 
                         <!-- Emp. ID -->
                         <div class="col-md-6">
-                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Emp. ID</label>
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Emp. ID <span class="text-muted" style="font-size: 10px;">(Auto-generated)</span></label>
                             <div class="input-group input-group-sm staff-input-group">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">badge</span>
                                 </span>
-                                <input type="text" class="form-control staff-input" name="emp_id" id="emp_id" placeholder="Enter employee ID">
+                                <input type="text" class="form-control staff-input" name="emp_id" id="emp_id" placeholder="Auto-generated Employee ID" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
                             </div>
                         </div>
 
@@ -649,63 +658,100 @@
         box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
         color: white;
     }
+    
+    .staff-salary-report-btn {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 6px rgba(40, 167, 69, 0.2);
+        text-decoration: none;
+    }
+    
+    .staff-salary-report-btn:hover {
+        background: linear-gradient(135deg, #20c997 0%, #28a745 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+        color: white;
+        text-decoration: none;
+    }
 
     /* Export Buttons Styling */
     .export-btn {
-        border-radius: 6px;
-        font-size: 12px;
+        border: none;
+        font-weight: 500;
         transition: all 0.3s ease;
-        border: 1px solid transparent;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        font-size: 13px;
     }
-
+    
     .excel-btn {
         background-color: #28a745;
         color: white;
     }
-
+    
     .excel-btn:hover {
         background-color: #218838;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
-
+    
     .csv-btn {
         background-color: #ff9800;
         color: white;
     }
-
+    
     .csv-btn:hover {
         background-color: #f57c00;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
     }
-
+    
     .pdf-btn {
         background-color: #dc3545;
         color: white;
     }
-
+    
     .pdf-btn:hover {
         background-color: #c82333;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
     }
-
+    
     .print-btn {
         background-color: #2196f3;
         color: white;
     }
-
+    
     .print-btn:hover {
         background-color: #0b7dda;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
     }
-
+    
+    .export-btn:active {
+        transform: translateY(0);
+    }
+    
     .delete-all-btn {
         background-color: #dc3545;
         color: white;
     }
-
+    
     .delete-all-btn:hover {
         background-color: #c82333;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
     }
 
     /* Search Input Group */
@@ -737,30 +783,74 @@
         font-size: 13px;
     }
 
-    /* Table Compact Styling */
+    /* Table Styling */
     .default-table-area table {
         margin-bottom: 0;
+        border-spacing: 0;
+        border-collapse: collapse;
         border: 1px solid #dee2e6;
     }
     
+    .default-table-area table thead {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
-        height: 32px;
+        vertical-align: middle;
+        line-height: 1.5;
+        white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
+    .default-table-area table thead th:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
+        vertical-align: middle;
+        line-height: 1.5;
         border: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody tr:last-child td {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:first-child,
+    .default-table-area table tbody td:first-child {
+        padding-left: 15px;
+    }
+    
+    .default-table-area table thead th:last-child,
+    .default-table-area table tbody td:last-child {
+        padding-right: 15px;
+    }
+    
+    .default-table-area table tbody tr:first-child td {
+        border-top: none;
     }
     
     .default-table-area .badge {
         font-size: 11px;
-        padding: 3px 6px;
+        padding: 4px 8px;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
@@ -774,28 +864,71 @@ function resetForm() {
     document.getElementById('staffForm').action = '{{ route('staff.management.store') }}';
     document.getElementById('staffForm').reset();
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('staffModalLabel').textContent = 'Add New Staff';
+    const modalLabel = document.getElementById('staffModalLabel');
+    modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">person_add</span><span style="color: white;">Add New Staff</span>';
     document.getElementById('password').required = true;
     document.getElementById('passwordRequired').style.display = 'inline';
     document.getElementById('passwordHint').style.display = 'none';
     document.getElementById('photo').value = '';
     document.getElementById('cv_resume').value = '';
+    document.getElementById('campus').value = '';
+    
+    // Make Emp. ID readonly and fetch next Employee ID
+    const empIdField = document.getElementById('emp_id');
+    empIdField.setAttribute('readonly', 'readonly');
+    empIdField.style.backgroundColor = '#f8f9fa';
+    empIdField.style.cursor = 'not-allowed';
+    
+    // Fetch next Employee ID
+    fetch('{{ route('staff.management.next-emp-id') }}', {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.emp_id) {
+            empIdField.value = data.emp_id;
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching Employee ID:', error);
+    });
 }
 
 function editStaff(id) {
-    fetch(`{{ url('/staff/management') }}/${id}`)
-        .then(response => response.json())
+    fetch(`{{ url('/staff/management') }}/${id}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             document.getElementById('staffForm').action = '{{ route('staff.management.update', ':id') }}'.replace(':id', id);
             document.getElementById('methodField').innerHTML = '@method('PUT')';
-            document.getElementById('staffModalLabel').textContent = 'Edit Staff';
+            const modalLabel = document.getElementById('staffModalLabel');
+            modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">person_add</span><span style="color: white;">Edit Staff</span>';
             
             document.getElementById('name').value = data.name || '';
             document.getElementById('father_husband_name').value = data.father_husband_name || '';
             document.getElementById('campus').value = data.campus || '';
             document.getElementById('designation').value = data.designation || '';
             document.getElementById('gender').value = data.gender || '';
-            document.getElementById('emp_id').value = data.emp_id || '';
+            
+            // Keep Emp. ID readonly in edit mode (cannot be changed)
+            const empIdField = document.getElementById('emp_id');
+            empIdField.value = data.emp_id || '';
+            empIdField.setAttribute('readonly', 'readonly');
+            empIdField.style.backgroundColor = '#f8f9fa';
+            empIdField.style.cursor = 'not-allowed';
+            
             document.getElementById('phone').value = data.phone || '';
             document.getElementById('whatsapp').value = data.whatsapp || '';
             document.getElementById('cnic').value = data.cnic || '';

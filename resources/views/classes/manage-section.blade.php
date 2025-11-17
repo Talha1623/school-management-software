@@ -41,7 +41,7 @@
                                 <select class="form-select form-select-sm" name="filter_campus" id="filter_campus">
                                     <option value="">All Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}" {{ request('filter_campus') == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                                        <option value="{{ $campus->campus_name ?? $campus }}" {{ request('filter_campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>{{ $campus->campus_name ?? $campus }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -54,7 +54,7 @@
                                 <select class="form-select form-select-sm" name="filter_class" id="filter_class">
                                     <option value="">All Classes</option>
                                     @foreach($classes as $class)
-                                        <option value="{{ $class }}" {{ request('filter_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
+                                        <option value="{{ $class->class_name ?? $class }}" {{ request('filter_class') == ($class->class_name ?? $class) ? 'selected' : '' }}>{{ $class->class_name ?? $class }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -91,7 +91,8 @@
                 </div>
             </div>
 
-            <!-- Table Toolbar -->
+            <!-- Table Toolbar - Show only when filters are applied -->
+            @if(request('filter_campus') || request('filter_class') || request('filter_session') || request('search'))
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                 <!-- Left Side -->
                 <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -143,7 +144,7 @@
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by name, campus, class..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 13px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by name, campus, class..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 12px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -156,17 +157,19 @@
                     </div>
                 </div>
             </div>
+            @endif
 
-            <!-- Table Header -->
-            <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
-                <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
-                    <span>Sections List</span>
-                </h5>
-            </div>
+            <!-- Show table only when filters are applied -->
+            @if(request('filter_campus') || request('filter_class') || request('filter_session') || request('search'))
+                <!-- Table Header -->
+                <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                    <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
+                        <span>Sections List</span>
+                    </h5>
+                </div>
 
-            <!-- Search Results Info -->
-            @if(request('search') || request('filter_campus') || request('filter_class') || request('filter_session'))
+                <!-- Search Results Info -->
                 <div class="search-results-info">
                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">filter_list</span>
                     <strong>Filtered Results:</strong>
@@ -190,11 +193,10 @@
                         Clear All
                     </a>
                 </div>
-            @endif
 
-            <div class="default-table-area" style="margin-top: 0;">
+                <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -213,29 +215,29 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($sections->currentPage() - 1) * $sections->perPage()) }}</td>
                                         <td>
-                                            <span class="badge bg-info text-white">{{ $section->campus }}</span>
+                                            <span class="badge bg-primary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $section->campus }}</span>
                                         </td>
                                         <td>
-                                            <strong class="text-primary">{{ $section->name }}</strong>
+                                            <strong class="text-dark">{{ $section->name }}</strong>
                                         </td>
                                         <td>
-                                            <span class="badge bg-secondary text-white">{{ $section->nick_name ?? 'N/A' }}</span>
+                                            <span class="badge bg-secondary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $section->nick_name ?? 'N/A' }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-success text-white">{{ $section->class }}</span>
+                                            <span class="badge bg-success text-white" style="font-size: 12px; padding: 4px 8px;">{{ $section->class }}</span>
                                         </td>
                                         <td>
                                             <span class="text-muted">{{ $section->teacher ?? 'N/A' }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-warning text-dark">{{ $section->session ?? 'N/A' }}</span>
+                                            <span class="badge bg-warning text-dark" style="font-size: 12px; padding: 4px 8px;">{{ $section->session ?? 'N/A' }}</span>
                                         </td>
                                         <td class="text-end">
-                                            <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editSection({{ $section->id }}, '{{ addslashes($section->campus) }}', '{{ addslashes($section->name) }}', '{{ addslashes($section->nick_name ?? '') }}', '{{ addslashes($section->class) }}', '{{ addslashes($section->teacher ?? '') }}', '{{ addslashes($section->session ?? '') }}')">
+                                            <div class="d-inline-flex gap-1 align-items-center">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editSection({{ $section->id }}, '{{ addslashes($section->campus) }}', '{{ addslashes($section->name) }}', '{{ addslashes($section->nick_name ?? '') }}', '{{ addslashes($section->class) }}', '{{ addslashes($section->teacher ?? '') }}', '{{ addslashes($section->session ?? '') }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this section?')) { document.getElementById('delete-form-{{ $section->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this section?')) { document.getElementById('delete-form-{{ $section->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $section->id }}" action="{{ route('classes.manage-section.destroy', $section) }}" method="POST" class="d-none">
@@ -266,9 +268,17 @@
                 </div>
             </div>
 
-            @if(isset($sections) && $sections->hasPages())
-                <div class="mt-3">
-                    {{ $sections->links() }}
+                @if(isset($sections) && $sections->hasPages())
+                    <div class="mt-3">
+                        {{ $sections->links() }}
+                    </div>
+                @endif
+            @else
+                <!-- Message when no filters applied -->
+                <div class="text-center py-5">
+                    <span class="material-symbols-outlined" style="font-size: 64px; opacity: 0.3; color: #003471;">filter_list</span>
+                    <p class="mt-3 mb-0 text-muted fs-15">Please apply filters to view sections</p>
+                    <p class="text-muted fs-13">Select Campus, Class, or Session to filter and view sections</p>
                 </div>
             @endif
         </div>
@@ -280,9 +290,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="sectionModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">group</span>
-                    <span>Add New Section</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="sectionModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">group</span>
+                    <span style="color: white;">Add New Section</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -297,10 +307,10 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <select class="form-control section-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff;">
+                                <select class="form-select section-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -329,10 +339,10 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">school</span>
                                 </span>
-                                <select class="form-control section-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;">
+                                <select class="form-select section-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Class</option>
                                     @foreach($classes as $class)
-                                        <option value="{{ $class }}">{{ $class }}</option>
+                                        <option value="{{ $class->class_name ?? $class }}">{{ $class->class_name ?? $class }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -597,7 +607,7 @@
     
     .search-input-group .form-control {
         border: none;
-        font-size: 13px;
+        font-size: 12px;
         height: 32px;
         line-height: 1.4;
     }
@@ -651,25 +661,31 @@
     /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
-        border-spacing: 0;
-        border-collapse: collapse;
+        font-size: 14px;
         border: 1px solid #dee2e6;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: white;
     }
     
     .default-table-area table thead {
-        border-bottom: 1px solid #dee2e6;
+        border-bottom: 2px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
         vertical-align: middle;
-        line-height: 1.3;
-        height: 32px;
+        line-height: 1.4;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
+        color: #495057;
+        text-transform: none;
     }
     
     .default-table-area table thead th:first-child {
@@ -681,11 +697,12 @@
     }
     
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
+        background-color: white;
     }
     
     .default-table-area table tbody td:first-child {
@@ -700,57 +717,32 @@
         border-bottom: 1px solid #dee2e6;
     }
     
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 10px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 10px;
-    }
-    
-    .default-table-area table tbody tr {
-        height: 36px;
-    }
-    
-    .default-table-area table tbody tr:first-child td {
-        border-top: none;
-    }
-    
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
-    }
-    
     .default-table-area table tbody tr:hover {
         background-color: #f8f9fa;
     }
     
+    .default-table-area table tbody tr:hover td {
+        background-color: #f8f9fa;
+    }
+    
     .default-table-area .badge {
-        font-size: 11px;
-        padding: 3px 6px;
-        font-weight: 500;
+        font-size: 12px;
+        padding: 4px 8px;
+        font-weight: 600;
     }
     
     .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
+        font-size: 14px !important;
     }
     
     .default-table-area .btn-sm {
-        font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        font-size: 13px;
+        padding: 4px 8px;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
         font-size: 14px !important;
         vertical-align: middle;
-        color: white !important;
     }
     
     .default-table-area .btn-primary .material-symbols-outlined,
@@ -765,9 +757,10 @@ function resetForm() {
     document.getElementById('sectionForm').reset();
     document.getElementById('sectionForm').action = "{{ route('classes.manage-section.store') }}";
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('sectionModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">group</span>
-        <span>Add New Section</span>
+    const modalLabel = document.getElementById('sectionModalLabel');
+    modalLabel.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">group</span>
+        <span style="color: white;">Add New Section</span>
     `;
     document.querySelector('.section-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -785,9 +778,10 @@ function editSection(id, campus, name, nickName, className, teacher, session) {
     document.getElementById('session').value = session || '';
     document.getElementById('sectionForm').action = "{{ url('classes/manage-section') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
-    document.getElementById('sectionModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-        <span>Edit Section</span>
+    const modalLabel = document.getElementById('sectionModalLabel');
+    modalLabel.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+        <span style="color: white;">Edit Section</span>
     `;
     document.querySelector('.section-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>

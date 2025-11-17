@@ -27,7 +27,7 @@
             <!-- Transfer Form -->
             <div class="card border-0 shadow-sm" style="border-radius: 8px; overflow: hidden;">
                 <div class="card-body p-4">
-                    <form action="#" method="POST" id="transferForm">
+                    <form action="{{ route('student.transfer.store') }}" method="POST" id="transferForm">
                         @csrf
                         <div class="row g-3 align-items-end">
                             <!-- From Campus -->
@@ -35,11 +35,11 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     From Campus
                                 </label>
-                                <select class="form-select form-select-sm" name="from_campus" id="from_campus">
+                                <select class="form-select form-select-sm" name="from_campus" id="from_campus" onchange="loadStudents()">
                                     <option value="">Select Campus</option>
-                                    <option value="Main Campus">Main Campus</option>
-                                    <option value="Branch Campus 1">Branch Campus 1</option>
-                                    <option value="Branch Campus 2">Branch Campus 2</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -50,9 +50,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="to_campus" id="to_campus" required>
                                     <option value="">Select Campus</option>
-                                    <option value="Main Campus">Main Campus</option>
-                                    <option value="Branch Campus 1">Branch Campus 1</option>
-                                    <option value="Branch Campus 2">Branch Campus 2</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -61,31 +61,28 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Class <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select form-select-sm" name="class" id="class" required>
+                                <select class="form-select form-select-sm" name="class" id="class" required onchange="loadStudents()">
                                     <option value="">Select Class</option>
-                                    <option value="Nursery">Nursery</option>
-                                    <option value="KG">KG</option>
-                                    <option value="1st">1st</option>
-                                    <option value="2nd">2nd</option>
-                                    <option value="3rd">3rd</option>
-                                    <option value="4th">4th</option>
-                                    <option value="5th">5th</option>
-                                    <option value="6th">6th</option>
-                                    <option value="7th">7th</option>
-                                    <option value="8th">8th</option>
-                                    <option value="9th">9th</option>
-                                    <option value="10th">10th</option>
-                                    <option value="11th">11th</option>
-                                    <option value="12th">12th</option>
+                                    @foreach($classes as $class)
+                                        <option value="{{ $class }}">{{ $class }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
                             <!-- Student Code -->
-                            <div class="col-md-3">
+                            <div class="col-md-3 position-relative">
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Student Code <span class="text-danger">*</span>
                                 </label>
-                                <input type="text" class="form-control form-control-sm" name="student_code" id="student_code" placeholder="Enter Student Code" required>
+                                <input type="text" class="form-control form-control-sm" name="student_code" id="student_code" placeholder="Type Student Code" required autocomplete="off" onkeyup="searchStudent(this.value)">
+                                <input type="hidden" name="student_id" id="student_id">
+                                <div id="student-suggestions" class="position-absolute bg-white border rounded shadow-sm" style="display: none; max-height: 200px; overflow-y: auto; z-index: 1000; width: 100%; margin-top: 2px; left: 0; right: 0;"></div>
+                                <div id="student-info" class="mt-1" style="display: none;">
+                                    <small class="text-success">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check_circle</span>
+                                        <span id="student-name-display"></span>
+                                    </small>
+                                </div>
                             </div>
                         </div>
 
@@ -208,15 +205,97 @@
 </style>
 
 <script>
+let searchTimeout;
+
+// Search student by code or name
+function searchStudent(query) {
+    const studentCodeInput = document.getElementById('student_code');
+    const studentIdInput = document.getElementById('student_id');
+    const suggestionsDiv = document.getElementById('student-suggestions');
+    const studentInfoDiv = document.getElementById('student-info');
+    const studentNameDisplay = document.getElementById('student-name-display');
+    
+    // Clear previous timeout
+    clearTimeout(searchTimeout);
+    
+    // Hide suggestions if query is empty
+    if (!query || query.length < 2) {
+        suggestionsDiv.style.display = 'none';
+        studentInfoDiv.style.display = 'none';
+        studentIdInput.value = '';
+        return;
+    }
+    
+    // Debounce search
+    searchTimeout = setTimeout(() => {
+        fetch(`{{ route('student.transfer.search-student') }}?code=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                suggestionsDiv.innerHTML = '';
+                
+                if (data.students && data.students.length > 0) {
+                    suggestionsDiv.style.display = 'block';
+                    
+                    data.students.forEach(student => {
+                        const div = document.createElement('div');
+                        div.className = 'p-2 border-bottom cursor-pointer student-suggestion-item';
+                        div.style.cursor = 'pointer';
+                        div.innerHTML = `
+                            <div class="fw-semibold">${student.code}</div>
+                            <div class="text-muted small">${student.name} - ${student.class} ${student.section || ''}</div>
+                        `;
+                        div.onclick = function() {
+                            studentCodeInput.value = student.code;
+                            studentIdInput.value = student.id;
+                            studentNameDisplay.textContent = student.name;
+                            studentInfoDiv.style.display = 'block';
+                            suggestionsDiv.style.display = 'none';
+                        };
+                        div.onmouseover = function() {
+                            this.style.backgroundColor = '#f8f9fa';
+                        };
+                        div.onmouseout = function() {
+                            this.style.backgroundColor = 'white';
+                        };
+                        suggestionsDiv.appendChild(div);
+                    });
+                } else {
+                    suggestionsDiv.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error searching students:', error);
+                suggestionsDiv.style.display = 'none';
+            });
+    }, 300);
+}
+
+// Hide suggestions when clicking outside
+document.addEventListener('click', function(e) {
+    const suggestionsDiv = document.getElementById('student-suggestions');
+    const studentCodeInput = document.getElementById('student_code');
+    
+    if (!suggestionsDiv.contains(e.target) && e.target !== studentCodeInput) {
+        suggestionsDiv.style.display = 'none';
+    }
+});
+
 // Form validation
 document.getElementById('transferForm').addEventListener('submit', function(e) {
     const toCampus = document.getElementById('to_campus').value;
     const classValue = document.getElementById('class').value;
     const studentCode = document.getElementById('student_code').value;
+    const studentId = document.getElementById('student_id').value;
     
     if (!toCampus || !classValue || !studentCode) {
         e.preventDefault();
         alert('Please fill in all required fields (marked with *)');
+        return false;
+    }
+    
+    if (!studentId) {
+        e.preventDefault();
+        alert('Please select a valid student from the suggestions.');
         return false;
     }
     

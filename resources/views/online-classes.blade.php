@@ -72,7 +72,7 @@
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search online classes..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" style="padding: 4px 8px; font-size: 12px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by topic, class, section, campus..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 12px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -111,13 +111,12 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
                                 <th>Class Topic</th>
                                 <th>Start Time</th>
-                                <th>Password</th>
                                 <th>Class</th>
                                 <th>Section</th>
                                 <th>Date</th>
@@ -133,39 +132,35 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($onlineClasses->currentPage() - 1) * $onlineClasses->perPage()) }}</td>
                                         <td>
-                                            <strong>{{ $class->class_topic }}</strong>
+                                            <strong class="text-dark">{{ $class->class_topic }}</strong>
                                         </td>
                                         <td>
-                                            <span class="badge bg-primary text-white">{{ $class->start_time ? date('H:i', strtotime($class->start_time)) : 'N/A' }}</span>
+                                            <span class="badge bg-primary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $class->start_time ? date('H:i', strtotime($class->start_time)) : 'N/A' }}</span>
                                         </td>
                                         <td>
-                                            <code style="background-color: #fff3cd; padding: 2px 6px; border-radius: 4px; font-size: 12px;">{{ $class->password }}</code>
+                                            <strong class="text-dark">{{ $class->class }}</strong>
                                         </td>
                                         <td>
-                                            <strong class="text-primary">{{ $class->class }}</strong>
+                                            <span class="badge bg-secondary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $class->section }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-secondary text-white">{{ $class->section }}</span>
+                                            <span class="badge bg-success text-white" style="font-size: 12px; padding: 4px 8px;">{{ $class->start_date->format('d-m-Y') }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-success text-white">{{ $class->start_date->format('d-m-Y') }}</span>
-                                        </td>
-                                        <td>
-                                            <code style="background-color: #f8f9fa; padding: 2px 6px; border-radius: 4px; font-size: 12px;">{{ $class->timing }}</code>
+                                            <span class="text-muted">{{ $class->timing }}</span>
                                         </td>
                                         <td>
                                             <span class="text-muted">{{ $class->created_by ?? 'N/A' }}</span>
                                         </td>
                                         <td>
-                                            <button type="button" class="btn btn-sm btn-primary px-3 py-1 join-class-btn" onclick="joinClass({{ $class->id }}, '{{ addslashes($class->class_topic) }}', '{{ addslashes($class->password) }}')" title="Join Class">
-                                                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: white;">videocam</span>
-                                                <span>Join Class</span>
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1 join-class-btn" onclick="joinClass({{ $class->id }}, '{{ addslashes($class->class_topic) }}', '{{ addslashes($class->password) }}')" title="Join Class">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">videocam</span>
+                                                <span>Join</span>
                                             </button>
                                         </td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this online class?')) { document.getElementById('delete-form-{{ $class->id }}').submit(); }">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
-                                                <span>Delete</span>
                                             </button>
                                             <form id="delete-form-{{ $class->id }}" action="{{ route('online-classes.destroy', $class->id) }}" method="POST" class="d-none">
                                                 @csrf
@@ -175,7 +170,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="11" class="text-center py-4">
+                                        <td colspan="10" class="text-center py-4">
                                             <div class="d-flex flex-column align-items-center gap-2">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">video_library</span>
                                                 <p class="text-muted mb-0">No online classes found.</p>
@@ -185,7 +180,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="11" class="text-center py-4">
+                                    <td colspan="10" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center gap-2">
                                             <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">video_library</span>
                                             <p class="text-muted mb-0">No online classes found.</p>
@@ -218,9 +213,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="onlineClassModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">video_library</span>
-                    <span>Add New Class</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="onlineClassModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">video_library</span>
+                    <span style="color: white;">Add New Class</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -235,15 +230,11 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <select class="form-select online-class-input" name="campus" id="campus" required>
+                                <select class="form-select online-class-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Campus</option>
-                                    @if(isset($campuses) && count($campuses) > 0)
-                                        @foreach($campuses as $campus)
-                                            <option value="{{ $campus }}">{{ $campus }}</option>
-                                        @endforeach
-                                    @else
-                                        <option value="Main Campus">Main Campus</option>
-                                    @endif
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -253,18 +244,11 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">school</span>
                                 </span>
-                                <select class="form-select online-class-input" name="class" id="class" required>
+                                <select class="form-select online-class-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Class</option>
-                                    @if(isset($classes) && count($classes) > 0)
-                                        @foreach($classes as $classItem)
-                                            <option value="{{ $classItem }}">{{ $classItem }}</option>
-                                        @endforeach
-                                    @else
-                                        <option value="Nursery">Nursery</option>
-                                        <option value="KG">KG</option>
-                                        <option value="1st">1st</option>
-                                        <option value="2nd">2nd</option>
-                                    @endif
+                                    @foreach($classes as $classItem)
+                                        <option value="{{ $classItem->class_name ?? $classItem }}">{{ $classItem->class_name ?? $classItem }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -274,17 +258,11 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">group</span>
                                 </span>
-                                <select class="form-select online-class-input" name="section" id="section" required>
+                                <select class="form-select online-class-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Section</option>
-                                    @if(isset($sections) && count($sections) > 0)
-                                        @foreach($sections as $section)
-                                            <option value="{{ $section }}">{{ $section }}</option>
-                                        @endforeach
-                                    @else
-                                        <option value="A">A</option>
-                                        <option value="B">B</option>
-                                        <option value="C">C</option>
-                                    @endif
+                                    @foreach($sections as $section)
+                                        <option value="{{ $section }}">{{ $section }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -439,20 +417,17 @@
         box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
     }
 
-    .search-results-info {
-        background-color: #e3f2fd;
-        padding: 10px 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        font-size: 13px;
-        color: #1565c0;
-    }
-
+    /* Export Buttons Styling */
     .export-btn {
-        border-radius: 6px;
-        font-size: 12px;
+        border: none;
+        font-weight: 500;
         transition: all 0.3s ease;
-        border: 1px solid transparent;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        font-size: 13px;
     }
 
     .excel-btn {
@@ -463,6 +438,8 @@
     .excel-btn:hover {
         background-color: #218838;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
 
     .csv-btn {
@@ -473,6 +450,8 @@
     .csv-btn:hover {
         background-color: #f57c00;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
     }
 
     .pdf-btn {
@@ -483,6 +462,8 @@
     .pdf-btn:hover {
         background-color: #c82333;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
     }
 
     .print-btn {
@@ -493,78 +474,169 @@
     .print-btn:hover {
         background-color: #0b7dda;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+    }
+
+    .export-btn:active {
+        transform: translateY(0);
+    }
+
+    .search-input-group {
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #dee2e6;
+        transition: all 0.3s ease;
+        height: 32px;
+    }
+
+    .search-input-group:focus-within {
+        border-color: #003471;
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    }
+
+    .search-input-group .form-control {
+        border: none;
+        font-size: 12px;
+        height: 32px;
+        line-height: 1.4;
+    }
+
+    .search-input-group .form-control:focus {
+        box-shadow: none;
+        border: none;
+    }
+
+    .search-input-group .input-group-text {
+        height: 32px;
+        padding: 4px 8px;
+        display: flex;
+        align-items: center;
     }
 
     .search-btn {
         background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
         color: white;
         border: none;
+        padding: 4px 10px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
     }
 
     .search-btn:hover {
-        background: linear-gradient(135deg, #004a9f 0%, #0056c3 100%);
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 52, 113, 0.3);
     }
 
-    .search-input-group:focus-within {
-        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    .search-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
     }
 
-    /* Table Styling */
+    /* Search Results Info */
+    .search-results-info {
+        padding: 8px 12px;
+        background-color: #e7f3ff;
+        border-left: 3px solid #003471;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        font-size: 13px;
+    }
+
+    /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
-        border-spacing: 0;
-        border-collapse: collapse;
+        font-size: 14px;
         border: 1px solid #dee2e6;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: white;
     }
     
     .default-table-area table thead {
-        border-bottom: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
-        font-weight: 600;
-        vertical-align: middle;
-        line-height: 1.3;
-        height: 32px;
-        white-space: nowrap;
-        border: 1px solid #dee2e6;
+        border-bottom: 2px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
+    .default-table-area table thead th {
+        padding: 12px 15px;
+        font-size: 14px;
+        font-weight: 600;
+        vertical-align: middle;
+        line-height: 1.4;
+        white-space: nowrap;
+        border: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+        color: #495057;
+        text-transform: none;
+    }
+    
+    .default-table-area table thead th:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
+        background-color: white;
+    }
+    
+    .default-table-area table tbody td:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody tr:last-child td {
+        border-bottom: 1px solid #dee2e6;
     }
     
     .default-table-area table tbody tr:hover {
         background-color: #f8f9fa;
     }
     
+    .default-table-area table tbody tr:hover td {
+        background-color: #f8f9fa;
+    }
+    
     .default-table-area .badge {
-        font-size: 11px;
-        padding: 3px 6px;
-        font-weight: 500;
+        font-size: 12px;
+        padding: 4px 8px;
+        font-weight: 600;
     }
     
     .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
+        font-size: 14px !important;
     }
     
     .default-table-area .btn-sm {
-        font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        font-size: 13px;
+        padding: 4px 8px;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
         font-size: 14px !important;
         vertical-align: middle;
+    }
+    
+    .default-table-area .btn-primary .material-symbols-outlined,
+    .default-table-area .btn-danger .material-symbols-outlined {
         color: white !important;
     }
 
@@ -588,7 +660,11 @@
     function resetForm() {
         document.getElementById('onlineClassForm').reset();
         document.getElementById('methodField').innerHTML = '';
-        document.getElementById('onlineClassModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">video_library</span><span>Add New Class</span>';
+        const modalLabel = document.getElementById('onlineClassModalLabel');
+        modalLabel.innerHTML = `
+            <span class="material-symbols-outlined" style="font-size: 20px; color: white;">video_library</span>
+            <span style="color: white;">Add New Class</span>
+        `;
         document.getElementById('onlineClassForm').action = '{{ route("online-classes.store") }}';
     }
 
@@ -604,7 +680,11 @@
         document.getElementById('password').value = password;
         document.getElementById('created_by').value = createdBy || '';
         
-        document.getElementById('onlineClassModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">edit</span><span>Edit Online Class</span>';
+        const modalLabel = document.getElementById('onlineClassModalLabel');
+        modalLabel.innerHTML = `
+            <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+            <span style="color: white;">Edit Online Class</span>
+        `;
         document.getElementById('onlineClassForm').action = '{{ route("online-classes.update", ":id") }}'.replace(':id', id);
         document.getElementById('methodField').innerHTML = '@method("PUT")';
         
@@ -659,8 +739,13 @@
         }
     }
 
+    function handleSearchInput(event) {
+        // Auto-clear if input is empty
+    }
+
     function performSearch() {
-        const searchValue = document.getElementById('searchInput').value.trim();
+        const searchInput = document.getElementById('searchInput');
+        const searchValue = searchInput.value.trim();
         const url = new URL(window.location.href);
         
         if (searchValue) {
@@ -669,14 +754,26 @@
             url.searchParams.delete('search');
         }
         
-        url.searchParams.delete('page');
+        url.searchParams.set('page', '1');
+        
+        searchInput.disabled = true;
+        const searchBtn = document.querySelector('.search-btn');
+        if (searchBtn) {
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+        }
+        
         window.location.href = url.toString();
     }
 
     function clearSearch() {
         const url = new URL(window.location.href);
         url.searchParams.delete('search');
-        url.searchParams.delete('page');
+        url.searchParams.set('page', '1');
+        
+        const searchInput = document.getElementById('searchInput');
+        searchInput.disabled = true;
+        
         window.location.href = url.toString();
     }
 

@@ -220,8 +220,25 @@
                                         <img class="rounded-circle admin-img-width-for-mobile" style="width: 40px; height: 40px;" src="{{ asset('assets/images/admin.png') }}" alt="admin">
                                     </div>
                                     <div class="flex-grow-1 ms-10">
-                                        <h3 class="fw-medium fs-17 mb-0">{{ auth()->user()->name ?? 'Admin' }}</h3>
-                                        <span class="fs-15 fw-medium">Admin</span>
+                                        @if(Auth::guard('admin')->check())
+                                            <h3 class="fw-medium fs-17 mb-0">{{ Auth::guard('admin')->user()->name }}</h3>
+                                            <span class="fs-15 fw-medium">
+                                                @if(Auth::guard('admin')->user()->isSuperAdmin())
+                                                    Super Admin
+                                                @else
+                                                    Admin
+                                                @endif
+                                            </span>
+                                        @elseif(Auth::guard('staff')->check())
+                                            <h3 class="fw-medium fs-17 mb-0">{{ Auth::guard('staff')->user()->name }}</h3>
+                                            <span class="fs-15 fw-medium">{{ Auth::guard('staff')->user()->designation ?? 'Staff' }}</span>
+                                        @elseif(auth()->check())
+                                            <h3 class="fw-medium fs-17 mb-0">{{ auth()->user()->name ?? 'User' }}</h3>
+                                            <span class="fs-15 fw-medium">User</span>
+                                        @else
+                                            <h3 class="fw-medium fs-17 mb-0">Guest</h3>
+                                            <span class="fs-15 fw-medium">Guest</span>
+                                        @endif
                                     </div>
                                 </div>
                                 <ul class="admin-link mb-0 list-unstyled">
@@ -259,6 +276,11 @@
         @csrf
     </form>
 @endif
+@if(Auth::guard('staff')->check())
+    <form id="staff-logout-form" action="{{ route('staff.logout') }}" method="POST" style="display: none;">
+        @csrf
+    </form>
+@endif
 @if(Auth::guard('web')->check())
     <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
         @csrf
@@ -271,6 +293,13 @@ function handleLogout() {
     var adminForm = document.getElementById('admin-logout-form');
     if (adminForm) {
         adminForm.submit();
+        return;
+    }
+    
+    // Check for staff logout form
+    var staffForm = document.getElementById('staff-logout-form');
+    if (staffForm) {
+        staffForm.submit();
         return;
     }
     

@@ -50,19 +50,34 @@
                 </button>
             </div>
 
-            @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            @endif
+            <!-- Toast Notification Container -->
+            <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+                @if(session('success'))
+                    <div class="toast show success-toast" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="3000">
+                        <div class="toast-header success-toast-header">
+                            <span class="material-symbols-outlined me-2" style="font-size: 20px; color: white;">check_circle</span>
+                            <strong class="me-auto text-white">Success</strong>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                        <div class="toast-body">
+                            {{ session('success') }}
+                        </div>
+                    </div>
+                @endif
 
-            @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            @endif
+                @if(session('error'))
+                    <div class="toast show error-toast" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="3000">
+                        <div class="toast-header error-toast-header">
+                            <span class="material-symbols-outlined me-2" style="font-size: 20px; color: white;">error</span>
+                            <strong class="me-auto text-white">Error</strong>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                        <div class="toast-body">
+                            {{ session('error') }}
+                        </div>
+                    </div>
+                @endif
+            </div>
 
             <!-- Table Toolbar -->
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
@@ -145,7 +160,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table accountant-table">
+                    <table class="table table-sm table-hover accountant-table">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -177,7 +192,7 @@
                                     </td>
                                     <td>
                                         @if($accountant->campus)
-                                            <span class="badge bg-light text-dark border">{{ $accountant->campus }}</span>
+                                            <span class="badge bg-primary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $accountant->campus }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
@@ -196,15 +211,15 @@
                                     </td>
                                     <td>
                                         <div class="d-inline-flex gap-1 align-items-center">
-                                            <button type="button" class="btn btn-sm option-btn key-btn" onclick="editAccountant({{ $accountant->id }})" title="Edit">
-                                                <span class="material-symbols-outlined" style="font-size: 16px;">key</span>
+                                            <button type="button" class="btn btn-sm option-btn key-btn px-2 py-1" onclick="editAccountant({{ $accountant->id }})" title="Edit">
+                                                <span class="material-symbols-outlined" style="font-size: 14px;">key</span>
                                             </button>
-                                            <button type="button" class="btn btn-sm option-btn lock-btn" onclick="viewAccountant({{ $accountant->id }})" title="View Details">
-                                                <span class="material-symbols-outlined" style="font-size: 16px;">lock</span>
+                                            <button type="button" class="btn btn-sm btn-info px-2 py-1" onclick="viewAccountant({{ $accountant->id }})" title="View Details">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
                                             </button>
                                             <div class="dropdown">
-                                                <button class="btn btn-sm option-btn dropdown-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More Options">
-                                                    <span class="material-symbols-outlined" style="font-size: 16px;">arrow_drop_down</span>
+                                                <button class="btn btn-sm option-btn dropdown-btn dropdown-toggle px-2 py-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More Options">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px;">arrow_drop_down</span>
                                                 </button>
                                                 <ul class="dropdown-menu dropdown-menu-end">
                                                     <li>
@@ -255,9 +270,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="accountantModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
-                    <span>Add New Accountant</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="accountantModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">person_add</span>
+                    <span style="color: white;">Add New Accountant</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -292,9 +307,9 @@
                                 </span>
                                 <select class="form-select accountant-input" name="campus" id="campus" style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Campus</option>
-                                    <option value="Main Campus">Main Campus</option>
-                                    <option value="Branch Campus 1">Branch Campus 1</option>
-                                    <option value="Branch Campus 2">Branch Campus 2</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -649,61 +664,56 @@
     /* Table Styling */
     .accountant-table {
         margin-bottom: 0;
-        font-size: 10px;
+        font-size: 14px;
         border: 1px solid #dee2e6;
         border-collapse: separate;
         border-spacing: 0;
-        border-radius: 4px;
+        border-radius: 8px;
         overflow: hidden;
         background-color: white;
     }
     
     .accountant-table thead {
-        border-bottom: 1px solid #dee2e6;
+        border-bottom: 2px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .accountant-table thead th {
-        padding: 3px 6px;
-        font-size: 10px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
         vertical-align: middle;
-        line-height: 1.2;
-        height: 24px;
+        line-height: 1.4;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
         color: #495057;
-        text-transform: uppercase;
+        text-transform: none;
     }
     
     .accountant-table thead th:first-child {
         border-left: 1px solid #dee2e6;
-        padding-left: 8px;
     }
     
     .accountant-table thead th:last-child {
         border-right: 1px solid #dee2e6;
-        padding-right: 8px;
     }
     
     .accountant-table tbody td {
-        padding: 3px 6px;
-        font-size: 10px;
+        padding: 12px 15px;
+        font-size: 14px;
         vertical-align: middle;
-        line-height: 1.2;
+        line-height: 1.4;
         border: 1px solid #dee2e6;
         background-color: white;
-        height: 32px;
     }
     
     .accountant-table tbody td:first-child {
         border-left: 1px solid #dee2e6;
-        padding-left: 8px;
     }
     
     .accountant-table tbody td:last-child {
         border-right: 1px solid #dee2e6;
-        padding-right: 8px;
     }
     
     .accountant-table tbody tr:last-child td {
@@ -718,39 +728,26 @@
         background-color: #f8f9fa;
     }
     
-    .accountant-table thead th:first-child,
-    .accountant-table tbody td:first-child {
-        padding-left: 8px;
-    }
-    
-    .accountant-table thead th:last-child,
-    .accountant-table tbody td:last-child {
-        padding-right: 8px;
-    }
-    
     /* Photo Placeholder */
     .accountant-photo-placeholder {
-        width: 28px;
-        height: 28px;
+        width: 45px;
+        height: 45px;
         border-radius: 50%;
         background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border: 1.5px solid #90caf9;
+        border: 2px solid #e9ecef;
     }
     
     .accountant-photo-placeholder .material-symbols-outlined {
-        font-size: 16px;
+        font-size: 22px;
         color: #1976d2;
     }
     
     /* Options Buttons */
     .option-btn {
-        width: 28px;
-        height: 28px;
-        padding: 0;
-        border-radius: 4px;
+        border-radius: 6px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -759,7 +756,7 @@
     }
     
     .option-btn .material-symbols-outlined {
-        font-size: 16px;
+        font-size: 14px;
     }
     
     .key-btn {
@@ -774,17 +771,6 @@
         box-shadow: 0 2px 6px rgba(40, 167, 69, 0.4);
     }
     
-    .lock-btn {
-        background-color: #fd7e14;
-        color: white;
-    }
-    
-    .lock-btn:hover {
-        background-color: #e86800;
-        color: white;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 6px rgba(253, 126, 20, 0.4);
-    }
     
     .dropdown-btn {
         background-color: #6c757d;
@@ -823,15 +809,95 @@
     .dropdown-item .material-symbols-outlined {
         font-size: 16px;
     }
+    
+    /* Toast Notification Styling */
+    .toast-container {
+        max-width: 400px;
+    }
+    
+    .success-toast {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        border: none;
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+    
+    .success-toast-header {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border-bottom: none;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+    }
+    
+    .success-toast .toast-body {
+        padding: 14px 16px;
+        color: #495057;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    
+    .error-toast {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        border: none;
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+    
+    .error-toast-header {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        border-bottom: none;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+    }
+    
+    .error-toast .toast-body {
+        padding: 14px 16px;
+        color: #495057;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    
+    .toast-header .btn-close {
+        margin-left: auto;
+        opacity: 0.9;
+    }
+    
+    .toast-header .btn-close:hover {
+        opacity: 1;
+    }
+    
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    .toast.show {
+        animation: slideInRight 0.3s ease-out;
+    }
 </style>
 
 <script>
 function resetForm() {
     document.getElementById('accountantForm').reset();
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('accountantModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
-        <span>Add New Accountant</span>
+    const modalLabel = document.getElementById('accountantModalLabel');
+    modalLabel.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">person_add</span>
+        <span style="color: white;">Add New Accountant</span>
     `;
     document.getElementById('password').required = true;
     document.getElementById('passwordRequired').style.display = 'inline';
@@ -850,9 +916,10 @@ function editAccountant(id) {
             document.getElementById('passwordRequired').style.display = 'none';
             document.getElementById('passwordHint').style.display = 'block';
             document.getElementById('password').placeholder = 'Leave blank to keep current password';
-            document.getElementById('accountantModalLabel').innerHTML = `
-                <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-                <span>Edit Accountant</span>
+            const modalLabel = document.getElementById('accountantModalLabel');
+            modalLabel.innerHTML = `
+                <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+                <span style="color: white;">Edit Accountant</span>
             `;
             document.getElementById('methodField').innerHTML = '<input type="hidden" name="_method" value="PUT">';
             document.getElementById('accountantForm').action = `{{ url('/accountants') }}/${id}`;
@@ -891,15 +958,8 @@ function toggleAppLogin(id) {
     .then(data => {
         if (data.success) {
             checkbox.checked = data.app_login_enabled;
-            // Show success message
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-success alert-dismissible fade show';
-            alertDiv.innerHTML = `
-                ${data.message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.querySelector('.card').insertBefore(alertDiv, document.querySelector('.card').firstChild);
-            setTimeout(() => alertDiv.remove(), 3000);
+            // Show success toast
+            showToast(data.message, 'success');
         } else {
             checkbox.checked = originalState;
             alert('Error updating app login status');
@@ -927,15 +987,8 @@ function toggleWebLogin(id) {
     .then(data => {
         if (data.success) {
             checkbox.checked = data.web_login_enabled;
-            // Show success message
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-success alert-dismissible fade show';
-            alertDiv.innerHTML = `
-                ${data.message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.querySelector('.card').insertBefore(alertDiv, document.querySelector('.card').firstChild);
-            setTimeout(() => alertDiv.remove(), 3000);
+            // Show success toast
+            showToast(data.message, 'success');
         } else {
             checkbox.checked = originalState;
             alert('Error updating web login status');
@@ -983,6 +1036,50 @@ function performSearch() {
 function clearSearch() {
     document.getElementById('searchInput').value = '';
     performSearch();
+}
+
+// Toast notification function
+function showToast(message, type = 'success') {
+    const toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) {
+        // Create container if it doesn't exist
+        const container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '9999';
+        document.body.appendChild(container);
+    }
+    
+    const toastId = 'toast-' + Date.now();
+    const icon = type === 'success' ? 'check_circle' : 'error';
+    const headerClass = type === 'success' ? 'success-toast-header' : 'error-toast-header';
+    const toastClass = type === 'success' ? 'success-toast' : 'error-toast';
+    const title = type === 'success' ? 'Success' : 'Error';
+    
+    const toastHTML = `
+        <div id="${toastId}" class="toast show ${toastClass}" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="3000">
+            <div class="toast-header ${headerClass}">
+                <span class="material-symbols-outlined me-2" style="font-size: 20px; color: white;">${icon}</span>
+                <strong class="me-auto text-white">${title}</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                ${message}
+            </div>
+        </div>
+    `;
+    
+    const toastContainerEl = document.getElementById('toastContainer');
+    toastContainerEl.insertAdjacentHTML('beforeend', toastHTML);
+    
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    
+    // Remove toast element after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
 }
 
 function printTable() {

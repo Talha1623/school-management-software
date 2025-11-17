@@ -30,6 +30,7 @@ return new class extends Migration
             $table->decimal('salary', 10, 2)->nullable();
             $table->string('email')->nullable()->unique();
             $table->string('password')->nullable();
+            $table->rememberToken();
             $table->text('home_address')->nullable();
             $table->string('photo')->nullable();
             $table->string('cv_resume')->nullable();

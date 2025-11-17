@@ -72,7 +72,7 @@
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by user name, ID card, campus..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 13px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by user name, ID card, campus..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 12px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -111,13 +111,12 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
                                 <th>User Name</th>
                                 <th>User ID Card</th>
-                                <th>Password</th>
                                 <th>Campus</th>
                                 <th class="text-end">Actions</th>
                             </tr>
@@ -128,23 +127,20 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($accounts->currentPage() - 1) * $accounts->perPage()) }}</td>
                                         <td>
-                                            <strong class="text-primary">{{ $account->user_name }}</strong>
+                                            <strong class="text-dark">{{ $account->user_name }}</strong>
                                         </td>
                                         <td>
-                                            <span class="badge bg-info text-white">{{ $account->user_id_card }}</span>
+                                            <span class="badge bg-primary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $account->user_id_card }}</span>
                                         </td>
                                         <td>
-                                            <code style="background-color: #f8f9fa; padding: 2px 6px; border-radius: 4px; font-size: 12px;">{{ $account->password }}</code>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-secondary text-white">{{ $account->campus }}</span>
+                                            <span class="badge bg-secondary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $account->campus }}</span>
                                         </td>
                                         <td class="text-end">
-                                            <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editAccount({{ $account->id }}, '{{ addslashes($account->user_name) }}', '{{ addslashes($account->user_id_card) }}', '{{ addslashes($account->password) }}', '{{ addslashes($account->campus) }}')">
+                                            <div class="d-inline-flex gap-1 align-items-center">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editAccount({{ $account->id }}, '{{ addslashes($account->user_name) }}', '{{ addslashes($account->user_id_card) }}', '{{ addslashes($account->password) }}', '{{ addslashes($account->campus) }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this attendance account?')) { document.getElementById('delete-form-{{ $account->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this attendance account?')) { document.getElementById('delete-form-{{ $account->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $account->id }}" action="{{ route('attendance.account.destroy', $account->id) }}" method="POST" class="d-none">
@@ -156,7 +152,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="text-center py-4">
+                                        <td colspan="5" class="text-center py-4">
                                             <div class="d-flex flex-column align-items-center gap-2">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">inbox</span>
                                                 <p class="text-muted mb-0">No attendance accounts found.</p>
@@ -166,7 +162,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="6" class="text-center py-4">
+                                    <td colspan="5" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center gap-2">
                                             <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">inbox</span>
                                             <p class="text-muted mb-0">No attendance accounts found.</p>
@@ -212,9 +208,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="accountModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
-                    <span>Add New Attendance</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="accountModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">person_add</span>
+                    <span style="color: white;">Add New Attendance</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -256,15 +252,11 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <select class="form-select account-input" name="campus" id="campus" required>
+                                <select class="form-select account-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Campus</option>
-                                    @if(isset($campuses) && count($campuses) > 0)
-                                        @foreach($campuses as $campus)
-                                            <option value="{{ $campus }}">{{ $campus }}</option>
-                                        @endforeach
-                                    @else
-                                        <option value="Main Campus">Main Campus</option>
-                                    @endif
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -359,20 +351,17 @@
         box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
     }
 
-    .search-results-info {
-        background-color: #e3f2fd;
-        padding: 10px 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        font-size: 13px;
-        color: #1565c0;
-    }
-
+    /* Export Buttons Styling */
     .export-btn {
-        border-radius: 6px;
-        font-size: 12px;
+        border: none;
+        font-weight: 500;
         transition: all 0.3s ease;
-        border: 1px solid transparent;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        font-size: 13px;
     }
 
     .excel-btn {
@@ -383,16 +372,20 @@
     .excel-btn:hover {
         background-color: #218838;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
 
     .csv-btn {
-        background-color: #17a2b8;
+        background-color: #ff9800;
         color: white;
     }
 
     .csv-btn:hover {
-        background-color: #138496;
+        background-color: #f57c00;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
     }
 
     .pdf-btn {
@@ -403,31 +396,182 @@
     .pdf-btn:hover {
         background-color: #c82333;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
     }
 
     .print-btn {
-        background-color: #6c757d;
+        background-color: #2196f3;
         color: white;
     }
 
     .print-btn:hover {
-        background-color: #5a6268;
+        background-color: #0b7dda;
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+    }
+
+    .export-btn:active {
+        transform: translateY(0);
+    }
+
+    .search-input-group {
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #dee2e6;
+        transition: all 0.3s ease;
+        height: 32px;
+    }
+
+    .search-input-group:focus-within {
+        border-color: #003471;
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    }
+
+    .search-input-group .form-control {
+        border: none;
+        font-size: 12px;
+        height: 32px;
+        line-height: 1.4;
+    }
+
+    .search-input-group .form-control:focus {
+        box-shadow: none;
+        border: none;
+    }
+
+    .search-input-group .input-group-text {
+        height: 32px;
+        padding: 4px 8px;
+        display: flex;
+        align-items: center;
     }
 
     .search-btn {
         background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
         color: white;
         border: none;
+        padding: 4px 10px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
     }
 
     .search-btn:hover {
-        background: linear-gradient(135deg, #004a9f 0%, #0056c3 100%);
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
         color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 52, 113, 0.3);
     }
 
-    .search-input-group:focus-within {
-        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    .search-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    /* Search Results Info */
+    .search-results-info {
+        padding: 8px 12px;
+        background-color: #e7f3ff;
+        border-left: 3px solid #003471;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        font-size: 13px;
+    }
+
+    /* Table Compact Styling */
+    .default-table-area table {
+        margin-bottom: 0;
+        font-size: 14px;
+        border: 1px solid #dee2e6;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: white;
+    }
+    
+    .default-table-area table thead {
+        border-bottom: 2px solid #dee2e6;
+        background-color: #f8f9fa;
+    }
+    
+    .default-table-area table thead th {
+        padding: 12px 15px;
+        font-size: 14px;
+        font-weight: 600;
+        vertical-align: middle;
+        line-height: 1.4;
+        white-space: nowrap;
+        border: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+        color: #495057;
+        text-transform: none;
+    }
+    
+    .default-table-area table thead th:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td {
+        padding: 12px 15px;
+        font-size: 14px;
+        vertical-align: middle;
+        line-height: 1.4;
+        border: 1px solid #dee2e6;
+        background-color: white;
+    }
+    
+    .default-table-area table tbody td:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody tr:last-child td {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .default-table-area table tbody tr:hover td {
+        background-color: #f8f9fa;
+    }
+    
+    .default-table-area .badge {
+        font-size: 12px;
+        padding: 4px 8px;
+        font-weight: 600;
+    }
+    
+    .default-table-area .material-symbols-outlined {
+        font-size: 14px !important;
+    }
+    
+    .default-table-area .btn-sm {
+        font-size: 13px;
+        padding: 4px 8px;
+    }
+    
+    .default-table-area .btn-sm .material-symbols-outlined {
+        font-size: 14px !important;
+        vertical-align: middle;
+    }
+    
+    .default-table-area .btn-primary .material-symbols-outlined,
+    .default-table-area .btn-danger .material-symbols-outlined {
+        color: white !important;
     }
 </style>
 
@@ -435,7 +579,11 @@
     function resetForm() {
         document.getElementById('accountForm').reset();
         document.getElementById('methodField').innerHTML = '';
-        document.getElementById('accountModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">person_add</span><span>Add New Attendance</span>';
+        const modalLabel = document.getElementById('accountModalLabel');
+        modalLabel.innerHTML = `
+            <span class="material-symbols-outlined" style="font-size: 20px; color: white;">person_add</span>
+            <span style="color: white;">Add New Attendance</span>
+        `;
         document.getElementById('accountForm').action = '{{ route("attendance.account.store") }}';
     }
 
@@ -446,7 +594,11 @@
         document.getElementById('password').value = password;
         document.getElementById('campus').value = campus;
         
-        document.getElementById('accountModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">edit</span><span>Edit Attendance Account</span>';
+        const modalLabel = document.getElementById('accountModalLabel');
+        modalLabel.innerHTML = `
+            <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+            <span style="color: white;">Edit Attendance Account</span>
+        `;
         document.getElementById('accountForm').action = '{{ route("attendance.account.update", ":id") }}'.replace(':id', id);
         document.getElementById('methodField').innerHTML = '@method("PUT")';
         

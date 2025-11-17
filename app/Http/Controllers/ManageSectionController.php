@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Section;
 use App\Models\ClassModel;
 use App\Models\Staff;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -51,22 +52,56 @@ class ManageSectionController extends Controller
         
         $sections = $query->latest()->paginate($perPage)->withQueryString();
         
-        // Get unique values for dropdowns
-        $campuses = Section::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
-        $classes = ClassModel::distinct()->pluck('class_name')->sort()->values();
-        $allSessions = Section::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        $teachers = Staff::whereNotNull('name')->orderBy('name')->pluck('name', 'id');
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
-        // If no data exists, provide defaults
+        // If no campuses found, get from sections
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($campusesFromSections as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
         }
+        
+        // Get classes from ClassModel
+        $classes = ClassModel::orderBy('class_name', 'asc')->get();
+        
+        // If no classes found, get from sections
         if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+            $classesFromSections = Section::whereNotNull('class')
+                ->distinct()
+                ->pluck('class')
+                ->sort()
+                ->values();
+            
+            // Convert to collection of objects with class_name property
+            $classes = collect();
+            foreach ($classesFromSections as $className) {
+                $classes->push((object)['class_name' => $className]);
+            }
         }
+        
+        // Get sessions from sections
+        $allSessions = Section::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
+        
+        // If no sessions found, provide defaults
         if ($allSessions->isEmpty()) {
-            $allSessions = collect([date('Y') . '-' . (date('Y') + 1), (date('Y') - 1) . '-' . date('Y')]);
+            $currentYear = date('Y');
+            $allSessions = collect([
+                $currentYear . '-' . ($currentYear + 1),
+                ($currentYear - 1) . '-' . $currentYear,
+                ($currentYear - 2) . '-' . ($currentYear - 1)
+            ]);
         }
+        
+        $teachers = Staff::whereNotNull('name')->orderBy('name')->pluck('name', 'id');
         
         return view('classes.manage-section', compact('sections', 'campuses', 'classes', 'allSessions', 'teachers'));
     }

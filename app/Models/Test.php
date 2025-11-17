@@ -19,10 +19,12 @@ class Test extends Model
         'description',
         'date',
         'session',
+        'result_status',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'result_status' => 'boolean',
     ];
 }
 

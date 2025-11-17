@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\ClassModel;
+use App\Models\Campus;
+use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -34,7 +36,34 @@ class ManageClassesController extends Controller
         
         $classes = $query->orderBy('numeric_no')->paginate($perPage)->withQueryString();
         
-        return view('classes.manage-classes', compact('classes'));
+        // Load sections for each class
+        foreach ($classes as $class) {
+            $sections = Section::where('class', $class->class_name)
+                ->orderBy('name', 'asc')
+                ->pluck('name')
+                ->toArray();
+            $class->sections = $sections;
+        }
+        
+        // Get campuses for dropdown
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($campusesFromClasses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        return view('classes.manage-classes', compact('classes', 'campuses'));
     }
 
     /**

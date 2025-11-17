@@ -107,7 +107,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -119,6 +119,7 @@
                                 <th>Test Type</th>
                                 <th>Date</th>
                                 <th>Session</th>
+                                <th>Result Status</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
@@ -143,12 +144,25 @@
                                         </td>
                                         <td>{{ date('d M Y', strtotime($test->date)) }}</td>
                                         <td>{{ $test->session }}</td>
+                                        <td>
+                                            @if($test->result_status ?? false)
+                                                <button type="button" class="btn btn-sm btn-success px-3 py-1 result-status-btn" id="result-btn-{{ $test->id }}" data-test-id="{{ $test->id }}" onclick="toggleResultStatus({{ $test->id }})" style="font-size: 11px;">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                                                    <span style="color: white;">Result Declared</span>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-sm btn-warning px-3 py-1 result-status-btn" id="result-btn-{{ $test->id }}" data-test-id="{{ $test->id }}" onclick="toggleResultStatus({{ $test->id }})" style="font-size: 11px;">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">pending</span>
+                                                    <span style="color: white;">Declare Result</span>
+                                                </button>
+                                            @endif
+                                        </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editTest({{ $test->id }}, '{{ addslashes($test->campus) }}', '{{ addslashes($test->test_name) }}', '{{ addslashes($test->for_class) }}', '{{ addslashes($test->section) }}', '{{ addslashes($test->subject) }}', '{{ addslashes($test->test_type) }}', '{{ addslashes($test->description ?? '') }}', '{{ $test->date->format('Y-m-d') }}', '{{ addslashes($test->session) }}')">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editTest({{ $test->id }}, '{{ addslashes($test->campus) }}', '{{ addslashes($test->test_name) }}', '{{ addslashes($test->for_class) }}', '{{ addslashes($test->section) }}', '{{ addslashes($test->subject) }}', '{{ addslashes($test->test_type) }}', '{{ addslashes($test->description ?? '') }}', '{{ $test->date->format('Y-m-d') }}', '{{ addslashes($test->session) }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this test?')) { document.getElementById('delete-form-{{ $test->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this test?')) { document.getElementById('delete-form-{{ $test->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $test->id }}" action="{{ route('test.list.destroy', $test->id) }}" method="POST" class="d-none">
@@ -160,7 +174,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="10" class="text-center text-muted py-5">
+                                        <td colspan="11" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No tests found.</p>
                                         </td>
@@ -168,7 +182,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="10" class="text-center text-muted py-5">
+                                    <td colspan="11" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No tests found.</p>
                                     </td>
@@ -213,7 +227,10 @@
                                 <select class="form-control test-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                        @php
+                                            $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                        @endphp
+                                        <option value="{{ $campusName }}">{{ $campusName }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -249,9 +266,6 @@
                                 </span>
                                 <select class="form-control test-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Section</option>
-                                    @foreach($sections as $sectionName)
-                                        <option value="{{ $sectionName }}">{{ $sectionName }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -508,28 +522,35 @@
         font-size: 13px;
     }
     
+    /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
         border-spacing: 0;
         border-collapse: collapse;
         border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .default-table-area table thead {
+        border-bottom: 1px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         font-weight: 600;
         vertical-align: middle;
         line-height: 1.3;
-        height: 32px;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
@@ -543,6 +564,61 @@
         font-size: 11px;
         padding: 3px 6px;
         font-weight: 500;
+        border-radius: 4px;
+    }
+    
+    .default-table-area .btn-sm {
+        font-size: 11px;
+        padding: 4px 8px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        height: 28px;
+    }
+    
+    .default-table-area .btn-sm .material-symbols-outlined {
+        font-size: 14px !important;
+        vertical-align: middle;
+        color: white !important;
+        line-height: 1;
+        display: inline-block;
+    }
+    
+    .default-table-area .btn-primary .material-symbols-outlined,
+    .default-table-area .btn-danger .material-symbols-outlined {
+        color: white !important;
+    }
+    
+    .default-table-area table tbody td strong {
+        font-size: 13px;
+        font-weight: 600;
+    }
+    
+    .result-status-btn {
+        font-size: 11px;
+        padding: 4px 12px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        line-height: 1;
+        height: 28px;
+        white-space: nowrap;
+    }
+    
+    .result-status-btn .material-symbols-outlined {
+        font-size: 14px !important;
+        vertical-align: middle;
+        color: white !important;
+        line-height: 1;
+    }
+    
+    .result-status-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 </style>
 
@@ -560,6 +636,8 @@ function resetForm() {
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
         Save Test
     `;
+    // Clear section dropdown
+    document.getElementById('section').innerHTML = '<option value="">Select Section</option>';
 }
 
 // Edit test function
@@ -567,7 +645,6 @@ function editTest(id, campus, testName, forClass, section, subject, testType, de
     document.getElementById('campus').value = campus;
     document.getElementById('test_name').value = testName;
     document.getElementById('for_class').value = forClass;
-    document.getElementById('section').value = section;
     document.getElementById('subject').value = subject;
     document.getElementById('test_type').value = testType;
     document.getElementById('description').value = description;
@@ -583,6 +660,32 @@ function editTest(id, campus, testName, forClass, section, subject, testType, de
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
         Update Test
     `;
+    
+    // Load sections for the selected class
+    const sectionSelect = document.getElementById('section');
+    if (forClass) {
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        fetch(`{{ route('test.list.get-sections') }}?class=${encodeURIComponent(forClass)}`)
+            .then(response => response.json())
+            .then(data => {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                data.sections.forEach(sec => {
+                    const option = document.createElement('option');
+                    option.value = sec;
+                    option.textContent = sec;
+                    if (sec === section) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+            });
+    } else {
+        sectionSelect.innerHTML = '<option value="">Select Section</option>';
+    }
     
     const modal = new bootstrap.Modal(document.getElementById('testModal'));
     modal.show();
@@ -657,6 +760,98 @@ function printTable() {
     window.print();
     document.body.innerHTML = originalContents;
     window.location.reload();
+}
+
+// Load sections when class changes
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('for_class');
+    const sectionSelect = document.getElementById('section');
+
+    if (classSelect && sectionSelect) {
+        function loadSections(selectedClass) {
+            if (selectedClass) {
+                sectionSelect.innerHTML = '<option value="">Loading...</option>';
+                
+                fetch(`{{ route('test.list.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                        data.sections.forEach(section => {
+                            const option = document.createElement('option');
+                            option.value = section;
+                            option.textContent = section;
+                            sectionSelect.appendChild(option);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error loading sections:', error);
+                        sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                    });
+            } else {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            }
+        }
+
+        classSelect.addEventListener('change', function() {
+            loadSections(this.value);
+        });
+    }
+});
+
+// Toggle result status
+function toggleResultStatus(testId) {
+    const button = document.getElementById('result-btn-' + testId);
+    const originalHTML = button.innerHTML;
+    
+    // Disable button and show loading
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> <span>Processing...</span>';
+    
+    fetch(`{{ url('test/list') }}/${testId}/toggle-result-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update button based on new status
+            if (data.result_status) {
+                button.className = 'btn btn-sm btn-success px-3 py-1 result-status-btn';
+                button.innerHTML = `
+                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                    <span style="color: white;">Result Declared</span>
+                `;
+            } else {
+                button.className = 'btn btn-sm btn-warning px-3 py-1 result-status-btn';
+                button.innerHTML = `
+                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">pending</span>
+                    <span style="color: white;">Declare Result</span>
+                `;
+            }
+            
+            // Show success message
+            if (typeof showToast !== 'undefined') {
+                showToast(data.message, 'success');
+            } else {
+                alert(data.message);
+            }
+        } else {
+            button.innerHTML = originalHTML;
+            alert('Failed to update result status. Please try again.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        button.innerHTML = originalHTML;
+        alert('An error occurred. Please try again.');
+    })
+    .finally(() => {
+        button.disabled = false;
+    });
 }
 </script>
 @endsection

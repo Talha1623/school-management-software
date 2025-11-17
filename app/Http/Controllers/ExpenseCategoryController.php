@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\ExpenseCategory;
+use App\Models\Campus;
+use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -33,7 +36,33 @@ class ExpenseCategoryController extends Controller
         
         $categories = $query->orderBy('category_name')->paginate($perPage)->withQueryString();
         
-        return view('expense-management.categories', compact('categories'));
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        return view('expense-management.categories', compact('categories', 'campuses'));
     }
 
     /**

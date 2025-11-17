@@ -40,9 +40,11 @@
                                 </span>
                                 <select class="form-control salary-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 36px;">
                                     <option value="">Select Campus</option>
-                                    @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
-                                    @endforeach
+                                    @if(isset($campuses) && $campuses->count() > 0)
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                        @endforeach
+                                    @endif
                                 </select>
                             </div>
                         </div>
@@ -129,6 +131,124 @@
                     </div>
                 </div>
             </form>
+
+            <!-- Generated Salaries Table -->
+            @if(isset($generatedSalaries) && $generatedSalaries->count() > 0)
+            <div class="mt-4">
+                <div class="card bg-white border border-white rounded-10 p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0 fs-16 fw-semibold">Generated Salaries</h5>
+                        @if(isset($generatedCampus) && isset($generatedMonth) && isset($generatedYear))
+                        <span class="badge bg-info text-white">
+                            {{ $generatedCampus }} - 
+                            @php
+                                $monthNames = [
+                                    '01' => 'January', '02' => 'February', '03' => 'March', '04' => 'April',
+                                    '05' => 'May', '06' => 'June', '07' => 'July', '08' => 'August',
+                                    '09' => 'September', '10' => 'October', '11' => 'November', '12' => 'December'
+                                ];
+                                $monthName = $monthNames[$generatedMonth] ?? $generatedMonth;
+                            @endphp
+                            {{ $monthName }} {{ $generatedYear }}
+                        </span>
+                        @endif
+                    </div>
+
+                    <div class="default-table-area">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Photo</th>
+                                        <th>Name</th>
+                                        <th>Salary Month</th>
+                                        <th class="text-center">Present</th>
+                                        <th class="text-center">Absent</th>
+                                        <th class="text-center">Late</th>
+                                        <th class="text-end">Basic</th>
+                                        <th class="text-end">Salary Generated</th>
+                                        <th class="text-end">Amount Paid</th>
+                                        <th class="text-end">Loan Repayment</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($generatedSalaries as $salary)
+                                    <tr>
+                                        <td>{{ $salary->id }}</td>
+                                        <td>
+                                            @if($salary->staff && $salary->staff->photo)
+                                                <img src="{{ asset('storage/' . $salary->staff->photo) }}" alt="Photo" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                                            @else
+                                                <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #e0e7ff; display: flex; align-items: center; justify-content: center;">
+                                                    <span class="material-symbols-outlined" style="font-size: 20px; color: #003471;">person</span>
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <strong class="text-dark">{{ $salary->staff->name ?? 'N/A' }}</strong>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $salary->salary_month }} {{ $salary->year }}</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-success text-white" style="font-size: 11px;">{{ $salary->present ?? 0 }}</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-danger text-white" style="font-size: 11px;">{{ $salary->absent ?? 0 }}</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-warning text-dark" style="font-size: 11px;">{{ $salary->late ?? 0 }}</span>
+                                        </td>
+                                        <td class="text-end">
+                                            <strong class="text-primary">₹{{ number_format($salary->basic ?? 0, 2) }}</strong>
+                                        </td>
+                                        <td class="text-end">
+                                            <strong class="text-success">₹{{ number_format($salary->salary_generated ?? 0, 2) }}</strong>
+                                        </td>
+                                        <td class="text-end">
+                                            <strong class="text-info">₹{{ number_format($salary->amount_paid ?? 0, 2) }}</strong>
+                                        </td>
+                                        <td class="text-end">
+                                            <strong class="text-warning">₹{{ number_format($salary->loan_repayment ?? 0, 2) }}</strong>
+                                        </td>
+                                        <td>
+                                            @if($salary->status == 'Pending')
+                                                <span class="badge bg-warning text-dark" style="font-size: 11px;">Pending</span>
+                                            @elseif($salary->status == 'Paid')
+                                                <span class="badge bg-success text-white" style="font-size: 11px;">Paid</span>
+                                            @else
+                                                <span class="badge bg-info text-white" style="font-size: 11px;">Partial</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="{{ route('salary-loan.manage-salaries') }}?search={{ $salary->staff->name ?? '' }}" class="btn btn-sm btn-primary px-2 py-1" title="View/Edit Payment">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">payments</span>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                                @if($generatedSalaries->count() > 0)
+                                <tfoot>
+                                    <tr style="background-color: #f8f9fa; font-weight: 600;">
+                                        <td colspan="8" class="text-end"><strong>Total:</strong></td>
+                                        <td class="text-end"><strong class="text-primary">₹{{ number_format($generatedSalaries->sum('basic'), 2) }}</strong></td>
+                                        <td class="text-end"><strong class="text-success">₹{{ number_format($generatedSalaries->sum('salary_generated'), 2) }}</strong></td>
+                                        <td class="text-end"><strong class="text-info">₹{{ number_format($generatedSalaries->sum('amount_paid'), 2) }}</strong></td>
+                                        <td class="text-end"><strong class="text-warning">₹{{ number_format($generatedSalaries->sum('loan_repayment'), 2) }}</strong></td>
+                                        <td colspan="2"></td>
+                                    </tr>
+                                </tfoot>
+                                @endif
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endif
         </div>
     </div>
 </div>
@@ -220,6 +340,53 @@
     
     .rounded-10 {
         border-radius: 10px;
+    }
+
+    /* Table Styling */
+    .default-table-area {
+        margin-top: 0;
+    }
+
+    .default-table-area table {
+        margin-bottom: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .default-table-area table thead th {
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        vertical-align: middle;
+        line-height: 1.3;
+        white-space: nowrap;
+        border: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+        color: #003471;
+    }
+
+    .default-table-area table tbody td {
+        padding: 8px 12px;
+        font-size: 13px;
+        vertical-align: middle;
+        line-height: 1.4;
+        border: 1px solid #dee2e6;
+    }
+
+    .default-table-area table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .default-table-area .badge {
+        font-size: 11px;
+        padding: 3px 6px;
+        font-weight: 500;
+    }
+
+    .default-table-area table tfoot td {
+        padding: 10px 12px;
+        font-size: 13px;
+        border: 1px solid #dee2e6;
     }
 </style>
 

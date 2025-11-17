@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\StockCategory;
+use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
@@ -40,13 +41,30 @@ class ProductController extends Controller
         // Get categories for dropdown
         $categories = StockCategory::whereNotNull('category_name')->distinct()->pluck('category_name')->sort()->values();
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
+        // If no campuses found, get from classes or sections
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
         }
         
         return view('stock.products', compact('products', 'categories', 'campuses'));
@@ -59,6 +77,7 @@ class ProductController extends Controller
     {
         $validated = $request->validate([
             'product_name' => ['required', 'string', 'max:255'],
+            'product_code' => ['nullable', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:255'],
             'purchase_price' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
@@ -80,6 +99,7 @@ class ProductController extends Controller
     {
         $validated = $request->validate([
             'product_name' => ['required', 'string', 'max:255'],
+            'product_code' => ['nullable', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:255'],
             'purchase_price' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
@@ -120,6 +140,7 @@ class ProductController extends Controller
                 $searchLower = strtolower($search);
                 $query->where(function($q) use ($search, $searchLower) {
                     $q->whereRaw('LOWER(product_name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(product_code) LIKE ?', ["%{$searchLower}%"])
                       ->orWhereRaw('LOWER(category) LIKE ?', ["%{$searchLower}%"])
                       ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
                 });
@@ -165,6 +186,7 @@ class ProductController extends Controller
                 fputcsv($file, [
                     $product->id,
                     $product->product_name,
+                    $product->product_code ?? 'N/A',
                     $product->category,
                     $product->purchase_price,
                     $product->sale_price,
@@ -201,6 +223,7 @@ class ProductController extends Controller
                 fputcsv($file, [
                     $product->id,
                     $product->product_name,
+                    $product->product_code ?? 'N/A',
                     $product->category,
                     $product->purchase_price,
                     $product->sale_price,

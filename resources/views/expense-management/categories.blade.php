@@ -107,7 +107,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -129,10 +129,10 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editCategory({{ $category->id }}, '{{ addslashes($category->category_name) }}', '{{ addslashes($category->campus) }}')">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editCategory({{ $category->id }}, '{{ addslashes($category->category_name) }}', '{{ addslashes($category->campus) }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this category?')) { document.getElementById('delete-form-{{ $category->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this category?')) { document.getElementById('delete-form-{{ $category->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $category->id }}" action="{{ route('expense-management.categories.destroy', $category->id) }}" method="POST" class="d-none">
@@ -203,7 +203,14 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <input type="text" class="form-control category-input" name="campus" id="campus" placeholder="Enter campus" required>
+                                <select class="form-control category-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Campus</option>
+                                    @if(isset($campuses) && $campuses->count() > 0)
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                        @endforeach
+                                    @endif
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -446,77 +453,32 @@
         border-spacing: 0;
         border-collapse: collapse;
         border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
     }
     
     .default-table-area table thead {
         border-bottom: 1px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         font-weight: 600;
         vertical-align: middle;
         line-height: 1.3;
-        height: 32px;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
-    .default-table-area table thead th:first-child {
-        border-left: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table thead th:last-child {
-        border-right: 1px solid #dee2e6;
-    }
-    
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody td:first-child {
-        border-left: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody td:last-child {
-        border-right: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody tr:last-child td {
-        border-bottom: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 10px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 10px;
-    }
-    
-    .default-table-area table tbody tr {
-        height: 36px;
-    }
-    
-    .default-table-area table tbody tr:first-child td {
-        border-top: none;
-    }
-    
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
     }
     
     .default-table-area table tbody tr:hover {
@@ -527,27 +489,43 @@
         font-size: 11px;
         padding: 3px 6px;
         font-weight: 500;
-    }
-    
-    .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
+        border-radius: 4px;
     }
     
     .default-table-area .btn-sm {
         font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        padding: 3px 6px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
         font-size: 14px !important;
         vertical-align: middle;
         color: white !important;
+        line-height: 1;
+        display: inline-block;
     }
     
     .default-table-area .btn-primary .material-symbols-outlined,
     .default-table-area .btn-danger .material-symbols-outlined {
         color: white !important;
+    }
+    
+    .default-table-area table tbody td strong {
+        font-size: 13px;
+        font-weight: 600;
+    }
+    
+    #categoryModal select.category-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23003471' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        padding-right: 2.5rem;
     }
 </style>
 

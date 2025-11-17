@@ -3,11 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Hash;
 
-class Staff extends Model
+class Staff extends Authenticatable
 {
-    use HasFactory;
+    use HasFactory, Notifiable;
 
     protected $table = 'staff';
 
@@ -36,7 +38,52 @@ class Staff extends Model
 
     protected $hidden = [
         'password',
+        'remember_token',
     ];
+
+    protected $casts = [
+        'birthday' => 'date',
+        'joining_date' => 'date',
+    ];
+
+    /**
+     * Set the password attribute (hash it)
+     */
+    public function setPasswordAttribute($value)
+    {
+        if (!empty($value)) {
+            $this->attributes['password'] = Hash::make($value);
+        }
+    }
+
+    /**
+     * Check if staff has dashboard access (has email and password)
+     */
+    public function hasDashboardAccess(): bool
+    {
+        return !empty($this->email) && !empty($this->password);
+    }
+
+    /**
+     * Get allowed routes based on designation
+     */
+    public function getAllowedRoutes(): array
+    {
+        // Default routes for all staff with dashboard access
+        $defaultRoutes = [
+            'dashboard',
+            'student-list',
+            'attendance.student',
+            'student-behavior.recording',
+        ];
+
+        // Add more routes based on designation if needed
+        if (strtolower($this->designation ?? '') === 'teacher') {
+            return $defaultRoutes;
+        }
+
+        return $defaultRoutes;
+    }
 
     /**
      * Get the salaries for the staff member.

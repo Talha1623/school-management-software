@@ -14,6 +14,11 @@ class Task extends Model
         'description',
         'type',
         'assign_to',
+        'status',
+    ];
+
+    protected $casts = [
+        'status' => 'string',
     ];
 }
 

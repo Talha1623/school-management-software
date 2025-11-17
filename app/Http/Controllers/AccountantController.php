@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Accountant;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
@@ -42,7 +43,25 @@ class AccountantController extends Controller
               ->orWhere('web_login_enabled', false);
         })->count();
 
-        return view('accountant', compact('accountants', 'totalAccountants', 'activeAccountants', 'restrictedAccountants'));
+        // Get campuses for dropdown
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from accountants
+        if ($campuses->isEmpty()) {
+            $campusesFromAccountants = Accountant::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($campusesFromAccountants as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+
+        return view('accountant', compact('accountants', 'totalAccountants', 'activeAccountants', 'restrictedAccountants', 'campuses'));
     }
 
     /**

@@ -44,6 +44,7 @@
             <tr>
                 <th>ID</th>
                 <th>Product Name</th>
+                <th>Product Code</th>
                 <th>Category</th>
                 <th class="text-right">Purchase Price</th>
                 <th class="text-right">Sale Price</th>
@@ -57,6 +58,7 @@
             <tr>
                 <td>{{ $product->id }}</td>
                 <td>{{ $product->product_name }}</td>
+                <td>{{ $product->product_code ?? 'N/A' }}</td>
                 <td>{{ $product->category }}</td>
                 <td class="text-right">{{ number_format($product->purchase_price, 2) }}</td>
                 <td class="text-right">{{ number_format($product->sale_price, 2) }}</td>
@@ -66,7 +68,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="8" style="text-align: center;">No products found</td>
+                <td colspan="9" style="text-align: center;">No products found</td>
             </tr>
             @endforelse
         </tbody>

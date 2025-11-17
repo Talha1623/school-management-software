@@ -116,82 +116,88 @@
             @endif
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table">
+                <div class="table-responsive" style="overflow-x: auto;">
+                    <table class="table table-sm table-hover" style="white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>WhatsApp</th>
-                                <th>ID Card Number</th>
-                                <th>Address</th>
-                                <th>Profession</th>
-                                <th class="text-end">Actions</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">#</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Name</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Email</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Phone</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">WhatsApp</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">ID Card Number</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Address</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Profession</th>
+                                <th class="text-end" style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($parents as $parent)
                                 <tr>
-                                    <td>{{ $loop->iteration + (($parents->currentPage() - 1) * $parents->perPage()) }}</td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $loop->iteration + (($parents->currentPage() - 1) * $parents->perPage()) }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <strong class="text-primary">{{ $parent->name }}</strong>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <span class="text-muted">
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span>
                                             {{ $parent->email }}
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($parent->phone)
-                                            <span class="badge bg-light text-dark">
-                                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">phone</span>
+                                            <span class="badge bg-light text-dark" style="font-size: 11px;">
+                                                <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">phone</span>
                                                 {{ $parent->phone }}
                                             </span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($parent->whatsapp)
-                                            <span class="badge bg-success text-white">
-                                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">chat</span>
+                                            <span class="badge bg-success text-white" style="font-size: 11px;">
+                                                <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">chat</span>
                                                 {{ $parent->whatsapp }}
                                             </span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($parent->id_card_number)
-                                            <span class="badge bg-info text-white">{{ $parent->id_card_number }}</span>
+                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $parent->id_card_number }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <span class="text-muted" title="{{ $parent->address }}">
                                             {{ $parent->address ? Str::limit($parent->address, 30) : 'N/A' }}
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($parent->profession)
-                                            <span class="badge bg-secondary text-white">{{ $parent->profession }}</span>
+                                            <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $parent->profession }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td class="text-end">
+                                    <td class="text-end" style="padding: 8px 12px; font-size: 13px; text-align: center;">
                                         <div class="d-inline-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-primary px-2 py-0" onclick="editParent({{ $parent->id }}, '{{ addslashes($parent->name) }}', '{{ addslashes($parent->email) }}', '{{ $parent->phone ?? '' }}', '{{ $parent->whatsapp ?? '' }}', '{{ $parent->id_card_number ?? '' }}', '{{ addslashes($parent->address ?? '') }}', '{{ addslashes($parent->profession ?? '') }}')" title="Edit">
+                                            <button type="button" class="btn btn-sm btn-warning px-2 py-1" onclick="resetPassword({{ $parent->id }}, '{{ addslashes($parent->name) }}')" title="Reset Password">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">lock_reset</span>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-info px-2 py-1" onclick="connectStudent({{ $parent->id }}, '{{ addslashes($parent->name) }}', '{{ $parent->id_card_number ?? '' }}', '{{ $parent->email ?? '' }}')" title="Connect Student">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">link</span>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editParent({{ $parent->id }}, '{{ addslashes($parent->name) }}', '{{ addslashes($parent->email) }}', '{{ $parent->phone ?? '' }}', '{{ $parent->whatsapp ?? '' }}', '{{ $parent->id_card_number ?? '' }}', '{{ addslashes($parent->address ?? '') }}', '{{ addslashes($parent->profession ?? '') }}')" title="Edit">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </button>
                                             <form action="{{ route('parent.manage-access.destroy', $parent) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this parent account?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-0" title="Delete">
+                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                             </form>
@@ -316,9 +322,159 @@
                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
                         Cancel
                     </button>
-                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 parent-submit-btn">
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 parent-submit-btn" style="color: white;">
                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
                         Save Parent
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="resetPasswordModalLabel">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">lock_reset</span>
+                    <span>Reset Password</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <form id="resetPasswordForm" method="POST" action="">
+                @csrf
+                @method('PUT')
+                <div class="modal-body p-3">
+                    <div class="mb-3">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Parent Name</label>
+                        <input type="text" class="form-control form-control-sm" id="reset_parent_name" readonly style="background-color: #f8f9fa;">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">New Password <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
+                            </span>
+                            <input type="password" class="form-control" name="password" id="reset_password" placeholder="Enter new password" required minlength="6">
+                        </div>
+                        <small class="text-muted" style="font-size: 11px;">Minimum 6 characters</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Confirm Password <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
+                            </span>
+                            <input type="password" class="form-control" id="reset_password_confirmation" placeholder="Confirm new password" required minlength="6">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                    <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8" style="background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%); color: white; border: none;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">lock_reset</span>
+                        Reset Password
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Connect Student Modal -->
+<div class="modal fade" id="connectStudentModal" tabindex="-1" aria-labelledby="connectStudentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="connectStudentModalLabel">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">link</span>
+                    <span>Connect Student to Parent</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <form id="connectStudentForm" method="POST" action="">
+                @csrf
+                <div class="modal-body p-3">
+                    <div class="mb-3">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Parent Name</label>
+                        <input type="text" class="form-control form-control-sm" id="connect_parent_name" readonly style="background-color: #f8f9fa;">
+                        <input type="hidden" id="connect_parent_id">
+                    </div>
+                    
+                    <!-- Connected Students Section -->
+                    <div class="mb-3" id="connectedStudentsSection" style="display: none;">
+                        <div class="card border border-info" style="background-color: #e7f3ff;">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong class="text-primary fs-13">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">link</span>
+                                        Connected Students (<span id="connected_students_count">0</span>)
+                                    </strong>
+                                </div>
+                                <div class="table-responsive" style="max-height: 150px; overflow-y: auto;">
+                                    <table class="table table-sm table-bordered mb-0" style="font-size: 11px; background-color: white;">
+                                        <thead>
+                                            <tr>
+                                                <th style="padding: 4px 6px; font-size: 11px;">Code</th>
+                                                <th style="padding: 4px 6px; font-size: 11px;">Name</th>
+                                                <th style="padding: 4px 6px; font-size: 11px;">Class</th>
+                                                <th style="padding: 4px 6px; font-size: 11px;">Section</th>
+                                                <th style="padding: 4px 6px; font-size: 11px; text-align: center;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="connectedStudentsTableBody">
+                                            <!-- Connected students will be loaded here -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Search Bar -->
+                    <div class="mb-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 15px;">search</span>
+                            </span>
+                            <input type="text" class="form-control" id="search_student_table" placeholder="Search by student code, name, class, section..." autocomplete="off" onkeyup="filterStudentTable(this.value)">
+                        </div>
+                    </div>
+                    
+                    <!-- Students Table -->
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-hover" id="studentsTable" style="white-space: nowrap;">
+                            <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 10;">
+                                <tr>
+                                    <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Select</th>
+                                    <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Code</th>
+                                    <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Name</th>
+                                    <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Class</th>
+                                    <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Section</th>
+                                    <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Father Name</th>
+                                    <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Father Email</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody">
+                                <!-- Students will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <input type="hidden" name="student_id" id="selected_student_id">
+                </div>
+                <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                    <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8" style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; border: none;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">link</span>
+                        Connect Student
                     </button>
                 </div>
             </form>
@@ -806,5 +962,227 @@ function printTable() {
     document.body.innerHTML = originalContents;
     window.location.reload();
 }
+
+// Reset Password
+function resetPassword(parentId, parentName) {
+    document.getElementById('resetPasswordForm').action = '{{ route('parent.manage-access.reset-password', ':id') }}'.replace(':id', parentId);
+    document.getElementById('reset_parent_name').value = parentName;
+    document.getElementById('reset_password').value = '';
+    document.getElementById('reset_password_confirmation').value = '';
+    new bootstrap.Modal(document.getElementById('resetPasswordModal')).show();
+}
+
+let allStudents = [];
+
+// Connect Student
+function connectStudent(parentId, parentName, idCard, email) {
+    document.getElementById('connectStudentForm').action = '{{ route('parent.manage-access.connect-student', ':id') }}'.replace(':id', parentId);
+    document.getElementById('connect_parent_name').value = parentName;
+    document.getElementById('connect_parent_id').value = parentId;
+    document.getElementById('selected_student_id').value = '';
+    document.getElementById('search_student_table').value = '';
+    
+    // Load all students and connected students
+    loadAllStudents(parentId);
+    
+    new bootstrap.Modal(document.getElementById('connectStudentModal')).show();
+}
+
+// Load all students
+function loadAllStudents(parentId) {
+    const tbody = document.getElementById('studentsTableBody');
+    const connectedTbody = document.getElementById('connectedStudentsTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Loading students...</td></tr>';
+    
+    fetch(`{{ route('parent.manage-access.get-all-students') }}?parent_id=${parentId}`)
+        .then(response => response.json())
+        .then(data => {
+            allStudents = data.students || [];
+            renderStudentsTable(allStudents);
+            
+            // Render connected students
+            if (data.connected_students && data.connected_students.length > 0) {
+                renderConnectedStudents(data.connected_students, parentId);
+            } else {
+                document.getElementById('connectedStudentsSection').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading students:', error);
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading students. Please try again.</td></tr>';
+        });
+}
+
+// Render connected students
+function renderConnectedStudents(connectedStudents, parentId) {
+    const section = document.getElementById('connectedStudentsSection');
+    const tbody = document.getElementById('connectedStudentsTableBody');
+    const countSpan = document.getElementById('connected_students_count');
+    
+    if (connectedStudents.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    
+    section.style.display = 'block';
+    countSpan.textContent = connectedStudents.length;
+    
+    const disconnectRoute = '{{ route('parent.manage-access.disconnect-student', ':id') }}'.replace(':id', parentId);
+    
+    tbody.innerHTML = connectedStudents.map(student => `
+        <tr>
+            <td style="padding: 4px 6px; font-size: 11px;">${student.code}</td>
+            <td style="padding: 4px 6px; font-size: 11px;"><strong>${student.name}</strong></td>
+            <td style="padding: 4px 6px; font-size: 11px;">${student.class}</td>
+            <td style="padding: 4px 6px; font-size: 11px;">${student.section}</td>
+            <td style="padding: 4px 6px; font-size: 11px; text-align: center;">
+                <form action="${disconnectRoute}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to disconnect this student?');">
+                    <input type="hidden" name="_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="student_id" value="${student.id}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger px-1 py-0" title="Disconnect" style="font-size: 10px;">
+                        <span class="material-symbols-outlined" style="font-size: 12px;">link_off</span>
+                    </button>
+                </form>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Render students table
+function renderStudentsTable(students) {
+    const tbody = document.getElementById('studentsTableBody');
+    const parentId = parseInt(document.getElementById('connect_parent_id').value);
+    
+    if (students.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No students found.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = students.map(student => {
+        const isConnected = student.parent_account_id == parentId;
+        const rowStyle = isConnected ? 'background-color: #e7f3ff; opacity: 0.7;' : 'cursor: pointer;';
+        const disabledAttr = isConnected ? 'disabled' : '';
+        const connectedBadge = isConnected ? '<span class="badge bg-info text-white ms-1" style="font-size: 10px;">Connected</span>' : '';
+        
+        return `
+        <tr class="student-row" data-student-id="${student.id}" style="${rowStyle}">
+            <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
+                <input type="radio" name="student_radio" value="${student.id}" onchange="selectStudent(${student.id})" ${disabledAttr}>
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">${student.code}</td>
+            <td style="padding: 8px 12px; font-size: 13px;"><strong class="text-primary">${student.name}</strong>${connectedBadge}</td>
+            <td style="padding: 8px 12px; font-size: 13px;">${student.class}</td>
+            <td style="padding: 8px 12px; font-size: 13px;">${student.section}</td>
+            <td style="padding: 8px 12px; font-size: 13px;">${student.father_name}</td>
+            <td style="padding: 8px 12px; font-size: 13px;">${student.father_email}</td>
+        </tr>
+        `;
+    }).join('');
+    
+    // Add click event to rows
+    document.querySelectorAll('.student-row').forEach(row => {
+        const studentId = row.getAttribute('data-student-id');
+        const radio = row.querySelector('input[type="radio"]');
+        const isDisabled = radio && radio.disabled;
+        
+        if (!isDisabled) {
+            row.addEventListener('click', function(e) {
+                if (e.target.type !== 'radio') {
+                    if (radio) {
+                        radio.checked = true;
+                        selectStudent(studentId);
+                    }
+                }
+            });
+            
+            row.addEventListener('mouseenter', function() {
+                this.style.backgroundColor = '#f8f9fa';
+            });
+            
+            row.addEventListener('mouseleave', function() {
+                if (!radio || !radio.checked) {
+                    this.style.backgroundColor = '';
+                }
+            });
+        }
+    });
+}
+
+// Select student
+function selectStudent(studentId) {
+    const parentId = parseInt(document.getElementById('connect_parent_id').value);
+    const student = allStudents.find(s => s.id == studentId);
+    
+    // Check if student is already connected
+    if (student && student.parent_account_id == parentId) {
+        alert('This student is already connected to this parent. Please select another student.');
+        document.getElementById('selected_student_id').value = '';
+        return;
+    }
+    
+    document.getElementById('selected_student_id').value = studentId;
+    
+    // Highlight selected row
+    document.querySelectorAll('.student-row').forEach(row => {
+        const rowStudentId = row.getAttribute('data-student-id');
+        const radio = row.querySelector('input[type="radio"]');
+        const isConnected = radio && radio.disabled;
+        
+        if (rowStudentId == studentId) {
+            row.style.backgroundColor = '#e7f3ff';
+        } else if (!isConnected) {
+            row.style.backgroundColor = '';
+        }
+    });
+}
+
+// Filter student table
+function filterStudentTable(query) {
+    if (!query || query.trim() === '') {
+        renderStudentsTable(allStudents);
+        return;
+    }
+    
+    const searchLower = query.toLowerCase();
+    const filtered = allStudents.filter(student => 
+        (student.code && student.code.toLowerCase().includes(searchLower)) ||
+        (student.name && student.name.toLowerCase().includes(searchLower)) ||
+        (student.class && student.class.toLowerCase().includes(searchLower)) ||
+        (student.section && student.section.toLowerCase().includes(searchLower)) ||
+        (student.father_name && student.father_name.toLowerCase().includes(searchLower)) ||
+        (student.father_email && student.father_email.toLowerCase().includes(searchLower))
+    );
+    
+    renderStudentsTable(filtered);
+}
+
+// Form validation for reset password
+document.getElementById('resetPasswordForm')?.addEventListener('submit', function(e) {
+    const password = document.getElementById('reset_password').value;
+    const confirmPassword = document.getElementById('reset_password_confirmation').value;
+    
+    if (password !== confirmPassword) {
+        e.preventDefault();
+        alert('Passwords do not match!');
+        return false;
+    }
+    
+    if (password.length < 6) {
+        e.preventDefault();
+        alert('Password must be at least 6 characters long!');
+        return false;
+    }
+});
+
+// Form validation for connect student
+document.getElementById('connectStudentForm')?.addEventListener('submit', function(e) {
+    const studentId = document.getElementById('selected_student_id').value;
+    
+    if (!studentId) {
+        e.preventDefault();
+        alert('Please select a student from the suggestions!');
+        return false;
+    }
+});
 </script>
 @endsection

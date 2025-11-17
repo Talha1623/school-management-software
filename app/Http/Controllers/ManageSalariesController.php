@@ -36,6 +36,69 @@ class ManageSalariesController extends Controller
     }
 
     /**
+     * Show the specified salary.
+     */
+    public function show(Request $request, Salary $salary)
+    {
+        // If request wants JSON (for modal), return JSON
+        if ($request->wantsJson() || $request->ajax()) {
+            $salary->load('staff');
+            return response()->json($salary);
+        }
+        
+        // Otherwise return view (if needed in future)
+        return view('salary-loan.manage-salaries', compact('salary'));
+    }
+
+    /**
+     * Update salary payment.
+     */
+    public function updatePayment(Request $request, Salary $salary)
+    {
+        $validated = $request->validate([
+            'amount_paid' => ['required', 'numeric', 'min:0'],
+            'loan_repayment' => ['nullable', 'numeric', 'min:0'],
+            'bonus_title' => ['nullable', 'string', 'max:255'],
+            'bonus_amount' => ['nullable', 'numeric', 'min:0'],
+            'deduction_title' => ['nullable', 'string', 'max:255'],
+            'deduction_amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_method' => ['required', 'string', 'in:Bank,Wallet,Transfer,Card,Check,Deposit,Cash'],
+            'fully_paid' => ['nullable', 'string', 'in:0,1'],
+            'payment_date' => ['required', 'date'],
+            'notify_employee' => ['nullable', 'string', 'in:0,1'],
+        ]);
+
+        // Calculate new salary generated (basic + bonus - deduction)
+        $bonusAmount = $validated['bonus_amount'] ?? 0;
+        $deductionAmount = $validated['deduction_amount'] ?? 0;
+        $newSalaryGenerated = $salary->basic + $bonusAmount - $deductionAmount;
+
+        // Determine status based on fully_paid or amount_paid
+        $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
+        $status = 'Pending';
+        if ($fullyPaid || $validated['amount_paid'] >= $newSalaryGenerated) {
+            $status = 'Paid';
+        } elseif ($validated['amount_paid'] > 0) {
+            $status = 'Partial';
+        }
+
+        // Update salary
+        $salary->update([
+            'amount_paid' => $validated['amount_paid'],
+            'loan_repayment' => $validated['loan_repayment'] ?? 0,
+            'salary_generated' => $newSalaryGenerated,
+            'status' => $status,
+        ]);
+
+        // TODO: Store bonus and deduction details if needed (may require additional table)
+        // TODO: Send notification to employee if notify_employee is true
+
+        return redirect()
+            ->route('salary-loan.manage-salaries')
+            ->with('success', 'Payment updated successfully!');
+    }
+
+    /**
      * Update salary status.
      */
     public function updateStatus(Request $request, Salary $salary)

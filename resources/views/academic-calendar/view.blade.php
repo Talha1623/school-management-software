@@ -8,9 +8,9 @@
         <div class="card bg-white border border-white rounded-10 p-4 mb-4" style="box-shadow: 0 2px 10px rgba(0,0,0,0.08);">
             <!-- Header Section -->
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-                <div class="calendar-header" style="background: linear-gradient(135deg, #ff9800 0%, #ff6b9d 100%); padding: 20px 40px; border-radius: 12px; width: 100%; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.3);">
-                    <h2 class="mb-0 text-white fw-bold text-center" style="font-size: 28px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                        <span class="material-symbols-outlined" style="font-size: 32px; vertical-align: middle; margin-right: 10px;">calendar_month</span>
+                <div class="calendar-header" style="background: linear-gradient(135deg, #ff9800 0%, #ff6b9d 100%); padding: 12px 24px; border-radius: 8px; width: 100%; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.3);">
+                    <h2 class="mb-0 text-white fw-bold text-center" style="font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                        <span class="material-symbols-outlined" style="font-size: 22px; vertical-align: middle; margin-right: 8px;">calendar_month</span>
                         Academic Calendar {{ $year ?? date('Y') }}
                     </h2>
                 </div>
@@ -19,7 +19,7 @@
                         <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">add</span>
                         Manage Events
                     </a>
-                    <button type="button" class="btn btn-sm btn-primary px-3 py-2" onclick="window.print()" style="white-space: nowrap; box-shadow: 0 2px 8px rgba(15, 121, 243, 0.3);">
+                    <button type="button" class="btn btn-sm px-3 py-2" onclick="window.print()" style="background-color: white; color: #003471; border: 1px solid #003471; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
                         <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">print</span>
                         Print Calendar
                     </button>
@@ -64,47 +64,47 @@
                         $monthEvents = $eventsByMonth[$monthNum] ?? [];
                         $eventCount = count($monthEvents);
                     @endphp
-                    <div class="month-box" style="border: 2px solid #28a745; border-radius: 12px; overflow: hidden; min-height: 220px; display: flex; flex-direction: column; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.3s ease;">
+                    <div class="month-box" style="border: 2px solid #28a745; border-radius: 8px; overflow: hidden; min-height: 180px; display: flex; flex-direction: column; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.3s ease;">
                         <!-- Month Header -->
-                        <div class="month-header" style="background: linear-gradient(135deg, #a8e6cf 0%, #88d8a3 100%); padding: 14px; text-align: center; border-bottom: 2px solid #28a745;">
-                            <h5 class="mb-0 fw-bold" style="color: #155724; font-size: 18px; text-shadow: 0 1px 2px rgba(255,255,255,0.5);">
+                        <div class="month-header" style="background: linear-gradient(135deg, #a8e6cf 0%, #88d8a3 100%); padding: 8px 12px; text-align: center; border-bottom: 2px solid #28a745;">
+                            <h5 class="mb-0 fw-bold" style="color: #155724; font-size: 14px; text-shadow: 0 1px 2px rgba(255,255,255,0.5);">
                                 {{ $monthData['name'] }}
                                 @if($eventCount > 0)
-                                    <span class="badge bg-danger ms-2" style="font-size: 10px; padding: 2px 6px;">{{ $eventCount }}</span>
+                                    <span class="badge bg-danger ms-2" style="font-size: 9px; padding: 2px 5px;">{{ $eventCount }}</span>
                                 @endif
                             </h5>
                         </div>
                         
                         <!-- Month Content -->
-                        <div class="month-content" style="background: linear-gradient(to bottom, #e7f3ff 0%, #d6e9f5 100%); padding: 12px; flex: 1; min-height: 160px; overflow-y: auto; max-height: 300px;">
+                        <div class="month-content" style="background: linear-gradient(to bottom, #e7f3ff 0%, #d6e9f5 100%); padding: 8px; flex: 1; min-height: 130px; overflow-y: auto; max-height: 250px;">
                             @if(count($monthEvents) > 0)
                                 @foreach($monthEvents as $event)
-                                    <div class="event-item mb-2" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); border-radius: 8px; padding: 10px; color: white; box-shadow: 0 2px 6px rgba(220, 53, 69, 0.4); border-left: 3px solid #ff9800;">
-                                        <div class="event-title" style="font-weight: 700; font-size: 13px; margin-bottom: 6px; line-height: 1.3;">
-                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">event</span>
+                                    <div class="event-item mb-2" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); border-radius: 6px; padding: 6px 8px; color: white; box-shadow: 0 2px 6px rgba(220, 53, 69, 0.4); border-left: 3px solid #ff9800;">
+                                        <div class="event-title" style="font-weight: 700; font-size: 11px; margin-bottom: 4px; line-height: 1.3;">
+                                            <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle; margin-right: 3px;">event</span>
                                             {{ $event->event_title }}
                                         </div>
                                         @if($event->event_details)
-                                            <div class="event-details" style="font-size: 11px; opacity: 0.95; margin-bottom: 6px; line-height: 1.4;">
-                                                {{ Str::limit($event->event_details, 35) }}
+                                            <div class="event-details" style="font-size: 10px; opacity: 0.95; margin-bottom: 4px; line-height: 1.3;">
+                                                {{ Str::limit($event->event_details, 30) }}
                                             </div>
                                         @endif
                                         @if($event->event_type)
-                                            <div class="event-type mb-2" style="display: inline-block;">
-                                                <span class="badge" style="background-color: rgba(255,255,255,0.3); color: white; font-size: 9px; padding: 2px 6px;">
+                                            <div class="event-type mb-1" style="display: inline-block;">
+                                                <span class="badge" style="background-color: rgba(255,255,255,0.3); color: white; font-size: 8px; padding: 1px 5px;">
                                                     {{ $event->event_type }}
                                                 </span>
                                             </div>
                                         @endif
-                                        <div class="event-date" style="background: linear-gradient(135deg, #ff9800 0%, #ff6b00 100%); border-radius: 5px; padding: 5px 10px; display: inline-block; font-size: 10px; font-weight: 700; color: #000; box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);">
-                                            <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle; margin-right: 2px;">calendar_today</span>
+                                        <div class="event-date" style="background: linear-gradient(135deg, #ff9800 0%, #ff6b00 100%); border-radius: 4px; padding: 3px 8px; display: inline-block; font-size: 9px; font-weight: 700; color: #000; box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);">
+                                            <span class="material-symbols-outlined" style="font-size: 10px; vertical-align: middle; margin-right: 2px;">calendar_today</span>
                                             {{ $event->event_date->format('d-M-Y') }}
                                         </div>
                                     </div>
                                 @endforeach
                             @else
-                                <div class="text-center text-muted d-flex flex-column align-items-center justify-content-center" style="padding-top: 50px; font-size: 12px; min-height: 160px;">
-                                    <span class="material-symbols-outlined" style="font-size: 32px; opacity: 0.3; margin-bottom: 8px;">event_busy</span>
+                                <div class="text-center text-muted d-flex flex-column align-items-center justify-content-center" style="padding-top: 30px; font-size: 11px; min-height: 130px;">
+                                    <span class="material-symbols-outlined" style="font-size: 24px; opacity: 0.3; margin-bottom: 6px;">event_busy</span>
                                     <span>No events</span>
                                 </div>
                             @endif
@@ -167,11 +167,15 @@
         }
         
         .calendar-header {
-            padding: 15px 25px !important;
+            padding: 10px 20px !important;
         }
         
         .calendar-header h2 {
-            font-size: 24px !important;
+            font-size: 18px !important;
+        }
+        
+        .calendar-header h2 .material-symbols-outlined {
+            font-size: 20px !important;
         }
     }
 
@@ -182,15 +186,15 @@
         }
         
         .calendar-header {
-            padding: 12px 20px !important;
+            padding: 10px 16px !important;
         }
         
         .calendar-header h2 {
-            font-size: 20px !important;
+            font-size: 16px !important;
         }
 
         .calendar-header h2 .material-symbols-outlined {
-            font-size: 24px !important;
+            font-size: 18px !important;
         }
     }
 
@@ -201,11 +205,11 @@
         }
 
         .month-box {
-            min-height: 180px !important;
+            min-height: 150px !important;
         }
 
         .month-content {
-            min-height: 140px !important;
+            min-height: 110px !important;
         }
     }
 

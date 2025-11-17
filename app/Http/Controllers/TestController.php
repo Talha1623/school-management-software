@@ -6,6 +6,8 @@ use App\Models\Test;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
+use App\Models\Campus;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -41,12 +43,15 @@ class TestController extends Controller
         $tests = $query->orderBy('date', 'desc')->paginate($perPage)->withQueryString();
 
         // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSubjects = Subject::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->merge($campusesFromSubjects)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
         }
 
         // Get classes
@@ -56,12 +61,8 @@ class TestController extends Controller
             $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
         }
 
-        // Get sections
-        $sections = Section::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D']);
-        }
+        // Get sections (will be filtered dynamically based on class selection)
+        $sections = collect();
 
         // Get subjects
         $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
@@ -145,6 +146,53 @@ class TestController extends Controller
         return redirect()
             ->route('test.list')
             ->with('success', 'Test deleted successfully!');
+    }
+
+    /**
+     * Toggle result status for a test.
+     */
+    public function toggleResultStatus(Request $request, Test $test): JsonResponse
+    {
+        $test->result_status = !$test->result_status;
+        $test->save();
+
+        return response()->json([
+            'success' => true,
+            'result_status' => $test->result_status,
+            'message' => $test->result_status ? 'Result declared successfully!' : 'Result status reset successfully!'
+        ]);
+    }
+
+    /**
+     * Get sections for a class (AJAX).
+     */
+    public function getSections(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+        
+        // Use case-insensitive matching for class
+        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name')
+            ->distinct()
+            ->pluck('name')
+            ->sort()
+            ->values();
+            
+        if ($sections->isEmpty()) {
+            // Try from subjects table with case-insensitive matching
+            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section')
+                ->distinct()
+                ->pluck('section')
+                ->sort()
+                ->values();
+        }
+        
+        return response()->json(['sections' => $sections]);
     }
 
     /**

@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Staff;
+use App\Models\Student;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -20,36 +23,84 @@ class CertificationController extends Controller
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
         $filterCertificateType = $request->get('filter_certificate_type');
+        $search = $request->get('search');
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
+        // If no campuses found, get from classes or sections
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-        
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
-        }
+        // Get classes from ClassModel (dynamic only, no static fallback)
+        $classes = ClassModel::whereNotNull('class_name')
+            ->distinct()
+            ->orderBy('class_name', 'asc')
+            ->pluck('class_name')
+            ->sort()
+            ->values();
 
-        // Get sections (filtered by class if provided)
-        $sectionsQuery = Section::query();
+        // Get sections (filtered by class if provided) - dynamic only, no static fallback
+        $sectionsQuery = Section::whereNotNull('name');
         if ($filterClass) {
             $sectionsQuery->where('class', $filterClass);
         }
-        $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D']);
-        }
+        $sections = $sectionsQuery->distinct()
+            ->orderBy('name', 'asc')
+            ->pluck('name')
+            ->sort()
+            ->values();
 
         // Get certificate types
-        $certificateTypes = collect(['Character Certificate', 'Transfer Certificate', 'Bonafide Certificate', 'Admission Certificate', 'Completion Certificate', 'Merit Certificate']);
+        $certificateTypes = collect(['Character Certificate', 'School Leaving Certificate', 'Date of Birth Certificate']);
+
+        // Fetch students based on filters if certificate type is selected
+        $students = collect();
+        if ($filterCertificateType) {
+            $studentsQuery = Student::query();
+            
+            if ($filterCampus) {
+                $studentsQuery->where('campus', $filterCampus);
+            }
+            
+            if ($filterClass) {
+                $studentsQuery->where('class', $filterClass);
+            }
+            
+            if ($filterSection) {
+                $studentsQuery->where('section', $filterSection);
+            }
+            
+            // Search functionality - search by student name or student code
+            if ($search) {
+                $searchTerm = trim($search);
+                $studentsQuery->where(function($query) use ($searchTerm) {
+                    $query->where('student_name', 'like', "%{$searchTerm}%")
+                          ->orWhere('student_code', 'like', "%{$searchTerm}%");
+                });
+            }
+            
+            $students = $studentsQuery->orderBy('student_name', 'asc')->get();
+        }
 
         return view('certification.student', compact(
             'campuses',
@@ -59,8 +110,58 @@ class CertificationController extends Controller
             'filterCampus',
             'filterClass',
             'filterSection',
-            'filterCertificateType'
+            'filterCertificateType',
+            'students',
+            'search'
         ));
+    }
+
+    /**
+     * Get classes based on campus (AJAX).
+     */
+    public function getClasses(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->where('campus', $campus);
+        }
+        
+        $classes = $classesQuery->distinct()
+            ->orderBy('class_name', 'asc')
+            ->pluck('class_name')
+            ->sort()
+            ->values();
+        
+        return response()->json($classes->isEmpty() ? [] : $classes);
+    }
+
+    /**
+     * Get sections based on class and campus (AJAX).
+     */
+    public function getSections(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        $campus = $request->get('campus');
+        
+        $sectionsQuery = Section::whereNotNull('name');
+        
+        if ($class) {
+            $sectionsQuery->where('class', $class);
+        }
+        
+        if ($campus) {
+            $sectionsQuery->where('campus', $campus);
+        }
+        
+        $sections = $sectionsQuery->distinct()
+            ->orderBy('name', 'asc')
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        return response()->json($sections->isEmpty() ? [] : $sections);
     }
 
     /**
@@ -73,24 +174,75 @@ class CertificationController extends Controller
         $filterCertificateType = $request->get('filter_certificate_type');
         $filterStaffType = $request->get('filter_staff_type');
 
-        // Get campuses for dropdown
-        $campusesFromStaff = Staff::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromStaff->merge($campusesFromClasses)->unique()->sort()->values();
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
+        // If no campuses found, get from staff, classes or sections
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromStaff = Staff::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromStaff->merge($campusesFromClasses)->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
         }
 
-        // Get certificate types
-        $certificateTypes = collect(['Character Certificate', 'Transfer Certificate', 'Bonafide Certificate', 'Employment Certificate', 'Experience Certificate', 'Service Certificate']);
+        // Get certificate types - only Experience Certificate and Appreciation Certificate
+        $certificateTypes = collect(['Experience Certificate', 'Appreciation Certificate']);
 
-        // Get staff types from designation field or use predefined
-        $staffTypesFromDB = Staff::whereNotNull('designation')->distinct()->pluck('designation')->sort()->values();
-        $staffTypes = collect(['Teacher', 'Principal', 'Vice Principal', 'Administrator', 'Accountant', 'Receptionist', 'Security', 'Cleaner']);
-        
-        if ($staffTypesFromDB->isNotEmpty()) {
-            $staffTypes = $staffTypes->merge($staffTypesFromDB)->unique()->sort()->values();
+        // Get staff types from designation field (dynamic only, no static fallback)
+        $staffTypes = Staff::whereNotNull('designation')
+            ->distinct()
+            ->orderBy('designation', 'asc')
+            ->pluck('designation')
+            ->sort()
+            ->values();
+
+        // Get search parameter
+        $search = $request->get('search');
+
+        // Fetch staff based on filters if certificate type is selected
+        $staff = collect();
+        if ($filterCertificateType) {
+            $staffQuery = Staff::query();
+            
+            if ($filterCampus) {
+                $staffQuery->where('campus', $filterCampus);
+            }
+            
+            if ($filterStaffType) {
+                $staffQuery->where('designation', $filterStaffType);
+            }
+            
+            // Search functionality - search by name or emp_id
+            if ($search) {
+                $searchTerm = trim($search);
+                $staffQuery->where(function($query) use ($searchTerm) {
+                    $query->where('name', 'like', "%{$searchTerm}%")
+                          ->orWhere('emp_id', 'like', "%{$searchTerm}%");
+                });
+            }
+            
+            $staff = $staffQuery->orderBy('name', 'asc')->get();
         }
 
         return view('certification.staff', compact(
@@ -99,8 +251,89 @@ class CertificationController extends Controller
             'staffTypes',
             'filterCampus',
             'filterCertificateType',
-            'filterStaffType'
+            'filterStaffType',
+            'staff',
+            'search'
         ));
+    }
+
+    /**
+     * Generate certificate for a student.
+     */
+    public function generateCertificate(Request $request, Student $student): View
+    {
+        $certificateType = $request->get('type', 'Character Certificate');
+        
+        // Validate certificate type
+        $validTypes = ['Character Certificate', 'School Leaving Certificate', 'Date of Birth Certificate'];
+        if (!in_array($certificateType, $validTypes)) {
+            abort(404, 'Invalid certificate type');
+        }
+        
+        // Get school information (you may want to store this in a settings table)
+        $schoolName = config('app.name', 'School Management System');
+        $schoolAddress = 'School Address'; // You can add this to config or database
+        $currentDate = now()->format('d F Y');
+        
+        return view("certification.certificates.{$this->getCertificateViewName($certificateType)}", compact(
+            'student',
+            'certificateType',
+            'schoolName',
+            'schoolAddress',
+            'currentDate'
+        ));
+    }
+
+    /**
+     * Generate certificate for a staff member.
+     */
+    public function generateStaffCertificate(Request $request, Staff $staff): View
+    {
+        $certificateType = $request->get('type', 'Experience Certificate');
+        
+        // Validate certificate type
+        $validTypes = ['Experience Certificate', 'Appreciation Certificate'];
+        if (!in_array($certificateType, $validTypes)) {
+            abort(404, 'Invalid certificate type');
+        }
+        
+        // Get school information
+        $schoolName = config('app.name', 'School Management System');
+        $schoolAddress = 'School Address'; // You can add this to config or database
+        $currentDate = now()->format('d F Y');
+        
+        return view("certification.certificates.staff.{$this->getStaffCertificateViewName($certificateType)}", compact(
+            'staff',
+            'certificateType',
+            'schoolName',
+            'schoolAddress',
+            'currentDate'
+        ));
+    }
+
+    /**
+     * Get the view name for certificate type.
+     */
+    private function getCertificateViewName(string $certificateType): string
+    {
+        return match($certificateType) {
+            'Character Certificate' => 'character',
+            'School Leaving Certificate' => 'school-leaving',
+            'Date of Birth Certificate' => 'date-of-birth',
+            default => 'character',
+        };
+    }
+
+    /**
+     * Get the view name for staff certificate type.
+     */
+    private function getStaffCertificateViewName(string $certificateType): string
+    {
+        return match($certificateType) {
+            'Experience Certificate' => 'experience',
+            'Appreciation Certificate' => 'appreciation',
+            default => 'experience',
+        };
     }
 }
 

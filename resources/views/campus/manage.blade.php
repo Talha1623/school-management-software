@@ -129,7 +129,7 @@
                                         <td>{{ $campus->description ? (strlen($campus->description) > 50 ? substr($campus->description, 0, 50) . '...' : $campus->description) : 'N/A' }}</td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editCampus({{ $campus->id }}, '{{ addslashes($campus->campus_name) }}', '{{ addslashes($campus->campus_address ?? '') }}', '{{ addslashes($campus->description ?? '') }}')">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editCampus({{ $campus->id }}, '{{ addslashes($campus->campus_name) }}', '{{ addslashes($campus->campus_address ?? '') }}', '{{ addslashes($campus->phone ?? '') }}', '{{ addslashes($campus->email ?? '') }}', '{{ addslashes($campus->description ?? '') }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this campus?')) { document.getElementById('delete-form-{{ $campus->id }}').submit(); }">
@@ -204,6 +204,24 @@
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
                                 <textarea class="form-control campus-input" name="campus_address" id="campus_address" rows="3" placeholder="Enter campus address (optional)" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; resize: vertical;"></textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Phone</label>
+                            <div class="input-group input-group-sm campus-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">phone</span>
+                                </span>
+                                <input type="text" class="form-control campus-input" name="phone" id="phone" placeholder="Enter phone number (optional)" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Email</label>
+                            <div class="input-group input-group-sm campus-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">email</span>
+                                </span>
+                                <input type="email" class="form-control campus-input" name="email" id="email" placeholder="Enter email (optional)" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                             </div>
                         </div>
                         <div class="col-md-12">
@@ -449,12 +467,14 @@ function resetForm() {
     document.getElementById('campusForm').action = '{{ route("manage.campuses.store") }}';
 }
 
-function editCampus(id, campusName, campusAddress, description) {
+function editCampus(id, campusName, campusAddress, phone, email, description) {
     resetForm();
     document.getElementById('methodField').innerHTML = '<input type="hidden" name="_method" value="PUT">';
     document.getElementById('campusForm').action = '{{ route("manage.campuses.update", ":id") }}'.replace(':id', id);
     document.getElementById('campus_name').value = campusName;
     document.getElementById('campus_address').value = campusAddress;
+    document.getElementById('phone').value = phone || '';
+    document.getElementById('email').value = email || '';
     document.getElementById('description').value = description;
     document.getElementById('campusModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">edit</span><span>Edit Campus</span>';
     new bootstrap.Modal(document.getElementById('campusModal')).show();

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Staff;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -48,7 +49,42 @@ class StaffManagementController extends Controller
         $presentToday = 0; // This would come from attendance system
         $absentToday = $totalTeachers - $presentToday; // Placeholder
         
-        return view('staff.management', compact('staff', 'totalTeachers', 'presentToday', 'absentToday'));
+        // Get campuses for dropdown
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        return view('staff.management', compact('staff', 'totalTeachers', 'presentToday', 'absentToday', 'campuses'));
+    }
+
+    /**
+     * Generate unique Employee ID
+     */
+    private function generateEmployeeId(): string
+    {
+        // Get the last employee ID
+        $lastStaff = Staff::whereNotNull('emp_id')
+            ->where('emp_id', 'like', 'EMP%')
+            ->orderByRaw('CAST(SUBSTRING(emp_id, 4) AS UNSIGNED) DESC')
+            ->first();
+
+        if ($lastStaff && $lastStaff->emp_id) {
+            // Extract the number part and increment
+            $lastNumber = (int) substr($lastStaff->emp_id, 3);
+            $newNumber = $lastNumber + 1;
+        } else {
+            // Start from 1 if no employee ID exists
+            $newNumber = 1;
+        }
+
+        // Format as EMP001, EMP002, etc.
+        return 'EMP' . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Get next Employee ID (for AJAX request)
+     */
+    public function getNextEmployeeId()
+    {
+        return response()->json(['emp_id' => $this->generateEmployeeId()]);
     }
 
     /**
@@ -79,9 +115,21 @@ class StaffManagementController extends Controller
             'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
         ]);
 
-        if (!empty($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
+        // Auto-generate Employee ID if not provided
+        $empId = $validated['emp_id'] ?? $this->generateEmployeeId();
+        $validated['emp_id'] = $empId;
+
+        // Auto-generate email if not provided (for dashboard access)
+        if (empty($validated['email'])) {
+            $namePart = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $validated['name']));
+            $validated['email'] = $namePart . $empId . '@school.local';
         }
+
+        // Auto-generate password if not provided (for dashboard access)
+        if (empty($validated['password'])) {
+            $validated['password'] = $empId . '@123'; // Default password: EMP001@123
+        }
+        // Password will be hashed automatically by Staff model's setPasswordAttribute mutator
 
         // Handle file uploads
         if ($request->hasFile('photo')) {
@@ -100,11 +148,17 @@ class StaffManagementController extends Controller
     }
 
     /**
-     * Show the specified staff member for editing.
+     * Show the specified staff member details.
      */
-    public function show(Staff $staff)
+    public function show(Request $request, Staff $staff)
     {
-        return response()->json($staff);
+        // If request wants JSON (for edit modal), return JSON
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json($staff);
+        }
+        
+        // Otherwise return view
+        return view('staff.view', compact('staff'));
     }
 
     /**
@@ -135,11 +189,11 @@ class StaffManagementController extends Controller
             'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
         ]);
 
-        if (!empty($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
-        } else {
+        // If password is empty, don't update it
+        if (empty($validated['password'])) {
             unset($validated['password']);
         }
+        // Password will be hashed automatically by Staff model's setPasswordAttribute mutator if provided
 
         // Handle file uploads
         if ($request->hasFile('photo')) {

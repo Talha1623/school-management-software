@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\FeeType;
+use App\Models\Campus;
+use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -33,7 +36,33 @@ class FeeTypeController extends Controller
         
         $feeTypes = $query->orderBy('fee_name')->paginate($perPage)->withQueryString();
         
-        return view('accounting.fee-type', compact('feeTypes'));
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        return view('accounting.fee-type', compact('feeTypes', 'campuses'));
     }
 
     /**
@@ -49,7 +78,7 @@ class FeeTypeController extends Controller
         FeeType::create($validated);
 
         return redirect()
-            ->route('accounting.fee-type.index')
+            ->route('accounting.fee-type')
             ->with('success', 'Fee type created successfully!');
     }
 
@@ -74,7 +103,7 @@ class FeeTypeController extends Controller
         $feeType->update($validated);
 
         return redirect()
-            ->route('accounting.fee-type.index')
+            ->route('accounting.fee-type')
             ->with('success', 'Fee type updated successfully!');
     }
 
@@ -86,7 +115,7 @@ class FeeTypeController extends Controller
         $feeType->delete();
 
         return redirect()
-            ->route('accounting.fee-type.index')
+            ->route('accounting.fee-type')
             ->with('success', 'Fee type deleted successfully!');
     }
 
@@ -119,7 +148,7 @@ class FeeTypeController extends Controller
             case 'pdf':
                 return $this->exportPDF($feeTypes);
             default:
-                return redirect()->route('accounting.fee-type.index')
+                return redirect()->route('accounting.fee-type')
                     ->with('error', 'Invalid export format!');
         }
     }

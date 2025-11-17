@@ -45,6 +45,7 @@ class Student extends Model
         'previous_school',
         'admission_date',
         'reference_remarks',
+        'parent_account_id',
     ];
 
     /**

@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@php
+use Illuminate\Support\Facades\Storage;
+@endphp
+
 @section('title', 'Job Inquiry/CV Bank')
 
 @section('content')
@@ -116,52 +120,52 @@
             @endif
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table">
+                <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
+                    <table class="table table-sm table-hover" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Name</th>
-                                <th>Father/Husband</th>
-                                <th>Campus</th>
-                                <th>Gender</th>
-                                <th>Phone</th>
-                                <th>Qualification</th>
-                                <th>Applied For</th>
-                                <th>Email</th>
-                                <th>CV/Resume</th>
-                                <th class="text-end">Actions</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">#</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Name</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Father/Husband</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Campus</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Gender</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Phone</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Qualification</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Applied For</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Email</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">CV/Resume</th>
+                                <th style="padding: 12px 15px; font-size: 14px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($inquiries as $inquiry)
                                 <tr>
-                                    <td>{{ $loop->iteration + (($inquiries->currentPage() - 1) * $inquiries->perPage()) }}</td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">{{ $loop->iteration + (($inquiries->currentPage() - 1) * $inquiries->perPage()) }}</td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <strong class="text-primary">{{ $inquiry->name }}</strong>
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <span class="text-muted">{{ $inquiry->father_husband_name ?? 'N/A' }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->campus)
-                                            <span class="badge bg-secondary text-white">{{ $inquiry->campus }}</span>
+                                            <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $inquiry->campus }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->gender)
-                                            <span class="badge {{ $inquiry->gender == 'Male' ? 'bg-primary' : ($inquiry->gender == 'Female' ? 'bg-danger' : 'bg-secondary') }} text-white">
+                                            <span class="badge {{ $inquiry->gender == 'Male' ? 'bg-primary' : ($inquiry->gender == 'Female' ? 'bg-danger' : 'bg-secondary') }} text-white" style="font-size: 11px;">
                                                 {{ $inquiry->gender }}
                                             </span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->phone)
-                                            <span class="badge bg-light text-dark">
+                                            <span class="badge bg-light text-dark" style="font-size: 11px;">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">phone</span>
                                                 {{ $inquiry->phone }}
                                             </span>
@@ -169,21 +173,21 @@
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->qualification)
                                             <span class="text-muted">{{ $inquiry->qualification }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->applied_for_designation)
-                                            <span class="badge bg-info text-white">{{ $inquiry->applied_for_designation }}</span>
+                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $inquiry->applied_for_designation }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->email)
                                             <span class="text-muted">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span>
@@ -193,24 +197,27 @@
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->cv_resume)
-                                            <a href="{{ asset('storage/' . $inquiry->cv_resume) }}" target="_blank" class="btn btn-sm btn-info px-2 py-0" title="View CV">
+                                            <a href="{{ Storage::url($inquiry->cv_resume) }}" target="_blank" class="btn btn-sm btn-info px-2 py-1" title="View CV">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">description</span>
                                             </a>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td class="text-end">
+                                    <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
                                         <div class="d-inline-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-primary px-2 py-0" onclick="editInquiry({{ $inquiry->id }})" title="Edit">
+                                            <a href="{{ route('staff.job-inquiry.show', $inquiry) }}" class="btn btn-sm btn-info px-2 py-1" title="View">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editInquiry({{ $inquiry->id }})" title="Edit">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </button>
                                             <form action="{{ route('staff.job-inquiry.destroy', $inquiry) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this job inquiry?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-0" title="Delete">
+                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                             </form>
@@ -244,9 +251,9 @@
     <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="inquiryModalLabel" style="font-size: 14px;">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">work</span>
-                    <span>Add New Inquiry</span>
+                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="inquiryModalLabel" style="font-size: 14px; color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: white;">work</span>
+                    <span style="color: white;">Add New Inquiry</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -284,7 +291,12 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">business</span>
                                 </span>
-                                <input type="text" class="form-control inquiry-input" name="campus" id="campus" placeholder="Enter campus" style="font-size: 12px;">
+                                <select class="form-control inquiry-input" name="campus" id="campus" style="font-size: 12px;">
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name }}">{{ $campus->campus_name }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                         </div>
 
@@ -626,30 +638,74 @@
         font-size: 13px;
     }
 
-    /* Table Compact Styling */
+    /* Table Styling */
     .default-table-area table {
         margin-bottom: 0;
+        border-spacing: 0;
+        border-collapse: collapse;
         border: 1px solid #dee2e6;
     }
     
+    .default-table-area table thead {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
-        height: 32px;
+        vertical-align: middle;
+        line-height: 1.5;
+        white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
+    .default-table-area table thead th:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
+        vertical-align: middle;
+        line-height: 1.5;
         border: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:first-child {
+        border-left: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody td:last-child {
+        border-right: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table tbody tr:last-child td {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .default-table-area table thead th:first-child,
+    .default-table-area table tbody td:first-child {
+        padding-left: 15px;
+    }
+    
+    .default-table-area table thead th:last-child,
+    .default-table-area table tbody td:last-child {
+        padding-right: 15px;
+    }
+    
+    .default-table-area table tbody tr:first-child td {
+        border-top: none;
     }
     
     .default-table-area .badge {
         font-size: 11px;
-        padding: 3px 6px;
+        padding: 4px 8px;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
@@ -669,17 +725,30 @@ function resetForm() {
     document.getElementById('inquiryForm').action = '{{ route('staff.job-inquiry.store') }}';
     document.getElementById('inquiryForm').reset();
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('inquiryModalLabel').textContent = 'Add New Inquiry';
+    const modalLabel = document.getElementById('inquiryModalLabel');
+    modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">work</span><span style="color: white;">Add New Inquiry</span>';
     document.getElementById('cv_resume').value = '';
+    document.getElementById('campus').value = '';
 }
 
 function editInquiry(id) {
-    fetch(`{{ url('/staff/job-inquiry') }}/${id}`)
-        .then(response => response.json())
+    fetch(`{{ url('/staff/job-inquiry') }}/${id}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             document.getElementById('inquiryForm').action = '{{ route('staff.job-inquiry.update', ':id') }}'.replace(':id', id);
             document.getElementById('methodField').innerHTML = '@method('PUT')';
-            document.getElementById('inquiryModalLabel').textContent = 'Edit Inquiry';
+            const modalLabel = document.getElementById('inquiryModalLabel');
+            modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">work</span><span style="color: white;">Edit Inquiry</span>';
             
             document.getElementById('name').value = data.name || '';
             document.getElementById('father_husband_name').value = data.father_husband_name || '';

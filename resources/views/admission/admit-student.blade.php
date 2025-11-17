@@ -194,7 +194,8 @@
                             
                             <div class="mb-1">
                                 <label for="student_code" class="form-label mb-0 fs-13 fw-medium">Student Code</label>
-                                <input type="text" class="form-control form-control-sm py-1" id="student_code" name="student_code" style="height: 32px;">
+                                <input type="text" class="form-control form-control-sm py-1" id="student_code" name="student_code" value="{{ $nextStudentCode ?? '' }}" readonly style="height: 32px; background-color: #f8f9fa;" placeholder="Auto-generated">
+                                <small class="text-muted fs-11">Auto-generated code</small>
                             </div>
                             
                             <div class="mb-1">
@@ -206,7 +207,9 @@
                                 <label for="campus" class="form-label mb-0 fs-13 fw-medium">Campus</label>
                                 <select class="form-select form-select-sm py-1" id="campus" name="campus" style="height: 32px;">
                                     <option value="">Select Campus</option>
-                                    <!-- Options will be populated dynamically -->
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus }}" {{ old('campus') == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                             
@@ -214,7 +217,9 @@
                                 <label for="class" class="form-label mb-0 fs-13 fw-medium">Class</label>
                                 <select class="form-select form-select-sm py-1" id="class" name="class" required style="height: 32px;">
                                     <option value="">Select Class</option>
-                                    <!-- Options will be populated dynamically -->
+                                    @foreach($classes as $class)
+                                        <option value="{{ $class }}" {{ old('class') == $class ? 'selected' : '' }}>{{ $class }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                             
@@ -222,7 +227,14 @@
                                 <label for="section" class="form-label mb-0 fs-13 fw-medium">Section</label>
                                 <select class="form-select form-select-sm py-1" id="section" name="section" style="height: 32px;">
                                     <option value="">Select Section</option>
-                                    <!-- Options will be populated dynamically -->
+                                    @if(old('class'))
+                                        @php
+                                            $sectionsForClass = \App\Models\Section::where('class', old('class'))->whereNotNull('name')->distinct()->pluck('name')->sort();
+                                        @endphp
+                                        @foreach($sectionsForClass as $section)
+                                            <option value="{{ $section }}" {{ old('section') == $section ? 'selected' : '' }}>{{ $section }}</option>
+                                        @endforeach
+                                    @endif
                                 </select>
                             </div>
                             
@@ -248,7 +260,7 @@
                 <div class="row">
                     <div class="col-12">
                         <div class="d-flex justify-content-end">
-                            <button type="submit" class="btn btn-primary px-5 py-2">
+                            <button type="submit" class="btn btn-primary px-5 py-2" style="color: white;">
                                 Admit Student
                             </button>
                         </div>
@@ -332,6 +344,34 @@ function retakePhoto() {
     document.getElementById('captured_photo_input').value = '';
     startLiveCapture();
 }
+
+// Load sections based on class selection
+document.getElementById('class').addEventListener('change', function() {
+    const classValue = this.value;
+    const sectionSelect = document.getElementById('section');
+    
+    // Clear existing options except the first one
+    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+    
+    if (classValue) {
+        // Fetch sections via AJAX
+        fetch(`{{ route('admission.get-sections') }}?class=${encodeURIComponent(classValue)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.sections && data.sections.length > 0) {
+                    data.sections.forEach(section => {
+                        const option = document.createElement('option');
+                        option.value = section;
+                        option.textContent = section;
+                        sectionSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+            });
+    }
+});
 
 // Handle form submission
 document.getElementById('admission-form').addEventListener('submit', function(e) {

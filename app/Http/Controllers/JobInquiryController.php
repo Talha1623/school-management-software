@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\JobInquiry;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -38,7 +39,10 @@ class JobInquiryController extends Controller
         
         $inquiries = $query->latest()->paginate($perPage)->withQueryString();
         
-        return view('staff.job-inquiry', compact('inquiries'));
+        // Get campuses for dropdown
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        return view('staff.job-inquiry', compact('inquiries', 'campuses'));
     }
 
     /**
@@ -76,11 +80,17 @@ class JobInquiryController extends Controller
     }
 
     /**
-     * Show the specified job inquiry for editing.
+     * Show the specified job inquiry details.
      */
-    public function show(JobInquiry $job_inquiry)
+    public function show(Request $request, JobInquiry $job_inquiry)
     {
-        return response()->json($job_inquiry);
+        // If request wants JSON (for edit modal), return JSON
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json($job_inquiry);
+        }
+        
+        // Otherwise return view
+        return view('staff.job-inquiry-view', compact('job_inquiry'));
     }
 
     /**

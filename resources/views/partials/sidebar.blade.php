@@ -15,12 +15,164 @@
             <span class="border-1 d-block for-dark-burger" style="border-bottom: 1px solid #475569; height: 1px; width: 25px;"></span>
         </button>
     </div>
-
+   
     <aside id="layout-menu" class="layout-menu menu-vertical menu active" data-simplebar>
         <ul class="menu-inner">
-            <li class="menu-title small text-uppercase">
-                <span class="menu-title-text">MAIN</span>
-            </li>
+            @php
+                $isStaff = Auth::guard('staff')->check();
+                $isAdmin = Auth::guard('admin')->check();
+            @endphp
+            
+            @if($isStaff)
+                {{-- Staff Menu (Limited Access) --}}
+                <li class="menu-title small text-uppercase">
+                    <span class="menu-title-text">MAIN</span>
+                </li>
+                
+                {{-- Dashboard --}}
+                <li class="menu-item {{ request()->routeIs('staff.dashboard') ? 'active' : '' }}">
+                    <a href="{{ route('staff.dashboard') }}" class="menu-link {{ request()->routeIs('staff.dashboard') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">dashboard</span>
+                        <span class="title">Dashboard</span>
+                    </a>
+                </li>
+                
+                {{-- Student List --}}
+                <li class="menu-item {{ request()->routeIs('student-list') ? 'active' : '' }}">
+                    <a href="{{ route('student-list') }}" class="menu-link {{ request()->routeIs('student-list') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">people</span>
+                        <span class="title">Student List</span>
+                    </a>
+                </li>
+                
+                {{-- Manage Attendance --}}
+                <li class="menu-item {{ request()->routeIs('attendance.student') ? 'active' : '' }}">
+                    <a href="{{ route('attendance.student') }}" class="menu-link {{ request()->routeIs('attendance.student') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">event_available</span>
+                        <span class="title">Manage Attendance</span>
+                    </a>
+                </li>
+                
+                {{-- Manage Student Behavior --}}
+                <li class="menu-item {{ request()->routeIs('student-behavior.recording') ? 'active' : '' }}">
+                    <a href="{{ route('student-behavior.recording') }}" class="menu-link {{ request()->routeIs('student-behavior.recording') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">psychology</span>
+                        <span class="title">Manage Student Behavior</span>
+                    </a>
+                </li>
+                    
+                {{-- Test Management --}}
+                <li class="menu-item {{ request()->routeIs('test*') ? 'open' : '' }}">
+                    <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">quiz</span>
+                        <span class="title">Test Management</span>
+                    </a>
+                    <ul class="menu-sub">
+                        <li class="menu-item">
+                            <a href="{{ route('test.list') }}" class="menu-link {{ request()->routeIs('test.list') ? 'active' : '' }}">
+                                Create a Test
+                            </a>
+                        </li>
+                        <li class="menu-item">
+                            <a href="{{ route('test.marks-entry') }}" class="menu-link {{ request()->routeIs('test.marks-entry') ? 'active' : '' }}">
+                                Marks Entry
+                            </a>
+                        </li>
+                        <li class="menu-item {{ request()->routeIs('test.teacher-remarks*') ? 'open' : '' }}">
+                            <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.teacher-remarks*') ? 'active' : '' }}">
+                                Test Remarks
+                            </a>
+                            <ul class="menu-sub">
+                                <li class="menu-item">
+                                    <a href="{{ route('test.teacher-remarks.practical') }}" class="menu-link {{ request()->routeIs('test.teacher-remarks.practical') ? 'active' : '' }}">
+                                        For Particular Test
+                                    </a>
+                                </li>
+                                <li class="menu-item">
+                                    <a href="{{ route('test.teacher-remarks.combined') }}" class="menu-link {{ request()->routeIs('test.teacher-remarks.combined') ? 'active' : '' }}">
+                                        For Combine Test
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                
+                {{-- Exam Management --}}
+                <li class="menu-item {{ request()->routeIs('exam*') ? 'open' : '' }}">
+                    <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">assignment</span>
+                        <span class="title">Exam Management</span>
+                    </a>
+                    <ul class="menu-sub">
+                        <li class="menu-item">
+                            <a href="{{ route('exam.marks-entry') }}" class="menu-link {{ request()->routeIs('exam.marks-entry') ? 'active' : '' }}">
+                                Marks Entry
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                
+                {{-- Task Management --}}
+                <li class="menu-item {{ request()->routeIs('task-management*') ? 'active' : '' }}">
+                    <a href="{{ route('task-management') }}" class="menu-link {{ request()->routeIs('task-management*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">task</span>
+                        <span class="title">Task Management</span>
+                    </a>
+                </li>
+                
+                {{-- Study Materials - Lectures --}}
+                <li class="menu-item {{ request()->routeIs('study-material*') ? 'active' : '' }}">
+                    <a href="{{ route('study-material.lms') }}" class="menu-link {{ request()->routeIs('study-material*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">menu_book</span>
+                        <span class="title">Study Materials - Lectures</span>
+                    </a>
+                </li>
+                
+                {{-- Daily Diary --}}
+                <li class="menu-item {{ request()->routeIs('homework-diary*') ? 'active' : '' }}">
+                    <a href="{{ route('homework-diary.manage') }}" class="menu-link {{ request()->routeIs('homework-diary*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">book</span>
+                        <span class="title">Daily Diary</span>
+                    </a>
+                </li>
+                
+                {{-- Online Class --}}
+                <li class="menu-item {{ request()->routeIs('online-classes*') ? 'active' : '' }}">
+                    <a href="{{ route('online-classes') }}" class="menu-link {{ request()->routeIs('online-classes*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">video_call</span>
+                        <span class="title">Online Class</span>
+                    </a>
+                </li>
+                
+                {{-- Attendance Report --}}
+                <li class="menu-item {{ request()->routeIs('attendance.report') ? 'active' : '' }}">
+                    <a href="{{ route('attendance.report') }}" class="menu-link {{ request()->routeIs('attendance.report') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">assessment</span>
+                        <span class="title">Attendance Report</span>
+                    </a>
+                </li>
+                
+                {{-- Academic/Holiday Calendar --}}
+                <li class="menu-item {{ request()->routeIs('academic-calendar*') ? 'active' : '' }}">
+                    <a href="{{ route('academic-calendar.view') }}" class="menu-link {{ request()->routeIs('academic-calendar*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">calendar_month</span>
+                        <span class="title">Academic/Holiday Calendar</span>
+                    </a>
+                </li>
+                
+                {{-- School Noticeboard --}}
+                <li class="menu-item {{ request()->routeIs('school.noticeboard') ? 'active' : '' }}">
+                    <a href="{{ route('school.noticeboard') }}" class="menu-link {{ request()->routeIs('school.noticeboard') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">campaign</span>
+                        <span class="title">School Noticeboard</span>
+                    </a>
+                </li>
+            @else
+                {{-- Admin Menu (Full Access) --}}
+                <li class="menu-title small text-uppercase">
+                    <span class="menu-title-text">MAIN</span>
+                </li>
                    <li class="menu-item {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'open' : '' }}">
                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">dashboard</span>
@@ -442,11 +594,6 @@
                         </ul>
                     </li>
                     <li class="menu-item">
-                        <a href="{{ route('fee-management') }}" class="menu-link {{ request()->routeIs('fee-management') ? 'active' : '' }}">
-                            Fee Management
-                        </a>
-                    </li>
-                    <li class="menu-item">
                         <a href="{{ route('fee-payment') }}" class="menu-link {{ request()->routeIs('fee-payment') ? 'active' : '' }}">
                             Fee Payment
                         </a>
@@ -707,7 +854,7 @@
                                     Test Schedule
                                 </a>
                             </li>
-                            <li class="menu-item">
+                            <li class="menu-item {{ request()->routeIs('test.assign-grades*') ? 'open' : '' }}">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.assign-grades*') ? 'active' : '' }}">
                                     Assign Grades
                                 </a>
@@ -724,19 +871,19 @@
                                     </li>
                                 </ul>
                             </li>
-                            <li class="menu-item">
+                            <li class="menu-item {{ request()->routeIs('test.teacher-remarks*') ? 'open' : '' }}">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.teacher-remarks*') ? 'active' : '' }}">
-                                    Teacher Remarks
+                                    Test Remarks
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
                                         <a href="{{ route('test.teacher-remarks.practical') }}" class="menu-link {{ request()->routeIs('test.teacher-remarks.practical') ? 'active' : '' }}">
-                                            For Practical Test
+                                            For Particular Test
                                         </a>
                                     </li>
                                     <li class="menu-item">
                                         <a href="{{ route('test.teacher-remarks.combined') }}" class="menu-link {{ request()->routeIs('test.teacher-remarks.combined') ? 'active' : '' }}">
-                                            For Combine Result
+                                            For Combine Test
                                         </a>
                                     </li>
                                 </ul>
@@ -843,6 +990,23 @@
                                     Marks Entry
                                 </a>
                             </li>
+                            <li class="menu-item {{ request()->routeIs('exam.teacher-remarks*') ? 'open' : '' }}">
+                                <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.teacher-remarks*') ? 'active' : '' }}">
+                                    Teacher Remarks
+                                </a>
+                                <ul class="menu-sub">
+                                    <li class="menu-item">
+                                        <a href="{{ route('exam.teacher-remarks.particular') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.particular') ? 'active' : '' }}">
+                                            For Particular Test
+                                        </a>
+                                    </li>
+                                    <li class="menu-item">
+                                        <a href="{{ route('exam.teacher-remarks.final') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.final') ? 'active' : '' }}">
+                                            For Combine Test
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
                             <li class="menu-item">
                                 <a href="{{ route('exam.print-admit-cards') }}" class="menu-link {{ request()->routeIs('exam.print-admit-cards') ? 'active' : '' }}">
                                     Print Admit Cards / Slip
@@ -866,23 +1030,6 @@
                                     <li class="menu-item">
                                         <a href="{{ route('exam.grades.final') }}" class="menu-link {{ request()->routeIs('exam.grades.final') ? 'active' : '' }}">
                                             For Final Exam
-                                        </a>
-                                    </li>
-                                </ul>
-                            </li>
-                            <li class="menu-item">
-                                <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.teacher-remarks*') ? 'active' : '' }}">
-                                    Teacher Remarks
-                                </a>
-                                <ul class="menu-sub">
-                                    <li class="menu-item">
-                                        <a href="{{ route('exam.teacher-remarks.particular') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.particular') ? 'active' : '' }}">
-                                            For Particular Exam
-                                        </a>
-                                    </li>
-                                    <li class="menu-item">
-                                        <a href="{{ route('exam.teacher-remarks.final') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.final') ? 'active' : '' }}">
-                                            For Final Result
                                         </a>
                                     </li>
                                 </ul>
@@ -1138,6 +1285,7 @@
                             Manage Campuses
                         </a>
                     </li>
+                    @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin())
                     <li class="menu-item">
                         <a href="{{ route('admin.roles-management') }}" class="menu-link {{ request()->routeIs('admin.roles-management') ? 'active' : '' }}">
                             Admin Roles Management
@@ -1209,19 +1357,64 @@
                             </li>
                         </ul>
                     </li>
-                    <li class="menu-item">
-                        <a href="#" onclick="event.preventDefault(); document.getElementById('logout-form').submit();" class="menu-link">
-                            <span class="material-symbols-outlined menu-icon">logout</span>
-                            <span class="title">Logout</span>
-                        </a>
-                    </li>
+                    @endif
                 </ul>
+            </li>
+            @endif
+            
+            {{-- Logout Button (for both Admin and Staff) --}}
+            <li class="menu-item">
+                <a href="#" onclick="event.preventDefault(); handleSidebarLogout();" class="menu-link">
+                    <span class="material-symbols-outlined menu-icon">logout</span>
+                    <span class="title">Logout</span>
+                </a>
             </li>
         </ul>
     </aside>
 </div>
 <!-- End Sidebar Area -->
 
-<form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
-    @csrf
-</form>
+@if(Auth::guard('admin')->check())
+    <form id="admin-logout-form" action="{{ route('admin.logout') }}" method="POST" style="display: none;">
+        @csrf
+    </form>
+@endif
+@if(Auth::guard('staff')->check())
+    <form id="staff-logout-form" action="{{ route('staff.logout') }}" method="POST" style="display: none;">
+        @csrf
+    </form>
+@endif
+@if(Auth::guard('web')->check())
+    <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
+        @csrf
+    </form>
+@endif
+
+<script>
+function handleSidebarLogout() {
+    // Check for admin logout form first
+    var adminForm = document.getElementById('admin-logout-form');
+    if (adminForm) {
+        adminForm.submit();
+        return;
+    }
+    
+    // Check for staff logout form
+    var staffForm = document.getElementById('staff-logout-form');
+    if (staffForm) {
+        staffForm.submit();
+        return;
+    }
+    
+    // Check for regular logout form
+    var logoutForm = document.getElementById('logout-form');
+    if (logoutForm) {
+        logoutForm.submit();
+        return;
+    }
+    
+    // If no form found, try to redirect
+    console.log('No logout form found');
+}
+</script>
+

@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@php
+    use Illuminate\Support\Facades\Storage;
+@endphp
+
 @section('title', 'Add Management Expense')
 
 @section('content')
@@ -107,7 +111,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -165,10 +169,10 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editExpense({{ $expense->id }}, '{{ addslashes($expense->campus) }}', '{{ addslashes($expense->category) }}', '{{ addslashes($expense->title) }}', '{{ addslashes($expense->description ?? '') }}', {{ $expense->amount }}, '{{ addslashes($expense->method) }}', '{{ addslashes($expense->invoice_receipt ?? '') }}', '{{ $expense->date->format('Y-m-d') }}', {{ $expense->notify_admin ? 'true' : 'false' }})">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editExpense({{ $expense->id }}, '{{ addslashes($expense->campus) }}', '{{ addslashes($expense->category) }}', '{{ addslashes($expense->title) }}', '{{ addslashes($expense->description ?? '') }}', {{ $expense->amount }}, '{{ addslashes($expense->method) }}', '{{ $expense->invoice_receipt ? Storage::url($expense->invoice_receipt) : '' }}', '{{ $expense->date->format('Y-m-d') }}', {{ $expense->notify_admin ? 'true' : 'false' }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this expense?')) { document.getElementById('delete-form-{{ $expense->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this expense?')) { document.getElementById('delete-form-{{ $expense->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $expense->id }}" action="{{ route('expense-management.add.destroy', $expense->id) }}" method="POST" class="d-none">
@@ -213,13 +217,13 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="expenseModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">receipt</span>
-                    <span>Add New Expense</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="expenseModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">receipt</span>
+                    <span style="color: white !important;">Add New Expense</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
-            <form id="expenseForm" method="POST" action="{{ route('expense-management.add.store') }}">
+            <form id="expenseForm" method="POST" action="{{ route('expense-management.add.store') }}" enctype="multipart/form-data">
                 @csrf
                 <div id="methodField"></div>
                 <div class="modal-body p-3">
@@ -230,7 +234,14 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <input type="text" class="form-control expense-input" name="campus" id="campus" placeholder="Enter campus" required>
+                                <select class="form-control expense-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Campus</option>
+                                    @if(isset($campuses) && $campuses->count() > 0)
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                        @endforeach
+                                    @endif
+                                </select>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -243,7 +254,7 @@
                                     <option value="">Select Category</option>
                                     @if(isset($categories) && $categories->count() > 0)
                                         @foreach($categories as $cat)
-                                            <option value="{{ $cat->category_name }}">{{ $cat->category_name }} ({{ $cat->campus }})</option>
+                                            <option value="{{ $cat->category_name }}" data-campus="{{ $cat->campus }}">{{ $cat->category_name }} ({{ $cat->campus }})</option>
                                         @endforeach
                                     @endif
                                 </select>
@@ -282,17 +293,37 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">payment</span>
                                 </span>
-                                <input type="text" class="form-control expense-input" name="method" id="method" placeholder="Enter payment method" required>
+                                <select class="form-control expense-input" name="method" id="method" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Payment Method</option>
+                                    <option value="Bank">Bank</option>
+                                    <option value="Wallet">Wallet</option>
+                                    <option value="Transfer">Transfer</option>
+                                    <option value="Card">Card</option>
+                                    <option value="Check">Check</option>
+                                    <option value="Deposit">Deposit</option>
+                                </select>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Invoice/Receipt</label>
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Invoice/Receipt Image</label>
                             <div class="input-group input-group-sm expense-input-group">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                    <span class="material-symbols-outlined" style="font-size: 15px;">receipt_long</span>
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">image</span>
                                 </span>
-                                <input type="text" class="form-control expense-input" name="invoice_receipt" id="invoice_receipt" placeholder="Enter invoice/receipt number">
+                                <input type="file" class="form-control expense-input" name="invoice_receipt" id="invoice_receipt" accept="image/*" onchange="previewImage(this)">
                             </div>
+                            <div id="imagePreview" class="mt-2" style="display: none;">
+                                <img id="previewImg" src="" alt="Preview" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                <button type="button" class="btn btn-sm btn-danger ms-2" onclick="removeImage()" style="margin-top: 5px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">delete</span>
+                                    Remove
+                                </button>
+                            </div>
+                            <div id="existingImage" class="mt-2" style="display: none;">
+                                <img id="existingImg" src="" alt="Current Image" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                <p class="text-muted small mt-1 mb-0">Current image (upload new to replace)</p>
+                            </div>
+                            <small class="text-muted">Max size: 5MB | Formats: JPG, PNG, GIF, WEBP</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Date <span class="text-danger">*</span></label>
@@ -566,77 +597,32 @@
         border-spacing: 0;
         border-collapse: collapse;
         border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
     }
     
     .default-table-area table thead {
         border-bottom: 1px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         font-weight: 600;
         vertical-align: middle;
         line-height: 1.3;
-        height: 32px;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
-    .default-table-area table thead th:first-child {
-        border-left: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table thead th:last-child {
-        border-right: 1px solid #dee2e6;
-    }
-    
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody td:first-child {
-        border-left: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody td:last-child {
-        border-right: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody tr:last-child td {
-        border-bottom: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 10px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 10px;
-    }
-    
-    .default-table-area table tbody tr {
-        height: 36px;
-    }
-    
-    .default-table-area table tbody tr:first-child td {
-        border-top: none;
-    }
-    
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
     }
     
     .default-table-area table tbody tr:hover {
@@ -647,28 +633,35 @@
         font-size: 11px;
         padding: 3px 6px;
         font-weight: 500;
-    }
-    
-    .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
+        border-radius: 4px;
     }
     
     .default-table-area .btn-sm {
         font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        padding: 3px 6px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
         font-size: 14px !important;
         vertical-align: middle;
         color: white !important;
+        line-height: 1;
+        display: inline-block;
     }
     
     .default-table-area .btn-primary .material-symbols-outlined,
-    .default-table-area .btn-danger .material-symbols-outlined,
-    .default-table-area .btn-info .material-symbols-outlined {
+    .default-table-area .btn-danger .material-symbols-outlined {
         color: white !important;
+    }
+    
+    .default-table-area table tbody td strong {
+        font-size: 13px;
+        font-weight: 600;
     }
 </style>
 
@@ -679,8 +672,8 @@ function resetForm() {
     document.getElementById('expenseForm').action = "{{ route('expense-management.add.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('expenseModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">receipt</span>
-        <span>Add New Expense</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">receipt</span>
+        <span style="color: white !important;">Add New Expense</span>
     `;
     document.querySelector('.expense-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -690,24 +683,78 @@ function resetForm() {
     // Set today's date as default
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('date').value = today;
+    // Reset image previews
+    document.getElementById('imagePreview').style.display = 'none';
+    document.getElementById('existingImage').style.display = 'none';
+    document.getElementById('invoice_receipt').value = '';
+}
+
+// Preview image function
+function previewImage(input) {
+    const preview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    const existingImage = document.getElementById('existingImage');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            preview.style.display = 'block';
+            if (existingImage) {
+                existingImage.style.display = 'none';
+            }
+        };
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        preview.style.display = 'none';
+    }
+}
+
+// Remove image function
+function removeImage() {
+    const input = document.getElementById('invoice_receipt');
+    const preview = document.getElementById('imagePreview');
+    const existingImage = document.getElementById('existingImage');
+    
+    input.value = '';
+    preview.style.display = 'none';
+    if (existingImage) {
+        existingImage.style.display = 'block';
+    }
 }
 
 // Edit expense function
-function editExpense(id, campus, category, title, description, amount, method, invoiceReceipt, date, notifyAdmin) {
+function editExpense(id, campus, category, title, description, amount, method, invoiceReceiptUrl, date, notifyAdmin) {
     document.getElementById('campus').value = campus;
     document.getElementById('category').value = category;
     document.getElementById('title').value = title;
     document.getElementById('description').value = description;
     document.getElementById('amount').value = amount;
     document.getElementById('method').value = method;
-    document.getElementById('invoice_receipt').value = invoiceReceipt;
     document.getElementById('date').value = date;
     document.getElementById('notify_admin').checked = notifyAdmin;
+    
+    // Handle image display
+    const existingImage = document.getElementById('existingImage');
+    const existingImg = document.getElementById('existingImg');
+    const imagePreview = document.getElementById('imagePreview');
+    const invoiceInput = document.getElementById('invoice_receipt');
+    
+    invoiceInput.value = ''; // Clear file input
+    
+    if (invoiceReceiptUrl) {
+        existingImg.src = invoiceReceiptUrl;
+        existingImage.style.display = 'block';
+        imagePreview.style.display = 'none';
+    } else {
+        existingImage.style.display = 'none';
+        imagePreview.style.display = 'none';
+    }
     document.getElementById('expenseForm').action = "{{ url('expense-management/add') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
     document.getElementById('expenseModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-        <span>Edit Expense</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">edit</span>
+        <span style="color: white !important;">Edit Expense</span>
     `;
     document.querySelector('.expense-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -795,6 +842,36 @@ document.addEventListener('DOMContentLoaded', function() {
     if (dateInput && !dateInput.value) {
         const today = new Date().toISOString().split('T')[0];
         dateInput.value = today;
+    }
+    
+    // Filter categories based on selected campus
+    const campusSelect = document.getElementById('campus');
+    const categorySelect = document.getElementById('category');
+    
+    if (campusSelect && categorySelect) {
+        campusSelect.addEventListener('change', function() {
+            const selectedCampus = this.value;
+            const categoryOptions = categorySelect.querySelectorAll('option');
+            
+            // Show/hide categories based on campus
+            categoryOptions.forEach(option => {
+                if (option.value === '') {
+                    option.style.display = 'block';
+                } else {
+                    const categoryCampus = option.getAttribute('data-campus');
+                    if (selectedCampus && categoryCampus && categoryCampus !== selectedCampus) {
+                        option.style.display = 'none';
+                    } else {
+                        option.style.display = 'block';
+                    }
+                }
+            });
+            
+            // Reset category selection if current selection is hidden
+            if (categorySelect.value && categorySelect.options[categorySelect.selectedIndex].style.display === 'none') {
+                categorySelect.value = '';
+            }
+        });
     }
 });
 </script>

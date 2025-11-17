@@ -39,9 +39,9 @@
                                 <label for="campus" class="form-label mb-0 fs-13 fw-medium">Campus <span class="text-danger">*</span></label>
                                 <select class="form-select form-select-sm py-1" id="campus" name="campus" required style="height: 32px;">
                                     <option value="">Select Campus</option>
-                                    <option value="Main Campus">Main Campus</option>
-                                    <option value="Branch Campus 1">Branch Campus 1</option>
-                                    <option value="Branch Campus 2">Branch Campus 2</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -55,20 +55,9 @@
                                 <label for="class" class="form-label mb-0 fs-13 fw-medium">Class <span class="text-danger">*</span></label>
                                 <select class="form-select form-select-sm py-1" id="class" name="class" required style="height: 32px;">
                                     <option value="">Select Class</option>
-                                    <option value="Nursery">Nursery</option>
-                                    <option value="KG">KG</option>
-                                    <option value="1st">1st</option>
-                                    <option value="2nd">2nd</option>
-                                    <option value="3rd">3rd</option>
-                                    <option value="4th">4th</option>
-                                    <option value="5th">5th</option>
-                                    <option value="6th">6th</option>
-                                    <option value="7th">7th</option>
-                                    <option value="8th">8th</option>
-                                    <option value="9th">9th</option>
-                                    <option value="10th">10th</option>
-                                    <option value="11th">11th</option>
-                                    <option value="12th">12th</option>
+                                    @foreach($classes as $classItem)
+                                        <option value="{{ $classItem->class_name ?? $classItem }}">{{ $classItem->class_name ?? $classItem }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -80,13 +69,8 @@
                             
                             <div class="mb-1">
                                 <label for="section" class="form-label mb-0 fs-13 fw-medium">Section <span class="text-danger">*</span></label>
-                                <select class="form-select form-select-sm py-1" id="section" name="section" required style="height: 32px;">
-                                    <option value="">Select Section</option>
-                                    <option value="A">A</option>
-                                    <option value="B">B</option>
-                                    <option value="C">C</option>
-                                    <option value="D">D</option>
-                                    <option value="E">E</option>
+                                <select class="form-select form-select-sm py-1" id="section" name="section" required style="height: 32px;" disabled>
+                                    <option value="">Select Class First</option>
                                 </select>
                             </div>
                         </div>
@@ -103,7 +87,12 @@
                             
                             <div class="mb-1">
                                 <label for="subject" class="form-label mb-0 fs-13 fw-medium">Subject <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control form-control-sm py-1" id="subject" name="subject" placeholder="Enter subject" required style="height: 32px;">
+                                <select class="form-select form-select-sm py-1" id="subject" name="subject" required style="height: 32px;">
+                                    <option value="">Select Subject</option>
+                                    @foreach($subjects as $subject)
+                                        <option value="{{ $subject }}">{{ $subject }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -116,13 +105,9 @@
                                 <label for="day" class="form-label mb-0 fs-13 fw-medium">Day <span class="text-danger">*</span></label>
                                 <select class="form-select form-select-sm py-1" id="day" name="day" required style="height: 32px;">
                                     <option value="">Select Day</option>
-                                    <option value="Monday">Monday</option>
-                                    <option value="Tuesday">Tuesday</option>
-                                    <option value="Wednesday">Wednesday</option>
-                                    <option value="Thursday">Thursday</option>
-                                    <option value="Friday">Friday</option>
-                                    <option value="Saturday">Saturday</option>
-                                    <option value="Sunday">Sunday</option>
+                                    @foreach($days as $day)
+                                        <option value="{{ $day }}">{{ $day }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -194,4 +179,75 @@
         color: #495057;
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('class');
+    const sectionSelect = document.getElementById('section');
+    
+    // Function to load sections based on selected class
+    function loadSections(className) {
+        if (!className) {
+            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+            sectionSelect.disabled = true;
+            return;
+        }
+        
+        // Show loading state
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+        
+        // Make AJAX request
+        fetch(`{{ route('timetable.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    sectionSelect.appendChild(option);
+                });
+                sectionSelect.disabled = false;
+            } else {
+                sectionSelect.innerHTML = '<option value="">No sections found</option>';
+                sectionSelect.disabled = true;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+            sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+            sectionSelect.disabled = true;
+        });
+    }
+    
+    // Listen for class selection changes
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            loadSections(this.value);
+            // Clear section when class changes
+            sectionSelect.value = '';
+        });
+    }
+    
+    // Load sections on page load if class is already selected (for form validation errors)
+    @if(old('class'))
+        loadSections('{{ old('class') }}');
+        // Set the selected section if it was previously selected
+        @if(old('section'))
+            setTimeout(() => {
+                sectionSelect.value = '{{ old('section') }}';
+            }, 500);
+        @endif
+    @endif
+});
+</script>
 @endsection

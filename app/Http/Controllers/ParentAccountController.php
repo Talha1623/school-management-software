@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ParentAccount;
+use App\Models\Student;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -106,6 +107,124 @@ class ParentAccountController extends Controller
         return redirect()
             ->route('parent.manage-access')
             ->with('success', 'Parent account deleted successfully!');
+    }
+
+    /**
+     * Reset password for parent account.
+     */
+    public function resetPassword(Request $request, ParentAccount $parent_account): RedirectResponse
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ]);
+
+        $parent_account->password = Hash::make($validated['password']);
+        $parent_account->save();
+
+        return redirect()
+            ->route('parent.manage-access')
+            ->with('success', 'Password reset successfully for ' . $parent_account->name . '!');
+    }
+
+    /**
+     * Connect student to parent account.
+     */
+    public function connectStudent(Request $request, ParentAccount $parent_account): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_id' => ['required', 'exists:students,id'],
+        ]);
+
+        $student = Student::findOrFail($validated['student_id']);
+
+        // Update student's father information to match parent account
+        $student->father_name = $parent_account->name;
+        $student->father_email = $parent_account->email;
+        $student->father_phone = $parent_account->phone;
+        if ($parent_account->id_card_number) {
+            $student->father_id_card = $parent_account->id_card_number;
+        }
+        // Link student to parent account
+        $student->parent_account_id = $parent_account->id;
+        $student->save();
+
+        return redirect()
+            ->route('parent.manage-access')
+            ->with('success', 'Student ' . $student->student_name . ' connected successfully to ' . $parent_account->name . '!');
+    }
+
+    /**
+     * Disconnect student from parent account.
+     */
+    public function disconnectStudent(Request $request, ParentAccount $parent_account): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_id' => ['required', 'exists:students,id'],
+        ]);
+
+        $student = Student::findOrFail($validated['student_id']);
+
+        // Verify student is connected to this parent
+        if ($student->parent_account_id != $parent_account->id) {
+            return redirect()
+                ->route('parent.manage-access')
+                ->with('error', 'Student is not connected to this parent account.');
+        }
+
+        // Disconnect student
+        $student->parent_account_id = null;
+        $student->save();
+
+        return redirect()
+            ->route('parent.manage-access')
+            ->with('success', 'Student ' . $student->student_name . ' disconnected successfully from ' . $parent_account->name . '!');
+    }
+
+    /**
+     * Get all students for connection (AJAX).
+     */
+    public function getAllStudentsForConnect(Request $request)
+    {
+        $parentId = $request->get('parent_id');
+        
+        $students = Student::select('id', 'student_code', 'student_name', 'gr_number', 'class', 'section', 'father_name', 'father_email', 'father_phone', 'parent_account_id')
+            ->orderBy('student_name')
+            ->get()
+            ->map(function($student) {
+                return [
+                    'id' => $student->id,
+                    'code' => $student->student_code ?? 'N/A',
+                    'name' => $student->student_name,
+                    'gr_number' => $student->gr_number ?? 'N/A',
+                    'class' => $student->class ?? 'N/A',
+                    'section' => $student->section ?? 'N/A',
+                    'father_name' => $student->father_name ?? 'N/A',
+                    'father_email' => $student->father_email ?? 'N/A',
+                    'parent_account_id' => $student->parent_account_id,
+                ];
+            });
+        
+        // Get connected students for this parent
+        $connectedStudents = [];
+        if ($parentId) {
+            $connectedStudents = Student::where('parent_account_id', $parentId)
+                ->select('id', 'student_code', 'student_name', 'class', 'section')
+                ->get()
+                ->map(function($student) {
+                    return [
+                        'id' => $student->id,
+                        'code' => $student->student_code ?? 'N/A',
+                        'name' => $student->student_name,
+                        'class' => $student->class ?? 'N/A',
+                        'section' => $student->section ?? 'N/A',
+                    ];
+                });
+        }
+        
+        return response()->json([
+            'students' => $students,
+            'connected_students' => $connectedStudents
+        ]);
     }
 
     /**

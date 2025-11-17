@@ -17,6 +17,69 @@
                 </div>
             @endif
 
+            <!-- Filter Form -->
+            <form method="GET" action="{{ route('student.information') }}" class="mb-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-0 fs-13 fw-medium">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                <option value="{{ $campus }}" {{ request('filter_campus') == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="filter_class" class="form-label mb-0 fs-13 fw-medium">Class</label>
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
+                            <option value="">All Classes</option>
+                            @foreach($classes as $class)
+                                <option value="{{ $class }}" {{ request('filter_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="filter_section" class="form-label mb-0 fs-13 fw-medium">Section</label>
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                            <option value="">All Sections</option>
+                            @foreach($sections as $section)
+                                <option value="{{ $section }}" {{ request('filter_section') == $section ? 'selected' : '' }}>{{ $section }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="filter_type" class="form-label mb-0 fs-13 fw-medium">Type</label>
+                        <select class="form-select form-select-sm" id="filter_type" name="filter_type" style="height: 32px;">
+                            <option value="">All Types</option>
+                            @foreach($types as $type)
+                                <option value="{{ $type }}" {{ request('filter_type') == $type ? 'selected' : '' }}>{{ ucfirst($type) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-sm w-100" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; height: 32px; border: none;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">filter_list</span>
+                            Filter
+                        </button>
+                    </div>
+                    @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type'))
+                    <div class="col-md-2">
+                        <a href="{{ route('student.information') }}" class="btn btn-sm btn-outline-secondary w-100" style="height: 32px;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">clear</span>
+                            Clear
+                        </a>
+                    </div>
+                    @endif
+                </div>
+                <!-- Preserve search and per_page in filter form -->
+                @if(request('search'))
+                    <input type="hidden" name="search" value="{{ request('search') }}">
+                @endif
+                @if(request('per_page'))
+                    <input type="hidden" name="per_page" value="{{ request('per_page') }}">
+                @endif
+            </form>
+
             <!-- Table Toolbar -->
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                 <!-- Left Side -->
@@ -34,6 +97,28 @@
 
                 <!-- Right Side -->
                 <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <!-- Export Buttons - Only show when filters are applied -->
+                    @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type'))
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('student.information.export', ['format' => 'excel']) }}?{{ http_build_query(request()->except(['page', 'per_page'])) }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
+                            <span>Excel</span>
+                        </a>
+                        <a href="{{ route('student.information.export', ['format' => 'pdf']) }}?{{ http_build_query(request()->except(['page', 'per_page'])) }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <form action="{{ route('student.information.delete-all') }}?{{ http_build_query(request()->except(['page', 'per_page'])) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete ALL filtered students? This action cannot be undone!');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-sm px-2 py-1 export-btn delete-all-btn">
+                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">delete_sweep</span>
+                                <span>Delete All</span>
+                            </button>
+                        </form>
+                    </div>
+                    @endif
+                    
                     <!-- Search -->
                     <div class="d-flex align-items-center gap-2">
                         <label for="searchInput" class="mb-0 fs-13 fw-medium text-dark">Search:</label>
@@ -55,11 +140,15 @@
                 </div>
             </div>
 
-            <!-- Table Header -->
+            <!-- Table Header and Table - Only show when filters are applied -->
+            @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type'))
             <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                 <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
                     <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
                     <span>Students List</span>
+                    <span class="badge bg-light text-dark ms-2">
+                        {{ $students->total() }} {{ Str::plural('student', $students->total()) }} found
+                    </span>
                 </h5>
             </div>
 
@@ -77,57 +166,58 @@
             @endif
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table">
+                <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
+                    <table class="table table-sm table-hover" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Student Name</th>
-                                <th>Student Code</th>
-                                <th>Father Name</th>
-                                <th>Phone</th>
-                                <th>Class</th>
-                                <th>Section</th>
-                                <th>Gender</th>
-                                <th>Date of Birth</th>
-                                <th>Admission Date</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">#</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student Name</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Father Name</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Phone</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Class</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Section</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Gender</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Date of Birth</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Admission Date</th>
+                                <th style="padding: 8px 12px; font-size: 13px; text-align: center;">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($students as $student)
                                 <tr>
-                                    <td>{{ $loop->iteration + (($students->currentPage() - 1) * $students->perPage()) }}</td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $loop->iteration + (($students->currentPage() - 1) * $students->perPage()) }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <strong class="text-primary">{{ $student->student_name }}</strong>
                                         @if($student->surname_caste)
                                             <span class="text-muted">({{ $student->surname_caste }})</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($student->student_code)
-                                            <span class="badge bg-info text-white">{{ $student->student_code }}</span>
+                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $student->student_code }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>{{ $student->father_name }}</td>
-                                    <td>
-                                        <span class="badge bg-light text-dark">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">phone</span>
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $student->father_name ?? 'N/A' }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-light text-dark" style="font-size: 11px;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">phone</span>
                                             {{ $student->father_phone ?? $student->whatsapp_number ?? 'N/A' }}
                                         </span>
                                     </td>
-                                    <td>
-                                        <span class="badge bg-primary text-white">{{ $student->class }}</span>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-primary text-white" style="font-size: 11px;">{{ $student->class ?? 'N/A' }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($student->section)
-                                            <span class="badge bg-secondary text-white">{{ $student->section }}</span>
+                                            <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $student->section }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @php
                                             $genderClass = match($student->gender) {
                                                 'male' => 'bg-info',
@@ -135,26 +225,31 @@
                                                 default => 'bg-secondary'
                                             };
                                         @endphp
-                                        <span class="badge {{ $genderClass }} text-white text-capitalize">
-                                            {{ $student->gender }}
+                                        <span class="badge {{ $genderClass }} text-white text-capitalize" style="font-size: 11px;">
+                                            {{ $student->gender ?? 'N/A' }}
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <span class="text-muted">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">calendar_today</span>
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
                                             {{ $student->date_of_birth ? $student->date_of_birth->format('d M Y') : 'N/A' }}
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <span class="text-muted">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">event</span>
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event</span>
                                             {{ $student->admission_date ? $student->admission_date->format('d M Y') : 'N/A' }}
                                         </span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
+                                        <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="viewStudent({{ $student->id }})" title="View Details">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="10" class="text-center text-muted py-5">
+                                    <td colspan="11" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">school</span>
                                         <p class="mt-2 mb-0">No students found.</p>
                                         <p class="mt-1 mb-0" style="font-size: 13px;">Admit students from Admission Management → Admit Student</p>
@@ -170,6 +265,14 @@
                 <div class="mt-3">
                     {{ $students->links() }}
                 </div>
+            @endif
+            @else
+            <!-- Message when no filters applied -->
+            <div class="text-center py-5">
+                <span class="material-symbols-outlined" style="font-size: 64px; color: #dee2e6; opacity: 0.5;">filter_list</span>
+                <h5 class="mt-3 text-muted">Apply Filters to View Students</h5>
+                <p class="text-muted mb-0">Please select Campus, Class, Section, or Type and click Filter to view students list.</p>
+            </div>
             @endif
         </div>
     </div>
@@ -394,5 +497,110 @@ function updateEntriesPerPage(value) {
     url.searchParams.set('page', '1'); // Reset to first page
     window.location.href = url.toString();
 }
+
+// Function to load sections based on class
+function loadSectionsForFilter(selectedClass, selectedSection = null) {
+    const sectionSelect = document.getElementById('filter_section');
+    
+    // Clear existing options except the first one
+    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+    
+    if (selectedClass) {
+        // Fetch sections via AJAX
+        fetch(`{{ route('admission.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.sections && data.sections.length > 0) {
+                    data.sections.forEach(section => {
+                        const option = document.createElement('option');
+                        option.value = section;
+                        option.textContent = section;
+                        // Preserve selected value if it matches
+                        if (selectedSection && selectedSection === section) {
+                            option.selected = true;
+                        }
+                        sectionSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+            });
+    }
+}
+
+// Load sections based on class selection in filter
+document.getElementById('filter_class').addEventListener('change', function() {
+    loadSectionsForFilter(this.value);
+});
+
+// Load sections on page load if class is already selected
+document.addEventListener('DOMContentLoaded', function() {
+    const selectedClass = document.getElementById('filter_class').value;
+    const selectedSection = '{{ request('filter_section') }}';
+    if (selectedClass) {
+        loadSectionsForFilter(selectedClass, selectedSection);
+    }
+});
+
+// View student details
+function viewStudent(studentId) {
+    window.location.href = '{{ route("student.view", ":id") }}'.replace(':id', studentId);
+}
 </script>
+
+<style>
+    /* Export Buttons Styling */
+    .export-btn {
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        font-size: 13px;
+    }
+    
+    .excel-btn {
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .excel-btn:hover {
+        background-color: #218838;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+    }
+    
+    .pdf-btn {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .pdf-btn:hover {
+        background-color: #c82333;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+    }
+    
+    .export-btn:active {
+        transform: translateY(0);
+    }
+    
+    .delete-all-btn {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .delete-all-btn:hover {
+        background-color: #c82333;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+    }
+</style>
 @endsection

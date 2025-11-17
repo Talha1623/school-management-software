@@ -111,7 +111,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -128,26 +128,26 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($events->currentPage() - 1) * $events->perPage()) }}</td>
                                         <td>
-                                            <strong class="text-primary">{{ $event->event_title }}</strong>
+                                            <strong class="text-dark">{{ $event->event_title }}</strong>
                                         </td>
                                         <td>
                                             <span class="text-muted">{{ Str::limit($event->event_details, 50) }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-info text-white">{{ $event->event_type ?? 'N/A' }}</span>
+                                            <span class="badge bg-info text-white" style="font-size: 12px; padding: 4px 8px;">{{ $event->event_type ?? 'N/A' }}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-success text-white">{{ $event->event_date->format('Y-m-d') }}</span>
+                                            <span class="badge bg-success text-white" style="font-size: 12px; padding: 4px 8px;">{{ $event->event_date->format('Y-m-d') }}</span>
                                         </td>
                                         <td class="text-end">
-                                            <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Add Students" onclick="addStudents({{ $event->id }})">
+                                            <div class="d-inline-flex gap-1 align-items-center">
+                                                <button type="button" class="btn btn-sm btn-success px-2 py-1" title="Add Students" onclick="addStudents({{ $event->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">person_add</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editEvent({{ $event->id }})">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editEvent({{ $event->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this event?')) { document.getElementById('delete-form-{{ $event->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this event?')) { document.getElementById('delete-form-{{ $event->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $event->id }}" action="{{ route('events.destroy', $event->id) }}" method="POST" class="d-none">
@@ -192,9 +192,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="eventModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">event</span>
-                    <span>Add New Event</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="eventModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">event</span>
+                    <span style="color: white;">Add New Event</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -269,9 +269,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="addStudentsModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
-                    <span>Add Students to Event</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="addStudentsModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">person_add</span>
+                    <span style="color: white;">Add Students to Event</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -535,25 +535,31 @@
     /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
-        border-spacing: 0;
-        border-collapse: collapse;
+        font-size: 14px;
         border: 1px solid #dee2e6;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: white;
     }
     
     .default-table-area table thead {
-        border-bottom: 1px solid #dee2e6;
+        border-bottom: 2px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
         vertical-align: middle;
-        line-height: 1.3;
-        height: 32px;
+        line-height: 1.4;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
+        color: #495057;
+        text-transform: none;
     }
     
     .default-table-area table thead th:first-child {
@@ -565,11 +571,12 @@
     }
     
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
+        background-color: white;
     }
     
     .default-table-area table tbody td:first-child {
@@ -584,57 +591,32 @@
         border-bottom: 1px solid #dee2e6;
     }
     
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 10px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 10px;
-    }
-    
-    .default-table-area table tbody tr {
-        height: 36px;
-    }
-    
-    .default-table-area table tbody tr:first-child td {
-        border-top: none;
-    }
-    
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
-    }
-    
     .default-table-area table tbody tr:hover {
         background-color: #f8f9fa;
     }
     
+    .default-table-area table tbody tr:hover td {
+        background-color: #f8f9fa;
+    }
+    
     .default-table-area .badge {
-        font-size: 11px;
-        padding: 3px 6px;
-        font-weight: 500;
+        font-size: 12px;
+        padding: 4px 8px;
+        font-weight: 600;
     }
     
     .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
+        font-size: 14px !important;
     }
     
     .default-table-area .btn-sm {
-        font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        font-size: 13px;
+        padding: 4px 8px;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
         font-size: 14px !important;
         vertical-align: middle;
-        color: white !important;
     }
     
     .default-table-area .btn-primary .material-symbols-outlined,
@@ -650,9 +632,10 @@ function resetForm() {
     document.getElementById('eventForm').reset();
     document.getElementById('eventForm').action = "{{ route('events.store') }}";
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('eventModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">event</span>
-        <span>Add New Event</span>
+    const modalLabel = document.getElementById('eventModalLabel');
+    modalLabel.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">event</span>
+        <span style="color: white;">Add New Event</span>
     `;
     document.querySelector('.event-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -667,9 +650,10 @@ function editEvent(id) {
         .then(data => {
             document.getElementById('eventForm').action = '{{ route('events.update', ':id') }}'.replace(':id', id);
             document.getElementById('methodField').innerHTML = '@method("PUT")';
-            document.getElementById('eventModalLabel').innerHTML = `
-                <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-                <span>Edit Event</span>
+            const modalLabel = document.getElementById('eventModalLabel');
+            modalLabel.innerHTML = `
+                <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+                <span style="color: white;">Edit Event</span>
             `;
             document.querySelector('.event-submit-btn').innerHTML = `
                 <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>

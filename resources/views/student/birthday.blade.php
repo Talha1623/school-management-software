@@ -57,44 +57,44 @@
             </div>
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table" id="studentBirthdayTable">
+                <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
+                    <table class="table table-sm table-hover" id="studentBirthdayTable" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>Picture</th>
-                                <th>Student</th>
-                                <th>Parent</th>
-                                <th>Class</th>
-                                <th>Section</th>
-                                <th>Birthday</th>
-                                <th>Status</th>
-                                <th>Birthday Card</th>
-                                <th>Wish</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Picture</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Class</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Section</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Birthday</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Status</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Birthday Card</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Wish</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($students as $index => $student)
                                 <tr>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($student['picture'])
-                                            <img src="{{ $student['picture'] }}" alt="Student" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">
+                                            <img src="{{ $student['picture'] }}" alt="Student" class="rounded-circle" style="width: 32px; height: 32px; object-fit: cover;">
                                         @else
-                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                                <span class="material-symbols-outlined text-muted" style="font-size: 20px;">person</span>
+                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                                <span class="material-symbols-outlined text-muted" style="font-size: 16px;">person</span>
                                             </div>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <strong class="text-primary">{{ $student['student'] ?? 'N/A' }}</strong>
                                     </td>
-                                    <td>{{ $student['parent'] ?? 'N/A' }}</td>
-                                    <td>
-                                        <span class="badge bg-primary text-white">{{ $student['class'] ?? 'N/A' }}</span>
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $student['parent'] ?? 'N/A' }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-primary text-white" style="font-size: 11px;">{{ $student['class'] ?? 'N/A' }}</span>
                                     </td>
-                                    <td>
-                                        <span class="badge bg-secondary text-white">{{ $student['section'] ?? 'N/A' }}</span>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $student['section'] ?? 'N/A' }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <span class="text-muted">
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
                                             @if(isset($student['birthday']) && $student['birthday'])
@@ -104,7 +104,7 @@
                                             @endif
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @php
                                             $statusClass = match($student['status'] ?? '') {
                                                 'Today' => 'bg-success',
@@ -113,19 +113,19 @@
                                                 default => 'bg-secondary'
                                             };
                                         @endphp
-                                        <span class="badge {{ $statusClass }} text-white">{{ $student['status'] ?? 'N/A' }}</span>
+                                        <span class="badge {{ $statusClass }} text-white" style="font-size: 11px;">{{ $student['status'] ?? 'N/A' }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @php
                                             $cardClass = ($student['birthday_card'] ?? '') === 'Sent' ? 'bg-success' : 'bg-warning';
                                         @endphp
-                                        <span class="badge {{ $cardClass }} text-white">{{ $student['birthday_card'] ?? 'Pending' }}</span>
+                                        <span class="badge {{ $cardClass }} text-white" style="font-size: 11px;">{{ $student['birthday_card'] ?? 'Pending' }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @php
                                             $wishClass = ($student['wish'] ?? '') === 'Sent' ? 'bg-success' : 'bg-warning';
                                         @endphp
-                                        <span class="badge {{ $wishClass }} text-white">{{ $student['wish'] ?? 'Pending' }}</span>
+                                        <span class="badge {{ $wishClass }} text-white" style="font-size: 11px;">{{ $student['wish'] ?? 'Pending' }}</span>
                                     </td>
                                 </tr>
                             @empty

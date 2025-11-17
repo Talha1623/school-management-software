@@ -27,7 +27,7 @@
             <!-- Filter Form -->
             <div class="card border-0 shadow-sm" style="border-radius: 8px; overflow: hidden;">
                 <div class="card-body p-4">
-                    <form action="#" method="POST" id="gatePassForm">
+                    <form action="{{ route('parent.print-gate-passes.filter') }}" method="POST" id="gatePassForm">
                         @csrf
                         <div class="row g-3 align-items-end">
                             <!-- Campus -->
@@ -37,9 +37,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="campus" id="campus">
                                     <option value="">All Campus</option>
-                                    <option value="Main Campus">Main Campus</option>
-                                    <option value="Branch Campus 1">Branch Campus 1</option>
-                                    <option value="Branch Campus 2">Branch Campus 2</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name }}" {{ request('campus') == $campus->campus_name ? 'selected' : '' }}>{{ $campus->campus_name }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -50,9 +50,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="parent_type" id="parent_type">
                                     <option value="">All Types</option>
-                                    <option value="Father">Father</option>
-                                    <option value="Mother">Mother</option>
-                                    <option value="Guardian">Guardian</option>
+                                    @foreach($parentTypes as $parentType)
+                                        <option value="{{ $parentType }}" {{ request('parent_type') == $parentType ? 'selected' : '' }}>{{ $parentType }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -63,10 +63,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="pass_validity" id="pass_validity">
                                     <option value="">All</option>
-                                    <option value="1 Month">1 Month</option>
-                                    <option value="3 Months">3 Months</option>
-                                    <option value="6 Months">6 Months</option>
-                                    <option value="1 Year">1 Year</option>
+                                    @foreach($passValidities as $passValidity)
+                                        <option value="{{ $passValidity }}" {{ request('pass_validity') == $passValidity ? 'selected' : '' }}>{{ $passValidity }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -77,9 +76,9 @@
                                 </label>
                                 <select class="form-select form-select-sm" name="card_type" id="card_type">
                                     <option value="">All Types</option>
-                                    <option value="Regular">Regular</option>
-                                    <option value="VIP">VIP</option>
-                                    <option value="Premium">Premium</option>
+                                    @foreach($cardTypes as $cardType)
+                                        <option value="{{ $cardType }}" {{ request('card_type') == $cardType ? 'selected' : '' }}>{{ $cardType }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 
@@ -161,11 +160,24 @@
 </style>
 
 <script>
-// Form submission
+// Form submission - redirect to print page in new tab
 document.getElementById('gatePassForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    // Filter logic will be implemented here
-    alert('Filter functionality will be implemented here');
+    
+    // Get form data
+    const formData = new FormData(this);
+    const params = new URLSearchParams();
+    
+    // Add form values to params
+    for (const [key, value] of formData.entries()) {
+        if (value) {
+            params.append(key, value);
+        }
+    }
+    
+    // Open print page in new tab
+    const printUrl = '{{ route("parent.print-gate-passes.print") }}?' + params.toString();
+    window.open(printUrl, '_blank');
 });
 </script>
 @endsection

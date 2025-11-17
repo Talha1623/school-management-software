@@ -104,5 +104,101 @@ class StaffSalaryReportController extends Controller
             'filterYear'
         ));
     }
+
+    /**
+     * Display the summarized salary & attendance report for all staff.
+     */
+    public function summarized(Request $request): View
+    {
+        // Get filter values
+        $filterCampus = $request->get('filter_campus');
+        $filterYear = $request->get('filter_year', date('Y')); // Default to current year
+
+        // Get all staff (dynamic - will include any newly added staff)
+        $staffQuery = Staff::query();
+        
+        if ($filterCampus) {
+            $staffQuery->where('campus', $filterCampus);
+        }
+
+        // Fetch all staff members - automatically includes newly added staff
+        $allStaff = $staffQuery->orderBy('name')->get();
+
+        // Month names
+        $monthNames = [
+            '01' => 'January',
+            '02' => 'February',
+            '03' => 'March',
+            '04' => 'April',
+            '05' => 'May',
+            '06' => 'June',
+            '07' => 'July',
+            '08' => 'August',
+            '09' => 'September',
+            '10' => 'October',
+            '11' => 'November',
+            '12' => 'December',
+        ];
+
+        // Get campuses for filter
+        $campuses = Staff::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
+        
+        if ($campuses->isEmpty()) {
+            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+        }
+
+        // Year options (current year and previous 5 years)
+        $currentYear = date('Y');
+        $years = collect();
+        for ($i = 0; $i < 6; $i++) {
+            $years->push($currentYear - $i);
+        }
+
+        // Prepare staff data with monthly salary records
+        $staffReports = collect();
+        
+        foreach ($allStaff as $staff) {
+            // Get all salary records for this staff for the selected year
+            $salaries = Salary::where('staff_id', $staff->id)
+                ->where('year', $filterYear)
+                ->get()
+                ->keyBy('salary_month');
+
+            // Prepare monthly data
+            $monthlyData = [];
+            foreach ($monthNames as $monthNum => $monthName) {
+                $salary = $salaries->get($monthNum);
+                
+                $monthlyData[] = [
+                    'month' => $monthName,
+                    'month_num' => $monthNum,
+                    'present' => $salary ? $salary->present : 0,
+                    'absent' => $salary ? $salary->absent : 0,
+                    'late' => $salary ? $salary->late : 0,
+                    'leaves' => $salary ? $salary->leaves : 0,
+                    'holidays' => $salary ? $salary->holidays : 0,
+                    'sundays' => $salary ? $salary->sundays : 0,
+                    'basic_salary' => $salary ? $salary->basic : ($staff->salary ?? 0),
+                    'salary_generated' => $salary ? $salary->salary_generated : 0,
+                    'amount_paid' => $salary ? $salary->amount_paid : 0,
+                    'loan_repayment' => $salary ? $salary->loan_repayment : 0,
+                ];
+            }
+
+            $staffReports->push([
+                'staff' => $staff,
+                'monthly_data' => $monthlyData,
+            ]);
+        }
+
+        return view('reports.staff-salary-summarized', compact(
+            'staffReports',
+            'filterCampus',
+            'filterYear',
+            'campuses',
+            'years',
+            'monthNames'
+        ));
+    }
 }
 

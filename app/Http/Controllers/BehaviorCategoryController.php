@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BehaviorCategory;
+use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
@@ -35,13 +36,30 @@ class BehaviorCategoryController extends Controller
         
         $categories = $query->orderBy('category_name')->paginate($perPage)->withQueryString();
         
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
+        // If no campuses found, get from classes or sections
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
         }
         
         return view('student-behavior.categories', compact('categories', 'campuses'));

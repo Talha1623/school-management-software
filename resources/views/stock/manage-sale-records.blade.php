@@ -12,52 +12,62 @@
 
             <!-- Filter Form -->
             <form action="{{ route('stock.manage-sale-records') }}" method="GET" id="filterForm">
-                <div class="row g-2 mb-3 align-items-end">
-                    <!-- Month -->
-                    <div class="col-md-2">
-                        <label for="filter_month" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Month</label>
-                        <select class="form-select form-select-sm" id="filter_month" name="filter_month" style="height: 32px;">
-                            <option value="">All Months</option>
-                            @foreach($months as $monthValue => $monthName)
-                                <option value="{{ $monthValue }}" {{ $filterMonth == $monthValue ? 'selected' : '' }}>{{ $monthName }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                <div class="p-3 rounded-8 mb-3" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
+                    <div class="row g-2 align-items-end">
+                        <!-- Month -->
+                        <div class="col-md-2 col-sm-6">
+                            <label for="filter_month" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Month</label>
+                            <select class="form-select form-select-sm filter-select" id="filter_month" name="filter_month">
+                                <option value="">All Months</option>
+                                @foreach($months as $monthValue => $monthName)
+                                    <option value="{{ $monthValue }}" {{ $filterMonth == $monthValue ? 'selected' : '' }}>{{ $monthName }}</option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    <!-- Date -->
-                    <div class="col-md-2">
-                        <label for="filter_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Date</label>
-                        <input type="date" class="form-control form-control-sm" id="filter_date" name="filter_date" value="{{ $filterDate }}" style="height: 32px;">
-                    </div>
+                        <!-- Date -->
+                        <div class="col-md-2 col-sm-6">
+                            <label for="filter_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Date</label>
+                            <input type="date" class="form-control form-control-sm filter-input" id="filter_date" name="filter_date" value="{{ $filterDate }}">
+                        </div>
 
-                    <!-- Year -->
-                    <div class="col-md-2">
-                        <label for="filter_year" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Year</label>
-                        <select class="form-select form-select-sm" id="filter_year" name="filter_year" style="height: 32px;">
-                            <option value="">All Years</option>
-                            @foreach($years as $year)
-                                <option value="{{ $year }}" {{ $filterYear == $year ? 'selected' : '' }}>{{ $year }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                        <!-- Year -->
+                        <div class="col-md-2 col-sm-6">
+                            <label for="filter_year" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Year</label>
+                            <select class="form-select form-select-sm filter-select" id="filter_year" name="filter_year">
+                                <option value="">All Years</option>
+                                @foreach($years as $year)
+                                    <option value="{{ $year }}" {{ $filterYear == $year ? 'selected' : '' }}>{{ $year }}</option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    <!-- Method -->
-                    <div class="col-md-2">
-                        <label for="filter_method" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Method</label>
-                        <select class="form-select form-select-sm" id="filter_method" name="filter_method" style="height: 32px;">
-                            <option value="">All Methods</option>
-                            @foreach($methods as $method)
-                                <option value="{{ $method }}" {{ $filterMethod == $method ? 'selected' : '' }}>{{ $method }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                        <!-- Method -->
+                        <div class="col-md-2 col-sm-6">
+                            <label for="filter_method" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Method</label>
+                            <select class="form-select form-select-sm filter-select" id="filter_method" name="filter_method">
+                                <option value="">All Methods</option>
+                                @foreach($methods as $method)
+                                    <option value="{{ $method }}" {{ $filterMethod == $method ? 'selected' : '' }}>{{ $method }}</option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    <!-- Filter Button -->
-                    <div class="col-md-2">
-                        <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn w-100" style="height: 32px;">
-                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_alt</span>
-                            <span style="font-size: 12px;">Filter</span>
-                        </button>
+                        <!-- Filter Button -->
+                        <div class="col-md-2 col-sm-6">
+                            <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn w-100 d-inline-flex align-items-center justify-content-center gap-1">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">filter_alt</span>
+                                <span style="font-size: 12px; white-space: nowrap;">Filter</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Clear Button -->
+                        <div class="col-md-2 col-sm-6">
+                            <a href="{{ route('stock.manage-sale-records') }}" class="btn btn-sm py-1 px-3 rounded-8 clear-btn w-100 d-inline-flex align-items-center justify-content-center gap-1">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
+                                <span style="font-size: 12px; white-space: nowrap;">Clear</span>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </form>
@@ -149,17 +159,53 @@
 </div>
 
 <style>
+.filter-select,
+.filter-input {
+    height: 32px;
+    font-size: 13px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+    border-color: #003471;
+    box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    outline: none;
+}
+
 .filter-btn {
     background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
     color: white;
     border: none;
     transition: all 0.3s ease;
+    height: 32px;
+    font-weight: 500;
 }
 
 .filter-btn:hover {
     background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
+    color: white;
+}
+
+.clear-btn {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    height: 32px;
+    font-weight: 500;
+}
+
+.clear-btn:hover {
+    background-color: #5a6268;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
 }
 
 .default-table-area {

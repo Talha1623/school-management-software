@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\ManagementExpense;
 use App\Models\ExpenseCategory;
+use App\Models\Campus;
+use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Storage;
 
 class ManagementExpenseController extends Controller
 {
@@ -37,10 +41,36 @@ class ManagementExpenseController extends Controller
         
         $expenses = $query->orderBy('date', 'desc')->paginate($perPage)->withQueryString();
         
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
         // Get expense categories for dropdown
         $categories = ExpenseCategory::orderBy('category_name')->get();
         
-        return view('expense-management.add', compact('expenses', 'categories'));
+        return view('expense-management.add', compact('expenses', 'categories', 'campuses'));
     }
 
     /**
@@ -55,12 +85,20 @@ class ManagementExpenseController extends Controller
             'description' => ['nullable', 'string'],
             'amount' => ['required', 'numeric', 'min:0'],
             'method' => ['required', 'string', 'max:255'],
-            'invoice_receipt' => ['nullable', 'string', 'max:255'],
+            'invoice_receipt' => ['nullable', 'image', 'mimes:jpeg,jpg,png,gif,webp', 'max:5120'], // 5MB max
             'date' => ['required', 'date'],
             'notify_admin' => ['nullable', 'boolean'],
         ]);
 
         $validated['notify_admin'] = $request->has('notify_admin') ? true : false;
+
+        // Handle file upload
+        if ($request->hasFile('invoice_receipt')) {
+            $file = $request->file('invoice_receipt');
+            $filename = 'expense_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $path = $file->storeAs('expenses/invoices', $filename, 'public');
+            $validated['invoice_receipt'] = $path;
+        }
 
         ManagementExpense::create($validated);
 
@@ -81,12 +119,28 @@ class ManagementExpenseController extends Controller
             'description' => ['nullable', 'string'],
             'amount' => ['required', 'numeric', 'min:0'],
             'method' => ['required', 'string', 'max:255'],
-            'invoice_receipt' => ['nullable', 'string', 'max:255'],
+            'invoice_receipt' => ['nullable', 'image', 'mimes:jpeg,jpg,png,gif,webp', 'max:5120'], // 5MB max
             'date' => ['required', 'date'],
             'notify_admin' => ['nullable', 'boolean'],
         ]);
 
         $validated['notify_admin'] = $request->has('notify_admin') ? true : false;
+
+        // Handle file upload
+        if ($request->hasFile('invoice_receipt')) {
+            // Delete old file if exists
+            if ($managementExpense->invoice_receipt && Storage::disk('public')->exists($managementExpense->invoice_receipt)) {
+                Storage::disk('public')->delete($managementExpense->invoice_receipt);
+            }
+            
+            $file = $request->file('invoice_receipt');
+            $filename = 'expense_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $path = $file->storeAs('expenses/invoices', $filename, 'public');
+            $validated['invoice_receipt'] = $path;
+        } else {
+            // Keep existing file if no new file uploaded
+            unset($validated['invoice_receipt']);
+        }
 
         $managementExpense->update($validated);
 
@@ -100,6 +154,11 @@ class ManagementExpenseController extends Controller
      */
     public function destroy(ManagementExpense $managementExpense): RedirectResponse
     {
+        // Delete associated image file if exists
+        if ($managementExpense->invoice_receipt && Storage::disk('public')->exists($managementExpense->invoice_receipt)) {
+            Storage::disk('public')->delete($managementExpense->invoice_receipt);
+        }
+        
         $managementExpense->delete();
 
         return redirect()

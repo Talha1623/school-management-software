@@ -18,12 +18,23 @@ class StudentPayment extends Model
         'method',
         'payment_date',
         'sms_notification',
+        'accountant',
+        'late_fee',
     ];
+    
+    /**
+     * Get the student that owns the payment.
+     */
+    public function student()
+    {
+        return $this->belongsTo(Student::class, 'student_code', 'student_code');
+    }
 
     protected $casts = [
         'payment_amount' => 'decimal:2',
         'discount' => 'decimal:2',
-        'payment_date' => 'date',
+        'late_fee' => 'decimal:2',
+        'payment_date' => 'datetime',
     ];
 }
 

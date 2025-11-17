@@ -13,6 +13,7 @@ class BehaviorRecord extends Model
         'student_id',
         'student_name',
         'type',
+        'points',
         'class',
         'section',
         'campus',
@@ -23,6 +24,7 @@ class BehaviorRecord extends Model
 
     protected $casts = [
         'date' => 'date',
+        'points' => 'integer',
     ];
 
     /**

@@ -25,5 +25,13 @@ class ParentAccount extends Model
     protected $hidden = [
         'password',
     ];
+
+    /**
+     * Get the students for this parent account.
+     */
+    public function students()
+    {
+        return $this->hasMany(Student::class, 'parent_account_id');
+    }
 }
 

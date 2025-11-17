@@ -102,7 +102,7 @@
                     @if(isset($feeTypes))
                         ({{ $feeTypes->total() }} {{ Str::plural('result', $feeTypes->total()) }} found)
                     @endif
-                    <a href="{{ route('accounting.fee-type.index') }}" class="text-decoration-none ms-2" style="color: #003471;">
+                    <a href="{{ route('accounting.fee-type') }}" class="text-decoration-none ms-2" style="color: #003471;">
                         <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span>
                         Clear
                     </a>
@@ -111,7 +111,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -126,17 +126,17 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($feeTypes->currentPage() - 1) * $feeTypes->perPage()) }}</td>
                                         <td>
-                                            <strong class="text-primary">{{ $feeType->fee_name }}</strong>
+                                            <strong class="text-dark">{{ $feeType->fee_name }}</strong>
                                         </td>
                                         <td>
-                                            <span class="badge bg-info text-white">{{ $feeType->campus }}</span>
+                                            <span class="badge" style="background-color: #17a2b8; color: white; font-size: 11px; padding: 3px 6px;">{{ $feeType->campus }}</span>
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editFeeType({{ $feeType->id }})">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editFeeType({{ $feeType->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this fee type?')) { document.getElementById('delete-form-{{ $feeType->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this fee type?')) { document.getElementById('delete-form-{{ $feeType->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $feeType->id }}" action="{{ route('accounting.fee-type.destroy', $feeType) }}" method="POST" class="d-none">
@@ -181,9 +181,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="feeTypeModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">payments</span>
-                    <span>Add New Fee Type</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="feeTypeModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">payments</span>
+                    <span style="color: white !important;">Add New Fee Type</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -209,16 +209,8 @@
                                 </span>
                                 <select class="form-control fee-type-input" name="campus" id="campus" required>
                                     <option value="">Select Campus</option>
-                                    @php
-                                        $campuses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                                        $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
-                                        $allCampuses = $campuses->merge($campusesFromSections)->unique()->sort()->values();
-                                        if ($allCampuses->isEmpty()) {
-                                            $allCampuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-                                        }
-                                    @endphp
-                                    @foreach($allCampuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -475,77 +467,32 @@
         border-spacing: 0;
         border-collapse: collapse;
         border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
     }
     
     .default-table-area table thead {
         border-bottom: 1px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         font-weight: 600;
         vertical-align: middle;
         line-height: 1.3;
-        height: 32px;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
-    .default-table-area table thead th:first-child {
-        border-left: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table thead th:last-child {
-        border-right: 1px solid #dee2e6;
-    }
-    
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody td:first-child {
-        border-left: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody td:last-child {
-        border-right: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table tbody tr:last-child td {
-        border-bottom: 1px solid #dee2e6;
-    }
-    
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 10px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 10px;
-    }
-    
-    .default-table-area table tbody tr {
-        height: 36px;
-    }
-    
-    .default-table-area table tbody tr:first-child td {
-        border-top: none;
-    }
-    
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
     }
     
     .default-table-area table tbody tr:hover {
@@ -556,16 +503,13 @@
         font-size: 11px;
         padding: 3px 6px;
         font-weight: 500;
-    }
-    
-    .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
+        border-radius: 4px;
     }
     
     .default-table-area .btn-sm {
         font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        padding: 3px 6px;
+        min-height: auto;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
@@ -578,6 +522,11 @@
     .default-table-area .btn-danger .material-symbols-outlined {
         color: white !important;
     }
+    
+    .default-table-area table tbody td strong {
+        font-size: 13px;
+        font-weight: 600;
+    }
 </style>
 
 <script>
@@ -587,8 +536,8 @@ function resetForm() {
     document.getElementById('feeTypeForm').action = "{{ route('accounting.fee-type.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('feeTypeModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">payments</span>
-        <span>Add New Fee Type</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">payments</span>
+        <span style="color: white !important;">Add New Fee Type</span>
     `;
     document.querySelector('.fee-type-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -604,8 +553,8 @@ function editFeeType(id) {
             document.getElementById('feeTypeForm').action = '{{ route('accounting.fee-type.update', ':id') }}'.replace(':id', id);
             document.getElementById('methodField').innerHTML = '@method("PUT")';
             document.getElementById('feeTypeModalLabel').innerHTML = `
-                <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-                <span>Edit Fee Type</span>
+                <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">edit</span>
+                <span style="color: white !important;">Edit Fee Type</span>
             `;
             document.querySelector('.fee-type-submit-btn').innerHTML = `
                 <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>

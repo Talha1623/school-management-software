@@ -97,6 +97,7 @@
             <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">35/ 300</h5>
         </div>
     </div>
+    @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin())
     <div class="col">
         <div class="card border-0 rounded-10 p-2 h-100" style="background-color: #003471;">
             <div class="d-flex align-items-center mb-1">
@@ -108,6 +109,7 @@
             <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">Unlimited</h5>
         </div>
     </div>
+    @endif
     <div class="col">
         <div class="card border-0 rounded-10 p-2 h-100" style="background-color: #32b4ee;">
             <div class="d-flex align-items-center mb-1">

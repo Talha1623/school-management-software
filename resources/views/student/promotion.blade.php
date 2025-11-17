@@ -24,85 +24,418 @@
                 </div>
             @endif
 
+            <!-- Filter Form -->
+            <form method="GET" action="{{ route('student.promotion') }}" class="mb-3" id="filterForm">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label for="campus" class="form-label mb-0 fs-13 fw-medium">Campus</label>
+                        <select class="form-select form-select-sm" id="campus" name="campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                <option value="{{ $campus }}" {{ request('campus') == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="from_class" class="form-label mb-0 fs-13 fw-medium">Promotion From Class <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="from_class" name="from_class" style="height: 32px;" onchange="loadSectionsForFilter(this.value)">
+                            <option value="">Select Class</option>
+                            @foreach($classes as $class)
+                                <option value="{{ $class }}" {{ request('from_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="from_section" class="form-label mb-0 fs-13 fw-medium">Section</label>
+                        <select class="form-select form-select-sm" id="from_section" name="from_section" style="height: 32px;">
+                            <option value="">All Sections</option>
+                            @foreach($sections as $section)
+                                <option value="{{ $section }}" {{ request('from_section') == $section ? 'selected' : '' }}>{{ $section }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="to_class" class="form-label mb-0 fs-13 fw-medium">Promotion To Class <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="to_class" name="to_class" style="height: 32px;" onchange="loadSectionsForToClass(this.value)">
+                            <option value="">Select Class</option>
+                            @foreach($classes as $class)
+                                <option value="{{ $class }}" {{ request('to_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="to_section" class="form-label mb-0 fs-13 fw-medium">Section</label>
+                        <select class="form-select form-select-sm" id="to_section" name="to_section" style="height: 32px;">
+                            <option value="">All Sections</option>
+                            @foreach($sections as $section)
+                                <option value="{{ $section }}" {{ request('to_section') == $section ? 'selected' : '' }}>{{ $section }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-sm w-100" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; height: 32px; border: none;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">filter_list</span>
+                            Filter
+                        </button>
+                    </div>
+                    @if(request('campus') || request('from_class') || request('from_section'))
+                    <div class="col-md-2">
+                        <a href="{{ route('student.promotion') }}" class="btn btn-sm btn-outline-secondary w-100" style="height: 32px;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">clear</span>
+                            Clear
+                        </a>
+                    </div>
+                    @endif
+                </div>
+            </form>
+
+            @if($hasFilters && isset($students))
+            <!-- Table Toolbar -->
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
+                <!-- Left Side -->
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="entriesPerPage" class="mb-0 fs-13 fw-medium text-dark">Show:</label>
+                        <select id="entriesPerPage" class="form-select form-select-sm" style="width: auto; min-width: 70px;" onchange="updateEntriesPerPage(this.value)">
+                            <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
+                            <option value="25" {{ request('per_page', 25) == 25 ? 'selected' : '' }}>25</option>
+                            <option value="50" {{ request('per_page', 50) == 50 ? 'selected' : '' }}>50</option>
+                            <option value="100" {{ request('per_page', 100) == 100 ? 'selected' : '' }}>100</option>
+                        </select>
+                    </div>
+                    <h5 class="mb-0 fs-14 fw-semibold text-dark">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">info</span>
+                        {{ $students->total() }} {{ Str::plural('student', $students->total()) }} found
+                    </h5>
+                </div>
+            </div>
+
+            <!-- Students Table -->
+            <div class="default-table-area" style="margin-top: 0;">
+                <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
+                    <table class="table table-sm table-hover" style="margin-bottom: 0; white-space: nowrap;">
+                        <thead>
+                            <tr>
+                                <th style="padding: 8px 12px; font-size: 13px;">#</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student Name</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Father Name</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Phone</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Class</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Section</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Gender</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Date of Birth</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Admission Date</th>
+                                <th style="padding: 8px 12px; font-size: 13px; text-align: center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($students as $student)
+                                <tr>
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $loop->iteration + (($students->currentPage() - 1) * $students->perPage()) }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <strong class="text-primary">{{ $student->student_name }}</strong>
+                                        @if($student->surname_caste)
+                                            <span class="text-muted">({{ $student->surname_caste }})</span>
+                                        @endif
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        @if($student->student_code)
+                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $student->student_code }}</span>
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $student->father_name ?? 'N/A' }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-light text-dark" style="font-size: 11px;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">phone</span>
+                                            {{ $student->father_phone ?? $student->whatsapp_number ?? 'N/A' }}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-primary text-white" style="font-size: 11px;">{{ $student->class ?? 'N/A' }}</span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        @if($student->section)
+                                            <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $student->section }}</span>
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        @php
+                                            $genderClass = match($student->gender) {
+                                                'male' => 'bg-info',
+                                                'female' => 'bg-danger',
+                                                default => 'bg-secondary'
+                                            };
+                                        @endphp
+                                        <span class="badge {{ $genderClass }} text-white text-capitalize" style="font-size: 11px;">
+                                            {{ $student->gender ?? 'N/A' }}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="text-muted">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
+                                            {{ $student->date_of_birth ? $student->date_of_birth->format('d M Y') : 'N/A' }}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="text-muted">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event</span>
+                                            {{ $student->admission_date ? $student->admission_date->format('d M Y') : 'N/A' }}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
+                                        <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="viewStudent({{ $student->id }})" title="View Details">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="11" class="text-center text-muted py-5">
+                                        <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">school</span>
+                                        <p class="mt-2 mb-0">No students found.</p>
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if($students->hasPages())
+                <div class="mt-3">
+                    {{ $students->links() }}
+                </div>
+            @endif
+
             <!-- Promotion Form -->
-            <div class="card border-0 shadow-sm" style="border-radius: 8px; overflow: hidden;">
+            @if($hasFilters && $students->count() > 0)
+            <div class="card border-0 shadow-sm mt-4" style="border-radius: 8px; overflow: hidden;">
                 <div class="card-body p-4">
+                    <h5 class="mb-3 fw-semibold" style="color: #003471;">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">trending_up</span>
+                        Promote Selected Students
+                    </h5>
                     <form action="{{ route('student.promotion.promote') }}" method="POST" id="promotionForm">
                         @csrf
+                        <input type="hidden" name="campus" value="{{ request('campus') }}">
+                        <input type="hidden" name="from_class" value="{{ request('from_class') }}">
+                        <input type="hidden" name="from_section" value="{{ request('from_section') }}">
                         <div class="row g-3 align-items-end">
-                            <!-- Campus -->
-                            <div class="col-md-2">
-                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
-                                    Campus
-                                </label>
-                                <select class="form-select form-select-sm" name="campus" id="campus">
-                                    <option value="">All Campus</option>
-                                    @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-
-                            <!-- Promotion From Class -->
-                            <div class="col-md-2">
-                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
-                                    Promotion From Class <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-select form-select-sm" name="from_class" id="from_class" required onchange="updateFromSections()">
-                                    <option value="">Select Class</option>
-                                    @foreach($classes as $class)
-                                        <option value="{{ $class }}">{{ $class }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-
-                            <!-- From Section -->
-                            <div class="col-md-2">
-                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
-                                    Section
-                                </label>
-                                <select class="form-select form-select-sm" name="from_section" id="from_section">
-                                    <option value="">All Sections</option>
-                                </select>
-                            </div>
-
-                            <!-- Promotion To Class -->
-                            <div class="col-md-2">
+                            <div class="col-md-4">
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Promotion To Class <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select form-select-sm" name="to_class" id="to_class" required onchange="updateToSections()">
+                                <select class="form-select form-select-sm" name="to_class" id="promotion_to_class" required style="height: 32px;" onchange="loadSectionsForPromotionForm(this.value)">
                                     <option value="">Select Class</option>
                                     @foreach($classes as $class)
-                                        <option value="{{ $class }}">{{ $class }}</option>
+                                        <option value="{{ $class }}" {{ request('to_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
                                     @endforeach
                                 </select>
                             </div>
-
-                            <!-- To Section -->
-                            <div class="col-md-2">
+                            <div class="col-md-4">
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Section
                                 </label>
-                                <select class="form-select form-select-sm" name="to_section" id="to_section">
+                                <select class="form-select form-select-sm" name="to_section" id="promotion_to_section" style="height: 32px;">
                                     <option value="">All Sections</option>
+                                    @foreach($sections as $section)
+                                        <option value="{{ $section }}" {{ request('to_section') == $section ? 'selected' : '' }}>{{ $section }}</option>
+                                    @endforeach
                                 </select>
                             </div>
-
-                            <!-- Manage Promotion Button -->
-                            <div class="col-md-2">
-                                <button type="submit" class="btn btn-primary w-100 promotion-btn">
+                            <div class="col-md-4">
+                                <button type="submit" class="btn btn-primary w-100 promotion-btn" style="height: 32px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">trending_up</span>
-                                    <span style="font-size: 12px;">Manage Promotion</span>
+                                    <span style="font-size: 12px;">Promote Students</span>
                                 </button>
                             </div>
                         </div>
                     </form>
                 </div>
             </div>
+            @endif
+            @else
+            <!-- Message when no filters applied -->
+            <div class="text-center py-5">
+                <span class="material-symbols-outlined" style="font-size: 64px; color: #dee2e6; opacity: 0.5;">filter_list</span>
+                <h5 class="mt-3 text-muted">Apply Filters to View Students</h5>
+                <p class="text-muted mb-0">Please select Campus, Class, or Section and click Filter to view students list.</p>
+            </div>
+            @endif
         </div>
     </div>
 </div>
+
+<script>
+// Update entries per page
+function updateEntriesPerPage(value) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('per_page', value);
+    url.searchParams.delete('page');
+    window.location.href = url.toString();
+}
+
+// Load sections based on class selection for "From Class"
+function loadSectionsForFilter(selectedClass) {
+    const sectionSelect = document.getElementById('from_section');
+    
+    if (!selectedClass) {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        return;
+    }
+    
+    // Clear existing options
+    sectionSelect.innerHTML = '<option value="">Loading...</option>';
+    
+    // Fetch sections for the selected class
+    fetch(`{{ route('student.promotion.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    // Preserve selected value if it matches
+                    const selectedSection = '{{ request('from_section') }}';
+                    if (selectedSection && selectedSection === section) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        });
+}
+
+// Load sections based on class selection for "To Class"
+function loadSectionsForToClass(selectedClass) {
+    const sectionSelect = document.getElementById('to_section');
+    
+    if (!selectedClass) {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        return;
+    }
+    
+    // Clear existing options
+    sectionSelect.innerHTML = '<option value="">Loading...</option>';
+    
+    // Fetch sections for the selected class
+    fetch(`{{ route('student.promotion.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    // Preserve selected value if it matches
+                    const selectedSection = '{{ request('to_section') }}';
+                    if (selectedSection && selectedSection === section) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        });
+}
+
+// View student details
+function viewStudent(studentId) {
+    window.location.href = '{{ route("student.view", ":id") }}'.replace(':id', studentId);
+}
+
+// Form validation for promotion
+document.getElementById('promotionForm')?.addEventListener('submit', function(e) {
+    const fromClass = '{{ request('from_class') }}';
+    const toClass = document.getElementById('promotion_to_class').value;
+    
+    if (!toClass) {
+        e.preventDefault();
+        alert('Please select Promotion To Class');
+        return false;
+    }
+    
+    if (fromClass === toClass) {
+        e.preventDefault();
+        alert('Promotion From Class and Promotion To Class cannot be the same');
+        return false;
+    }
+    
+    const studentCount = {{ $students->count() ?? 0 }};
+    if (!confirm('Are you sure you want to promote ' + studentCount + ' student(s)? This action cannot be undone.')) {
+        e.preventDefault();
+        return false;
+    }
+});
+
+// Load sections for promotion form (below table)
+function loadSectionsForPromotionForm(selectedClass) {
+    const sectionSelect = document.getElementById('promotion_to_section');
+    
+    if (!selectedClass) {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        return;
+    }
+    
+    // Clear existing options
+    sectionSelect.innerHTML = '<option value="">Loading...</option>';
+    
+    // Fetch sections for the selected class
+    fetch(`{{ route('student.promotion.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    sectionSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        });
+}
+
+// Load sections on page load if class is already selected
+document.addEventListener('DOMContentLoaded', function() {
+    const selectedFromClass = document.getElementById('from_class').value;
+    if (selectedFromClass) {
+        loadSectionsForFilter(selectedFromClass);
+    }
+    
+    const selectedToClass = document.getElementById('to_class').value;
+    if (selectedToClass) {
+        loadSectionsForToClass(selectedToClass);
+    }
+    
+    const selectedPromotionToClass = document.getElementById('promotion_to_class')?.value;
+    if (selectedPromotionToClass) {
+        loadSectionsForPromotionForm(selectedPromotionToClass);
+    }
+});
+</script>
 
 <style>
     .form-select-sm {
@@ -126,8 +459,6 @@
         font-weight: 500;
         padding: 4px 12px;
         font-size: 12px;
-        height: 32px;
-        line-height: 1.4;
         transition: all 0.3s ease;
         box-shadow: 0 2px 6px rgba(0, 52, 113, 0.2);
         border-radius: 6px;
@@ -147,76 +478,5 @@
     .promotion-btn:active {
         transform: translateY(0);
     }
-    
-    .form-label {
-        margin-bottom: 0.4rem;
-        line-height: 1.3;
-    }
 </style>
-
-<script>
-// Get all sections from students
-const allSections = @json($sections);
-
-function updateFromSections() {
-    const fromClass = document.getElementById('from_class').value;
-    const fromSectionSelect = document.getElementById('from_section');
-    
-    // Clear existing options except "All Sections"
-    fromSectionSelect.innerHTML = '<option value="">All Sections</option>';
-    
-    if (fromClass) {
-        // Filter sections based on selected class
-        // For now, show all sections - you can filter by class if needed
-        allSections.forEach(section => {
-            const option = document.createElement('option');
-            option.value = section;
-            option.textContent = section;
-            fromSectionSelect.appendChild(option);
-        });
-    }
-}
-
-function updateToSections() {
-    const toClass = document.getElementById('to_class').value;
-    const toSectionSelect = document.getElementById('to_section');
-    
-    // Clear existing options except "All Sections"
-    toSectionSelect.innerHTML = '<option value="">All Sections</option>';
-    
-    if (toClass) {
-        // Filter sections based on selected class
-        // For now, show all sections - you can filter by class if needed
-        allSections.forEach(section => {
-            const option = document.createElement('option');
-            option.value = section;
-            option.textContent = section;
-            toSectionSelect.appendChild(option);
-        });
-    }
-}
-
-// Form validation
-document.getElementById('promotionForm').addEventListener('submit', function(e) {
-    const fromClass = document.getElementById('from_class').value;
-    const toClass = document.getElementById('to_class').value;
-    
-    if (!fromClass || !toClass) {
-        e.preventDefault();
-        alert('Please select both Promotion From Class and Promotion To Class');
-        return false;
-    }
-    
-    if (fromClass === toClass) {
-        e.preventDefault();
-        alert('Promotion From Class and Promotion To Class cannot be the same');
-        return false;
-    }
-    
-    if (!confirm('Are you sure you want to promote students? This action cannot be undone.')) {
-        e.preventDefault();
-        return false;
-    }
-});
-</script>
 @endsection

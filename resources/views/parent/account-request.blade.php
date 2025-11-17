@@ -104,54 +104,54 @@
             @endif
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table">
+                <div class="table-responsive" style="overflow-x: auto;">
+                    <table class="table table-sm table-hover" style="white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Parent ID</th>
-                                <th>Request By</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>ID Card</th>
-                                <th>Request Status</th>
-                                <th class="text-end">Option</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">#</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Parent ID</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Request By</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Email</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Phone</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">ID Card</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Request Status</th>
+                                <th class="text-end" style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Option</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($requests as $request)
                                 <tr>
-                                    <td>{{ $loop->iteration + (($requests->currentPage() - 1) * $requests->perPage()) }}</td>
-                                    <td>
-                                        <span class="badge bg-info text-white">{{ $request->parent_id ?? 'N/A' }}</span>
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $loop->iteration + (($requests->currentPage() - 1) * $requests->perPage()) }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-info text-white" style="font-size: 11px;">{{ $request->parent_id ?? 'N/A' }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <strong class="text-primary">{{ $request->request_by ?? 'N/A' }}</strong>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <span class="text-muted">
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span>
                                             {{ $request->email ?? 'N/A' }}
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($request->phone)
-                                            <span class="badge bg-light text-dark">
-                                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">phone</span>
+                                            <span class="badge bg-light text-dark" style="font-size: 11px;">
+                                                <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">phone</span>
                                                 {{ $request->phone }}
                                             </span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($request->id_card)
-                                            <span class="badge bg-secondary text-white">{{ $request->id_card }}</span>
+                                            <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $request->id_card }}</span>
                                         @else
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @php
                                             $statusClass = match(strtolower($request->request_status ?? 'pending')) {
                                                 'approved' => 'bg-success',
@@ -160,11 +160,11 @@
                                                 default => 'bg-secondary'
                                             };
                                         @endphp
-                                        <span class="badge {{ $statusClass }} text-white">{{ $request->request_status ?? 'Pending' }}</span>
+                                        <span class="badge {{ $statusClass }} text-white" style="font-size: 11px;">{{ $request->request_status ?? 'Pending' }}</span>
                                     </td>
-                                    <td class="text-end">
+                                    <td class="text-end" style="padding: 8px 12px; font-size: 13px; text-align: center;">
                                         <div class="d-inline-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this request?')) { document.getElementById('delete-form-{{ $request->id }}').submit(); }">
+                                            <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this request?')) { document.getElementById('delete-form-{{ $request->id }}').submit(); }">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                             </button>
                                             <form id="delete-form-{{ $request->id }}" action="#" method="POST" class="d-none">

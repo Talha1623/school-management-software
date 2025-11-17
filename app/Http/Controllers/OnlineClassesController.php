@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\OnlineClass;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -37,20 +38,67 @@ class OnlineClassesController extends Controller
         
         $onlineClasses = $query->orderBy('start_date', 'desc')->paginate($perPage)->withQueryString();
         
-        // Get unique values for dropdowns
-        $campuses = ClassModel::distinct()->pluck('campus')->filter()->sort()->values()->toArray();
-        if (empty($campuses)) {
-            $campuses = ['Main Campus'];
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or online classes
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromOnlineClasses = OnlineClass::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromOnlineClasses)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
         }
         
-        $classes = ClassModel::distinct()->pluck('class_name')->sort()->values()->toArray();
-        if (empty($classes)) {
-            $classes = ['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
+        // Get classes from ClassModel
+        $classes = ClassModel::orderBy('class_name', 'asc')->get();
+        
+        // If no classes found, get from online classes
+        if ($classes->isEmpty()) {
+            $classesFromOnlineClasses = OnlineClass::whereNotNull('class')
+                ->distinct()
+                ->pluck('class')
+                ->sort()
+                ->values();
+            
+            // Convert to collection of objects with class_name property
+            $classes = collect();
+            foreach ($classesFromOnlineClasses as $className) {
+                $classes->push((object)['class_name' => $className]);
+            }
         }
         
-        $sections = Section::distinct()->pluck('name')->filter()->sort()->values()->toArray();
-        if (empty($sections)) {
-            $sections = ['A', 'B', 'C'];
+        // Get sections from Section model
+        $sections = Section::whereNotNull('name')
+            ->distinct()
+            ->orderBy('name', 'asc')
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        // If no sections found, get from online classes
+        if ($sections->isEmpty()) {
+            $sectionsFromOnlineClasses = OnlineClass::whereNotNull('section')
+                ->distinct()
+                ->pluck('section')
+                ->sort()
+                ->values();
+            
+            $sections = $sectionsFromOnlineClasses;
         }
         
         return view('online-classes', compact('onlineClasses', 'campuses', 'classes', 'sections'));

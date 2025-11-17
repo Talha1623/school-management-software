@@ -3,9 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Task;
+use App\Models\AdminRole;
+use App\Models\Accountant;
+use App\Models\Staff;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\DB;
 
 class TaskManagementController extends Controller
 {
@@ -37,13 +41,16 @@ class TaskManagementController extends Controller
         
         // Summary statistics
         $totalTasks = Task::count();
-        $pendingTasks = Task::where(function($q) {
-            $q->whereNull('assign_to')->orWhere('assign_to', '');
-        })->count();
-        $activeTasks = Task::whereNotNull('assign_to')->where('assign_to', '!=', '')->count();
-        $completedTasks = 0; // Can be updated when status field is added
+        $pendingTasks = Task::where('status', 'Pending')->count();
+        $activeTasks = Task::whereIn('status', ['Accepted', 'Pending'])->count();
+        $completedTasks = Task::where('status', 'Completed')->count();
         
-        return view('task-management', compact('tasks', 'totalTasks', 'pendingTasks', 'activeTasks', 'completedTasks'));
+        // Get all admins, accountants, and all staff members for dropdown
+        $admins = AdminRole::orderBy('name')->get(['id', 'name']);
+        $accountants = Accountant::orderBy('name')->get(['id', 'name']);
+        $staff = Staff::orderBy('name')->get(['id', 'name']);
+        
+        return view('task-management', compact('tasks', 'totalTasks', 'pendingTasks', 'activeTasks', 'completedTasks', 'admins', 'accountants', 'staff'));
     }
 
     /**
@@ -57,6 +64,9 @@ class TaskManagementController extends Controller
             'type' => ['nullable', 'string', 'max:255'],
             'assign_to' => ['nullable', 'string', 'max:255'],
         ]);
+
+        // Set default status to Pending for new tasks
+        $validated['status'] = 'Pending';
 
         Task::create($validated);
 
@@ -114,6 +124,52 @@ class TaskManagementController extends Controller
         return redirect()
             ->route('task-management')
             ->with('success', 'All tasks deleted successfully!');
+    }
+
+    /**
+     * Update task status.
+     */
+    public function updateStatus(Request $request, Task $task)
+    {
+        try {
+            $request->validate([
+                'status' => ['required', 'string', 'in:Pending,Accepted,Returned,Completed'],
+            ]);
+
+            // Ensure status value is properly formatted and matches enum
+            $status = ucfirst(trim($request->status));
+            
+            // Validate against allowed enum values
+            $allowedStatuses = ['Pending', 'Accepted', 'Returned', 'Completed'];
+            if (!in_array($status, $allowedStatuses)) {
+                throw new \InvalidArgumentException("Invalid status value: {$status}");
+            }
+            
+            // Update using model's update method with proper attribute setting
+            $task->status = $status;
+            $task->save();
+            
+            // Refresh the task to get updated status
+            $task->refresh();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Task status updated successfully',
+                'status' => $task->status,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error: ' . $e->getMessage(),
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Task status update error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating task status: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

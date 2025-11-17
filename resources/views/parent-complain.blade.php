@@ -68,7 +68,7 @@
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by parent name, email, phone..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 13px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by parent name, email, phone..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 12px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -107,7 +107,7 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -137,7 +137,7 @@
                                         </td>
                                         <td>
                                             @if($complain->phone)
-                                                <span class="badge bg-light text-dark">
+                                                <span class="text-muted">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">phone</span>
                                                     {{ $complain->phone }}
                                                 </span>
@@ -146,7 +146,7 @@
                                             @endif
                                         </td>
                                         <td>
-                                            <span class="badge bg-info text-white">{{ $complain->subject ?? 'N/A' }}</span>
+                                            <span class="badge bg-primary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $complain->subject ?? 'N/A' }}</span>
                                         </td>
                                         <td>
                                             <span class="text-muted">{{ Str::limit($complain->complain ?? 'N/A', 50) }}</span>
@@ -166,11 +166,11 @@
                                                     default => 'bg-secondary'
                                                 };
                                             @endphp
-                                            <span class="badge {{ $statusClass }} text-white">{{ ucfirst($complain->status ?? 'Pending') }}</span>
+                                            <span class="badge {{ $statusClass }} text-white" style="font-size: 12px; padding: 4px 8px;">{{ ucfirst($complain->status ?? 'Pending') }}</span>
                                         </td>
                                         <td class="text-end">
-                                            <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this complain?')) { document.getElementById('delete-form-{{ $complain->id ?? $loop->index }}').submit(); }">
+                                            <div class="d-inline-flex gap-1 align-items-center">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this complain?')) { document.getElementById('delete-form-{{ $complain->id ?? $loop->index }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $complain->id ?? $loop->index }}" action="#" method="POST" class="d-none">
@@ -296,7 +296,7 @@
     
     .search-input-group .form-control {
         border: none;
-        font-size: 13px;
+        font-size: 12px;
         height: 32px;
         line-height: 1.4;
     }
@@ -350,25 +350,31 @@
     /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
-        border-spacing: 0;
-        border-collapse: collapse;
+        font-size: 14px;
         border: 1px solid #dee2e6;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: white;
     }
     
     .default-table-area table thead {
-        border-bottom: 1px solid #dee2e6;
+        border-bottom: 2px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
         vertical-align: middle;
-        line-height: 1.3;
-        height: 32px;
+        line-height: 1.4;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
+        color: #495057;
+        text-transform: none;
     }
     
     .default-table-area table thead th:first-child {
@@ -380,11 +386,12 @@
     }
     
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
+        background-color: white;
     }
     
     .default-table-area table tbody td:first-child {
@@ -399,60 +406,34 @@
         border-bottom: 1px solid #dee2e6;
     }
     
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 10px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 10px;
-    }
-    
-    .default-table-area table tbody tr {
-        height: 36px;
-    }
-    
-    .default-table-area table tbody tr:first-child td {
-        border-top: none;
-    }
-    
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
-    }
-    
     .default-table-area table tbody tr:hover {
         background-color: #f8f9fa;
     }
     
+    .default-table-area table tbody tr:hover td {
+        background-color: #f8f9fa;
+    }
+    
     .default-table-area .badge {
-        font-size: 11px;
-        padding: 3px 6px;
-        font-weight: 500;
+        font-size: 12px;
+        padding: 4px 8px;
+        font-weight: 600;
     }
     
     .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
+        font-size: 14px !important;
     }
     
     .default-table-area .btn-sm {
-        font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        font-size: 13px;
+        padding: 4px 8px;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
         font-size: 14px !important;
         vertical-align: middle;
-        color: white !important;
     }
     
-    .default-table-area .btn-primary .material-symbols-outlined,
     .default-table-area .btn-danger .material-symbols-outlined {
         color: white !important;
     }

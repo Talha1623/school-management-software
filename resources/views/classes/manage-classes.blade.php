@@ -72,7 +72,7 @@
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by campus, class name..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 13px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by campus, class name..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 12px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -111,13 +111,14 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
                                 <th>Campus</th>
                                 <th>Class Name</th>
                                 <th>Numeric No</th>
+                                <th>Sections</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
@@ -127,24 +128,35 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($classes->currentPage() - 1) * $classes->perPage()) }}</td>
                                         <td>
-                                            <span class="badge bg-info text-white">{{ $class->campus }}</span>
+                                            <span class="badge bg-primary text-white">{{ $class->campus }}</span>
                                         </td>
                                         <td>
-                                            <strong class="text-primary">{{ $class->class_name }}</strong>
+                                            <strong class="text-dark">{{ $class->class_name }}</strong>
                                         </td>
                                         <td>
                                             <span class="badge bg-secondary text-white">{{ $class->numeric_no }}</span>
                                         </td>
+                                        <td>
+                                            @if(isset($class->sections) && count($class->sections) > 0)
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    @foreach($class->sections as $section)
+                                                        <span class="badge bg-success text-white">{{ $section }}</span>
+                                                    @endforeach
+                                                </div>
+                                            @else
+                                                <span class="text-muted" style="font-size: 12px;">No sections</span>
+                                            @endif
+                                        </td>
                                         <td class="text-end">
-                                            <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-info px-2 py-0" title="Transfer" onclick="transferClass({{ $class->id }})">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">swap_horiz</span>
+                                            <div class="d-inline-flex gap-1 align-items-center">
+                                                <button type="button" class="btn btn-sm btn-info" title="Transfer" onclick="transferClass({{ $class->id }})">
+                                                    <span class="material-symbols-outlined" style="color: white;">swap_horiz</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editClass({{ $class->id }}, '{{ $class->campus }}', '{{ $class->class_name }}', {{ $class->numeric_no }})">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                                                <button type="button" class="btn btn-sm btn-primary" title="Edit" onclick="editClass({{ $class->id }}, '{{ $class->campus }}', '{{ $class->class_name }}', {{ $class->numeric_no }})">
+                                                    <span class="material-symbols-outlined" style="color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this class?')) { document.getElementById('delete-form-{{ $class->id }}').submit(); }">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                                <button type="button" class="btn btn-sm btn-danger" title="Delete" onclick="if(confirm('Are you sure you want to delete this class?')) { document.getElementById('delete-form-{{ $class->id }}').submit(); }">
+                                                    <span class="material-symbols-outlined" style="color: white;">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $class->id }}" action="{{ route('classes.manage-classes.destroy', $class->id) }}" method="POST" class="d-none">
                                                     @csrf
@@ -155,7 +167,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted py-5">
+                                        <td colspan="6" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No classes found.</p>
                                         </td>
@@ -163,7 +175,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-5">
+                                    <td colspan="6" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No classes found.</p>
                                     </td>
@@ -188,9 +200,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="classModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">class</span>
-                    <span>Add New Class</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="classModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">class</span>
+                    <span style="color: white;">Add New Class</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -205,7 +217,12 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <input type="text" class="form-control class-input" name="campus" id="campus" placeholder="Enter campus" required>
+                                <select class="form-select class-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff;">
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -421,7 +438,7 @@
     
     .search-input-group .form-control {
         border: none;
-        font-size: 13px;
+        font-size: 12px;
         height: 32px;
         line-height: 1.4;
     }
@@ -475,25 +492,31 @@
     /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
-        border-spacing: 0;
-        border-collapse: collapse;
+        font-size: 13px;
         border: 1px solid #dee2e6;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: white;
     }
     
     .default-table-area table thead {
-        border-bottom: 1px solid #dee2e6;
+        border-bottom: 2px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
+        padding: 8px 10px;
         font-size: 12px;
         font-weight: 600;
         vertical-align: middle;
         line-height: 1.3;
-        height: 32px;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
+        color: #495057;
+        text-transform: none;
     }
     
     .default-table-area table thead th:first-child {
@@ -505,11 +528,12 @@
     }
     
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 10px;
+        font-size: 13px;
         vertical-align: middle;
-        line-height: 1.4;
+        line-height: 1.3;
         border: 1px solid #dee2e6;
+        background-color: white;
     }
     
     .default-table-area table tbody td:first-child {
@@ -524,41 +548,31 @@
         border-bottom: 1px solid #dee2e6;
     }
     
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 10px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 10px;
-    }
-    
-    .default-table-area table tbody tr {
-        height: 36px;
-    }
-    
-    .default-table-area table tbody tr:first-child td {
-        border-top: none;
-    }
-    
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
-    }
-    
     .default-table-area table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .default-table-area table tbody tr:hover td {
         background-color: #f8f9fa;
     }
     
     .default-table-area .badge {
         font-size: 11px;
         padding: 3px 6px;
-        font-weight: 500;
+        font-weight: 600;
+    }
+    
+    .default-table-area .badge.bg-success {
+        background-color: #28a745 !important;
+    }
+    
+    .default-table-area td {
+        max-width: 200px;
+    }
+    
+    .default-table-area td:nth-child(5) {
+        max-width: 300px;
+        min-width: 150px;
     }
     
     .default-table-area .material-symbols-outlined {
@@ -566,15 +580,15 @@
     }
     
     .default-table-area .btn-sm {
-        font-size: 11px;
-        line-height: 1.2;
-        min-height: 26px;
+        font-size: 12px;
+        padding: 3px 6px;
+        min-width: 28px;
+        height: 28px;
     }
     
     .default-table-area .btn-sm .material-symbols-outlined {
-        font-size: 14px !important;
+        font-size: 13px !important;
         vertical-align: middle;
-        color: white !important;
     }
     
     .default-table-area .btn-primary .material-symbols-outlined,
@@ -590,9 +604,10 @@ function resetForm() {
     document.getElementById('classForm').reset();
     document.getElementById('classForm').action = "{{ route('classes.manage-classes.store') }}";
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('classModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">class</span>
-        <span>Add New Class</span>
+    const modalLabel = document.getElementById('classModalLabel');
+    modalLabel.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">class</span>
+        <span style="color: white;">Add New Class</span>
     `;
     document.querySelector('.class-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -607,9 +622,10 @@ function editClass(id, campus, className, numericNo) {
     document.getElementById('numeric_no').value = numericNo;
     document.getElementById('classForm').action = "{{ url('classes/manage-classes') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
-    document.getElementById('classModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-        <span>Edit Class</span>
+    const modalLabel = document.getElementById('classModalLabel');
+    modalLabel.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+        <span style="color: white;">Edit Class</span>
     `;
     document.querySelector('.class-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>

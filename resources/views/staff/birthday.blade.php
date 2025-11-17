@@ -57,35 +57,35 @@
             </div>
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
-                    <table class="table" id="staffBirthdayTable">
+                <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
+                    <table class="table table-sm table-hover" id="staffBirthdayTable" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th>Picture</th>
-                                <th>Name</th>
-                                <th>Father/Husband</th>
-                                <th>Birthday</th>
-                                <th>Status</th>
-                                <th>Wish</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Picture</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Name</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Father/Husband</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Birthday</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Status</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Wish</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($staff as $index => $member)
                                 <tr>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member['picture'])
-                                            <img src="{{ $member['picture'] }}" alt="Staff" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">
+                                            <img src="{{ $member['picture'] }}" alt="Staff" class="rounded-circle" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #e9ecef;">
                                         @else
-                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                                <span class="material-symbols-outlined text-muted" style="font-size: 20px;">person</span>
+                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 45px; height: 45px; border: 2px solid #e9ecef;">
+                                                <span class="material-symbols-outlined text-muted" style="font-size: 22px;">person</span>
                                             </div>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <strong class="text-primary">{{ $member['name'] ?? 'N/A' }}</strong>
                                     </td>
-                                    <td>{{ $member['father_husband'] ?? 'N/A' }}</td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">{{ $member['father_husband'] ?? 'N/A' }}</td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         <span class="text-muted">
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
                                             @if(isset($member['birthday']) && $member['birthday'])
@@ -95,7 +95,7 @@
                                             @endif
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @php
                                             $statusClass = match($member['status'] ?? '') {
                                                 'Today' => 'bg-success',
@@ -104,13 +104,13 @@
                                                 default => 'bg-secondary'
                                             };
                                         @endphp
-                                        <span class="badge {{ $statusClass }} text-white">{{ $member['status'] ?? 'N/A' }}</span>
+                                        <span class="badge {{ $statusClass }} text-white" style="font-size: 11px;">{{ $member['status'] ?? 'N/A' }}</span>
                                     </td>
-                                    <td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
                                         @php
                                             $wishClass = ($member['wish'] ?? '') === 'Sent' ? 'bg-success' : 'bg-warning';
                                         @endphp
-                                        <span class="badge {{ $wishClass }} text-white">{{ $member['wish'] ?? 'Pending' }}</span>
+                                        <span class="badge {{ $wishClass }} text-white" style="font-size: 11px;">{{ $member['wish'] ?? 'Pending' }}</span>
                                     </td>
                                 </tr>
                             @empty
@@ -200,7 +200,7 @@
         transform: translateY(0);
     }
 
-    /* Table Compact Styling */
+    /* Table Styling */
     .default-table-area table {
         margin-bottom: 0;
         border-spacing: 0;
@@ -213,12 +213,11 @@
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         font-weight: 600;
         vertical-align: middle;
-        line-height: 1.3;
-        height: 32px;
+        line-height: 1.5;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
@@ -233,10 +232,10 @@
     }
     
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 12px 15px;
+        font-size: 14px;
         vertical-align: middle;
-        line-height: 1.4;
+        line-height: 1.5;
         border: 1px solid #dee2e6;
     }
     
@@ -252,39 +251,23 @@
         border-bottom: 1px solid #dee2e6;
     }
     
-    .default-table-area table tbody tr {
-        height: 36px;
+    .default-table-area table thead th:first-child,
+    .default-table-area table tbody td:first-child {
+        padding-left: 15px;
+    }
+    
+    .default-table-area table thead th:last-child,
+    .default-table-area table tbody td:last-child {
+        padding-right: 15px;
     }
     
     .default-table-area table tbody tr:first-child td {
         border-top: none;
     }
     
-    .default-table-area .table-responsive {
-        padding: 0;
-        margin-top: 0;
-    }
-    
-    .default-table-area {
-        margin-top: 0 !important;
-    }
-    
-    .default-table-area table tbody tr:hover {
-        background-color: #f8f9fa;
-    }
-    
     .default-table-area .badge {
         font-size: 11px;
-        padding: 3px 6px;
-        font-weight: 500;
-    }
-    
-    .default-table-area .material-symbols-outlined {
-        font-size: 13px !important;
-    }
-    
-    .table tbody tr:hover {
-        background-color: #f8f9fa;
+        padding: 4px 8px;
     }
 
     @media print {
