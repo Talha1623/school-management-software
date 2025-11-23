@@ -107,12 +107,7 @@
             @if(request('filter_campus') && request('filter_class_section'))
             <div class="mt-4">
                 <!-- Report Header -->
-                <div class="text-center mb-4" style="border-bottom: 2px solid #003471; padding-bottom: 20px;">
-                    <div class="mb-3">
-                        <div class="d-inline-block rounded-circle bg-success text-white d-flex align-items-center justify-content-center" style="width: 60px; height: 60px; font-size: 28px; font-weight: bold;">
-                            C
-                        </div>
-                    </div>
+                <div class="text-center mb-4" style="padding-bottom: 20px;">
                     <h2 class="mb-2 fw-bold" style="color: #003471; font-size: 28px;">ICMS</h2>
                     <h4 class="mb-3 fw-semibold" style="color: #495057; font-size: 18px;">Attendance Sheet</h4>
                     <div class="d-flex justify-content-center gap-4 flex-wrap" style="font-size: 14px; color: #6c757d;">
@@ -151,10 +146,13 @@
                                     $presentDays = 0;
                                     $absentDays = 0;
                                     $studentAttendance = $attendanceData[$student->id] ?? [];
+                                    
+                                    // Count present and absent days dynamically
                                     foreach ($studentAttendance as $day => $status) {
-                                        if ($status === 'P' || $status === 'p') {
+                                        $statusUpper = strtoupper($status);
+                                        if ($statusUpper === 'P') {
                                             $presentDays++;
-                                        } elseif ($status === 'A' || $status === 'a') {
+                                        } elseif ($statusUpper === 'A') {
                                             $absentDays++;
                                         }
                                     }
@@ -176,15 +174,23 @@
                                     @for($day = 1; $day <= $daysInMonth; $day++)
                                         @php
                                             $attendanceStatus = $studentAttendance[$day] ?? '';
-                                            $cellClass = '';
-                                            if ($attendanceStatus === 'P' || $attendanceStatus === 'p') {
-                                                $cellClass = 'bg-success text-white';
-                                            } elseif ($attendanceStatus === 'A' || $attendanceStatus === 'a') {
-                                                $cellClass = 'bg-danger text-white';
+                                            $statusUpper = strtoupper($attendanceStatus);
+                                            $cellStyle = '';
+                                            
+                                            if ($statusUpper === 'P') {
+                                                $cellStyle = 'background-color: #28a745; color: white; font-weight: bold;';
+                                            } elseif ($statusUpper === 'A') {
+                                                $cellStyle = 'background-color: #dc3545; color: white; font-weight: bold;';
+                                            } elseif ($statusUpper === 'H') {
+                                                $cellStyle = 'background-color: #ffc107; color: #000; font-weight: bold;';
+                                            } elseif ($statusUpper === 'S') {
+                                                $cellStyle = 'background-color: #17a2b8; color: white; font-weight: bold;';
+                                            } elseif ($statusUpper === 'L') {
+                                                $cellStyle = 'background-color: #6c757d; color: white; font-weight: bold;';
                                             }
                                         @endphp
-                                        <td style="padding: 4px; text-align: center; border: 1px solid #dee2e6; {{ $cellClass ? 'background-color: ' . ($attendanceStatus === 'P' || $attendanceStatus === 'p' ? '#28a745' : '#dc3545') . '; color: white;' : '' }}">
-                                            {{ $attendanceStatus ? strtoupper($attendanceStatus) : '' }}
+                                        <td style="padding: 4px; text-align: center; border: 1px solid #dee2e6; {{ $cellStyle }}">
+                                            {{ $attendanceStatus ? $statusUpper : '' }}
                                         </td>
                                     @endfor
                                     <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #e7f3ff; font-weight: bold;">

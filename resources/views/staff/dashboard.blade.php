@@ -11,85 +11,6 @@
             <span class="material-symbols-outlined text-secondary" style="font-size: 20px;">arrow_forward</span>
         </div>
 
-        <!-- Quick Action Buttons -->
-        <div class="mb-4">
-            <div class="d-flex gap-2 flex-wrap" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); padding: 16px; border-radius: 12px; overflow-x: auto;">
-                <!-- Dashboard Button -->
-                <a href="{{ route('staff.dashboard') }}" class="btn-quick-action" style="background-color: #20c997;">
-                    <span class="material-symbols-outlined text-white">speed</span>
-                </a>        
-                
-                <!-- Student List Button -->
-                <a href="{{ route('student-list') }}" class="btn-quick-action" style="background-color: #f44336;">
-                    <span class="material-symbols-outlined text-white">groups</span>
-                </a>
-                
-                <!-- Attendance Report Button -->
-                <a href="{{ route('attendance.report') }}" class="btn-quick-action" style="background-color: #28a745;">
-                    <span class="material-symbols-outlined text-white">bar_chart</span>
-                </a>
-                
-                <!-- Manage Attendance Button -->
-                <a href="{{ route('attendance.student') }}" class="btn-quick-action" style="background-color: #03a9f4;">
-                    <span class="material-symbols-outlined text-white">event_available</span>
-                </a>
-                
-                <!-- Test Management Button -->
-                <a href="{{ route('test.list') }}" class="btn-quick-action" style="background-color: #ff9800;">
-                    <span class="material-symbols-outlined text-white">quiz</span>
-                </a>
-                
-                <!-- Exam Management Button -->
-                <a href="{{ route('exam.list') }}" class="btn-quick-action" style="background-color: #6c757d;">
-                    <span class="material-symbols-outlined text-white">assignment</span>
-                </a>
-                
-                <!-- Marks Entry Button -->
-                <a href="{{ route('test.marks-entry') }}" class="btn-quick-action" style="background-color: #20c997;">
-                    <span class="material-symbols-outlined text-white">edit_note</span>
-                </a>
-                
-                <!-- Daily Diary Button -->
-                <a href="{{ route('homework-diary.manage') }}" class="btn-quick-action" style="background-color: #ff9800;">
-                    <span class="material-symbols-outlined text-white">menu_book</span>
-                </a>
-                
-                <!-- Student Behavior Button -->
-                <a href="{{ route('student-behavior.recording') }}" class="btn-quick-action" style="background-color: #f44336;">
-                    <span class="material-symbols-outlined text-white">psychology</span>
-                </a>
-                
-                <!-- Study Materials Button -->
-                <a href="#" class="btn-quick-action" style="background-color: #28a745;">
-                    <span class="material-symbols-outlined text-white">library_books</span>
-                </a>
-                
-                <!-- Online Class Button -->
-                <a href="#" class="btn-quick-action" style="background-color: #03a9f4;">
-                    <span class="material-symbols-outlined text-white">videocam</span>
-                </a>
-                
-                <!-- Task Management Button -->
-                <a href="#" class="btn-quick-action" style="background-color: #ff9800;">
-                    <span class="material-symbols-outlined text-white">task</span>
-                </a>
-                
-                <!-- Calendar Button -->
-                <a href="#" class="btn-quick-action" style="background-color: #20c997;">
-                    <span class="material-symbols-outlined text-white">calendar_month</span>
-                </a>
-                
-                <!-- Noticeboard Button -->
-                <a href="{{ route('school.noticeboard') }}" class="btn-quick-action" style="background-color: #ff9800;">
-                    <span class="material-symbols-outlined text-white">notifications</span>
-                </a>
-                
-                <!-- Notifications Button -->
-                <a href="#" class="btn-quick-action" style="background-color: #03a9f4;">
-                    <span class="material-symbols-outlined text-white">notifications_active</span>
-                </a>
-            </div>
-        </div>
 
         <!-- Statistics Cards -->
         <div class="row g-3 mb-4">
@@ -156,7 +77,7 @@
                     <div class="card-body p-4 position-relative">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div>
-                                <h2 class="text-white mb-1 fw-bold" style="font-size: 36px;">{{ $attendancePercentage }}%</h2>
+                                <h2 class="text-white mb-1 fw-bold" style="font-size: 36px;" id="attendancePercentage">{{ $attendancePercentage }}%</h2>
                                 <p class="text-white-50 mb-0" style="font-size: 14px; font-weight: 500;">Class Attendance</p>
                             </div>
                             <span class="material-symbols-outlined text-white-50" style="font-size: 48px; opacity: 0.3;">bar_chart</span>
@@ -252,7 +173,7 @@
                             
                             <div class="position-absolute top-50 start-50 translate-middle text-center">
                                 <div class="fw-bold" style="font-size: 14px; color: #333;">Absent Students</div>
-                                <div class="fw-bold" style="font-size: 32px; color: #ff6b6b;">{{ $absentToday }}</div>
+                                <div class="fw-bold" style="font-size: 32px; color: #ff6b6b;" id="absentToday">{{ $absentToday }}</div>
                             </div>
                         </div>
                     </div>
@@ -261,11 +182,11 @@
                     <div class="d-flex justify-content-center gap-4 mt-3">
                         <div class="d-flex align-items-center">
                             <div style="width: 12px; height: 12px; background: #51cf66; border-radius: 2px; margin-right: 6px;"></div>
-                            <span style="font-size: 12px; color: #666;">Present ({{ $presentToday }})</span>
+                            <span style="font-size: 12px; color: #666;">Present (<span id="presentToday">{{ $presentToday }}</span>)</span>
                         </div>
                         <div class="d-flex align-items-center">
                             <div style="width: 12px; height: 12px; background: #ff6b6b; border-radius: 2px; margin-right: 6px;"></div>
-                            <span style="font-size: 12px; color: #666;">Absent ({{ $absentToday }})</span>
+                            <span style="font-size: 12px; color: #666;">Absent (<span id="absentTodayLegend">{{ $absentToday }}</span>)</span>
                         </div>
                     </div>
                 </div>
@@ -328,5 +249,99 @@
     }
 }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Function to update attendance stats
+    function updateAttendanceStats() {
+        fetch('{{ route("staff.dashboard.attendance-stats") }}', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.attendancePercentage !== undefined) {
+                // Update attendance percentage
+                const percentageEl = document.getElementById('attendancePercentage');
+                if (percentageEl) {
+                    percentageEl.textContent = data.attendancePercentage + '%';
+                }
+                
+                // Update present count
+                const presentEl = document.getElementById('presentToday');
+                if (presentEl) {
+                    presentEl.textContent = data.presentToday;
+                }
+                
+                // Update absent count
+                const absentEl = document.getElementById('absentToday');
+                if (absentEl) {
+                    absentEl.textContent = data.absentToday;
+                }
+                
+                const absentLegendEl = document.getElementById('absentTodayLegend');
+                if (absentLegendEl) {
+                    absentLegendEl.textContent = data.absentToday;
+                }
+                
+                // Update chart if needed
+                updateAttendanceChart(data.presentToday, data.absentToday, data.totalStudents);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating attendance stats:', error);
+        });
+    }
+    
+    // Function to update attendance chart
+    function updateAttendanceChart(presentToday, absentToday, totalStudents) {
+        const totalForChart = totalStudents > 0 ? totalStudents : 1;
+        const presentPercentage = (presentToday / totalForChart) * 100;
+        const absentPercentage = (absentToday / totalForChart) * 100;
+        
+        const circumference = 2 * Math.PI * 80;
+        const presentDashArray = (presentPercentage / 100) * circumference;
+        const absentDashArray = (absentPercentage / 100) * circumference;
+        
+        // Update SVG circles
+        const svg = document.querySelector('.position-relative svg');
+        if (svg) {
+            const presentCircle = svg.querySelector('circle[stroke="#51cf66"]');
+            const absentCircle = svg.querySelector('circle[stroke="#ff6b6b"]');
+            
+            if (presentCircle) {
+                presentCircle.setAttribute('stroke-dasharray', `${presentDashArray} ${circumference - presentDashArray}`);
+            }
+            if (absentCircle) {
+                absentCircle.setAttribute('stroke-dasharray', `${absentDashArray} ${circumference - absentDashArray}`);
+                absentCircle.setAttribute('stroke-dashoffset', -presentDashArray);
+            }
+        }
+    }
+    
+    // Listen for attendance updates from other tabs/windows
+    if (window.BroadcastChannel) {
+        const channel = new BroadcastChannel('attendance-updates');
+        channel.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'updateAttendanceStats') {
+                updateAttendanceStats();
+            }
+        });
+    }
+    
+    // Also listen for postMessage from parent/opener windows
+    window.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'updateAttendanceStats') {
+            updateAttendanceStats();
+        }
+    });
+    
+    // Auto-refresh every 30 seconds
+    setInterval(updateAttendanceStats, 30000);
+});
+</script>
 @endsection
 

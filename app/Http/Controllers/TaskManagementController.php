@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class TaskManagementController extends Controller
 {
@@ -50,7 +51,12 @@ class TaskManagementController extends Controller
         $accountants = Accountant::orderBy('name')->get(['id', 'name']);
         $staff = Staff::orderBy('name')->get(['id', 'name']);
         
-        return view('task-management', compact('tasks', 'totalTasks', 'pendingTasks', 'activeTasks', 'completedTasks', 'admins', 'accountants', 'staff'));
+        // Check if accountant is logged in
+        $isAccountant = Auth::guard('accountant')->check();
+        
+        $view = $isAccountant ? 'accountant.task-management' : 'task-management';
+        
+        return view($view, compact('tasks', 'totalTasks', 'pendingTasks', 'activeTasks', 'completedTasks', 'admins', 'accountants', 'staff'));
     }
 
     /**

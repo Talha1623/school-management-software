@@ -6,6 +6,7 @@ use App\Models\Student;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Transport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -43,7 +44,10 @@ class AdmissionController extends Controller
         // Generate next student code
         $nextStudentCode = $this->generateNextStudentCode();
 
-        return view('admission.admit-student', compact('campuses', 'classes', 'sections', 'nextStudentCode'));
+        // Get transport routes
+        $transportRoutes = Transport::orderBy('route_name', 'asc')->pluck('route_name')->unique()->values();
+
+        return view('admission.admit-student', compact('campuses', 'classes', 'sections', 'nextStudentCode', 'transportRoutes'));
     }
 
     /**
@@ -143,12 +147,20 @@ class AdmissionController extends Controller
 
         $photoPath = $this->handlePhotoUpload($request);
 
-        Student::create([
+        // Prepare student data
+        $studentData = [
             ...$validated,
             'photo' => $photoPath,
             'discounted_student' => $request->has('discounted_student'),
             'create_parent_account' => $request->has('create_parent_account'),
-        ]);
+        ];
+
+        // Hash B-Form Number as password if provided
+        if (!empty($validated['b_form_number'])) {
+            $studentData['password'] = $validated['b_form_number']; // Will be hashed automatically by Student model's setPasswordAttribute
+        }
+
+        Student::create($studentData);
 
         return redirect()
             ->route('admission.admit-student')

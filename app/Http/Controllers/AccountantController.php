@@ -76,7 +76,7 @@ class AccountantController extends Controller
             'password' => ['required', 'string', 'min:6'],
         ]);
 
-        $validated['password'] = Hash::make($validated['password']);
+        // Password will be hashed automatically by the model's setPasswordAttribute mutator
         $validated['app_login_enabled'] = true;
         $validated['web_login_enabled'] = true;
 
@@ -112,9 +112,8 @@ class AccountantController extends Controller
             'password' => ['nullable', 'string', 'min:6'],
         ]);
 
-        if (!empty($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
-        } else {
+        // Password will be hashed automatically by the model's setPasswordAttribute mutator
+        if (empty($validated['password'])) {
             unset($validated['password']);
         }
 

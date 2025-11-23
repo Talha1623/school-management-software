@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Quiz;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Subject;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
 class QuizController extends Controller
@@ -37,13 +40,15 @@ class QuizController extends Controller
         
         $quizzes = $query->orderBy('start_date_time', 'desc')->paginate($perPage)->withQueryString();
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+        // Get campuses for dropdown - First from Campus model, then fallback
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
         }
 
         // Get classes
@@ -53,12 +58,8 @@ class QuizController extends Controller
             $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
         }
 
-        // Get sections
-        $sections = Section::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D']);
-        }
+        // Sections will be loaded dynamically via AJAX based on class selection
+        $sections = collect();
         
         return view('quiz.manage', compact('quizzes', 'campuses', 'classes', 'sections'));
     }
@@ -205,6 +206,35 @@ class QuizController extends Controller
         return response($html)
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'attachment; filename="quizzes_' . date('Y-m-d_His') . '.pdf"');
+    }
+
+    /**
+     * Get sections based on class (AJAX).
+     */
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+        
+        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name')
+            ->distinct()
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        if ($sections->isEmpty()) {
+            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section')
+                ->distinct()
+                ->pluck('section')
+                ->sort()
+                ->values();
+        }
+        
+        return response()->json(['sections' => $sections]);
     }
 }
 

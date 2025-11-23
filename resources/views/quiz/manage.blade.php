@@ -15,16 +15,22 @@
             </div>
 
             @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-success alert-dismissible fade show success-toast" role="alert" id="successAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">check_circle</span>
+                        <span>{{ session('success') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-danger alert-dismissible fade show error-toast" role="alert" id="errorAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">error</span>
+                        <span>{{ session('error') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
@@ -139,11 +145,11 @@
                                         <td>{{ $quiz->start_date_time->format('d M Y H:i') }}</td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editQuiz({{ $quiz->id }}, '{{ addslashes($quiz->campus) }}', '{{ addslashes($quiz->quiz_name) }}', '{{ addslashes($quiz->description ?? '') }}', '{{ addslashes($quiz->for_class) }}', '{{ addslashes($quiz->section) }}', {{ $quiz->total_questions }}, '{{ $quiz->start_date_time->format('Y-m-d\TH:i') }}')">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editQuiz({{ $quiz->id }}, '{{ addslashes($quiz->campus) }}', '{{ addslashes($quiz->quiz_name) }}', '{{ addslashes($quiz->description ?? '') }}', '{{ addslashes($quiz->for_class) }}', '{{ addslashes($quiz->section) }}', {{ $quiz->total_questions }}, '{{ $quiz->start_date_time->format('Y-m-d\TH:i') }}')">
+                                                    <span class="material-symbols-outlined">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this quiz?')) { document.getElementById('delete-form-{{ $quiz->id }}').submit(); }">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this quiz?')) { document.getElementById('delete-form-{{ $quiz->id }}').submit(); }">
+                                                    <span class="material-symbols-outlined">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $quiz->id }}" action="{{ route('quiz.manage.destroy', $quiz->id) }}" method="POST" class="d-none">
                                                     @csrf
@@ -186,10 +192,10 @@
 <div class="modal fade" id="quizModal" tabindex="-1" aria-labelledby="quizModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="quizModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">quiz</span>
-                    <span>Add New Quiz</span>
+            <div class="modal-header p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2 text-white" id="quizModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">quiz</span>
+                    <span style="color: white;">Add New Quiz</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -207,7 +213,10 @@
                                 <select class="form-control quiz-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                        @php
+                                            $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                        @endphp
+                                        <option value="{{ $campusName }}">{{ $campusName }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -241,11 +250,8 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">group</span>
                                 </span>
-                                <select class="form-control quiz-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                <select class="form-control quiz-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;" disabled>
                                     <option value="">Select Section</option>
-                                    @foreach($sections as $sectionName)
-                                        <option value="{{ $sectionName }}">{{ $sectionName }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -309,11 +315,34 @@
     
     #quizModal .quiz-input {
         font-size: 13px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.35rem 0.65rem;
+        height: 32px;
         border: none;
         border-left: 1px solid #e0e7ff;
         border-radius: 0 8px 8px 0;
         transition: all 0.3s ease;
+    }
+    
+    #quizModal .quiz-input[type="datetime-local"],
+    #quizModal .quiz-input[type="number"],
+    #quizModal .quiz-input select {
+        height: 32px;
+        padding: 0.35rem 0.65rem;
+    }
+    
+    #quizModal textarea.quiz-input {
+        min-height: 32px;
+        padding: 0.35rem 0.65rem;
+    }
+    
+    #quizModal select.quiz-input {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23003471' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.65rem center;
+        padding-right: 2rem;
     }
     
     #quizModal .quiz-input:focus {
@@ -323,7 +352,8 @@
     }
     
     #quizModal .input-group-text {
-        padding: 0 0.75rem;
+        padding: 0 0.65rem;
+        height: 32px;
         display: flex;
         align-items: center;
         border: none;
@@ -500,13 +530,142 @@
     .default-table-area table tbody tr:hover {
         background-color: #f8f9fa;
     }
+    
+    .default-table-area .btn-sm {
+        font-size: 11px;
+        padding: 4px 8px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        height: 28px;
+        width: 28px;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: all 0.2s ease;
+    }
+    
+    .default-table-area .btn-sm:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    
+    .default-table-area .btn-sm .material-symbols-outlined {
+        font-size: 16px !important;
+        vertical-align: middle;
+        color: white !important;
+        line-height: 1;
+        display: inline-block;
+    }
+    
+    .default-table-area .btn-primary .material-symbols-outlined,
+    .default-table-area .btn-danger .material-symbols-outlined {
+        color: white !important;
+    }
+    
+    /* Toast Notification Styling */
+    .success-toast,
+    .error-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 400px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideInDown 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    
+    .success-toast {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border: none;
+    }
+    
+    .error-toast {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        border: none;
+    }
+    
+    .success-toast .btn-close,
+    .error-toast .btn-close {
+        filter: brightness(0) invert(1);
+        opacity: 0.9;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: auto;
+    }
+    
+    .success-toast .btn-close:hover,
+    .error-toast .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .success-toast .material-symbols-outlined,
+    .error-toast .material-symbols-outlined {
+        font-size: 20px;
+        flex-shrink: 0;
+    }
+    
+    .success-toast > div,
+    .error-toast > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    
+    @keyframes slideInDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOutUp {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+    }
+    
+    .success-toast.fade-out,
+    .error-toast.fade-out {
+        animation: slideOutUp 0.3s ease-out forwards;
+    }
 </style>
 
 <script>
 function resetForm() {
     document.getElementById('quizForm').reset();
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('quizModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">quiz</span><span>Add New Quiz</span>';
+    document.getElementById('quizModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">quiz</span><span style="color: white;">Add New Quiz</span>';
+    // Reset section dropdown
+    const sectionSelect = document.getElementById('section');
+    if (sectionSelect) {
+        sectionSelect.innerHTML = '<option value="">Select Section</option>';
+        sectionSelect.disabled = true;
+    }
 }
 
 function editQuiz(id, campus, quizName, description, forClass, section, totalQuestions, startDateTime) {
@@ -517,10 +676,15 @@ function editQuiz(id, campus, quizName, description, forClass, section, totalQue
     document.getElementById('quiz_name').value = quizName;
     document.getElementById('description').value = description;
     document.getElementById('for_class').value = forClass;
-    document.getElementById('section').value = section;
     document.getElementById('total_questions').value = totalQuestions;
     document.getElementById('start_date_time').value = startDateTime;
-    document.getElementById('quizModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">edit</span><span>Edit Quiz</span>';
+    document.getElementById('quizModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span><span style="color: white;">Edit Quiz</span>';
+    
+    // Load sections for the selected class
+    if (forClass) {
+        loadSections(forClass, section);
+    }
+    
     new bootstrap.Modal(document.getElementById('quizModal')).show();
 }
 
@@ -564,5 +728,81 @@ function clearSearch() {
 function printTable() {
     window.print();
 }
+
+// Dynamic section loading based on class
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('for_class');
+    const sectionSelect = document.getElementById('section');
+    
+    if (classSelect && sectionSelect) {
+        classSelect.addEventListener('change', function() {
+            const selectedClass = this.value;
+            if (selectedClass) {
+                loadSections(selectedClass);
+            } else {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                sectionSelect.disabled = true;
+            }
+        });
+    }
+});
+
+function loadSections(selectedClass, selectedSection = null) {
+    const sectionSelect = document.getElementById('section');
+    if (!sectionSelect) return;
+    
+    sectionSelect.innerHTML = '<option value="">Loading...</option>';
+    sectionSelect.disabled = true;
+    
+    fetch(`{{ route('quiz.manage.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`)
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    if (selectedSection && section === selectedSection) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+            }
+            sectionSelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+            sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+            sectionSelect.disabled = false;
+        });
+}
+
+// Auto-dismiss toast notifications
+document.addEventListener('DOMContentLoaded', function() {
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    
+    function dismissToast(toast) {
+        if (toast) {
+            toast.classList.add('fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+    }
+    
+    if (successAlert) {
+        setTimeout(() => {
+            dismissToast(successAlert);
+        }, 5000);
+    }
+    
+    if (errorAlert) {
+        setTimeout(() => {
+            dismissToast(errorAlert);
+        }, 5000);
+    }
+});
 </script>
 @endsection

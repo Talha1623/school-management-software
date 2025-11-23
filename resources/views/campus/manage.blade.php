@@ -15,16 +15,22 @@
             </div>
 
             @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-success alert-dismissible fade show success-toast" role="alert" id="successAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">check_circle</span>
+                        <span>{{ session('success') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-danger alert-dismissible fade show error-toast" role="alert" id="errorAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">error</span>
+                        <span>{{ session('error') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
@@ -129,11 +135,11 @@
                                         <td>{{ $campus->description ? (strlen($campus->description) > 50 ? substr($campus->description, 0, 50) . '...' : $campus->description) : 'N/A' }}</td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editCampus({{ $campus->id }}, '{{ addslashes($campus->campus_name) }}', '{{ addslashes($campus->campus_address ?? '') }}', '{{ addslashes($campus->phone ?? '') }}', '{{ addslashes($campus->email ?? '') }}', '{{ addslashes($campus->description ?? '') }}')">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editCampus({{ $campus->id }}, '{{ addslashes($campus->campus_name) }}', '{{ addslashes($campus->campus_address ?? '') }}', '{{ addslashes($campus->description ?? '') }}')">
+                                                    <span class="material-symbols-outlined">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this campus?')) { document.getElementById('delete-form-{{ $campus->id }}').submit(); }">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this campus?')) { document.getElementById('delete-form-{{ $campus->id }}').submit(); }">
+                                                    <span class="material-symbols-outlined">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $campus->id }}" action="{{ route('manage.campuses.destroy', $campus->id) }}" method="POST" class="d-none">
                                                     @csrf
@@ -176,10 +182,10 @@
 <div class="modal fade" id="campusModal" tabindex="-1" aria-labelledby="campusModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="campusModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">apartment</span>
-                    <span>Add New Campus</span>
+            <div class="modal-header p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2 text-white" id="campusModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">apartment</span>
+                    <span style="color: white;">Add New Campus</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -204,24 +210,6 @@
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
                                 <textarea class="form-control campus-input" name="campus_address" id="campus_address" rows="3" placeholder="Enter campus address (optional)" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; resize: vertical;"></textarea>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Phone</label>
-                            <div class="input-group input-group-sm campus-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                    <span class="material-symbols-outlined" style="font-size: 15px;">phone</span>
-                                </span>
-                                <input type="text" class="form-control campus-input" name="phone" id="phone" placeholder="Enter phone number (optional)" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Email</label>
-                            <div class="input-group input-group-sm campus-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                    <span class="material-symbols-outlined" style="font-size: 15px;">email</span>
-                                </span>
-                                <input type="email" class="form-control campus-input" name="email" id="email" placeholder="Enter email (optional)" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                             </div>
                         </div>
                         <div class="col-md-12">
@@ -266,11 +254,18 @@
     
     #campusModal .campus-input {
         font-size: 13px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.35rem 0.65rem;
+        height: 32px;
         border: none;
         border-left: 1px solid #e0e7ff;
         border-radius: 0 8px 8px 0;
         transition: all 0.3s ease;
+    }
+    
+    #campusModal textarea.campus-input {
+        min-height: 32px;
+        padding: 0.35rem 0.65rem;
+        height: auto;
     }
     
     #campusModal .campus-input:focus {
@@ -280,7 +275,8 @@
     }
     
     #campusModal .input-group-text {
-        padding: 0 0.75rem;
+        padding: 0 0.65rem;
+        height: 32px;
         display: flex;
         align-items: center;
         border: none;
@@ -457,26 +453,147 @@
     .default-table-area table tbody tr:hover {
         background-color: #f8f9fa;
     }
+    
+    .default-table-area .btn-sm {
+        font-size: 11px;
+        padding: 4px 8px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        height: 28px;
+        width: 28px;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: all 0.2s ease;
+    }
+    
+    .default-table-area .btn-sm:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    
+    .default-table-area .btn-sm .material-symbols-outlined {
+        font-size: 16px !important;
+        vertical-align: middle;
+        color: white !important;
+        line-height: 1;
+        display: inline-block;
+    }
+    
+    .default-table-area .btn-primary .material-symbols-outlined,
+    .default-table-area .btn-danger .material-symbols-outlined {
+        color: white !important;
+    }
+    
+    /* Toast Notification Styling */
+    .success-toast,
+    .error-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 400px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideInDown 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    
+    .success-toast {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border: none;
+    }
+    
+    .error-toast {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        border: none;
+    }
+    
+    .success-toast .btn-close,
+    .error-toast .btn-close {
+        filter: brightness(0) invert(1);
+        opacity: 0.9;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: auto;
+    }
+    
+    .success-toast .btn-close:hover,
+    .error-toast .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .success-toast .material-symbols-outlined,
+    .error-toast .material-symbols-outlined {
+        font-size: 20px;
+        flex-shrink: 0;
+    }
+    
+    .success-toast > div,
+    .error-toast > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    
+    @keyframes slideInDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOutUp {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+    }
+    
+    .success-toast.fade-out,
+    .error-toast.fade-out {
+        animation: slideOutUp 0.3s ease-out forwards;
+    }
 </style>
 
 <script>
 function resetForm() {
     document.getElementById('campusForm').reset();
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('campusModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">apartment</span><span>Add New Campus</span>';
+    document.getElementById('campusModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">apartment</span><span style="color: white;">Add New Campus</span>';
     document.getElementById('campusForm').action = '{{ route("manage.campuses.store") }}';
 }
 
-function editCampus(id, campusName, campusAddress, phone, email, description) {
+function editCampus(id, campusName, campusAddress, description) {
     resetForm();
     document.getElementById('methodField').innerHTML = '<input type="hidden" name="_method" value="PUT">';
     document.getElementById('campusForm').action = '{{ route("manage.campuses.update", ":id") }}'.replace(':id', id);
     document.getElementById('campus_name').value = campusName;
     document.getElementById('campus_address').value = campusAddress;
-    document.getElementById('phone').value = phone || '';
-    document.getElementById('email').value = email || '';
     document.getElementById('description').value = description;
-    document.getElementById('campusModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">edit</span><span>Edit Campus</span>';
+    document.getElementById('campusModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span><span style="color: white;">Edit Campus</span>';
     new bootstrap.Modal(document.getElementById('campusModal')).show();
 }
 
@@ -520,6 +637,33 @@ function clearSearch() {
 function printTable() {
     window.print();
 }
+
+// Auto-dismiss toast notifications
+document.addEventListener('DOMContentLoaded', function() {
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    
+    function dismissToast(toast) {
+        if (toast) {
+            toast.classList.add('fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+    }
+    
+    if (successAlert) {
+        setTimeout(() => {
+            dismissToast(successAlert);
+        }, 5000);
+    }
+    
+    if (errorAlert) {
+        setTimeout(() => {
+            dismissToast(errorAlert);
+        }, 5000);
+    }
+});
 </script>
 @endsection
 

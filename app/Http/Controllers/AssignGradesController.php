@@ -8,6 +8,8 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\CombinedResultGrade;
+use App\Models\Campus;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -26,13 +28,15 @@ class AssignGradesController extends Controller
         $filterSubject = $request->get('filter_subject');
         $filterTest = $request->get('filter_test');
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+        // Get campuses for dropdown - First from Campus model, then fallback
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
         }
 
         // Get classes
@@ -42,11 +46,26 @@ class AssignGradesController extends Controller
             $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
         }
 
-        // Get sections
-        $sections = Section::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D']);
+        // Get sections - will be loaded dynamically based on class selection
+        $sections = collect();
+        if ($filterClass) {
+            // Load sections for the selected class
+            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->whereNotNull('name')
+                ->distinct()
+                ->pluck('name')
+                ->sort()
+                ->values();
+                
+            if ($sections->isEmpty()) {
+                // Try from subjects table with case-insensitive matching
+                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+            }
         }
 
         // Get subjects (filtered by other criteria if provided)
@@ -168,6 +187,38 @@ class AssignGradesController extends Controller
             'filterToPercentage' => $request->filter_to_percentage,
             'filterSession' => $request->filter_session
         ]);
+    }
+
+    /**
+     * Get sections by class (AJAX).
+     */
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+        
+        // Use case-insensitive matching for class
+        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name')
+            ->distinct()
+            ->pluck('name')
+            ->sort()
+            ->values();
+            
+        if ($sections->isEmpty()) {
+            // Try from subjects table with case-insensitive matching
+            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section')
+                ->distinct()
+                ->pluck('section')
+                ->sort()
+                ->values();
+        }
+        
+        return response()->json(['sections' => $sections]);
     }
 
     /**

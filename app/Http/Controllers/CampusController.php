@@ -45,8 +45,6 @@ class CampusController extends Controller
         $validated = $request->validate([
             'campus_name' => ['required', 'string', 'max:255'],
             'campus_address' => ['nullable', 'string'],
-            'phone' => ['nullable', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
             'description' => ['nullable', 'string'],
         ]);
 
@@ -65,8 +63,6 @@ class CampusController extends Controller
         $validated = $request->validate([
             'campus_name' => ['required', 'string', 'max:255'],
             'campus_address' => ['nullable', 'string'],
-            'phone' => ['nullable', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
             'description' => ['nullable', 'string'],
         ]);
 

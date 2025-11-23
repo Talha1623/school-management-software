@@ -15,16 +15,22 @@
             </div>
 
             @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-success alert-dismissible fade show success-toast" role="alert" id="successAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">check_circle</span>
+                        <span>{{ session('success') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-danger alert-dismissible fade show error-toast" role="alert" id="errorAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">error</span>
+                        <span>{{ session('error') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
@@ -141,24 +147,19 @@
                                             @endif
                                         </td>
                                         <td>
-                                            @if($noticeboard->show_on)
-                                                @php
-                                                    $showOnArray = explode(',', $noticeboard->show_on);
-                                                @endphp
-                                                @foreach($showOnArray as $show)
-                                                    <span class="badge bg-success text-white me-1">{{ ucfirst(str_replace('_', ' ', $show)) }}</span>
-                                                @endforeach
+                                            @if($noticeboard->show_on === 'Yes')
+                                                <span class="badge bg-success text-white">Yes</span>
                                             @else
-                                                <span class="text-muted">N/A</span>
+                                                <span class="badge bg-secondary text-white">No</span>
                                             @endif
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editNoticeboard({{ $noticeboard->id }}, '{{ addslashes($noticeboard->campus ?? '') }}', '{{ addslashes($noticeboard->title) }}', '{{ addslashes($noticeboard->notice ?? '') }}', '{{ $noticeboard->date->format('Y-m-d') }}', '{{ $noticeboard->show_on ?? '' }}', '{{ $noticeboard->image ? asset('storage/' . $noticeboard->image) : '' }}')">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editNoticeboard({{ $noticeboard->id }}, '{{ addslashes($noticeboard->campus ?? '') }}', '{{ addslashes($noticeboard->title) }}', '{{ addslashes($noticeboard->notice ?? '') }}', '{{ $noticeboard->date->format('Y-m-d') }}', '{{ $noticeboard->show_on ?? '' }}', '{{ $noticeboard->image ? asset('storage/' . $noticeboard->image) : '' }}')">
+                                                    <span class="material-symbols-outlined">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this noticeboard?')) { document.getElementById('delete-form-{{ $noticeboard->id }}').submit(); }">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this noticeboard?')) { document.getElementById('delete-form-{{ $noticeboard->id }}').submit(); }">
+                                                    <span class="material-symbols-outlined">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $noticeboard->id }}" action="{{ route('school.noticeboard.destroy', $noticeboard->id) }}" method="POST" class="d-none">
                                                     @csrf
@@ -201,10 +202,10 @@
 <div class="modal fade" id="noticeboardModal" tabindex="-1" aria-labelledby="noticeboardModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="noticeboardModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">note</span>
-                    <span>Add New Notice</span>
+            <div class="modal-header p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2 text-white" id="noticeboardModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">note</span>
+                    <span style="color: white;">Add New Notice</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -222,7 +223,10 @@
                                 <select class="form-control noticeboard-input" name="campus" id="campus" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                        @php
+                                            $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                        @endphp
+                                        <option value="{{ $campusName }}">{{ $campusName }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -266,25 +270,14 @@
                         </div>
                         <div class="col-md-12">
                             <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Show On</label>
-                            <div class="d-flex flex-wrap gap-3 mt-2">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="show_on_uploads" id="show_on_uploads" value="1">
-                                    <label class="form-check-label" for="show_on_uploads" style="font-size: 13px;">
-                                        Uploads
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="show_on_website" id="show_on_website" value="1">
-                                    <label class="form-check-label" for="show_on_website" style="font-size: 13px;">
-                                        Website
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="show_on_mobile_app" id="show_on_mobile_app" value="1">
-                                    <label class="form-check-label" for="show_on_mobile_app" style="font-size: 13px;">
-                                        Mobile APP
-                                    </label>
-                                </div>
+                            <div class="input-group input-group-sm noticeboard-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span>
+                                </span>
+                                <select class="form-control noticeboard-input" name="show_on" id="show_on" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="No">No</option>
+                                    <option value="Yes">Yes</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -320,11 +313,34 @@
     
     #noticeboardModal .noticeboard-input {
         font-size: 13px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.35rem 0.65rem;
+        height: 32px;
         border: none;
         border-left: 1px solid #e0e7ff;
         border-radius: 0 8px 8px 0;
         transition: all 0.3s ease;
+    }
+    
+    #noticeboardModal .noticeboard-input[type="date"],
+    #noticeboardModal .noticeboard-input[type="file"] {
+        height: 32px;
+        padding: 0.35rem 0.65rem;
+    }
+    
+    #noticeboardModal textarea.noticeboard-input {
+        min-height: 32px;
+        padding: 0.35rem 0.65rem;
+        height: auto;
+    }
+    
+    #noticeboardModal select.noticeboard-input {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23003471' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.65rem center;
+        padding-right: 2rem;
     }
     
     #noticeboardModal .noticeboard-input:focus {
@@ -334,7 +350,8 @@
     }
     
     #noticeboardModal .input-group-text {
-        padding: 0 0.75rem;
+        padding: 0 0.65rem;
+        height: 32px;
         display: flex;
         align-items: center;
         border: none;
@@ -511,6 +528,129 @@
     .default-table-area table tbody tr:hover {
         background-color: #f8f9fa;
     }
+    
+    .default-table-area .btn-sm {
+        font-size: 11px;
+        padding: 4px 8px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        height: 28px;
+        width: 28px;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: all 0.2s ease;
+    }
+    
+    .default-table-area .btn-sm:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    
+    .default-table-area .btn-sm .material-symbols-outlined {
+        font-size: 16px !important;
+        vertical-align: middle;
+        color: white !important;
+        line-height: 1;
+        display: inline-block;
+    }
+    
+    .default-table-area .btn-primary .material-symbols-outlined,
+    .default-table-area .btn-danger .material-symbols-outlined {
+        color: white !important;
+    }
+    
+    /* Toast Notification Styling */
+    .success-toast,
+    .error-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 400px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideInDown 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    
+    .success-toast {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border: none;
+    }
+    
+    .error-toast {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        border: none;
+    }
+    
+    .success-toast .btn-close,
+    .error-toast .btn-close {
+        filter: brightness(0) invert(1);
+        opacity: 0.9;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: auto;
+    }
+    
+    .success-toast .btn-close:hover,
+    .error-toast .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .success-toast .material-symbols-outlined,
+    .error-toast .material-symbols-outlined {
+        font-size: 20px;
+        flex-shrink: 0;
+    }
+    
+    .success-toast > div,
+    .error-toast > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    
+    @keyframes slideInDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOutUp {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+    }
+    
+    .success-toast.fade-out,
+    .error-toast.fade-out {
+        animation: slideOutUp 0.3s ease-out forwards;
+    }
 </style>
 
 <script>
@@ -518,7 +658,7 @@ function resetForm() {
     document.getElementById('noticeboardForm').reset();
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('imagePreview').innerHTML = '';
-    document.getElementById('noticeboardModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">note</span><span>Add New Notice</span>';
+    document.getElementById('noticeboardModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">note</span><span style="color: white;">Add New Notice</span>';
     document.getElementById('noticeboardForm').action = '{{ route("school.noticeboard.store") }}';
     document.getElementById('noticeboardForm').enctype = 'multipart/form-data';
 }
@@ -532,12 +672,12 @@ function editNoticeboard(id, campus, title, notice, date, showOn, imageUrl) {
     document.getElementById('notice').value = notice;
     document.getElementById('date').value = date;
     
-    // Set checkboxes based on show_on
+    // Set show_on dropdown based on showOn value
     if (showOn) {
-        const showOnArray = showOn.split(',');
-        document.getElementById('show_on_uploads').checked = showOnArray.includes('uploads');
-        document.getElementById('show_on_website').checked = showOnArray.includes('website');
-        document.getElementById('show_on_mobile_app').checked = showOnArray.includes('mobile_app');
+        // If showOn has any value (not empty), set to "Yes", otherwise "No"
+        document.getElementById('show_on').value = showOn.trim() !== '' ? 'Yes' : 'No';
+    } else {
+        document.getElementById('show_on').value = 'No';
     }
     
     // Show existing image if available
@@ -545,7 +685,7 @@ function editNoticeboard(id, campus, title, notice, date, showOn, imageUrl) {
         document.getElementById('imagePreview').innerHTML = '<img src="' + imageUrl + '" alt="Current Image" style="max-width: 200px; max-height: 200px; border-radius: 4px; margin-top: 8px;">';
     }
     
-    document.getElementById('noticeboardModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">edit</span><span>Edit Notice</span>';
+    document.getElementById('noticeboardModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span><span style="color: white;">Edit Notice</span>';
     new bootstrap.Modal(document.getElementById('noticeboardModal')).show();
 }
 
@@ -603,5 +743,32 @@ function clearSearch() {
 function printTable() {
     window.print();
 }
+
+// Auto-dismiss toast notifications
+document.addEventListener('DOMContentLoaded', function() {
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    
+    function dismissToast(toast) {
+        if (toast) {
+            toast.classList.add('fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+    }
+    
+    if (successAlert) {
+        setTimeout(() => {
+            dismissToast(successAlert);
+        }, 5000);
+    }
+    
+    if (errorAlert) {
+        setTimeout(() => {
+            dismissToast(errorAlert);
+        }, 5000);
+    }
+});
 </script>
 @endsection

@@ -19,7 +19,10 @@
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
                             @foreach($campuses as $campus)
-                                <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -38,11 +41,13 @@
                     <!-- Section -->
                     <div class="col-md-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;" {{ !$filterClass ? 'disabled' : '' }}>
                             <option value="">All Sections</option>
-                            @foreach($sections as $sectionName)
-                                <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
-                            @endforeach
+                            @if($filterClass)
+                                @foreach($sections as $sectionName)
+                                    <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
+                                @endforeach
+                            @endif
                         </select>
                     </div>
 
@@ -244,6 +249,52 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Load sections when class changes
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+
+    if (classSelect && sectionSelect) {
+        function loadSections(selectedClass) {
+            if (selectedClass) {
+                sectionSelect.disabled = false;
+                sectionSelect.innerHTML = '<option value="">Loading...</option>';
+                
+                fetch(`{{ route('test.assign-grades.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                        data.sections.forEach(section => {
+                            const option = document.createElement('option');
+                            option.value = section;
+                            option.textContent = section;
+                            @if($filterSection)
+                            if (section === '{{ $filterSection }}') {
+                                option.selected = true;
+                            }
+                            @endif
+                            sectionSelect.appendChild(option);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error loading sections:', error);
+                        sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                    });
+            } else {
+                sectionSelect.disabled = true;
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            }
+        }
+
+        classSelect.addEventListener('change', function() {
+            loadSections(this.value);
+        });
+
+        // Load sections on page load if class is already selected
+        @if($filterClass)
+        loadSections('{{ $filterClass }}');
+        @endif
+    }
+
     // Auto-calculate grade based on marks
     document.querySelectorAll('.marks-input').forEach(function(input) {
         input.addEventListener('input', function() {

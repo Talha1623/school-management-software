@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Noticeboard;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -37,13 +38,15 @@ class NoticeboardController extends Controller
         
         $noticeboards = $query->orderBy('date', 'desc')->paginate($perPage)->withQueryString();
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+        // Get campuses for dropdown - First from Campus model, then fallback
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
         }
 
         return view('school.noticeboard', compact('noticeboards', 'campuses'));
@@ -69,18 +72,8 @@ class NoticeboardController extends Controller
             $validated['image'] = $imagePath;
         }
 
-        // Handle show_on checkboxes
-        $showOn = [];
-        if ($request->has('show_on_uploads')) {
-            $showOn[] = 'uploads';
-        }
-        if ($request->has('show_on_website')) {
-            $showOn[] = 'website';
-        }
-        if ($request->has('show_on_mobile_app')) {
-            $showOn[] = 'mobile_app';
-        }
-        $validated['show_on'] = implode(',', $showOn);
+        // Handle show_on dropdown (Yes/No)
+        $validated['show_on'] = $request->input('show_on', 'No');
 
         Noticeboard::create($validated);
 
@@ -113,18 +106,8 @@ class NoticeboardController extends Controller
             $validated['image'] = $imagePath;
         }
 
-        // Handle show_on checkboxes
-        $showOn = [];
-        if ($request->has('show_on_uploads')) {
-            $showOn[] = 'uploads';
-        }
-        if ($request->has('show_on_website')) {
-            $showOn[] = 'website';
-        }
-        if ($request->has('show_on_mobile_app')) {
-            $showOn[] = 'mobile_app';
-        }
-        $validated['show_on'] = implode(',', $showOn);
+        // Handle show_on dropdown (Yes/No)
+        $validated['show_on'] = $request->input('show_on', 'No');
 
         $noticeboard->update($validated);
 

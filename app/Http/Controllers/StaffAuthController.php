@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Staff;
 use App\Models\Student;
+use App\Models\StudentAttendance;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
 
 class StaffAuthController extends Controller
 {
@@ -110,21 +112,30 @@ class StaffAuthController extends Controller
         })->count();
         
         // Calculate attendance percentage (for today)
-        // This is a placeholder - you'll need to integrate with your attendance system
-        // For now, we'll calculate based on a simple logic or show 0%
         $attendancePercentage = 0;
         $presentToday = 0;
-        $absentToday = $totalStudents; // Default: all absent until attendance system is integrated
+        $absentToday = 0;
         
         if ($totalStudents > 0) {
-            // Get today's attendance count (placeholder - replace with actual attendance logic)
-            // When attendance system is implemented, query the attendance table here
-            $presentToday = 0; // This should come from your attendance system
-            $absentToday = $totalStudents - $presentToday;
+            $today = date('Y-m-d');
+            $studentIds = $allStudents->pluck('id');
             
-            // For now, if you want to show a sample percentage, you can use:
-            // $attendancePercentage = round(($presentToday / $totalStudents) * 100, 1);
-            // Otherwise, it will show 0% until attendance system is integrated
+            // Get today's attendance
+            $todayAttendance = StudentAttendance::whereIn('student_id', $studentIds)
+                ->whereDate('attendance_date', $today)
+                ->get();
+            
+            // Count present (only 'Present' status counts as present)
+            $presentToday = $todayAttendance->where('status', 'Present')->count();
+            
+            // Count absent (only 'Absent' status counts as absent)
+            $absentToday = $todayAttendance->where('status', 'Absent')->count();
+            
+            // Calculate percentage based on total students who have attendance marked
+            $totalMarked = $todayAttendance->whereIn('status', ['Present', 'Absent'])->count();
+            if ($totalMarked > 0) {
+                $attendancePercentage = round(($presentToday / $totalMarked) * 100, 1);
+            }
         }
         
         // Get latest admissions (12 most recent students)
@@ -149,6 +160,57 @@ class StaffAuthController extends Controller
             'absentToday',
             'latestAdmissions'
         ));
+    }
+
+    /**
+     * Get attendance statistics for AJAX requests (for real-time updates).
+     */
+    public function getAttendanceStats(): JsonResponse
+    {
+        $staff = Auth::guard('staff')->user();
+        
+        // Get students based on staff's campus
+        $studentsQuery = Student::query();
+        
+        if ($staff->campus) {
+            $studentsQuery->where('campus', $staff->campus);
+        }
+        
+        $allStudents = $studentsQuery->get();
+        $totalStudents = $allStudents->count();
+        
+        $attendancePercentage = 0;
+        $presentToday = 0;
+        $absentToday = 0;
+        
+        if ($totalStudents > 0) {
+            $today = date('Y-m-d');
+            $studentIds = $allStudents->pluck('id');
+            
+            // Get today's attendance
+            $todayAttendance = StudentAttendance::whereIn('student_id', $studentIds)
+                ->whereDate('attendance_date', $today)
+                ->get();
+            
+            // Count present (only 'Present' status counts as present)
+            $presentToday = $todayAttendance->where('status', 'Present')->count();
+            
+            // Count absent (only 'Absent' status counts as absent)
+            $absentToday = $todayAttendance->where('status', 'Absent')->count();
+            
+            // Calculate percentage based on total students who have attendance marked
+            $totalMarked = $todayAttendance->whereIn('status', ['Present', 'Absent'])->count();
+            if ($totalMarked > 0) {
+                $attendancePercentage = round(($presentToday / $totalMarked) * 100, 1);
+            }
+        }
+        
+        return response()->json([
+            'attendancePercentage' => $attendancePercentage,
+            'presentToday' => $presentToday,
+            'absentToday' => $absentToday,
+            'totalStudents' => $totalStudents
+        ]);
     }
 }
 

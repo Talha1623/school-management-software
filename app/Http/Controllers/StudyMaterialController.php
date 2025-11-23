@@ -4,8 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Subject;
+use App\Models\Campus;
+use App\Models\StudyMaterial;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Storage;
 
 class StudyMaterialController extends Controller
 {
@@ -20,13 +26,15 @@ class StudyMaterialController extends Controller
         $filterSection = $request->get('filter_section');
         $filterType = $request->get('filter_type');
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+        // Get campuses for dropdown - First from Campus model, then fallback
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
         }
 
         // Get classes
@@ -37,29 +45,216 @@ class StudyMaterialController extends Controller
         }
 
         // Get sections (filtered by class if provided)
-        $sectionsQuery = Section::query();
+        $sections = collect();
         if ($filterClass) {
-            $sectionsQuery->where('class', $filterClass);
-        }
-        $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D']);
+            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->whereNotNull('name')
+                ->distinct()
+                ->pluck('name')
+                ->sort()
+                ->values();
+            
+            if ($sections->isEmpty()) {
+                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+            }
         }
 
         // Get material types
-        $materialTypes = collect(['Video', 'Document', 'PDF', 'Image', 'Audio', 'Link', 'Assignment', 'Quiz']);
+        $materialTypes = collect(['picture', 'video', 'documents']);
+
+        // Get subjects for modal (will be loaded dynamically via AJAX)
+        $subjects = collect();
+
+        // Query study materials based on filters
+        $studyMaterials = collect();
+        if ($filterCampus || $filterClass || $filterSection || $filterType) {
+            $query = StudyMaterial::query();
+            
+            $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
+            if ($campusName) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
+            }
+            if ($filterClass) {
+                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+            }
+            if ($filterSection) {
+                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            }
+            if ($filterType) {
+                $query->where('file_type', $filterType);
+            }
+            
+            $studyMaterials = $query->orderBy('created_at', 'desc')->get();
+        }
 
         return view('study-material.lms', compact(
             'campuses',
             'classes',
             'sections',
+            'subjects',
             'materialTypes',
+            'studyMaterials',
             'filterCampus',
             'filterClass',
             'filterSection',
             'filterType'
         ));
+    }
+
+    /**
+     * Store a newly created study material.
+     */
+    public function store(Request $request): RedirectResponse
+    {
+        $rules = [
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'campus' => ['required', 'string', 'max:255'],
+            'class' => ['required', 'string', 'max:255'],
+            'section' => ['nullable', 'string', 'max:255'],
+            'subject' => ['nullable', 'string', 'max:255'],
+            'file_type' => ['required', 'in:picture,video,documents'],
+        ];
+
+        // Conditional validation based on file type
+        if ($request->file_type === 'video') {
+            $rules['youtube_url'] = ['required', 'url', 'max:500'];
+        } else {
+            $rules['file'] = ['required', 'file', 'max:10240']; // Max 10MB
+        }
+
+        $validated = $request->validate($rules);
+
+        $filePath = null;
+        $youtubeUrl = null;
+
+        if ($validated['file_type'] === 'video') {
+            // For video, use YouTube URL
+            $youtubeUrl = $validated['youtube_url'] ?? null;
+        } else {
+            // For picture or documents, upload file
+            if ($request->hasFile('file')) {
+                $file = $request->file('file');
+                $fileName = time() . '_' . $file->getClientOriginalName();
+                $filePath = $file->storeAs('study-materials', $fileName, 'public');
+            }
+        }
+
+        StudyMaterial::create([
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'campus' => $validated['campus'],
+            'class' => $validated['class'],
+            'section' => $validated['section'] ?? null,
+            'subject' => $validated['subject'] ?? null,
+            'file_type' => $validated['file_type'],
+            'file_path' => $filePath,
+            'youtube_url' => $youtubeUrl,
+        ]);
+
+        return redirect()
+            ->route('study-material.lms', [
+                'filter_campus' => $validated['campus'],
+                'filter_class' => $validated['class'],
+                'filter_section' => $validated['section'] ?? '',
+                'filter_type' => $validated['file_type']
+            ])
+            ->with('success', 'Study material created successfully!');
+    }
+
+    /**
+     * Get sections based on class (AJAX).
+     */
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+        
+        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name')
+            ->distinct()
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        if ($sections->isEmpty()) {
+            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section')
+                ->distinct()
+                ->pluck('section')
+                ->sort()
+                ->values();
+        }
+        
+        return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Get subjects based on class and section (AJAX).
+     */
+    public function getSubjectsByClassSection(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        $section = $request->get('section');
+        
+        $subjectsQuery = Subject::query();
+        
+        if ($class) {
+            $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        }
+        if ($section) {
+            $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+        }
+        
+        $subjects = $subjectsQuery->whereNotNull('subject_name')
+            ->distinct()
+            ->pluck('subject_name')
+            ->sort()
+            ->values();
+        
+        return response()->json(['subjects' => $subjects]);
+    }
+
+    /**
+     * View/Download study material file.
+     */
+    public function viewFile(StudyMaterial $studyMaterial)
+    {
+        if (!$studyMaterial->file_path) {
+            abort(404, 'File not found');
+        }
+
+        $filePath = storage_path('app/public/' . $studyMaterial->file_path);
+        
+        if (!file_exists($filePath)) {
+            abort(404, 'File not found');
+        }
+
+        return response()->file($filePath);
+    }
+
+    /**
+     * Delete a study material.
+     */
+    public function destroy(StudyMaterial $studyMaterial): RedirectResponse
+    {
+        // Delete file if exists
+        if ($studyMaterial->file_path && Storage::disk('public')->exists($studyMaterial->file_path)) {
+            Storage::disk('public')->delete($studyMaterial->file_path);
+        }
+
+        $studyMaterial->delete();
+
+        return redirect()
+            ->route('study-material.lms')
+            ->with('success', 'Study material deleted successfully!');
     }
 }
 

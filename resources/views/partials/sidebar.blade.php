@@ -173,17 +173,17 @@
                 <li class="menu-title small text-uppercase">
                     <span class="menu-title-text">MAIN</span>
                 </li>
-                   <li class="menu-item {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'open' : '' }}">
-                       <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || request()->routeIs('student*') || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('question-paper*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'active' : '' }}">
+                   <li class="menu-item {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || (request()->routeIs('student*') && !request()->routeIs('student-behavior*')) || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') || request()->routeIs('change-password*') || request()->routeIs('live-chat') ? 'open' : '' }}">
+                       <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || (request()->routeIs('student*') && !request()->routeIs('student-behavior*')) || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') || request()->routeIs('change-password*') || request()->routeIs('live-chat') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">dashboard</span>
                     <span class="title">Dashboard</span>
-                    <span class="count">11</span>
                 </a>
             
                 <ul class="menu-sub">
-                    <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('admission*') ? 'active' : '' }}">
-                            Admission Management
+                    <li class="menu-item admission-management-item">
+                        <a href="javascript:void(0);" class="menu-link menu-toggle admission-management-link {{ request()->routeIs('admission*') ? 'active' : '' }}">
+                            <span class="material-symbols-outlined menu-icon">how_to_reg</span>
+                            <span class="title">Admission Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -208,7 +208,8 @@
                             </li>
                             <li class="menu-item {{ request()->routeIs('admission.inquiry*') ? 'open' : '' }}">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('admission.inquiry*') ? 'active' : '' }}">
-                                    Admission Inquiry
+                                    <span class="material-symbols-outlined menu-icon">contact_support</span>
+                                    <span class="title">Admission Inquiry</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -226,8 +227,9 @@
                         </ul>
                     </li>
                     <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('student*') ? 'active' : '' }}">
-                            Student Management
+                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ (request()->routeIs('student*') && !request()->routeIs('student-behavior*')) ? 'active' : '' }}">
+                            <span class="material-symbols-outlined menu-icon">people</span>
+                            <span class="title">Student Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -259,7 +261,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('parent*') ? 'active' : '' }}">
-                            Parent Account
+                            <span class="material-symbols-outlined menu-icon">family_restroom</span>
+                            <span class="title">Parent Account</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -286,7 +289,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('staff*') ? 'active' : '' }}">
-                            Staff Management
+                            <span class="material-symbols-outlined menu-icon">groups</span>
+                            <span class="title">Staff Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -308,12 +312,14 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('task-management') }}" class="menu-link {{ request()->routeIs('task-management') ? 'active' : '' }}">
-                            Task Management
+                            <span class="material-symbols-outlined menu-icon">task</span>
+                            <span class="title">Task Management</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('id-card*') ? 'active' : '' }}">
-                            ID Card Printing
+                            <span class="material-symbols-outlined menu-icon">badge</span>
+                            <span class="title">ID Card Printing</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -330,12 +336,14 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('accountants') }}" class="menu-link {{ request()->routeIs('accountants') ? 'active' : '' }}">
-                            Accountants
+                            <span class="material-symbols-outlined menu-icon">account_circle</span>
+                            <span class="title">Accountants</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accounting*') ? 'active' : '' }}">
-                            Accounting
+                            <span class="material-symbols-outlined menu-icon">account_balance_wallet</span>
+                            <span class="title">Accounting</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -370,7 +378,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accounting.parent-wallet*') ? 'active' : '' }}">
-                                    Parent Wallet System
+                                    <span class="material-symbols-outlined menu-icon">account_balance_wallet</span>
+                                    <span class="title">Parent Wallet System</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -417,7 +426,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accounting.direct-payment*') ? 'active' : '' }}">
-                                    Direct Payment
+                                    <span class="material-symbols-outlined menu-icon">payments</span>
+                                    <span class="title">Direct Payment</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -434,7 +444,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accounting.fee-increment*') ? 'active' : '' }}">
-                                    Generate Fee Increment
+                                    <span class="material-symbols-outlined menu-icon">trending_up</span>
+                                    <span class="title">Generate Fee Increment</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -451,7 +462,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accounting.fee-document*') ? 'active' : '' }}">
-                                    Generate Fee Document
+                                    <span class="material-symbols-outlined menu-icon">description</span>
+                                    <span class="title">Generate Fee Document</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -468,7 +480,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accounting.fee-voucher*') ? 'active' : '' }}">
-                                    Print Fee Voucher
+                                    <span class="material-symbols-outlined menu-icon">receipt</span>
+                                    <span class="title">Print Fee Voucher</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -487,12 +500,14 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('parent-complain') }}" class="menu-link {{ request()->routeIs('parent-complain') ? 'active' : '' }}">
-                            Parent Complain
+                            <span class="material-symbols-outlined menu-icon">feedback</span>
+                            <span class="title">Parent Complain</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('classes*') ? 'active' : '' }}">
-                            Classes and Section
+                            <span class="material-symbols-outlined menu-icon">class</span>
+                            <span class="title">Classes and Section</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -509,12 +524,14 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('manage-subjects') }}" class="menu-link {{ request()->routeIs('manage-subjects') ? 'active' : '' }}">
-                            Manage Subjects
+                            <span class="material-symbols-outlined menu-icon">subject</span>
+                            <span class="title">Manage Subjects</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('attendance*') ? 'active' : '' }}">
-                            Manage Attendance
+                            <span class="material-symbols-outlined menu-icon">event_available</span>
+                            <span class="title">Manage Attendance</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -556,12 +573,14 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('online-classes') }}" class="menu-link {{ request()->routeIs('online-classes') ? 'active' : '' }}">
-                            Online Classes
+                            <span class="material-symbols-outlined menu-icon">video_call</span>
+                            <span class="title">Online Classes</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('timetable*') ? 'active' : '' }}">
-                            Timetable Management
+                            <span class="material-symbols-outlined menu-icon">schedule</span>
+                            <span class="title">Timetable Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -578,7 +597,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('academic-calendar*') ? 'active' : '' }}">
-                            Academic Holiday Calendar
+                            <span class="material-symbols-outlined menu-icon">calendar_month</span>
+                            <span class="title">Academic Holiday Calendar</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -595,12 +615,14 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('fee-payment') }}" class="menu-link {{ request()->routeIs('fee-payment') ? 'active' : '' }}">
-                            Fee Payment
+                            <span class="material-symbols-outlined menu-icon">payment</span>
+                            <span class="title">Fee Payment</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('expense-management*') ? 'active' : '' }}">
-                            Expense Management
+                            <span class="material-symbols-outlined menu-icon">receipt_long</span>
+                            <span class="title">Expense Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -617,7 +639,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('salary-loan*') ? 'active' : '' }}">
-                            Salary and Loan Management
+                            <span class="material-symbols-outlined menu-icon">payments</span>
+                            <span class="title">Salary and Loan Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -647,7 +670,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('salary-loan.increment*') ? 'active' : '' }}">
-                                    Generate Salary Increment
+                                    <span class="material-symbols-outlined menu-icon">trending_up</span>
+                                    <span class="title">Generate Salary Increment</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -664,7 +688,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('salary-loan.decrement*') ? 'active' : '' }}">
-                                    Generate Salary Decrement
+                                    <span class="material-symbols-outlined menu-icon">trending_down</span>
+                                    <span class="title">Generate Salary Decrement</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -683,7 +708,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('reports*') ? 'active' : '' }}">
-                            Reporting
+                            <span class="material-symbols-outlined menu-icon">assessment</span>
+                            <span class="title">Reporting</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -750,7 +776,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('stock*') || request()->routeIs('inventory*') ? 'active' : '' }}">
-                            Stock & Inventory
+                            <span class="material-symbols-outlined menu-icon">inventory_2</span>
+                            <span class="title">Stock & Inventory</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -787,7 +814,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('student-behavior*') ? 'active' : '' }}">
-                            Manage Student Behavior
+                            <span class="material-symbols-outlined menu-icon">psychology</span>
+                            <span class="title">Manage Student Behavior</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -813,30 +841,9 @@
                         </ul>
                     </li>
                     <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('question-paper*') ? 'active' : '' }}">
-                            Question Paper
-                        </a>
-                        <ul class="menu-sub">
-                            <li class="menu-item">
-                                <a href="{{ route('question-paper.manage-book') }}" class="menu-link {{ request()->routeIs('question-paper.manage-book') ? 'active' : '' }}">
-                                    Manage Book
-                                </a>
-                            </li>
-                            <li class="menu-item">
-                                <a href="{{ route('question-paper.question-bank') }}" class="menu-link {{ request()->routeIs('question-paper.question-bank') ? 'active' : '' }}">
-                                    Question Bank
-                                </a>
-                            </li>
-                            <li class="menu-item">
-                                <a href="{{ route('question-paper.generate') }}" class="menu-link {{ request()->routeIs('question-paper.generate') ? 'active' : '' }}">
-                                    Generate Question Paper
-                                </a>
-                            </li>
-                        </ul>
-                    </li>
-                    <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test*') ? 'active' : '' }}">
-                            Test Management
+                            <span class="material-symbols-outlined menu-icon">quiz</span>
+                            <span class="title">Test Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -856,7 +863,8 @@
                             </li>
                             <li class="menu-item {{ request()->routeIs('test.assign-grades*') ? 'open' : '' }}">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.assign-grades*') ? 'active' : '' }}">
-                                    Assign Grades
+                                    <span class="material-symbols-outlined menu-icon">grade</span>
+                                    <span class="title">Assign Grades</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -873,7 +881,8 @@
                             </li>
                             <li class="menu-item {{ request()->routeIs('test.teacher-remarks*') ? 'open' : '' }}">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.teacher-remarks*') ? 'active' : '' }}">
-                                    Test Remarks
+                                    <span class="material-symbols-outlined menu-icon">comment</span>
+                                    <span class="title">Test Remarks</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -890,7 +899,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.tabulation-sheet*') ? 'active' : '' }}">
-                                    Tabulation Sheet
+                                    <span class="material-symbols-outlined menu-icon">table_chart</span>
+                                    <span class="title">Tabulation Sheet</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -907,7 +917,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.position-holder*') ? 'active' : '' }}">
-                                    Position Holder
+                                    <span class="material-symbols-outlined menu-icon">emoji_events</span>
+                                    <span class="title">Position Holder</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -924,7 +935,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.send-marks*') ? 'active' : '' }}">
-                                    Send Marks to Parents
+                                    <span class="material-symbols-outlined menu-icon">send</span>
+                                    <span class="title">Send Marks to Parents</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -941,7 +953,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.send-marksheet*') ? 'active' : '' }}">
-                                    Send Marksheet via WA
+                                    <span class="material-symbols-outlined menu-icon">forward_to_inbox</span>
+                                    <span class="title">Send Marksheet via WA</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -958,7 +971,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('test.print-marksheets*') ? 'active' : '' }}">
-                                    Print Marksheets
+                                    <span class="material-symbols-outlined menu-icon">print</span>
+                                    <span class="title">Print Marksheets</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -977,7 +991,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam*') ? 'active' : '' }}">
-                            Exam Management
+                            <span class="material-symbols-outlined menu-icon">assignment</span>
+                            <span class="title">Exam Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -992,7 +1007,8 @@
                             </li>
                             <li class="menu-item {{ request()->routeIs('exam.teacher-remarks*') ? 'open' : '' }}">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.teacher-remarks*') ? 'active' : '' }}">
-                                    Teacher Remarks
+                                    <span class="material-symbols-outlined menu-icon">comment</span>
+                                    <span class="title">Teacher Remarks</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -1019,7 +1035,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.grades*') ? 'active' : '' }}">
-                                    Exam Grades
+                                    <span class="material-symbols-outlined menu-icon">grade</span>
+                                    <span class="title">Exam Grades</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -1036,7 +1053,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.timetable*') ? 'active' : '' }}">
-                                    Exam Timetable
+                                    <span class="material-symbols-outlined menu-icon">schedule</span>
+                                    <span class="title">Exam Timetable</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -1053,7 +1071,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.tabulation-sheet*') ? 'active' : '' }}">
-                                    Tabulation Sheet
+                                    <span class="material-symbols-outlined menu-icon">table_chart</span>
+                                    <span class="title">Tabulation Sheet</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -1070,7 +1089,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.position-holders*') ? 'active' : '' }}">
-                                    Position Holders
+                                    <span class="material-symbols-outlined menu-icon">emoji_events</span>
+                                    <span class="title">Position Holders</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -1087,7 +1107,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.send-marks*') ? 'active' : '' }}">
-                                    Send Marks to Parents
+                                    <span class="material-symbols-outlined menu-icon">send</span>
+                                    <span class="title">Send Marks to Parents</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -1104,7 +1125,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.print-marksheet*') ? 'active' : '' }}">
-                                    Print Marksheet
+                                    <span class="material-symbols-outlined menu-icon">print</span>
+                                    <span class="title">Print Marksheet</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">
@@ -1123,7 +1145,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('quiz*') ? 'active' : '' }}">
-                            Quiz Management
+                            <span class="material-symbols-outlined menu-icon">help</span>
+                            <span class="title">Quiz Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1135,7 +1158,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('certification*') ? 'active' : '' }}">
-                            Certifications
+                            <span class="material-symbols-outlined menu-icon">workspace_premium</span>
+                            <span class="title">Certifications</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1152,7 +1176,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('homework-diary*') ? 'active' : '' }}">
-                            Daily Homework Diary
+                            <span class="material-symbols-outlined menu-icon">book</span>
+                            <span class="title">Daily Homework Diary</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1169,17 +1194,20 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('study-material.lms') }}" class="menu-link {{ request()->routeIs('study-material.lms') ? 'active' : '' }}">
-                            Study Material - LMS
+                            <span class="material-symbols-outlined menu-icon">menu_book</span>
+                            <span class="title">Study Material - LMS</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('leave-management') }}" class="menu-link {{ request()->routeIs('leave-management') ? 'active' : '' }}">
-                            Leave Management
+                            <span class="material-symbols-outlined menu-icon">event_busy</span>
+                            <span class="title">Leave Management</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('sms*') ? 'active' : '' }}">
-                            SMS Management
+                            <span class="material-symbols-outlined menu-icon">sms</span>
+                            <span class="title">SMS Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1206,7 +1234,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('notification*') ? 'active' : '' }}">
-                            Mobile App Notification
+                            <span class="material-symbols-outlined menu-icon">notifications</span>
+                            <span class="title">Mobile App Notification</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1233,7 +1262,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('whatsapp*') ? 'active' : '' }}">
-                            WhatsApp Notification
+                            <span class="material-symbols-outlined menu-icon">chat</span>
+                            <span class="title">WhatsApp Notification</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1255,12 +1285,14 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('whatsapp.template') }}" class="menu-link {{ request()->routeIs('whatsapp.template') ? 'active' : '' }}">
-                            Send/WhatsApp Template
+                            <span class="material-symbols-outlined menu-icon">description</span>
+                            <span class="title">Send/WhatsApp Template</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('email-alerts*') ? 'active' : '' }}">
-                            Email Alerts
+                            <span class="material-symbols-outlined menu-icon">mail</span>
+                            <span class="title">Email Alerts</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1277,23 +1309,27 @@
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('school.noticeboard') }}" class="menu-link {{ request()->routeIs('school.noticeboard') ? 'active' : '' }}">
-                            School Noticeboard
+                            <span class="material-symbols-outlined menu-icon">campaign</span>
+                            <span class="title">School Noticeboard</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="{{ route('manage.campuses') }}" class="menu-link {{ request()->routeIs('manage.campuses') ? 'active' : '' }}">
-                            Manage Campuses
+                            <span class="material-symbols-outlined menu-icon">location_city</span>
+                            <span class="title">Manage Campuses</span>
                         </a>
                     </li>
                     @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin())
                     <li class="menu-item">
                         <a href="{{ route('admin.roles-management') }}" class="menu-link {{ request()->routeIs('admin.roles-management') ? 'active' : '' }}">
-                            Admin Roles Management
+                            <span class="material-symbols-outlined menu-icon">admin_panel_settings</span>
+                            <span class="title">Admin Roles Management</span>
                         </a>
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('transport*') ? 'active' : '' }}">
-                            Transport
+                            <span class="material-symbols-outlined menu-icon">directions_bus</span>
+                            <span class="title">Transport</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1310,7 +1346,8 @@
                     </li>
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('website-management*') ? 'active' : '' }}">
-                            Website Management
+                            <span class="material-symbols-outlined menu-icon">language</span>
+                            <span class="title">Website Management</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1326,8 +1363,9 @@
                         </ul>
                     </li>
                     <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('account-settings') || request()->routeIs('change-password') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') ? 'active' : '' }}">
-                            Settings
+                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') ? 'active' : '' }}">
+                            <span class="material-symbols-outlined menu-icon">settings</span>
+                            <span class="title">Settings</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
@@ -1336,13 +1374,13 @@
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('change-password') }}" class="menu-link {{ request()->routeIs('change-password') ? 'active' : '' }}">
-                                    Change Password
+                                <a href="{{ route('connections') }}" class="menu-link {{ request()->routeIs('connections') ? 'active' : '' }}">
+                                    Connections
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('connections') }}" class="menu-link {{ request()->routeIs('connections') ? 'active' : '' }}">
-                                    Connections
+                                <a href="{{ route('thermal-printer.setting') }}" class="menu-link {{ request()->routeIs('thermal-printer*') ? 'active' : '' }}">
+                                    Thermal Printer Setting
                                 </a>
                             </li>
                             <li class="menu-item">
@@ -1357,10 +1395,27 @@
                             </li>
                         </ul>
                     </li>
+                    <li class="menu-item">
+                        <a href="{{ route('live-chat') }}" class="menu-link {{ request()->routeIs('live-chat') ? 'active' : '' }}">
+                            <span class="material-symbols-outlined menu-icon">chat</span>
+                            <span class="title">Live Chat</span>
+                        </a>
+                    </li>
                     @endif
                 </ul>
             </li>
             @endif
+            
+            {{-- IMPORTANT LINKS Section --}}
+            <li class="menu-title small text-uppercase">
+                <span class="menu-title-text">IMPORTANT LINKS</span>
+            </li>
+            <li class="menu-item">
+                <a href="{{ route('change-password') }}" class="menu-link {{ request()->routeIs('change-password*') ? 'active' : '' }}">
+                    <span class="material-symbols-outlined menu-icon">lock</span>
+                    <span class="title">Change Password</span>
+                </a>
+            </li>
             
             {{-- Logout Button (for both Admin and Staff) --}}
             <li class="menu-item">
@@ -1417,4 +1472,13 @@ function handleSidebarLogout() {
     console.log('No logout form found');
 }
 </script>
+
+<style>
+/* Remove dots from all sub-menu items */
+.menu-vertical .menu-sub .menu-item .menu-link::before {
+    display: none !important;
+    content: none !important;
+}
+</style>
+
 

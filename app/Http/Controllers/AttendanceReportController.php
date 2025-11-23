@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\StudentAttendance;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Carbon\Carbon;
@@ -118,14 +119,49 @@ class AttendanceReportController extends Controller
             $daysInMonth = $date->daysInMonth;
             $monthName = $date->format('F');
 
-            // TODO: Fetch actual attendance data from attendance table
-            // For now, we'll prepare the structure
-            // When attendance system is implemented, query the attendance table here
+            // Fetch actual attendance data from attendance table
+            $studentIds = $students->pluck('id');
+            
+            // Get attendance for the entire month
+            $startDate = Carbon::create($filterYear, $filterMonth, 1)->startOfDay();
+            $endDate = Carbon::create($filterYear, $filterMonth, $daysInMonth)->endOfDay();
+            
+            $attendances = StudentAttendance::whereIn('student_id', $studentIds)
+                ->whereBetween('attendance_date', [$startDate, $endDate])
+                ->get()
+                ->groupBy('student_id');
+            
+            // Build attendance data array for each student
             foreach ($students as $student) {
                 $attendanceData[$student->id] = [];
+                
+                // Initialize all days as empty
                 for ($day = 1; $day <= $daysInMonth; $day++) {
-                    // Placeholder: 'P' for Present, 'A' for Absent, '' for not marked
                     $attendanceData[$student->id][$day] = '';
+                }
+                
+                // Fill in actual attendance data
+                if (isset($attendances[$student->id])) {
+                    foreach ($attendances[$student->id] as $attendance) {
+                        $attendanceDate = Carbon::parse($attendance->attendance_date);
+                        $day = $attendanceDate->day;
+                        
+                        // Convert status to single letter
+                        $status = strtoupper($attendance->status);
+                        if ($status === 'PRESENT') {
+                            $attendanceData[$student->id][$day] = 'P';
+                        } elseif ($status === 'ABSENT') {
+                            $attendanceData[$student->id][$day] = 'A';
+                        } elseif ($status === 'HOLIDAY') {
+                            $attendanceData[$student->id][$day] = 'H';
+                        } elseif ($status === 'SUNDAY') {
+                            $attendanceData[$student->id][$day] = 'S';
+                        } elseif ($status === 'LEAVE') {
+                            $attendanceData[$student->id][$day] = 'L';
+                        } else {
+                            $attendanceData[$student->id][$day] = '';
+                        }
+                    }
                 }
             }
         }

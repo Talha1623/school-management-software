@@ -18458,7 +18458,7 @@ Dark Mode SCSS
   position: fixed;
   top: 0;
   left: 0;
-  width: 300px;
+  width: 320px;
   height: 100%;
   transition: all ease 0.5s;
   padding-bottom: 30px;
@@ -18592,7 +18592,7 @@ Dark Mode SCSS
 }
 .menu-vertical .menu-sub .menu-item .menu-link {
   padding: 9.5px 18px;
-  padding-left: 32px;
+  padding-left: 42px;
   transition: all ease 0.5s;
   position: relative;
   font-size: 14px;
@@ -18600,7 +18600,7 @@ Dark Mode SCSS
 }
 .menu-vertical .menu-sub .menu-item .menu-link::before {
   top: 50%;
-  left: 15px;
+  left: 22px;
   width: 6px;
   height: 6px;
   content: "";
@@ -18794,7 +18794,7 @@ Dark Mode SCSS
   display: none;
 }
 [sidebar-data-theme=sidebar-hide] .sidebar-area:hover {
-  width: 300px;
+  width: 320px;
 }
 [sidebar-data-theme=sidebar-hide] .sidebar-area:hover .logo {
   padding: 25px;
@@ -18972,7 +18972,7 @@ Dark Mode SCSS
 /* Min width 1200px to Max width 1399px */
 @media only screen and (min-width: 1200px) and (max-width: 1399px) {
   .sidebar-area {
-    width: 280px;
+    width: 300px;
   }
 }
 /* 

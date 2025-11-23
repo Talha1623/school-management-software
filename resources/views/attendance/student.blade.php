@@ -545,6 +545,9 @@ function updateAttendance(studentId, status, attendanceDate) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // Update dashboard if it's open in another tab/window
+            updateDashboardStats();
+            
             // Reload the page to show updated status
             window.location.reload();
         } else {
@@ -561,6 +564,24 @@ function updateAttendance(studentId, status, attendanceDate) {
         button.innerHTML = originalText;
         button.className = originalClass;
     });
+}
+
+// Function to update dashboard stats (for real-time updates)
+function updateDashboardStats() {
+    // Try to update dashboard if it's open in another tab/window
+    if (window.opener && !window.opener.closed) {
+        try {
+            window.opener.postMessage({ type: 'updateAttendanceStats' }, '*');
+        } catch(e) {
+            console.log('Could not update parent window');
+        }
+    }
+    
+    // Also broadcast to same-origin windows
+    if (window.BroadcastChannel) {
+        const channel = new BroadcastChannel('attendance-updates');
+        channel.postMessage({ type: 'updateAttendanceStats' });
+    }
 }
 </script>
 @endsection

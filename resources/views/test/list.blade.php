@@ -15,16 +15,22 @@
             </div>
 
             @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-success alert-dismissible fade show success-toast" role="alert" id="successAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">check_circle</span>
+                        <span>{{ session('success') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-danger alert-dismissible fade show error-toast" role="alert" id="errorAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">error</span>
+                        <span>{{ session('error') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
@@ -206,10 +212,10 @@
 <div class="modal fade" id="testModal" tabindex="-1" aria-labelledby="testModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="testModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">quiz</span>
-                    <span>Add New Test</span>
+            <div class="modal-header p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2 text-white" id="testModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">quiz</span>
+                    <span style="color: white;">Add New Test</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -291,9 +297,9 @@
                                 </span>
                                 <select class="form-control test-input" name="test_type" id="test_type" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Test Type</option>
-                                    @foreach($testTypes as $type)
-                                        <option value="{{ $type }}">{{ $type }}</option>
-                                    @endforeach
+                                    <option value="daily test">Daily Test</option>
+                                    <option value="weekly test">Weekly Test</option>
+                                    <option value="monthly test">Monthly Test</option>
                                 </select>
                             </div>
                         </div>
@@ -362,11 +368,33 @@
     
     #testModal .test-input {
         font-size: 13px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.35rem 0.65rem;
+        height: 32px;
         border: none;
         border-left: 1px solid #e0e7ff;
         border-radius: 0 8px 8px 0;
         transition: all 0.3s ease;
+    }
+    
+    #testModal .test-input[type="date"],
+    #testModal .test-input select {
+        height: 32px;
+        padding: 0.35rem 0.65rem;
+    }
+    
+    #testModal textarea.test-input {
+        min-height: 32px;
+        padding: 0.35rem 0.65rem;
+    }
+    
+    #testModal select.test-input {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23003471' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.65rem center;
+        padding-right: 2rem;
     }
     
     #testModal .test-input:focus {
@@ -376,7 +404,8 @@
     }
     
     #testModal .input-group-text {
-        padding: 0 0.75rem;
+        padding: 0 0.65rem;
+        height: 32px;
         display: flex;
         align-items: center;
         border: none;
@@ -620,6 +649,96 @@
         opacity: 0.6;
         cursor: not-allowed;
     }
+    
+    /* Toast Notification Styling */
+    .success-toast,
+    .error-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 400px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideInDown 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    
+    .success-toast {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border: none;
+    }
+    
+    .error-toast {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        border: none;
+    }
+    
+    .success-toast .btn-close,
+    .error-toast .btn-close {
+        filter: brightness(0) invert(1);
+        opacity: 0.9;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: auto;
+    }
+    
+    .success-toast .btn-close:hover,
+    .error-toast .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .success-toast .material-symbols-outlined,
+    .error-toast .material-symbols-outlined {
+        font-size: 20px;
+        flex-shrink: 0;
+    }
+    
+    .success-toast > div,
+    .error-toast > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    
+    @keyframes slideInDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOutUp {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+    }
+    
+    .success-toast.fade-out,
+    .error-toast.fade-out {
+        animation: slideOutUp 0.3s ease-out forwards;
+    }
 </style>
 
 <script>
@@ -629,8 +748,8 @@ function resetForm() {
     document.getElementById('testForm').action = "{{ route('test.list.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('testModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">quiz</span>
-        <span>Add New Test</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">quiz</span>
+        <span style="color: white;">Add New Test</span>
     `;
     document.querySelector('.test-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -653,8 +772,8 @@ function editTest(id, campus, testName, forClass, section, subject, testType, de
     document.getElementById('testForm').action = "{{ url('test/list') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
     document.getElementById('testModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-        <span>Edit Test</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+        <span style="color: white;">Edit Test</span>
     `;
     document.querySelector('.test-submit-btn').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
@@ -853,5 +972,32 @@ function toggleResultStatus(testId) {
         button.disabled = false;
     });
 }
+
+// Auto-dismiss toast notifications
+document.addEventListener('DOMContentLoaded', function() {
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    
+    function dismissToast(toast) {
+        if (toast) {
+            toast.classList.add('fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+    }
+    
+    if (successAlert) {
+        setTimeout(() => {
+            dismissToast(successAlert);
+        }, 5000);
+    }
+    
+    if (errorAlert) {
+        setTimeout(() => {
+            dismissToast(errorAlert);
+        }, 5000);
+    }
+});
 </script>
 @endsection

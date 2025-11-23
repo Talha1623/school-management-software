@@ -29,12 +29,16 @@
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Exam -->
                     <div class="col-md-2">
-                        <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam</label>
-                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;">
-                            <option value="">All Exams</option>
-                            @foreach($exams as $examName)
-                                <option value="{{ $examName }}" {{ $filterExam == $examName ? 'selected' : '' }}>{{ $examName }}</option>
-                            @endforeach
+                        <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam Name</label>
+                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;" {{ !$filterClass || !$filterSection ? 'disabled' : '' }}>
+                            <option value="">Select Exam</option>
+                            @if(isset($exams) && $exams->count() > 0)
+                                @foreach($exams as $examName)
+                                    <option value="{{ $examName }}" {{ $filterExam == $examName ? 'selected' : '' }}>{{ $examName }}</option>
+                                @endforeach
+                            @else
+                                <option value="" disabled>No exams found</option>
+                            @endif
                         </select>
                     </div>
 
@@ -52,8 +56,8 @@
                     <!-- Section -->
                     <div class="col-md-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
-                            <option value="">All Sections</option>
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;" {{ !$filterClass ? 'disabled' : '' }}>
+                            <option value="">Select Section</option>
                             @if($filterClass)
                                 @foreach($sections as $sectionName)
                                     <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
@@ -65,8 +69,8 @@
                     <!-- Subject -->
                     <div class="col-md-2">
                         <label for="filter_subject" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Subject</label>
-                        <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;">
-                            <option value="">All Subjects</option>
+                        <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;" {{ !$filterClass || !$filterSection ? 'disabled' : '' }}>
+                            <option value="">Select Subject</option>
                             @foreach($subjects as $subjectName)
                                 <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
                             @endforeach
@@ -84,8 +88,49 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_exam', 'filter_class', 'filter_section', 'filter_subject']))
+            @if($filterClass && $filterSection)
             <div class="mt-3">
+                <!-- Context Card -->
+                <div class="card mb-3" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
+                    <div class="card-body p-3">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <div class="d-flex flex-column gap-1">
+                                    @if($filterExam)
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="fw-semibold" style="color: #003471;">Exam:</span>
+                                            <span style="color: #495057;">{{ $filterExam }}</span>
+                                        </div>
+                                    @endif
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-semibold" style="color: #003471;">Class:</span>
+                                        <span style="color: #495057;">{{ $filterClass }}</span>
+                                        @if($filterSection)
+                                            <span class="fw-semibold" style="color: #003471; margin-left: 10px;">Section:</span>
+                                            <span style="color: #495057;">{{ $filterSection }}</span>
+                                        @endif
+                                    </div>
+                                    @if($filterSubject)
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="fw-semibold" style="color: #003471;">Subject:</span>
+                                            <span style="color: #495057;">{{ $filterSubject }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6; opacity: 0.5;">bar_chart</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Navigation Guide Banner -->
+                <div class="alert alert-warning mb-3 d-flex align-items-center gap-2" style="background-color: #fff3cd; border-color: #ffc107; color: #856404;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">info</span>
+                    <span style="font-size: 13px;"><strong>Navigation Guide:</strong> Use ← (Left Arrow), → (Right Arrow), ↑ (Up Arrow), and ↓ (Down Arrow) to navigate between input fields.</span>
+                </div>
+                
                 <!-- Search Bar -->
                 <div class="mb-3">
                     <div class="input-group input-group-sm search-input-group" style="max-width: 400px;">
@@ -167,7 +212,7 @@
             @else
             <div class="text-center py-5">
                 <span class="material-symbols-outlined text-muted" style="font-size: 64px;">filter_alt</span>
-                <p class="text-muted mt-3 mb-0">Please apply filters to view students for marks entry</p>
+                <p class="text-muted mt-3 mb-0">Please select Class and Section to view students for marks entry</p>
             </div>
             @endif
         </div>
@@ -260,7 +305,27 @@ document.addEventListener('DOMContentLoaded', function() {
     if (classSelect) {
         classSelect.addEventListener('change', function() {
             const selectedClass = this.value;
-            loadSections(selectedClass);
+            if (selectedClass) {
+                loadSections(selectedClass);
+                // Enable section dropdown
+                if (sectionSelect) {
+                    sectionSelect.disabled = false;
+                }
+            } else {
+                // Disable section, exam, and subject dropdowns if no class selected
+                if (sectionSelect) {
+                    sectionSelect.disabled = true;
+                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                }
+                if (subjectSelect) {
+                    subjectSelect.disabled = true;
+                    subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+                }
+                const examSelect = document.getElementById('filter_exam');
+                if (examSelect) {
+                    examSelect.disabled = true;
+                }
+            }
             // Also reload subjects when class changes
             loadSubjects();
         });
@@ -269,7 +334,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load subjects when class or section changes
     if (sectionSelect) {
         sectionSelect.addEventListener('change', function() {
-            loadSubjects();
+            const selectedSection = this.value;
+            if (selectedSection && classSelect && classSelect.value) {
+                // Enable exam and subject dropdowns
+                const examSelect = document.getElementById('filter_exam');
+                if (examSelect) {
+                    examSelect.disabled = false;
+                }
+                if (subjectSelect) {
+                    subjectSelect.disabled = false;
+                }
+                loadSubjects();
+            } else {
+                // Disable exam and subject dropdowns if no section selected
+                const examSelect = document.getElementById('filter_exam');
+                if (examSelect) {
+                    examSelect.disabled = true;
+                }
+                if (subjectSelect) {
+                    subjectSelect.disabled = true;
+                    subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+                }
+            }
         });
     }
 
@@ -282,7 +368,7 @@ document.addEventListener('DOMContentLoaded', function() {
             fetch(`{{ route('exam.marks-entry.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
                 .then(response => response.json())
                 .then(data => {
-                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
                     if (data.sections && data.sections.length > 0) {
                         data.sections.forEach(section => {
                             const option = document.createElement('option');
@@ -301,7 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
                 });
         } else {
-            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
         }
     }
 
@@ -311,8 +397,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const classValue = classSelect ? classSelect.value : '';
         const section = sectionSelect ? sectionSelect.value : '';
         
-        if (!classValue && !section) {
-            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+        if (!classValue || !section) {
+            subjectSelect.innerHTML = '<option value="">Select Subject</option>';
             return;
         }
         
@@ -325,7 +411,7 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`{{ route('exam.marks-entry.get-subjects') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
-                subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                subjectSelect.innerHTML = '<option value="">Select Subject</option>';
                 if (data.subjects && data.subjects.length > 0) {
                     data.subjects.forEach(subject => {
                         const option = document.createElement('option');
@@ -347,14 +433,46 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initial load if filters are already set
     const initialClass = classSelect ? classSelect.value : '';
+    const initialSection = sectionSelect ? sectionSelect.value : '';
+    
     if (initialClass) {
+        if (sectionSelect) {
+            sectionSelect.disabled = false;
+        }
         loadSections(initialClass);
+    } else {
+        // Disable dependent dropdowns if no class selected
+        if (sectionSelect) {
+            sectionSelect.disabled = true;
+        }
+        if (subjectSelect) {
+            subjectSelect.disabled = true;
+        }
+        const examSelect = document.getElementById('filter_exam');
+        if (examSelect) {
+            examSelect.disabled = true;
+        }
     }
     
-    // Load subjects initially if any filters are set
-    const initialSection = sectionSelect ? sectionSelect.value : '';
-    if (initialClass || initialSection) {
+    if (initialClass && initialSection) {
+        // Enable exam and subject dropdowns if both class and section are selected
+        const examSelect = document.getElementById('filter_exam');
+        if (examSelect) {
+            examSelect.disabled = false;
+        }
+        if (subjectSelect) {
+            subjectSelect.disabled = false;
+        }
         loadSubjects();
+    } else if (initialSection) {
+        // If section is selected but class is not, disable subject
+        if (subjectSelect) {
+            subjectSelect.disabled = true;
+        }
+        const examSelect = document.getElementById('filter_exam');
+        if (examSelect) {
+            examSelect.disabled = true;
+        }
     }
 
     // Search functionality

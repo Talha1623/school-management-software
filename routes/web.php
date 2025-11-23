@@ -20,6 +20,31 @@ Route::prefix('staff')->name('staff.')->group(function () {
     // Protected Staff Routes
     Route::middleware([App\Http\Middleware\StaffMiddleware::class])->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\StaffAuthController::class, 'dashboard'])->name('dashboard');
+        Route::get('/dashboard/attendance-stats', [App\Http\Controllers\StaffAuthController::class, 'getAttendanceStats'])->name('dashboard.attendance-stats');
+    });
+});
+
+// Accountant Authentication Routes
+Route::prefix('accountant')->name('accountant.')->group(function () {
+    Route::get('/login', [App\Http\Controllers\AccountantAuthController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [App\Http\Controllers\AccountantAuthController::class, 'login'])->name('login');
+    Route::post('/logout', [App\Http\Controllers\AccountantAuthController::class, 'logout'])->name('logout');
+    
+    // Protected Accountant Routes
+    Route::middleware([App\Http\Middleware\AccountantMiddleware::class])->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\AccountantAuthController::class, 'dashboard'])->name('dashboard');
+    });
+});
+
+// Student Authentication Routes
+Route::prefix('student')->name('student.')->group(function () {
+    Route::get('/login', [App\Http\Controllers\StudentAuthController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [App\Http\Controllers\StudentAuthController::class, 'login'])->name('login');
+    Route::post('/logout', [App\Http\Controllers\StudentAuthController::class, 'logout'])->name('logout');
+    
+    // Protected Student Routes
+    Route::middleware([App\Http\Middleware\StudentMiddleware::class])->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\StudentAuthController::class, 'dashboard'])->name('dashboard');
     });
 });
 
@@ -571,6 +596,7 @@ Route::get('/test/schedule', [App\Http\Controllers\TestScheduleController::class
 
 // Test Reports - Assign Grades
 Route::get('/test/assign-grades/particular', [App\Http\Controllers\AssignGradesController::class, 'particular'])->name('test.assign-grades.particular');
+Route::get('/test/assign-grades/get-sections-by-class', [App\Http\Controllers\AssignGradesController::class, 'getSectionsByClass'])->name('test.assign-grades.get-sections-by-class');
 
 Route::get('/test/assign-grades/combined', [App\Http\Controllers\AssignGradesController::class, 'combined'])->name('test.assign-grades.combined');
 Route::post('/test/assign-grades/combined', [App\Http\Controllers\AssignGradesController::class, 'storeCombined'])->name('test.assign-grades.combined.store');
@@ -579,15 +605,15 @@ Route::delete('/test/assign-grades/combined/{combinedResultGrade}', [App\Http\Co
 Route::get('/test/assign-grades/combined/export/{format}', [App\Http\Controllers\AssignGradesController::class, 'exportCombined'])->name('test.assign-grades.combined.export');
 
 // Test Reports - Teacher Remarks
-Route::get('/test/teacher-remarks/practical', [App\Http\Controllers\TeacherRemarksController::class, 'practical'])->name('test.teacher-remarks.practical');
-Route::post('/test/teacher-remarks/practical/save', [App\Http\Controllers\TeacherRemarksController::class, 'saveRemarks'])->name('test.teacher-remarks.practical.save');
-Route::get('/test/teacher-remarks/practical/get-sections', [App\Http\Controllers\TeacherRemarksController::class, 'getSections'])->name('test.teacher-remarks.practical.get-sections');
-Route::get('/test/teacher-remarks/practical/get-subjects', [App\Http\Controllers\TeacherRemarksController::class, 'getSubjects'])->name('test.teacher-remarks.practical.get-subjects');
-Route::get('/test/teacher-remarks/practical/get-tests', [App\Http\Controllers\TeacherRemarksController::class, 'getTests'])->name('test.teacher-remarks.practical.get-tests');
+Route::get('/test/teacher-remarks/practical', [App\Http\Controllers\TeacherRemarksController::class, 'practical'])->name('test.teacher-remarks.practical')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::post('/test/teacher-remarks/practical/save', [App\Http\Controllers\TeacherRemarksController::class, 'saveRemarks'])->name('test.teacher-remarks.practical.save')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::get('/test/teacher-remarks/practical/get-sections', [App\Http\Controllers\TeacherRemarksController::class, 'getSections'])->name('test.teacher-remarks.practical.get-sections')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::get('/test/teacher-remarks/practical/get-subjects', [App\Http\Controllers\TeacherRemarksController::class, 'getSubjects'])->name('test.teacher-remarks.practical.get-subjects')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::get('/test/teacher-remarks/practical/get-tests', [App\Http\Controllers\TeacherRemarksController::class, 'getTests'])->name('test.teacher-remarks.practical.get-tests')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 
-Route::get('/test/teacher-remarks/combined', [App\Http\Controllers\TeacherRemarksController::class, 'combined'])->name('test.teacher-remarks.combined');
-Route::post('/test/teacher-remarks/combined/save', [App\Http\Controllers\TeacherRemarksController::class, 'saveCombinedRemarks'])->name('test.teacher-remarks.combined.save');
-Route::get('/test/teacher-remarks/combined/get-class-sections', [App\Http\Controllers\TeacherRemarksController::class, 'getClassSections'])->name('test.teacher-remarks.combined.get-class-sections');
+Route::get('/test/teacher-remarks/combined', [App\Http\Controllers\TeacherRemarksController::class, 'combined'])->name('test.teacher-remarks.combined')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::post('/test/teacher-remarks/combined/save', [App\Http\Controllers\TeacherRemarksController::class, 'saveCombinedRemarks'])->name('test.teacher-remarks.combined.save')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::get('/test/teacher-remarks/combined/get-class-sections', [App\Http\Controllers\TeacherRemarksController::class, 'getClassSections'])->name('test.teacher-remarks.combined.get-class-sections')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 
 // Test Reports - Tabulation Sheet
 Route::get('/test/tabulation-sheet/practical', [App\Http\Controllers\TabulationSheetController::class, 'practical'])->name('test.tabulation-sheet.practical');
@@ -707,6 +733,7 @@ Route::post('/quiz/manage', [App\Http\Controllers\QuizController::class, 'store'
 Route::put('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'update'])->name('quiz.manage.update');
 Route::delete('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'destroy'])->name('quiz.manage.destroy');
 Route::get('/quiz/manage/export/{format}', [App\Http\Controllers\QuizController::class, 'export'])->name('quiz.manage.export');
+Route::get('/quiz/manage/get-sections-by-class', [App\Http\Controllers\QuizController::class, 'getSectionsByClass'])->name('quiz.manage.get-sections-by-class');
 
 // Certification Routes
 Route::get('/certification/student', [App\Http\Controllers\CertificationController::class, 'student'])->name('certification.student');
@@ -720,14 +747,20 @@ Route::get('/certification/staff/{staff}/generate', [App\Http\Controllers\Certif
 // Daily Homework Diary Routes
 Route::get('/homework-diary/manage', [App\Http\Controllers\HomeworkDiaryController::class, 'manage'])->name('homework-diary.manage');
 Route::get('/homework-diary/get-sections', [App\Http\Controllers\HomeworkDiaryController::class, 'getSections'])->name('homework-diary.get-sections');
+Route::post('/homework-diary/store', [App\Http\Controllers\HomeworkDiaryController::class, 'store'])->name('homework-diary.store');
 Route::post('/homework-diary/send', [App\Http\Controllers\HomeworkDiaryController::class, 'sendDiary'])->name('homework-diary.send');
 
 Route::get('/homework-diary/send-sms', function () {
     return view('homework-diary.send-sms');
 })->name('homework-diary.send-sms');
 
-// Study Material - LMS Route
+// Study Material - LMS Routes
 Route::get('/study-material/lms', [App\Http\Controllers\StudyMaterialController::class, 'lms'])->name('study-material.lms');
+Route::post('/study-material/lms', [App\Http\Controllers\StudyMaterialController::class, 'store'])->name('study-material.store');
+Route::get('/study-material/{studyMaterial}/view-file', [App\Http\Controllers\StudyMaterialController::class, 'viewFile'])->name('study-material.view-file');
+Route::delete('/study-material/lms/{studyMaterial}', [App\Http\Controllers\StudyMaterialController::class, 'destroy'])->name('study-material.destroy');
+Route::get('/study-material/get-sections-by-class', [App\Http\Controllers\StudyMaterialController::class, 'getSectionsByClass'])->name('study-material.get-sections-by-class');
+Route::get('/study-material/get-subjects-by-class-section', [App\Http\Controllers\StudyMaterialController::class, 'getSubjectsByClassSection'])->name('study-material.get-subjects-by-class-section');
 
 // Leave Management Route
 Route::get('/leave-management', function () {
@@ -1491,15 +1524,21 @@ Route::get('/my-profile', function () {
     return view('blank-page');
 })->name('my-profile');
 
+// Change Password Routes (Both Super Admin and Admin)
+Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function () {
+    Route::get('/change-password', [App\Http\Controllers\ChangePasswordController::class, 'index'])->name('change-password');
+    Route::put('/change-password', [App\Http\Controllers\ChangePasswordController::class, 'update'])->name('change-password.update');
+    
+    Route::get('/live-chat', function () {
+        return view('live-chat');
+    })->name('live-chat');
+});
+
 // Settings Routes (Super Admin Only)
 Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(function () {
     Route::get('/account-settings', function () {
         return view('blank-page');
     })->name('account-settings');
-    
-    Route::get('/change-password', function () {
-        return view('blank-page');
-    })->name('change-password');
     
     Route::get('/connections', function () {
         return view('blank-page');
@@ -1512,4 +1551,8 @@ Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(func
     Route::get('/terms-conditions', function () {
         return view('blank-page');
     })->name('terms-conditions');
+    
+    Route::get('/thermal-printer/setting', function () {
+        return view('blank-page');
+    })->name('thermal-printer.setting');
 });

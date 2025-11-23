@@ -4,7 +4,7 @@
 	position: fixed;
 	top: 0;
 	left: 0;
-	width: 300px;
+	width: 320px;
 	height: 100%;
 	transition: $transition;
 	padding-bottom: 30px;
@@ -147,14 +147,14 @@
 			margin-bottom: 0;
 			.menu-link {
 				padding: 9.5px 18px;
-                padding-left: 32px;
+                padding-left: 42px;
 				transition: $transition;
 				position: relative;
 				font-size: 14px;
                 color: $secondary;
 				&::before {
 					top: 50%;
-                    left: 15px;
+                    left: 22px;
                     width: 6px;
                     height: 6px;
                     content: "";
@@ -531,7 +531,7 @@
 	}
     [sidebar-data-theme=sidebar-hide] .sidebar-area {
         left: 0;
-        width: 300px;
+        width: 320px;
         box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
         .logo {
             padding: 25px;
@@ -612,7 +612,7 @@
 @media only screen and (min-width: 1200px) and (max-width: 1399px) {
 
 	.sidebar-area {
-		width: 280px;
+		width: 300px;
 	}
 	
 }

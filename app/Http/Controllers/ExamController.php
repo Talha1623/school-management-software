@@ -9,6 +9,7 @@ use App\Models\Subject;
 use App\Models\Test;
 use App\Models\Student;
 use App\Models\StudentMark;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -41,13 +42,15 @@ class ExamController extends Controller
         
         $exams = $query->orderBy('exam_date', 'desc')->paginate($perPage)->withQueryString();
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+        // Get campuses for dropdown - First from Campus model, then fallback
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
         }
 
         // Get sessions
@@ -270,8 +273,13 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterSubject = $request->get('filter_subject');
 
-        // Get exams
-        $exams = Exam::whereNotNull('exam_name')->distinct()->pluck('exam_name')->sort()->values();
+        // Get exams from Exam List (all distinct exam names, ordered alphabetically)
+        $exams = Exam::whereNotNull('exam_name')
+            ->orderBy('exam_name', 'asc')
+            ->get()
+            ->pluck('exam_name')
+            ->unique()
+            ->values();
 
         // Get classes
         $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();

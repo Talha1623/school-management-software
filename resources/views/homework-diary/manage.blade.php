@@ -11,16 +11,22 @@
             </div>
 
             @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-success alert-dismissible fade show success-toast" role="alert" id="successAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">check_circle</span>
+                        <span>{{ session('success') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <div class="alert alert-danger alert-dismissible fade show error-toast" role="alert" id="errorAlert">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">error</span>
+                        <span>{{ session('error') }}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
@@ -109,75 +115,88 @@
                 </div>
             </form>
 
-            <!-- Subjects Table - Only show when all filters are applied -->
+            <!-- Homework Diary Form - Only show when all filters are applied -->
             @if(request('filter_campus') && request('filter_class') && request('filter_section'))
             <div class="mt-3">
-                <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
-                    <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
-                        <span class="material-symbols-outlined" style="font-size: 18px;">menu_book</span>
-                        <span>Subjects List</span>
-                        <span class="badge bg-light text-dark ms-2">
-                            {{ $subjects->count() }} {{ $subjects->count() == 1 ? 'subject' : 'subjects' }} found
-                        </span>
-                    </h5>
-                </div>
-
-                <div class="default-table-area" style="margin-top: 0;">
-                    <div class="table-responsive" style="max-height: none; overflow: visible; overflow-x: auto;">
-                        <table class="table table-sm table-hover" style="margin-bottom: 0; white-space: nowrap;">
-                            <thead>
-                                <tr>
-                                    <th style="padding: 8px 12px; font-size: 13px;">#</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Subject Name</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Teacher</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Session</th>
-                                    <th style="padding: 8px 12px; font-size: 13px; text-align: center;">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($subjects as $index => $subject)
-                                    <tr>
-                                        <td style="padding: 8px 12px; font-size: 13px;">{{ $index + 1 }}</td>
-                                        <td style="padding: 8px 12px; font-size: 13px;">
-                                            <strong class="text-primary">{{ $subject->subject_name }}</strong>
-                                        </td>
-                                        <td style="padding: 8px 12px; font-size: 13px;">
-                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $subject->teacher ?? 'N/A' }}</span>
-                                        </td>
-                                        <td style="padding: 8px 12px; font-size: 13px;">
-                                            <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $subject->session ?? 'N/A' }}</span>
-                                        </td>
-                                        <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
-                                            <form action="{{ route('homework-diary.send') }}" method="POST" style="display: inline-block;">
-                                                @csrf
-                                                <input type="hidden" name="subject_id" value="{{ $subject->id }}">
-                                                <input type="hidden" name="date" value="{{ $filterDate }}">
-                                                <button type="submit" class="btn btn-sm btn-success px-3 py-1" title="Send Diary" onclick="return confirm('Are you sure you want to send diary for {{ $subject->subject_name }}?')">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white; vertical-align: middle;">send</span>
-                                                    <span style="color: white; font-size: 12px;">Send Diary</span>
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-5">
-                                            <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">menu_book</span>
-                                            <p class="mt-2 mb-0">No subjects found.</p>
-                                            <p class="mt-1 mb-0" style="font-size: 13px;">Please add subjects for this Campus, Class, and Section combination.</p>
-                                            <div class="mt-3">
-                                                <a href="{{ route('manage-subjects') }}" class="btn btn-sm btn-primary px-4 py-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: white;">add</span>
-                                                    <span style="color: white; font-size: 13px;">Add Subjects (Super Admin)</span>
-                                                </a>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+                <!-- Context Card -->
+                <div class="card mb-3" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
+                    <div class="card-body p-3">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <div class="d-flex flex-column gap-1">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-semibold" style="color: #003471;">Section:</span>
+                                        <span style="color: #495057;">{{ $filterSection }}</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-semibold" style="color: #003471;">Date:</span>
+                                        <span style="color: #495057;">{{ \Carbon\Carbon::parse($filterDate)->format('d F - Y') }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6; opacity: 0.5;">bar_chart</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                
+                <!-- Navigation Guide Banner -->
+                <div class="alert alert-warning mb-3 d-flex align-items-center gap-2" style="background-color: #fff3cd; border-color: #ffc107; color: #856404;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">info</span>
+                    <span style="font-size: 13px;"><strong>Navigation Guide:</strong> Use ← (Left Arrow), → (Right Arrow), ↑ (Up Arrow), and ↓ (Down Arrow) to navigate between input fields.</span>
+                </div>
+                
+                @if($subjects->count() > 0)
+                <form action="{{ route('homework-diary.store') }}" method="POST" id="diaryForm">
+                    @csrf
+                    <input type="hidden" name="campus" value="{{ $filterCampus }}">
+                    <input type="hidden" name="class" value="{{ $filterClass }}">
+                    <input type="hidden" name="section" value="{{ $filterSection }}">
+                    <input type="hidden" name="date" value="{{ $filterDate }}">
+                    
+                    <div class="row g-3">
+                        @foreach($subjects as $subject)
+                            @php
+                                $existingEntry = $diaryEntries->get($subject->id);
+                            @endphp
+                            <div class="col-12">
+                                <label for="diary_{{ $subject->id }}" class="form-label mb-1 fs-14 fw-semibold" style="color: #003471;">
+                                    {{ $subject->subject_name }}
+                                </label>
+                                <textarea 
+                                    class="form-control diary-textarea" 
+                                    id="diary_{{ $subject->id }}" 
+                                    name="diaries[{{ $loop->index }}][homework_content]" 
+                                    rows="4" 
+                                    placeholder="Enter homework for {{ $subject->subject_name }}..."
+                                    style="font-size: 14px; padding: 12px; border: 1px solid #dee2e6; border-radius: 8px; resize: vertical; min-height: 100px;"
+                                >{{ $existingEntry ? $existingEntry->homework_content : '' }}</textarea>
+                                <input type="hidden" name="diaries[{{ $loop->index }}][subject_id]" value="{{ $subject->id }}">
+                            </div>
+                        @endforeach
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <button type="submit" class="btn btn-success px-5 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none; font-weight: 500; font-size: 14px;">
+                            <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">thumb_up</span>
+                            <span style="color: white;">Save Changes</span>
+                        </button>
+                    </div>
+                </form>
+                @else
+                <div class="text-center py-5">
+                    <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">menu_book</span>
+                    <p class="mt-2 mb-0 text-muted">No subjects found.</p>
+                    <p class="mt-1 mb-0 text-muted" style="font-size: 13px;">Please add subjects for this Campus, Class, and Section combination.</p>
+                    <div class="mt-3">
+                        <a href="{{ route('manage-subjects') }}" class="btn btn-sm btn-primary px-4 py-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: white;">add</span>
+                            <span style="color: white; font-size: 13px;">Add Subjects (Super Admin)</span>
+                        </a>
+                    </div>
+                </div>
+                @endif
             </div>
             @else
             <!-- Message when filters are not fully applied -->
@@ -237,6 +256,106 @@
 
 .table-hover tbody tr:hover {
     background-color: #f8f9fa;
+}
+
+.diary-textarea {
+    transition: all 0.3s ease;
+}
+
+.diary-textarea:focus {
+    border-color: #003471 !important;
+    box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15) !important;
+    outline: none;
+}
+
+/* Toast Notification Styling */
+.success-toast,
+.error-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 300px;
+    max-width: 400px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: slideInDown 0.3s ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.success-toast {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+}
+
+.error-toast {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+}
+
+.success-toast .btn-close,
+.error-toast .btn-close {
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+}
+
+.success-toast .btn-close:hover,
+.error-toast .btn-close:hover {
+    opacity: 1;
+}
+
+.success-toast .material-symbols-outlined,
+.error-toast .material-symbols-outlined {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.success-toast > div,
+.error-toast > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutUp {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+}
+
+.success-toast.fade-out,
+.error-toast.fade-out {
+    animation: slideOutUp 0.3s ease-out forwards;
 }
 </style>
 
@@ -302,6 +421,60 @@ document.addEventListener('DOMContentLoaded', function() {
     const initialClass = classSelect.value;
     if (initialClass) {
         loadSections(initialClass);
+    }
+});
+
+// Keyboard navigation for textareas
+document.addEventListener('DOMContentLoaded', function() {
+    const textareas = document.querySelectorAll('.diary-textarea');
+    
+    textareas.forEach((textarea, index) => {
+        textarea.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowDown' && index < textareas.length - 1) {
+                e.preventDefault();
+                textareas[index + 1].focus();
+            } else if (e.key === 'ArrowUp' && index > 0) {
+                e.preventDefault();
+                textareas[index - 1].focus();
+            } else if (e.key === 'ArrowRight' && e.ctrlKey) {
+                e.preventDefault();
+                if (index < textareas.length - 1) {
+                    textareas[index + 1].focus();
+                }
+            } else if (e.key === 'ArrowLeft' && e.ctrlKey) {
+                e.preventDefault();
+                if (index > 0) {
+                    textareas[index - 1].focus();
+                }
+            }
+        });
+    });
+});
+
+// Auto-dismiss toast notifications
+document.addEventListener('DOMContentLoaded', function() {
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    
+    function dismissToast(toast) {
+        if (toast) {
+            toast.classList.add('fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+    }
+    
+    if (successAlert) {
+        setTimeout(() => {
+            dismissToast(successAlert);
+        }, 5000);
+    }
+    
+    if (errorAlert) {
+        setTimeout(() => {
+            dismissToast(errorAlert);
+        }, 5000);
     }
 });
 </script>
