@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class TestController extends Controller
 {
@@ -54,11 +55,27 @@ class TestController extends Controller
             });
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        // Get classes - filter by teacher's assigned classes if teacher
+        $classes = collect();
+        $staff = Auth::guard('staff')->user();
         
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get classes from teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            $classes = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
+                ->sort()
+                ->values();
+        } else {
+            // For non-teachers, get all classes
+            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+            
+            if ($classes->isEmpty()) {
+                $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+            }
         }
 
         // Get sections (will be filtered dynamically based on class selection)

@@ -8,7 +8,7 @@
         <div class="card bg-white border border-white rounded-10 p-4">
             <div class="d-flex align-items-center mb-4">
                 <span class="material-symbols-outlined me-2" style="font-size: 28px; color: #003471;">person_add</span>
-                <h3 class="mb-0 fw-bold" style="color: #003471;">Admit Student</h3>
+                <h3 class="mb-0 fw-bold" style="color: #003471;">{{ __('admission.admit_student') }}</h3>
             </div>
             
             @if(session('success'))
@@ -40,7 +40,7 @@
                         <div class="card border-0 shadow-sm rounded-3 p-2 mb-2" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);">
                             <div class="d-flex align-items-center mb-2" style="background-color: #003471; padding: 8px 12px; margin: -8px -8px 8px -8px; border-radius: 8px 8px 0 0;">
                                 <span class="material-symbols-outlined me-2" style="font-size: 18px; color: #ffffff;">person</span>
-                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">Student Information</h5>
+                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">{{ __('admission.student_information') }}</h5>
                             </div>
                             
                             <div class="mb-2">
@@ -122,7 +122,7 @@
                         <div class="card border-0 shadow-sm rounded-3 p-2 mb-2" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);">
                             <div class="d-flex align-items-center mb-2" style="background-color: #003471; padding: 8px 12px; margin: -8px -8px 8px -8px; border-radius: 8px 8px 0 0;">
                                 <span class="material-symbols-outlined me-2" style="font-size: 18px; color: #ffffff;">family_restroom</span>
-                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">Parent Information</h5>
+                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">{{ __('admission.parent_information') }}</h5>
                             </div>
                             
                             <div class="mb-2">
@@ -201,7 +201,7 @@
                         <div class="card border-0 shadow-sm rounded-3 p-2 mb-2" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);">
                             <div class="d-flex align-items-center mb-2" style="background-color: #003471; padding: 8px 12px; margin: -8px -8px 8px -8px; border-radius: 8px 8px 0 0;">
                                 <span class="material-symbols-outlined me-2" style="font-size: 18px; color: #ffffff;">info</span>
-                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">Other Information</h5>
+                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">{{ __('admission.other_information') }}</h5>
                             </div>
                             
                             <div class="mb-2">
@@ -302,7 +302,7 @@
                         <div class="card border-0 shadow-sm rounded-3 p-2 mb-2" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);">
                             <div class="d-flex align-items-center mb-2" style="background-color: #003471; padding: 8px 12px; margin: -8px -8px 8px -8px; border-radius: 8px 8px 0 0;">
                                 <span class="material-symbols-outlined me-2" style="font-size: 18px; color: #ffffff;">school</span>
-                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">Academic Information</h5>
+                                <h5 class="mb-0 fw-semibold fs-15" style="color: #ffffff;">{{ __('admission.academic_information') }}</h5>
                             </div>
                             
                             <div class="mb-2">

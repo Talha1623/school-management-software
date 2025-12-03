@@ -79,20 +79,13 @@
                 <!-- Header Card -->
                 <div class="card mb-3" style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px;">
                     <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
+                        <div class="d-flex justify-content-center align-items-center">
+                            <div class="text-center">
                                 <h5 class="mb-1 fw-semibold" style="color: #495057; font-size: 16px;">Manage Behaviour - Class: {{ $filterClass }}</h5>
-                                <div class="d-flex gap-3 flex-wrap" style="font-size: 13px; color: #6c757d;">
+                                <div class="d-flex gap-3 flex-wrap justify-content-center" style="font-size: 13px; color: #6c757d;">
                                     <span><strong>Section:</strong> {{ $filterSection ?? 'N/A' }}</span>
                                     <span><strong>{{ $campusName ?? 'Main Campus' }}</strong></span>
                                     <span><strong>{{ $filterDate ? \Carbon\Carbon::parse($filterDate)->format('d F - Y') : date('d F - Y') }}</strong></span>
-                                </div>
-                            </div>
-                            <div class="d-none d-md-block">
-                                <div style="width: 100px; height: 60px; opacity: 0.1;">
-                                    <svg viewBox="0 0 100 60" style="width: 100%; height: 100%;">
-                                        <polyline points="0,50 20,40 40,45 60,30 80,35 100,25" stroke="#003471" stroke-width="2" fill="none"/>
-                                    </svg>
                                 </div>
                             </div>
                         </div>
@@ -120,42 +113,54 @@
 
                 <!-- Search Input -->
                 <div class="mb-3">
-                    <div class="input-group input-group-sm" style="max-width: 300px; height: 32px;">
-                        <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px; height: 32px;">
-                            <span class="material-symbols-outlined" style="font-size: 16px; color: #003471;">search</span>
+                    <div class="input-group search-input-group" style="max-width: 350px;">
+                        <span class="input-group-text search-icon-wrapper">
+                            <span class="material-symbols-outlined search-icon">search</span>
                         </span>
-                        <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search by Name / Student Code ..." style="padding: 4px 8px; font-size: 12px; height: 32px;">
-                        <button class="btn btn-outline-secondary border-start-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px; height: 32px;">
-                            <span class="material-symbols-outlined" style="font-size: 16px;">close</span>
+                        <input type="text" id="searchInput" class="form-control search-input" placeholder="Search by Name / Student Code ...">
+                        <button class="btn search-clear-btn" type="button" onclick="clearSearch()" title="Clear search">
+                            <span class="material-symbols-outlined">close</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Students List -->
                 @if($students->count() > 0)
-                <div id="studentsList">
-                    @foreach($students as $student)
-                        @php
-                            $studentId = $student->student_code ?? $student->gr_number ?? ($loop->iteration + 2000);
-                            $parentName = $student->father_name ?? 'N/A';
-                        @endphp
-                        <div class="student-item mb-2 p-3 rounded" style="background-color: #f8f9fa; border: 1px solid #e9ecef;" data-student-id="{{ $student->id }}" data-student-name="{{ strtolower($student->student_name) }}" data-student-code="{{ strtolower($student->student_code ?? '') }}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div class="flex-grow-1">
-                                    <div style="font-size: 14px; color: #495057;">
-                                        <strong>Student:</strong> {{ $studentId }} - {{ $student->student_name }} <span style="color: #6c757d;">|</span> <strong>Parent:</strong> {{ $parentName }}
-                                    </div>
-                                </div>
-                                <div class="d-flex gap-2 ms-3">
-                                    <button type="button" class="btn btn-sm behavior-btn" data-student-id="{{ $student->id }}" data-points="-2" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}" style="background-color: #dc3545; color: white; border: none; width: 40px; height: 32px; font-size: 12px; font-weight: bold;">-2</button>
-                                    <button type="button" class="btn btn-sm behavior-btn" data-student-id="{{ $student->id }}" data-points="-1" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}" style="background-color: #fd7e14; color: white; border: none; width: 40px; height: 32px; font-size: 12px; font-weight: bold;">-1</button>
-                                    <button type="button" class="btn btn-sm behavior-btn" data-student-id="{{ $student->id }}" data-points="0" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}" style="background-color: #6c757d; color: white; border: none; width: 40px; height: 32px; font-size: 12px; font-weight: bold;">0</button>
-                                    <button type="button" class="btn btn-sm behavior-btn" data-student-id="{{ $student->id }}" data-points="1" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}" style="background-color: #0d6efd; color: white; border: none; width: 40px; height: 32px; font-size: 12px; font-weight: bold;">+1</button>
-                                    <button type="button" class="btn btn-sm behavior-btn" data-student-id="{{ $student->id }}" data-points="2" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}" style="background-color: #198754; color: white; border: none; width: 40px; height: 32px; font-size: 12px; font-weight: bold;">+2</button>
-                                </div>
-                            </div>
-                        </div>
-                    @endforeach
+                <div class="table-responsive">
+                    <table class="table table-hover behavior-table" id="studentsList">
+                        <thead>
+                            <tr>
+                                <th style="width: 5%;">#</th>
+                                <th style="width: 25%;">Student Code</th>
+                                <th style="width: 25%;">Student Name</th>
+                                <th style="width: 25%;">Parent Name</th>
+                                <th style="width: 20%;" class="text-center">Behavior Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($students as $student)
+                                @php
+                                    $studentId = $student->student_code ?? $student->gr_number ?? ($loop->iteration + 2000);
+                                    $parentName = $student->father_name ?? 'N/A';
+                                @endphp
+                                <tr class="student-item" data-student-id="{{ $student->id }}" data-student-name="{{ strtolower($student->student_name) }}" data-student-code="{{ strtolower($student->student_code ?? '') }}">
+                                    <td>{{ $loop->iteration }}</td>
+                                    <td><strong>{{ $studentId }}</strong></td>
+                                    <td>{{ $student->student_name }}</td>
+                                    <td>{{ $parentName }}</td>
+                                    <td>
+                                        <div class="d-flex gap-2 justify-content-center align-items-center">
+                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-2" data-student-id="{{ $student->id }}" data-points="-2" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&minus;2</button>
+                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-1" data-student-id="{{ $student->id }}" data-points="-1" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&minus;1</button>
+                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-zero" data-student-id="{{ $student->id }}" data-points="0" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">0</button>
+                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-1" data-student-id="{{ $student->id }}" data-points="1" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&plus;1</button>
+                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-2" data-student-id="{{ $student->id }}" data-points="2" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&plus;2</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
                 @else
                 <div class="text-center py-5">
@@ -226,44 +231,205 @@
     outline: none;
 }
 
+/* Search Input Styling */
+.search-input-group {
+    height: 32px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.search-input-group:focus-within {
+    box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    border: 1px solid #003471;
+}
+
+.search-icon-wrapper {
+    background-color: #f0f4ff !important;
+    border: 1px solid #e0e7ff;
+    border-right: none;
+    padding: 4px 10px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.search-icon {
+    font-size: 18px;
+    color: #003471;
+}
+
+.search-input {
+    border: 1px solid #dee2e6;
+    border-left: none;
+    border-right: none;
+    padding: 4px 12px;
+    font-size: 13px;
+    height: 32px;
+    transition: all 0.3s ease;
+}
+
+.search-input:focus {
+    border-color: #003471;
+    box-shadow: none;
+    outline: none;
+}
+
+.search-clear-btn {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-left: none;
+    padding: 4px 10px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+    transition: all 0.2s ease;
+}
+
+.search-clear-btn:hover {
+    background-color: #e9ecef;
+    color: #495057;
+}
+
+.search-clear-btn .material-symbols-outlined {
+    font-size: 18px;
+}
+
 
 .mark-all-btn:hover {
     opacity: 0.9;
     transform: translateY(-1px);
 }
 
-.behavior-btn:hover {
-    opacity: 0.9;
-    transform: scale(1.05);
-}
-
-.student-item {
+.behavior-btn {
+    color: white;
+    border: none;
+    width: 40px;
+    height: 32px;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 6px;
     transition: all 0.2s ease;
-}
-
-.student-item:hover {
-    background-color: #e9ecef !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.behavior-btn-minus-2 {
+    background-color: #dc3545;
+}
+
+.behavior-btn-minus-1 {
+    background-color: #fd7e14;
+}
+
+.behavior-btn-zero {
+    background-color: #6c757d;
+}
+
+.behavior-btn-plus-1 {
+    background-color: #0d6efd;
+}
+
+.behavior-btn-plus-2 {
+    background-color: #198754;
+}
+
+.behavior-btn:hover {
+    opacity: 0.9;
+    transform: scale(1.05);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.behavior-btn:active {
+    transform: scale(0.98);
+}
+
+/* Table Styling */
+.behavior-table {
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    border: 1px solid #dee2e6;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.behavior-table thead {
+    background-color: #f8f9fa;
+}
+
+.behavior-table thead th {
+    border-bottom: 2px solid #dee2e6;
+    border-right: 1px solid #dee2e6;
+    color: #003471;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 12px 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.behavior-table thead th:last-child {
+    border-right: none;
+}
+
+.behavior-table tbody tr {
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.behavior-table tbody tr:hover {
+    background-color: #f8f9fa !important;
+}
+
+.behavior-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.behavior-table tbody td {
+    padding: 15px;
+    vertical-align: middle;
+    border-right: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 14px;
+    color: #495057;
+}
+
+.behavior-table tbody td:last-child {
+    border-right: none;
+}
+
+.behavior-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
 .save-behavior-btn {
-    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
     color: white;
     border: none;
     padding: 12px 32px;
     border-radius: 8px;
     font-weight: 600;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(25, 135, 84, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 52, 113, 0.2);
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
 .save-behavior-btn:hover {
-    background: linear-gradient(135deg, #20c997 0%, #198754 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(25, 135, 84, 0.4);
+    background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
     color: white;
 }
 
@@ -334,7 +500,7 @@ function filterStudents() {
         const studentCode = item.getAttribute('data-student-code') || '';
         
         if (searchTerm === '' || studentName.includes(searchTerm) || studentCode.includes(searchTerm)) {
-            item.style.display = 'block';
+            item.style.display = 'table-row';
         } else {
             item.style.display = 'none';
         }

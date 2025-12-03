@@ -68,11 +68,13 @@
                     <!-- Subject -->
                     <div class="col-md-2">
                         <label for="filter_subject" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Subject</label>
-                        <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;" {{ !$filterClass ? 'disabled' : '' }}>
                             <option value="">All Subjects</option>
-                            @foreach($subjects as $subjectName)
-                                <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
-                            @endforeach
+                            @if($filterClass)
+                                @foreach($subjects as $subjectName)
+                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
+                                @endforeach
+                            @endif
                         </select>
                     </div>
 
@@ -299,9 +301,27 @@ document.addEventListener('DOMContentLoaded', function() {
         classSelect.addEventListener('change', function() {
             const selectedClass = this.value;
             loadSections(selectedClass);
-            // Also reload subjects and tests when class changes
-            loadSubjects();
-            loadTests();
+            // Enable/disable and reload subjects and tests when class changes
+            if (selectedClass) {
+                if (subjectSelect) {
+                    subjectSelect.disabled = false;
+                }
+                if (testSelect) {
+                    testSelect.disabled = false;
+                }
+                loadSubjects();
+                loadTests();
+            } else {
+                // Disable and clear if no class selected
+                if (subjectSelect) {
+                    subjectSelect.disabled = true;
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                }
+                if (testSelect) {
+                    testSelect.disabled = true;
+                    testSelect.innerHTML = '<option value="">All Tests</option>';
+                }
+            }
         });
     }
 
@@ -363,32 +383,39 @@ document.addEventListener('DOMContentLoaded', function() {
         const classValue = classSelect ? classSelect.value : '';
         const section = sectionSelect ? sectionSelect.value : '';
         
-        if (!campus && !classValue && !section) {
+        // Class is required - if not provided, disable and clear
+        if (!classValue) {
+            subjectSelect.disabled = true;
             subjectSelect.innerHTML = '<option value="">All Subjects</option>';
             return;
         }
         
+        subjectSelect.disabled = false;
         subjectSelect.innerHTML = '<option value="">Loading...</option>';
         
         const params = new URLSearchParams();
         if (campus) params.append('campus', campus);
-        if (classValue) params.append('class', classValue);
+        params.append('class', classValue); // Always include class
         if (section) params.append('section', section);
         
         fetch(`{{ route('test.teacher-remarks.practical.get-subjects') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 subjectSelect.innerHTML = '<option value="">All Subjects</option>';
-                data.subjects.forEach(subject => {
-                    const option = document.createElement('option');
-                    option.value = subject;
-                    option.textContent = subject;
-                    // Preserve selected subject if it exists
-                    if (subject === '{{ $filterSubject }}') {
-                        option.selected = true;
-                    }
-                    subjectSelect.appendChild(option);
-                });
+                if (data.subjects && data.subjects.length > 0) {
+                    data.subjects.forEach(subject => {
+                        const option = document.createElement('option');
+                        option.value = subject;
+                        option.textContent = subject;
+                        // Preserve selected subject if it exists
+                        @if($filterSubject)
+                        if (subject === '{{ $filterSubject }}') {
+                            option.selected = true;
+                        }
+                        @endif
+                        subjectSelect.appendChild(option);
+                    });
+                }
             })
             .catch(error => {
                 console.error('Error loading subjects:', error);
@@ -404,16 +431,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const section = sectionSelect ? sectionSelect.value : '';
         const subject = subjectSelect ? subjectSelect.value : '';
         
-        if (!campus && !classValue && !section && !subject) {
+        // Class is required - if not provided, disable and clear
+        if (!classValue) {
+            testSelect.disabled = true;
             testSelect.innerHTML = '<option value="">All Tests</option>';
             return;
         }
         
+        testSelect.disabled = false;
         testSelect.innerHTML = '<option value="">Loading...</option>';
         
         const params = new URLSearchParams();
         if (campus) params.append('campus', campus);
-        if (classValue) params.append('class', classValue);
+        params.append('class', classValue); // Always include class
         if (section) params.append('section', section);
         if (subject) params.append('subject', subject);
         
@@ -427,9 +457,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         option.value = test;
                         option.textContent = test;
                         // Preserve selected test if it exists
+                        @if($filterTest)
                         if (test === '{{ $filterTest }}') {
                             option.selected = true;
                         }
+                        @endif
                         testSelect.appendChild(option);
                     });
                 }
@@ -444,13 +476,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const initialClass = classSelect ? classSelect.value : '';
     if (initialClass) {
         loadSections(initialClass);
-    }
-    
-    // Load subjects initially if any filters are set
-    const initialCampus = campusSelect ? campusSelect.value : '';
-    const initialSection = sectionSelect ? sectionSelect.value : '';
-    if (initialCampus || initialClass || initialSection) {
-        loadSubjects();
+        // Enable and load subjects and tests if class is selected
+        if (subjectSelect) {
+            subjectSelect.disabled = false;
+        }
+        if (testSelect) {
+            testSelect.disabled = false;
+        }
+        // Small delay to ensure all elements are ready
+        setTimeout(function() {
+            loadSubjects();
+            loadTests();
+        }, 100);
+    } else {
+        // Disable subjects and tests if no class selected
+        if (subjectSelect) {
+            subjectSelect.disabled = true;
+        }
+        if (testSelect) {
+            testSelect.disabled = true;
+        }
     }
 
     // Search functionality

@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class HomeworkDiaryController extends Controller
 {
@@ -37,32 +38,62 @@ class HomeworkDiaryController extends Controller
             });
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        // Get classes - filter by teacher's assigned classes if teacher
+        $classes = collect();
+        $staff = Auth::guard('staff')->user();
         
-        if ($classes->isEmpty()) {
-            $classesFromSubjects = Subject::whereNotNull('class')->distinct()->pluck('class')->sort();
-            $classes = $classesFromSubjects->isEmpty() ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']) : $classesFromSubjects;
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get classes from teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            $classes = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
+                ->sort()
+                ->values();
+        } else {
+            // For non-teachers, get all classes
+            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+            
+            if ($classes->isEmpty()) {
+                $classesFromSubjects = Subject::whereNotNull('class')->distinct()->pluck('class')->sort();
+                $classes = $classesFromSubjects->isEmpty() ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']) : $classesFromSubjects;
+            }
         }
 
         // Get sections (filtered by class if provided)
+        // Filter by teacher's assigned subjects if teacher
         $sections = collect();
         if ($filterClass) {
-            // Use case-insensitive matching for class
-            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
-                ->sort()
-                ->values();
-            
-            if ($sections->isEmpty()) {
-                $sectionsFromSubjects = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                    ->whereNotNull('section')
+            if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+                // Get sections from teacher's assigned subjects for this class
+                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->get();
+                
+                $sections = $assignedSubjects->pluck('section')
+                    ->unique()
+                    ->filter()
+                    ->sort()
+                    ->values();
+            } else {
+                // For non-teachers, get all sections
+                $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereNotNull('name')
                     ->distinct()
-                    ->pluck('section')
-                    ->sort();
-                $sections = $sectionsFromSubjects;
+                    ->pluck('name')
+                    ->sort()
+                    ->values();
+                
+                if ($sections->isEmpty()) {
+                    $sectionsFromSubjects = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                        ->whereNotNull('section')
+                        ->distinct()
+                        ->pluck('section')
+                        ->sort();
+                    $sections = $sectionsFromSubjects;
+                }
             }
         }
 
@@ -112,6 +143,7 @@ class HomeworkDiaryController extends Controller
 
     /**
      * Get sections for homework diary (AJAX).
+     * Filter by teacher's assigned subjects if teacher.
      */
     public function getSections(Request $request): JsonResponse
     {
@@ -121,22 +153,39 @@ class HomeworkDiaryController extends Controller
             return response()->json(['sections' => []]);
         }
         
-        // Use case-insensitive matching for class
-        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-            ->whereNotNull('name')
-            ->distinct()
-            ->pluck('name')
-            ->sort()
-            ->values();
+        $staff = Auth::guard('staff')->user();
+        $sections = collect();
+        
+        // Filter by teacher's assigned subjects if teacher
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get sections from teacher's assigned subjects for this class
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
             
-        if ($sections->isEmpty()) {
-            // Try from subjects table with case-insensitive matching
-            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('section')
-                ->distinct()
-                ->pluck('section')
+            $sections = $assignedSubjects->pluck('section')
+                ->unique()
+                ->filter()
                 ->sort()
                 ->values();
+        } else {
+            // For non-teachers, get all sections
+            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('name')
+                ->distinct()
+                ->pluck('name')
+                ->sort()
+                ->values();
+                
+            if ($sections->isEmpty()) {
+                // Try from subjects table with case-insensitive matching
+                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+            }
         }
         
         return response()->json(['sections' => $sections]);

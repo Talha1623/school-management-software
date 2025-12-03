@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\Student;
 use App\Models\StudentAttendance;
+use App\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
 use Illuminate\Http\JsonResponse;
+use Carbon\Carbon;
 
 class StaffAuthController extends Controller
 {
@@ -88,11 +90,35 @@ class StaffAuthController extends Controller
     {
         $staff = Auth::guard('staff')->user();
         
-        // Get students based on staff's campus
+        // Step 1: Get teacher's assigned subjects (if teacher)
+        $assignedSubjects = collect();
+        $assignedClasses = collect();
+        
+        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            // Get unique classes from assigned subjects
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
+                ->values();
+        }
+        
+        // Step 2: Get students based on assigned classes (if teacher) or campus (if other staff)
         $studentsQuery = Student::query();
         
         if ($staff->campus) {
-            $studentsQuery->where('campus', $staff->campus);
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($staff->campus))]);
+        }
+        
+        // If teacher has assigned classes, filter by those classes
+        if ($assignedClasses->isNotEmpty()) {
+            $studentsQuery->where(function($q) use ($assignedClasses) {
+                foreach ($assignedClasses as $class) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                }
+            });
         }
         
         $allStudents = $studentsQuery->get();
@@ -117,7 +143,7 @@ class StaffAuthController extends Controller
         $absentToday = 0;
         
         if ($totalStudents > 0) {
-            $today = date('Y-m-d');
+            $today = Carbon::today()->format('Y-m-d');
             $studentIds = $allStudents->pluck('id');
             
             // Get today's attendance
@@ -138,11 +164,21 @@ class StaffAuthController extends Controller
             }
         }
         
-        // Get latest admissions (12 most recent students)
+        // Get latest admissions (12 most recent students) - from assigned classes if teacher
         $latestAdmissionsQuery = Student::query();
         if ($staff->campus) {
-            $latestAdmissionsQuery->where('campus', $staff->campus);
+            $latestAdmissionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($staff->campus))]);
         }
+        
+        // Filter by assigned classes if teacher
+        if ($assignedClasses->isNotEmpty()) {
+            $latestAdmissionsQuery->where(function($q) use ($assignedClasses) {
+                foreach ($assignedClasses as $class) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                }
+            });
+        }
+        
         $latestAdmissions = $latestAdmissionsQuery
             ->whereNotNull('admission_date')
             ->orderBy('admission_date', 'desc')
@@ -158,7 +194,8 @@ class StaffAuthController extends Controller
             'attendancePercentage',
             'presentToday',
             'absentToday',
-            'latestAdmissions'
+            'latestAdmissions',
+            'assignedClasses'
         ));
     }
 
@@ -169,11 +206,33 @@ class StaffAuthController extends Controller
     {
         $staff = Auth::guard('staff')->user();
         
-        // Get students based on staff's campus
+        // Step 1: Get teacher's assigned classes (if teacher)
+        $assignedClasses = collect();
+        
+        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
+                ->values();
+        }
+        
+        // Step 2: Get students based on assigned classes (if teacher) or campus (if other staff)
         $studentsQuery = Student::query();
         
         if ($staff->campus) {
-            $studentsQuery->where('campus', $staff->campus);
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($staff->campus))]);
+        }
+        
+        // If teacher has assigned classes, filter by those classes
+        if ($assignedClasses->isNotEmpty()) {
+            $studentsQuery->where(function($q) use ($assignedClasses) {
+                foreach ($assignedClasses as $class) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                }
+            });
         }
         
         $allStudents = $studentsQuery->get();
@@ -184,7 +243,7 @@ class StaffAuthController extends Controller
         $absentToday = 0;
         
         if ($totalStudents > 0) {
-            $today = date('Y-m-d');
+            $today = Carbon::today()->format('Y-m-d');
             $studentIds = $allStudents->pluck('id');
             
             // Get today's attendance

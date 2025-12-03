@@ -975,5 +975,26 @@ function updateTaskStatus(taskId, status) {
         alert('Error: ' + (error.message || 'Failed to update task status. Please try again.'));
     });
 }
+
+// Ensure sidebar stays open on Task Management page
+document.addEventListener('DOMContentLoaded', function() {
+    // Force sidebar to show state
+    document.body.setAttribute("sidebar-data-theme", "sidebar-show");
+    
+    // Ensure sidebar is visible
+    const sidebarArea = document.getElementById('sidebar-area');
+    if (sidebarArea) {
+        sidebarArea.style.display = '';
+        sidebarArea.classList.remove('sidebar-hide');
+        sidebarArea.classList.add('sidebar-show');
+    }
+    
+    // Prevent auto-close on window resize
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 992) { // Only on desktop
+            document.body.setAttribute("sidebar-data-theme", "sidebar-show");
+        }
+    });
+});
 </script>
 @endsection

@@ -155,27 +155,27 @@
         <div class="d-flex justify-content-between align-items-center">
             <h4 class="mb-0">
                 <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 20px;">dashboard</span>
-                Admin Dashboard
+                {{ __('dashboard.admin_dashboard') }} <small class="text-muted">({{ app()->getLocale() }})</small>
             </h4>
             <a href="javascript:void(0);" class="text-secondary text-decoration-none">Hide Dashboard Details</a>
         </div>
     </div>
 </div>
 
-<div class="row mb-4">
+<div class="row mb-4 align-items-end">
     <!-- Left Column - Awards -->
-    <div class="col-lg-4 col-md-12 mb-3">
+    <div class="col-lg-4 col-md-12">
         <div class="d-flex flex-column gap-1">
             <!-- St. Monthly Attendance Award -->
-            <div class="card border-0 rounded-10 p-1" style="background-color: #e3f2fd; height: 70px;">
-                <div class="d-flex align-items-start h-100">
+            <div class="card border-0 rounded-10 p-1" style="background: linear-gradient(135deg, #2196F3 0%, #03A9F4 100%); height: 70px;">
+                <div class="d-flex align-items-end h-100">
                     <div class="flex-shrink-0 me-2" style="width: 35px; height: 35px; display: flex; align-items: center; justify-content: center;">
                         <span class="material-symbols-outlined" style="font-size: 28px; color: #ffd700;">emoji_events</span>
                     </div>
-                    <div class="flex-grow-1 d-flex flex-column justify-content-center">
-                        <h6 class="mb-1 fw-medium text-dark" style="font-size: 12px; line-height: 1.2;">St. Monthly Attendance Award</h6>
-                        <p class="mb-0 text-dark" style="font-size: 11px; line-height: 1.2;">
-                            <span class="badge bg-success" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
+                    <div class="flex-grow-1 d-flex flex-column justify-content-end">
+                        <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">St. Monthly Attendance Award</h6>
+                        <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
+                            <span class="badge bg-warning" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
                             C1-011 | Hamza - Presents: 1
                         </p>
                     </div>
@@ -183,15 +183,15 @@
             </div>
 
             <!-- Staff Monthly Att. Award -->
-            <div class="card border-0 rounded-10 p-1" style="background-color: #e8f5e9; height: 70px;">
-                <div class="d-flex align-items-start h-100">
+            <div class="card border-0 rounded-10 p-1" style="background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%); height: 70px;">
+                <div class="d-flex align-items-end h-100">
                     <div class="flex-shrink-0 me-2" style="width: 35px; height: 35px; display: flex; align-items: center; justify-content: center;">
                         <span class="material-symbols-outlined" style="font-size: 28px; color: #ffd700;">emoji_events</span>
                     </div>
-                    <div class="flex-grow-1 d-flex flex-column justify-content-center">
-                        <h6 class="mb-1 fw-medium text-dark" style="font-size: 12px; line-height: 1.2;">Staff Monthly Att. Award</h6>
-                        <p class="mb-0 text-dark" style="font-size: 11px; line-height: 1.2;">
-                            <span class="badge bg-success" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
+                    <div class="flex-grow-1 d-flex flex-column justify-content-end">
+                        <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">Staff Monthly Att. Award</h6>
+                        <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
+                            <span class="badge bg-warning" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
                             N/A | N/A - Presents: 0
                         </p>
                     </div>
@@ -199,14 +199,14 @@
             </div>
 
             <!-- Student with Highest Dues -->
-            <div class="card border-0 rounded-10 p-1" style="background-color: #fff9c4; height: 70px;">
-                <div class="d-flex align-items-start h-100">
+            <div class="card border-0 rounded-10 p-1" style="background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%); height: 70px;">
+                <div class="d-flex align-items-end h-100">
                     <div class="flex-shrink-0 me-2" style="width: 35px; height: 35px; display: flex; align-items: center; justify-content: center;">
-                        <span class="material-symbols-outlined" style="font-size: 28px; color: #000;">sentiment_very_dissatisfied</span>
+                        <span class="material-symbols-outlined" style="font-size: 28px; color: #fff;">sentiment_very_dissatisfied</span>
                     </div>
-                    <div class="flex-grow-1 d-flex flex-column justify-content-center">
-                        <h6 class="mb-1 fw-medium text-dark" style="font-size: 12px; line-height: 1.2;">Student with Highest Dues</h6>
-                        <p class="mb-0 text-dark" style="font-size: 11px; line-height: 1.2;">
+                    <div class="flex-grow-1 d-flex flex-column justify-content-end">
+                        <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">Student with Highest Dues</h6>
+                        <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
                             <span class="badge bg-danger" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
                             N/A | N/A - Due: 0.00
                         </p>
@@ -215,15 +215,15 @@
             </div>
 
             <!-- Best Performance (Teacher) -->
-            <div class="card border-0 rounded-10 p-1" style="background-color: #fce4ec; height: 70px;">
-                <div class="d-flex align-items-start h-100">
+            <div class="card border-0 rounded-10 p-1" style="background: linear-gradient(135deg, #9C27B0 0%, #BA68C8 100%); height: 70px;">
+                <div class="d-flex align-items-end h-100">
                     <div class="flex-shrink-0 me-2" style="width: 35px; height: 35px; display: flex; align-items: center; justify-content: center;">
                         <span class="material-symbols-outlined" style="font-size: 28px; color: #ffd700;">emoji_events</span>
                     </div>
-                    <div class="flex-grow-1 d-flex flex-column justify-content-center">
-                        <h6 class="mb-1 fw-medium text-dark" style="font-size: 12px; line-height: 1.2;">Best Performance (Teacher)</h6>
-                        <p class="mb-0 text-dark" style="font-size: 11px; line-height: 1.2;">
-                            <span class="badge bg-success" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
+                    <div class="flex-grow-1 d-flex flex-column justify-content-end">
+                        <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">Best Performance (Teacher)</h6>
+                        <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
+                            <span class="badge bg-warning" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
                             N/A | N/A (N/A/N/A) - Pass St.: 0
                         </p>
                     </div>
@@ -332,130 +332,439 @@
     </div>
 </div>
 
-<div class="row">
-    <div class="col-lg-6">
-        <div class="card bg-white p-20 rounded-10 border border-white mb-4">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <h3>Total Sales</h3>
-
-                <div class="dropdown select-dropdown without-border">
-                    <button class="dropdown-toggle bg-transparent text-secondary fs-15" data-bs-toggle="dropdown" aria-expanded="false">
-                        Year 2025
-                    </button>
-                
-                    <ul class="dropdown-menu dropdown-menu-end bg-white border-0 box-shadow rounded-10" data-simplebar>
-                        <li>
-                            <button class="dropdown-item text-secondary">Year 2025</button>
-                        </li>
-                        <li>
-                            <button class="dropdown-item text-secondary">Year 2024</button>
-                        </li>
-                        <li>
-                            <button class="dropdown-item text-secondary">Year 2023</button>
-                        </li>
-                    </ul>
+<!-- Admissions & Income/Expense Overview Section -->
+<div class="row mb-4">
+    <!-- Admissions Overview - Left Panel -->
+    <div class="col-lg-6 col-md-12 mb-3">
+        <div class="card bg-white p-3 rounded-10 border border-white h-100">
+            <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.admissions_overview') }}</h4>
+            <div id="admissions_overview_chart" style="min-height: 300px;"></div>
+            <div class="d-flex justify-content-center flex-wrap gap-3 mt-3">
+                <div class="d-flex align-items-center">
+                    <div style="width: 12px; height: 12px; background-color: #9C27B0; border-radius: 2px; margin-right: 6px;"></div>
+                    <span style="font-size: 12px; color: #666;">Yearly Admissions</span>
                 </div>
-            </div>
-
-            <div id="total_sales_chart" style="margin-bottom: -16px; margin-top: -1.5px;"></div>
-        </div>
-    </div>
-
-    <div class="col-lg-6 col-xxl-3 col-xxxl-6">
-        <div class="row">
-            <div class="col-md-6 col-lg-12">
-                <div class="card bg-white p-20 rounded-10 border border-white mb-4">
-                    <div class="d-flex">
-                        <div class="flex-grow-1">
-                            <h3 class="mb-10">Total Orders</h3>
-                            <h2 class="fs-26 fw-medium mb-0 lh-1">20,705</h2>
-                        </div>
-                        <div class="flex-shrink-0 ms-3">
-                            <div class="bg-primary text-white text-center rounded-circle d-block" style="width: 75px; height: 75px; line-height: 105px;">
-                                <i class="material-symbols-outlined fs-40">shopping_basket</i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center" style="margin-top: 21px;">
-                        <p class="mb-0 fs-14">4.75% Increase in orders last week</p>
-                        <span class="d-flex align-content-center gap-1 bg-success bg-opacity-10 border border-success" style="padding: 3px 5px;">
-                            <i class="material-symbols-outlined fs-14 text-success">trending_up</i>
-                            <span class="lh-1 fs-14 text-success">4.75%</span>
-                        </span>
-                    </div>
+                <div class="d-flex align-items-center">
+                    <div style="width: 12px; height: 12px; background-color: #FF9800; border-radius: 2px; margin-right: 6px;"></div>
+                    <span style="font-size: 12px; color: #666;">Monthly Admissions</span>
                 </div>
-            </div>
-            <div class="col-md-6 col-lg-12">
-                <div class="card bg-white p-20 rounded-10 border border-white mb-4">
-                    <div class="d-flex">
-                        <div class="flex-grow-1">
-                            <h3 class="mb-10">Total Customers</h3>
-                            <h2 class="fs-26 fw-medium mb-0 lh-1">84,127</h2>
-                        </div>
-                        <div class="flex-shrink-0 ms-3">
-                            <div class="bg-info text-white text-center rounded-circle d-block" style="width: 75px; height: 75px; line-height: 105px;">
-                                <i class="material-symbols-outlined fs-40">diversity_2</i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center" style="margin-top: 21px;">
-                        <p class="mb-0 fs-14">Total visitors decreased by 1.25%</p>
-                        <span class="d-flex align-content-center gap-1 bg-danger bg-opacity-10 border border-danger" style="padding: 3px 5px;">
-                            <i class="material-symbols-outlined fs-14 text-danger">trending_down</i>
-                            <span class="lh-1 fs-14 text-danger">1.25%</span>
-                        </span>
-                    </div>
+                <div class="d-flex align-items-center">
+                    <div style="width: 12px; height: 12px; background-color: #03A9F4; border-radius: 2px; margin-right: 6px;"></div>
+                    <span style="font-size: 12px; color: #666;">Admissions Today</span>
+                </div>
+                <div class="d-flex align-items-center">
+                    <div style="width: 12px; height: 12px; background-color: #F44336; border-radius: 2px; margin-right: 6px;"></div>
+                    <span style="font-size: 12px; color: #666;">Pass-out Students</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-xl-12 col-xxl-3 col-xxxl-12">
-        <div class="row">
-            <div class="col-md-6 col-xxxl-6 col-xxl-12">
-                <div class="card bg-white p-20 rounded-10 border border-white mb-4">
-                    <div class="d-flex">
-                        <div class="flex-grow-1">
-                            <h3 class="mb-10">Total Revenue</h3>
-                            <h2 class="fs-26 fw-medium mb-0 lh-1">$15,278</h2>
-                        </div>
-                        <div class="flex-shrink-0 ms-3">
-                            <div class="bg-warning text-white text-center rounded-circle d-block" style="width: 75px; height: 75px; line-height: 116px;">
-                                <i class="material-symbols-outlined fs-50">attach_money</i>
-                            </div>
-                        </div>
+    <!-- Weekly/Yearly Income & Expense Overview - Right Panel -->
+    <div class="col-lg-6 col-md-12 mb-3">
+        <div class="card bg-white p-3 rounded-10 border border-white h-100">
+            <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.income_expense_overview') }}</h4>
+            <div id="daily_income_expense_chart" style="min-height: 150px; margin-bottom: 20px;"></div>
+            <div id="monthly_income_expense_chart" style="min-height: 150px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Month Wise Paid Unpaid Fee Report & Statistics Cards Section -->
+<div class="row mb-4">
+    <!-- Month Wise Paid Unpaid Fee Report - Left Panel -->
+    <div class="col-lg-8 col-md-12 mb-3">
+        <div class="card bg-white p-3 rounded-10 border border-white h-100">
+            <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.month_wise_fee_report') }}</h4>
+            <div id="month_wise_fee_chart" style="min-height: 350px;"></div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards - Right Panel -->
+    <div class="col-lg-4 col-md-12 mb-3">
+        <div class="d-flex flex-column gap-2 h-100">
+            <!-- Active Students Card -->
+            <div class="card border-0 rounded-10 p-3" style="background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="flex-grow-1">
+                        <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.active_students') }}</h6>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">38</h2>
+                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Boys: 7 Girls: 0 (No Gender Set: 31)</p>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center" style="margin-top: 23px;">
-                        <p class="mb-0 fs-14">Revenue increases this month</p>
-                        <span class="d-flex align-content-center gap-1 bg-success bg-opacity-10 border border-success" style="padding: 3px 5px;">
-                            <i class="material-symbols-outlined fs-14 text-success">trending_up</i>
-                            <span class="lh-1 fs-14 text-success">3.15%</span>
-                        </span>
+                    <div class="flex-shrink-0">
+                        <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">person</span>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6 col-xxxl-6 col-xxl-12">
-                <div class="bg-primary-50 p-20 border rounded-10 border-primary-50 mb-4">
-                    <h3 class="text-white mb-12">Sales Overview</h3>
-                    <div class="d-flex flex-wrap gap-2 justify-content-between mb-14">
-                        <div>
-                            <span class="fs-14 text-white mb-1 d-block">Total Sales</span>
-                            <h2 class="fs-20 fw-medium lh-1 text-white mb-0">9,586</h2>
-                        </div>
-                        <div>
-                            <span class="fs-14 text-white mb-1 d-block">Monthly Sales</span>
-                            <h2 class="fs-20 fw-medium lh-1 text-white mb-0">3,507</h2>
-                        </div>
-                        <div>
-                            <span class="fs-14 text-white mb-1 d-block">Today's Sales</span>
-                            <h2 class="fs-20 fw-medium lh-1 text-white mb-0">357</h2>
-                        </div>
+
+            <!-- Parents Card -->
+            <div class="card border-0 rounded-10 p-3" style="background: linear-gradient(135deg, #F44336 0%, #E57373 100%);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="flex-grow-1">
+                        <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.parents') }}</h6>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">18</h2>
+                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Total Registered Parents</p>
                     </div>
-                    <div class="progress rounded-0 mb-6" role="progressbar" aria-label="Basic example" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100" style="height: 3px; background-color: #6258cc;">
-                        <div class="progress-bar rounded-0 bg-white" style="width: 80%; height: 3px;"></div>
+                    <div class="flex-shrink-0">
+                        <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">group</span>
                     </div>
-                    <span class="fs-14 text-white d-block" style="margin-bottom: -6px;">20% Increase in last month</span>
                 </div>
+            </div>
+
+            <!-- Staff Card -->
+            <div class="card border-0 rounded-10 p-3" style="background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="flex-grow-1">
+                        <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.staff') }}</h6>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">5</h2>
+                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Male: 5 Female: 0</p>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">groups</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Present Students Today Card -->
+            <div class="card border-0 rounded-10 p-3" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="flex-grow-1">
+                        <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.present_students_today') }}</h6>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">0</h2>
+                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Attendance Percentage: 0%</p>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">thumb_up</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Latest Admissions, Staff Attendance Chart & Tasks Overview Section -->
+<div class="row mb-4">
+    <!-- Latest Admissions - Left Panel -->
+    <div class="col-lg-4 col-md-12 mb-3">
+        <div class="card bg-white p-3 rounded-10 border border-white h-100">
+            <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.latest_admissions') }}</h4>
+            <div class="row g-2 mt-2">
+                <!-- Admission Card 1 -->
+                <div class="col-6">
+                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
+                        <div class="d-flex flex-column align-items-center text-center">
+                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
+                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                            </div>
+                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Zubair Javed</h6>
+                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">C3-012</p>
+                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">21 Nov - 2025</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Admission Card 2 -->
+                <div class="col-6">
+                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
+                        <div class="d-flex flex-column align-items-center text-center">
+                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
+                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                            </div>
+                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">korban</h6>
+                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">ST0001-12</p>
+                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">20 Nov - 2025</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Admission Card 3 -->
+                <div class="col-6">
+                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
+                        <div class="d-flex flex-column align-items-center text-center">
+                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
+                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                            </div>
+                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Muhammad</h6>
+                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">ST0001-2</p>
+                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">12 Nov - 2025</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Admission Card 4 -->
+                <div class="col-6">
+                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
+                        <div class="d-flex flex-column align-items-center text-center">
+                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
+                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                            </div>
+                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Azhar</h6>
+                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">ST0001-1</p>
+                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">07 Oct - 2025</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Admission Card 5 -->
+                <div class="col-6">
+                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
+                        <div class="d-flex flex-column align-items-center text-center">
+                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
+                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                            </div>
+                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Aliyan Imran</h6>
+                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">C3-011</p>
+                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">10 Jan - 2025</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Admission Card 6 -->
+                <div class="col-6">
+                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
+                        <div class="d-flex flex-column align-items-center text-center">
+                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
+                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                            </div>
+                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Hassam</h6>
+                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">C2-011</p>
+                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">01 Oct - 2025</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="text-dark mb-0 mt-3 text-center" style="font-size: 12px;">{{ __('dashboard.total_admissions_month') }}: 3</p>
+        </div>
+    </div>
+
+    <!-- Staff Attendance Chart - Middle Panel -->
+    <div class="col-lg-4 col-md-12 mb-3">
+        <div class="card bg-white p-3 rounded-10 border border-white h-100">
+            <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.staff_attendance_chart') }}</h4>
+            <div id="staff_attendance_chart" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
+                <p class="text-muted mb-0" style="font-size: 14px;">No attendance data available.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks Overview - Right Panel -->
+    <div class="col-lg-4 col-md-12 mb-3">
+        <div class="card bg-white p-3 rounded-10 border border-white h-100">
+            <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.tasks_overview') }}</h4>
+            <div class="d-flex flex-column gap-2 mt-2">
+                <!-- Task 1 -->
+                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #F44336 0%, #E57373 100%);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">test</h6>
+                        <span class="badge bg-success text-white" style="font-size: 10px; padding: 4px 8px;">Completed</span>
+                    </div>
+                </div>
+                <!-- Task 2 -->
+                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #03A9F4 0%, #64B5F6 100%);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Chomu</h6>
+                        <span class="badge bg-warning text-white" style="font-size: 10px; padding: 4px 8px;">Pending</span>
+                    </div>
+                </div>
+                <!-- Task 3 -->
+                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Public Holiday</h6>
+                        <span class="badge bg-warning text-white" style="font-size: 10px; padding: 4px 8px;">Pending</span>
+                    </div>
+                </div>
+                <!-- Task 4 -->
+                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Public Holiday</h6>
+                        <span class="badge bg-warning text-white" style="font-size: 10px; padding: 4px 8px;">Pending</span>
+                    </div>
+                </div>
+                <!-- Task 5 -->
+                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #9C27B0 0%, #BA68C8 100%);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Meeting</h6>
+                        <span class="badge bg-success text-white" style="font-size: 10px; padding: 4px 8px;">Completed</span>
+                    </div>
+                </div>
+                <!-- Task 6 -->
+                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #F44336 0%, #E57373 100%);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Exam Result Announcements</h6>
+                        <span class="badge text-white" style="font-size: 10px; padding: 4px 8px; background-color: #03A9F4;">Processing</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Class Wise Attendance & Financial Table Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-white p-3 rounded-10 border border-white">
+            <div class="table-responsive">
+                <table class="table table-bordered mb-0" style="font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Class</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Section Strength</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Present Today</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Absent Today</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">On Leave</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Expected</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Generated</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Paid Amount</th>
+                            <th class="text-white fw-bold" style="padding: 10px; background: linear-gradient(135deg, #1a237e 0%, #003471 100%);">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Row 1: Class One -->
+                        <tr>
+                            <td class="fw-bold" style="padding: 12px;">One</td>
+                            <td style="padding: 12px;">
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> A: 2
+                                    </span>
+                                    <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> I: 0
+                                    </span>
+                                </div>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge text-white rounded-pill" style="padding: 6px 10px; font-size: 11px; background-color: #1a237e;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-warning text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">credit_card</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 2234
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 1200
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 1200
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                </span>
+                            </td>
+                        </tr>
+                        <!-- Row 2: Class Two -->
+                        <tr>
+                            <td class="fw-bold" style="padding: 12px;">Two</td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> A: 1
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge text-white rounded-pill" style="padding: 6px 10px; font-size: 11px; background-color: #1a237e;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-warning text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">credit_card</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 650
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                </span>
+                            </td>
+                        </tr>
+                        <!-- Row 3: Class Three -->
+                        <tr>
+                            <td class="fw-bold" style="padding: 12px;">Three</td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> A: 35
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge text-white rounded-pill" style="padding: 6px 10px; font-size: 11px; background-color: #1a237e;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-warning text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">credit_card</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 48400
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 15400
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                </span>
+                            </td>
+                            <td style="padding: 12px;">
+                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 15400
+                                </span>
+                            </td>
+                        </tr>
+                        <!-- Total Row -->
+                        <tr style="background-color: #ffebee;">
+                            <td class="fw-bold text-dark" style="padding: 12px;">Total</td>
+                            <td class="text-dark" style="padding: 12px;">38</td>
+                            <td class="text-dark" style="padding: 12px;">0</td>
+                            <td class="text-dark" style="padding: 12px;">0</td>
+                            <td class="text-dark" style="padding: 12px;">0</td>
+                            <td class="text-dark" style="padding: 12px;">51284</td>
+                            <td class="text-dark" style="padding: 12px;">16600</td>
+                            <td class="text-dark" style="padding: 12px;">1200</td>
+                            <td class="text-dark" style="padding: 12px;">15400</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -480,6 +789,274 @@ function updateCurrentTime() {
 // Update time every second
 setInterval(updateCurrentTime, 1000);
 updateCurrentTime();
+
+// Initialize Charts when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait for ApexCharts to be available
+    if (typeof ApexCharts !== 'undefined') {
+        initializeCharts();
+    } else {
+        // If ApexCharts is not loaded yet, wait a bit
+        setTimeout(function() {
+            if (typeof ApexCharts !== 'undefined') {
+                initializeCharts();
+            }
+        }, 500);
+    }
+});
+
+function initializeCharts() {
+    // Admissions Overview Pie Chart
+    const admissionsChartId = document.getElementById('admissions_overview_chart');
+    if (admissionsChartId) {
+        var options = {
+            series: [85, 12, 2, 1],
+            chart: {
+                type: 'pie',
+                height: 300
+            },
+            labels: ['Yearly Admissions', 'Monthly Admissions', 'Admissions Today', 'Pass-out Students'],
+            colors: ['#9C27B0', '#FF9800', '#03A9F4', '#F44336'],
+            legend: {
+                show: false
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: function(val) {
+                    return val.toFixed(0) + "%";
+                }
+            },
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return val + "%";
+                    }
+                }
+            }
+        };
+        var chart = new ApexCharts(document.querySelector("#admissions_overview_chart"), options);
+        chart.render();
+    }
+
+    // Daily Income & Expense Chart
+    const dailyChartId = document.getElementById('daily_income_expense_chart');
+    if (dailyChartId) {
+        var options = {
+            series: [
+                {
+                    name: 'Daily Income',
+                    data: [0, 0, 0, 0, 0, 0, 0]
+                },
+                {
+                    name: 'Daily Expenses',
+                    data: [0, 0, 0, 0, 0, 0, 0]
+                }
+            ],
+            chart: {
+                type: 'line',
+                height: 150,
+                toolbar: {
+                    show: false
+                }
+            },
+            colors: ['#00BCD4', '#2196F3'],
+            stroke: {
+                width: 2,
+                curve: 'smooth'
+            },
+            xaxis: {
+                categories: ['Tue 18', 'Wed 19', 'Thu 20', 'Fri 21', 'Sat 22', 'Sun 23', 'Mon 24'],
+                labels: {
+                    style: {
+                        fontSize: '10px',
+                        colors: '#666'
+                    }
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: {
+                        fontSize: '10px',
+                        colors: '#666'
+                    }
+                }
+            },
+            legend: {
+                show: true,
+                position: 'top',
+                fontSize: '11px',
+                offsetY: -5
+            },
+            grid: {
+                strokeDashArray: 3,
+                borderColor: '#e0e0e0'
+            },
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return val.toFixed(1);
+                    }
+                }
+            }
+        };
+        var chart = new ApexCharts(document.querySelector("#daily_income_expense_chart"), options);
+        chart.render();
+    }
+
+    // Monthly Income & Expense Chart
+    const monthlyChartId = document.getElementById('monthly_income_expense_chart');
+    if (monthlyChartId) {
+        var options = {
+            series: [
+                {
+                    name: 'Monthly Income',
+                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 2000, 2200, 2400]
+                },
+                {
+                    name: 'Monthly Expenses',
+                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1800, 2000, 2100]
+                }
+            ],
+            chart: {
+                type: 'area',
+                height: 150,
+                toolbar: {
+                    show: false
+                },
+                stacked: false
+            },
+            colors: ['#03A9F4', '#E91E63'],
+            stroke: {
+                width: 2,
+                curve: 'smooth'
+            },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    opacityFrom: 0.6,
+                    opacityTo: 0.1
+                }
+            },
+            xaxis: {
+                categories: ['Dec 2024', 'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025', 'May 2025', 'Jun 2025', 'Jul 2025', 'Aug 2025', 'Sep 2025', 'Oct 2025', 'Nov 2025'],
+                labels: {
+                    rotate: -45,
+                    style: {
+                        fontSize: '9px',
+                        colors: '#666'
+                    }
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: {
+                        fontSize: '10px',
+                        colors: '#666'
+                    }
+                }
+            },
+            legend: {
+                show: true,
+                position: 'top',
+                fontSize: '11px',
+                offsetY: -5
+            },
+            grid: {
+                strokeDashArray: 3,
+                borderColor: '#e0e0e0'
+            },
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return val.toFixed(0);
+                    }
+                }
+            }
+        };
+        var chart = new ApexCharts(document.querySelector("#monthly_income_expense_chart"), options);
+        chart.render();
+    }
+
+    // Month Wise Paid Unpaid Fee Report Chart
+    const feeChartId = document.getElementById('month_wise_fee_chart');
+    if (feeChartId) {
+        var options = {
+            series: [
+                {
+                    name: 'Paid Fee',
+                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]
+                },
+                {
+                    name: 'Unpaid Fee',
+                    data: [0, 0, 1, 0, 0, 0, 0, 0, 0, 6, 35, 11]
+                }
+            ],
+            chart: {
+                type: 'bar',
+                height: 350,
+                toolbar: {
+                    show: false
+                },
+                stacked: false
+            },
+            colors: ['#4CAF50', '#FF9800'],
+            plotOptions: {
+                bar: {
+                    horizontal: false,
+                    columnWidth: '55%',
+                    endingShape: 'rounded'
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            stroke: {
+                show: true,
+                width: 2,
+                colors: ['transparent']
+            },
+            xaxis: {
+                categories: ['Dec-24', 'Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25', 'Jun-25', 'Jul-25', 'Aug-25', 'Sep-25', 'Oct-25', 'Nov-25'],
+                labels: {
+                    style: {
+                        fontSize: '11px',
+                        colors: '#666'
+                    }
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: {
+                        fontSize: '11px',
+                        colors: '#666'
+                    }
+                }
+            },
+            fill: {
+                opacity: 1
+            },
+            legend: {
+                show: true,
+                position: 'top',
+                fontSize: '12px',
+                offsetY: -5
+            },
+            grid: {
+                strokeDashArray: 3,
+                borderColor: '#e0e0e0'
+            },
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return val;
+                    }
+                }
+            }
+        };
+        var chart = new ApexCharts(document.querySelector("#month_wise_fee_chart"), options);
+        chart.render();
+    }
+}
 </script>
 @endsection
 

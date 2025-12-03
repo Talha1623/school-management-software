@@ -489,13 +489,28 @@ class ExamController extends Controller
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        // Get campuses for dropdown - First from Campus model (super admin added)
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
+        // If no campuses from Campus model, get from other sources
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSubjects = Subject::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->merge($campusesFromSubjects)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        // If still empty, use default campuses
+        if ($campuses->isEmpty()) {
+            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2'])->map(function($name) {
+                return (object)['campus_name' => $name];
+            });
         }
 
         // Get exams (filtered by campus if provided)
@@ -527,11 +542,49 @@ class ExamController extends Controller
             $sections = collect(['A', 'B', 'C', 'D']);
         }
 
+        // Query students based on filters - Require Campus, Exam, and Class
+        $students = collect();
+        if ($filterCampus && $filterExam && $filterClass) {
+            $studentsQuery = Student::query();
+            
+            // Always filter by campus and class
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+            
+            // Filter by section if provided
+            if ($filterSection) {
+                $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            }
+            
+            $students = $studentsQuery->orderBy('student_code', 'asc')
+                ->orderBy('student_name', 'asc')
+                ->get();
+            
+            // Load marks for each student for the selected exam
+            if ($students->count() > 0) {
+                $marks = StudentMark::where('test_name', $filterExam)
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->when($filterSection, function($query) use ($filterSection) {
+                        return $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                    })
+                    ->get()
+                    ->keyBy('student_id');
+                
+                // Attach marks to students
+                $students = $students->map(function($student) use ($marks) {
+                    $student->mark = $marks->get($student->id);
+                    return $student;
+                });
+            }
+        }
+
         return view('exam.teacher-remarks.particular', compact(
             'campuses',
             'exams',
             'classes',
             'sections',
+            'students',
             'filterCampus',
             'filterExam',
             'filterClass',
@@ -540,18 +593,45 @@ class ExamController extends Controller
     }
 
     /**
-     * Get exams based on campus (AJAX) for teacher remarks.
+     * Get exams based on campus and class (AJAX) for teacher remarks.
      */
     public function getExamsForTeacherRemarks(Request $request): JsonResponse
     {
         $campus = $request->get('campus');
+        $class = $request->get('class');
         
-        $examsQuery = Exam::query();
+        // Get exams from StudentMark table filtered by campus and class
+        // Since exams are linked to classes through StudentMark records
+        $examsQuery = StudentMark::query();
+        
         if ($campus) {
-            $examsQuery->where('campus', $campus);
+            $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
         
-        $exams = $examsQuery->whereNotNull('exam_name')->distinct()->pluck('exam_name')->sort()->values();
+        // Filter by class if provided
+        if ($class) {
+            $examsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        }
+        
+        // Get distinct exam names from StudentMark (test_name field stores exam_name)
+        $exams = $examsQuery->whereNotNull('test_name')
+            ->distinct()
+            ->pluck('test_name')
+            ->sort()
+            ->values();
+        
+        // If no exams found in StudentMark, try Exam table as fallback
+        if ($exams->isEmpty()) {
+            $examsQuery = Exam::query();
+            if ($campus) {
+                $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $exams = $examsQuery->whereNotNull('exam_name')
+                ->distinct()
+                ->pluck('exam_name')
+                ->sort()
+                ->values();
+        }
         
         return response()->json($exams);
     }
@@ -573,6 +653,91 @@ class ExamController extends Controller
     }
 
     /**
+     * Save teacher remarks for particular exam.
+     */
+    public function saveTeacherRemarksParticular(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'exam_name' => ['required', 'string'],
+            'campus' => ['required', 'string'],
+            'class' => ['required', 'string'],
+            'section' => ['nullable', 'string'],
+            'remarks' => ['required', 'array'],
+            'remarks.*' => ['nullable', 'string'],
+        ]);
+
+        // Save or update remarks for each student
+        foreach ($validated['remarks'] as $studentId => $remark) {
+            if ($remark) {
+                StudentMark::updateOrCreate(
+                    [
+                        'student_id' => $studentId,
+                        'test_name' => $validated['exam_name'],
+                        'campus' => $validated['campus'],
+                        'class' => $validated['class'],
+                        'section' => $validated['section'] ?? null,
+                    ],
+                    [
+                        'teacher_remarks' => $remark,
+                    ]
+                );
+            }
+        }
+
+        return redirect()
+            ->route('exam.teacher-remarks.particular', [
+                'filter_campus' => $validated['campus'],
+                'filter_exam' => $validated['exam_name'],
+                'filter_class' => $validated['class'],
+                'filter_section' => $validated['section'] ?? '',
+            ])
+            ->with('success', 'Teacher remarks saved successfully!');
+    }
+
+    /**
+     * Save teacher remarks for final exam.
+     */
+    public function saveTeacherRemarksFinal(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['required', 'string'],
+            'session' => ['required', 'string'],
+            'class' => ['required', 'string'],
+            'section' => ['nullable', 'string'],
+            'remarks' => ['required', 'array'],
+            'remarks.*' => ['nullable', 'string'],
+        ]);
+
+        // Save or update remarks for each student
+        foreach ($validated['remarks'] as $studentId => $remark) {
+            if ($remark) {
+                // Use FINAL_RESULT as test_name for final exam remarks
+                StudentMark::updateOrCreate(
+                    [
+                        'student_id' => $studentId,
+                        'test_name' => 'FINAL_RESULT',
+                        'campus' => $validated['campus'],
+                        'class' => $validated['class'],
+                        'section' => $validated['section'] ?? null,
+                    ],
+                    [
+                        'teacher_remarks' => $remark,
+                    ]
+                );
+            }
+        }
+
+        return redirect()
+            ->route('exam.teacher-remarks.final', [
+                'filter_campus' => $validated['campus'],
+                'filter_session' => $validated['session'],
+                'filter_class' => $validated['class'],
+                'filter_section' => $validated['section'] ?? '',
+            ])
+            ->with('success', 'Teacher remarks saved successfully!');
+    }
+
+    /**
      * Display the teacher remarks for final result page.
      */
     public function teacherRemarksFinal(Request $request): View
@@ -583,10 +748,14 @@ class ExamController extends Controller
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
 
-        // Get campuses for dropdown
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        // Get campuses for dropdown - from Campus model first, then fallback
+        $campuses = Campus::whereNotNull('campus_name')->distinct()->pluck('campus_name')->sort()->values();
+        
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        }
         
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
@@ -617,6 +786,75 @@ class ExamController extends Controller
             $sections = collect(['A', 'B', 'C', 'D']);
         }
 
+        // Query students based on filters
+        $students = collect();
+        if ($filterCampus && $filterSession && $filterClass) {
+            $studentsQuery = Student::query();
+            
+            // Always filter by campus, session, and class
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+            
+            // Filter by section if provided
+            if ($filterSection) {
+                $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            }
+            
+            $students = $studentsQuery->orderBy('student_code', 'asc')
+                ->orderBy('student_name', 'asc')
+                ->get();
+            
+            // Load final exam marks for each student (aggregate from all exams in the session)
+            if ($students->count() > 0) {
+                // Get all exam names for this session
+                $examNames = Exam::where('session', $filterSession)
+                    ->whereNotNull('exam_name')
+                    ->distinct()
+                    ->pluck('exam_name');
+                
+                // Aggregate marks from all exams in the session
+                $students = $students->map(function($student) use ($examNames, $filterCampus, $filterClass, $filterSection, $filterSession) {
+                    // Get all marks for this student from exams in the session
+                    $marksQuery = StudentMark::where('student_id', $student->id)
+                        ->whereIn('test_name', $examNames)
+                        ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+                    
+                    if ($filterSection) {
+                        $marksQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                    }
+                    
+                    $marks = $marksQuery->get();
+                    
+                    // Calculate aggregated totals
+                    $totalMarks = $marks->sum('total_marks') ?? 0;
+                    $obtainedMarks = $marks->sum('marks_obtained') ?? 0;
+                    
+                    // Get teacher remarks for final exam (stored with test_name = "FINAL_RESULT" or session-based)
+                    $finalRemark = StudentMark::where('student_id', $student->id)
+                        ->where(function($query) use ($filterSession) {
+                            $query->where('test_name', 'FINAL_RESULT')
+                                  ->orWhere('test_name', 'LIKE', '%FINAL%')
+                                  ->orWhere('test_name', $filterSession . '_FINAL');
+                        })
+                        ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+                    
+                    if ($filterSection) {
+                        $finalRemark->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                    }
+                    
+                    $finalRemark = $finalRemark->first();
+                    
+                    $student->finalTotal = $totalMarks;
+                    $student->finalObtained = $obtainedMarks;
+                    $student->finalRemark = $finalRemark;
+                    
+                    return $student;
+                });
+            }
+        }
+
         return view('exam.teacher-remarks.final', compact(
             'campuses',
             'sessions',
@@ -625,7 +863,8 @@ class ExamController extends Controller
             'filterCampus',
             'filterSession',
             'filterClass',
-            'filterSection'
+            'filterSection',
+            'students'
         ));
     }
 

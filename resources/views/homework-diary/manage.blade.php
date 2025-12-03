@@ -178,7 +178,7 @@
                     </div>
                     
                     <div class="text-center mt-4">
-                        <button type="submit" class="btn btn-success px-5 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none; font-weight: 500; font-size: 14px;">
+                        <button type="submit" class="btn save-changes-btn px-5 py-2">
                             <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">thumb_up</span>
                             <span style="color: white;">Save Changes</span>
                         </button>
@@ -189,12 +189,6 @@
                     <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">menu_book</span>
                     <p class="mt-2 mb-0 text-muted">No subjects found.</p>
                     <p class="mt-1 mb-0 text-muted" style="font-size: 13px;">Please add subjects for this Campus, Class, and Section combination.</p>
-                    <div class="mt-3">
-                        <a href="{{ route('manage-subjects') }}" class="btn btn-sm btn-primary px-4 py-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: white;">add</span>
-                            <span style="color: white; font-size: 13px;">Add Subjects (Super Admin)</span>
-                        </a>
-                    </div>
                 </div>
                 @endif
             </div>
@@ -222,6 +216,27 @@
     background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
+}
+
+.save-changes-btn {
+    background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+    color: white;
+    border: none;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 6px rgba(0, 52, 113, 0.2);
+}
+
+.save-changes-btn:hover {
+    background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
+    color: white;
+}
+
+.save-changes-btn:active {
+    transform: translateY(0);
 }
 
 /* Table Styling */

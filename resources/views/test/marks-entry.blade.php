@@ -308,6 +308,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const testSelect = document.getElementById('filter_test');
     const subjectSelect = document.getElementById('filter_subject');
 
+    // On page load, reload subjects if class is already selected (to get latest filtered subjects)
+    // This ensures subjects are filtered correctly based on current Class and Section
+    if (classSelect && classSelect.value) {
+        // Small delay to ensure all elements are ready
+        setTimeout(function() {
+            loadSubjects();
+        }, 100);
+    }
+
     // Load sections when class changes
     if (classSelect) {
         classSelect.addEventListener('change', function() {

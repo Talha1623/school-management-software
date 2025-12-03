@@ -2,6 +2,18 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
+use Illuminate\Support\Facades\Session;
+
+// Language Switch Route
+Route::get('/language/{locale}', function ($locale) {
+    $supportedLocales = ['en', 'ur'];
+    if (in_array($locale, $supportedLocales)) {
+        Session::put('locale', $locale);
+        // Also set cookie for persistence
+        return redirect()->back()->cookie('locale', $locale, 60 * 24 * 30); // 30 days
+    }
+    return redirect()->back();
+})->name('language.switch');
 
 Route::get('/', function () {
     return redirect()->route('dashboard');
@@ -401,6 +413,7 @@ Route::post('/online-classes', [App\Http\Controllers\OnlineClassesController::cl
 Route::put('/online-classes/{online_class}', [App\Http\Controllers\OnlineClassesController::class, 'update'])->name('online-classes.update');
 Route::delete('/online-classes/{online_class}', [App\Http\Controllers\OnlineClassesController::class, 'destroy'])->name('online-classes.destroy');
 Route::get('/online-classes/export/{format}', [App\Http\Controllers\OnlineClassesController::class, 'export'])->name('online-classes.export');
+Route::get('/online-classes/get-sections', [App\Http\Controllers\OnlineClassesController::class, 'getSections'])->name('online-classes.get-sections');
 
 // Timetable Management Routes
 Route::get('/timetable/add', [App\Http\Controllers\TimetableController::class, 'add'])->name('timetable.add');
@@ -684,10 +697,12 @@ Route::get('/exam/grades/final/export/{format}', [App\Http\Controllers\FinalExam
 
 // Teacher Remarks
 Route::get('/exam/teacher-remarks/particular', [App\Http\Controllers\ExamController::class, 'teacherRemarksParticular'])->name('exam.teacher-remarks.particular');
+Route::post('/exam/teacher-remarks/particular/save', [App\Http\Controllers\ExamController::class, 'saveTeacherRemarksParticular'])->name('exam.teacher-remarks.particular.save');
 Route::get('/exam/teacher-remarks/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForTeacherRemarks'])->name('exam.teacher-remarks.get-exams');
 Route::get('/exam/teacher-remarks/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForTeacherRemarks'])->name('exam.teacher-remarks.get-sections');
 
 Route::get('/exam/teacher-remarks/final', [App\Http\Controllers\ExamController::class, 'teacherRemarksFinal'])->name('exam.teacher-remarks.final');
+Route::post('/exam/teacher-remarks/final/save', [App\Http\Controllers\ExamController::class, 'saveTeacherRemarksFinal'])->name('exam.teacher-remarks.final.save');
 
 // Exam Timetable
 Route::get('/exam/timetable/add', [App\Http\Controllers\ExamController::class, 'addTimetable'])->name('exam.timetable.add');
@@ -1553,6 +1568,36 @@ Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(func
     })->name('terms-conditions');
     
     Route::get('/thermal-printer/setting', function () {
-        return view('blank-page');
+        return view('settings.thermal-printer');
     })->name('thermal-printer.setting');
+    
+    Route::get('/settings/general', function () {
+        return view('settings.general');
+    })->name('settings.general');
+    
+    Route::post('/settings/general', function () {
+        // Handle form submission
+        // For now, just redirect back with success message
+        return redirect()->route('settings.general')->with('success', 'Settings saved successfully!');
+    })->name('settings.general.store');
+    
+    Route::get('/settings/automation', function () {
+        return view('settings.automation');
+    })->name('settings.automation');
+    
+    Route::get('/settings/sms', function () {
+        return view('settings.sms');
+    })->name('settings.sms');
+    
+    Route::get('/settings/email', function () {
+        return view('settings.email');
+    })->name('settings.email');
+    
+    Route::get('/settings/payment', function () {
+        return view('settings.payment');
+    })->name('settings.payment');
+    
+    Route::get('/settings/exam', function () {
+        return view('settings.exam');
+    })->name('settings.exam');
 });

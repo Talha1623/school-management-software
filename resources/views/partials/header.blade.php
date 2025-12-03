@@ -32,10 +32,10 @@
                                 <span class="material-symbols-outlined" style="font-size: 19px;">translate</span>
                             </button>
                             <div class="dropdown-menu dropdown-lg p-0 border-0 dropdown-menu-end">
-                                <span class="fw-medium fs-16 text-secondary d-block title" style="padding-top: 20px; padding-bottom: 20px;">Choose Language</span>
+                                <span class="fw-medium fs-16 text-secondary d-block title" style="padding-top: 20px; padding-bottom: 20px;">{{ __('common.choose_language') }}</span>
                                 <div class="max-h-275" data-simplebar>
                                     <div class="notification-menu">
-                                        <a href="javascript:void(0);" class="dropdown-item">
+                                        <a href="{{ route('language.switch', ['locale' => 'en']) }}" class="dropdown-item">
                                             <div class="d-flex align-items-center">
                                                 <div class="flex-shrink-0">
                                                     <img src="{{ asset('assets/images/usa.png') }}" class="wh-30 rounded-circle" alt="usa">
@@ -46,50 +46,16 @@
                                             </div>
                                         </a>
                                     </div>
-                                    <div class="notification-menu">
-                                        <a href="javascript:void(0);" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/australia.png') }}" class="wh-30 rounded-circle" alt="australia">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <span class="text-secondary fw-medium fs-15">Australia</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
-                                    <div class="notification-menu">
-                                        <a href="javascript:void(0);" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/spain.png') }}" class="wh-30 rounded-circle" alt="spain">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <span class="text-secondary fw-medium fs-15">Spanish</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
-                                    <div class="notification-menu">
-                                        <a href="javascript:void(0);" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/france.png') }}" class="wh-30 rounded-circle" alt="portugal">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <span class="text-secondary fw-medium fs-15">France</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
                                     <div class="notification-menu mb-0">
-                                        <a href="javascript:void(0);" class="dropdown-item">
+                                        <a href="{{ route('language.switch', ['locale' => 'ur']) }}" class="dropdown-item">
                                             <div class="d-flex align-items-center">
                                                 <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/germany.png') }}" class="wh-30 rounded-circle" alt="Germany">
+                                                    <div class="wh-30 rounded-circle d-flex align-items-center justify-content-center fw-bold text-white" style="width: 30px; height: 30px; background-color: #01411C; font-size: 12px;">
+                                                        اردو
+                                                    </div>
                                                 </div>
                                                 <div class="flex-grow-1 ms-10">
-                                                    <span class="text-secondary fw-medium fs-15">Germany</span>
+                                                    <span class="text-secondary fw-medium fs-15">Urdu</span>
                                                 </div>
                                             </div>
                                         </a>

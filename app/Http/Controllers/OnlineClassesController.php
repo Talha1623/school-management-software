@@ -8,6 +8,7 @@ use App\Models\Section;
 use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
 class OnlineClassesController extends Controller
@@ -118,13 +119,7 @@ class OnlineClassesController extends Controller
             'start_time' => ['nullable', 'string'],
             'timing' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'min:4'],
-            'created_by' => ['nullable', 'string', 'max:255'],
         ]);
-
-        // Set created_by if not provided
-        if (empty($validated['created_by'])) {
-            $validated['created_by'] = auth()->user()->name ?? 'Admin';
-        }
 
         OnlineClass::create($validated);
 
@@ -147,7 +142,6 @@ class OnlineClassesController extends Controller
             'start_time' => ['nullable', 'string'],
             'timing' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'min:4'],
-            'created_by' => ['nullable', 'string', 'max:255'],
         ]);
 
         $online_class->update($validated);
@@ -167,6 +161,39 @@ class OnlineClassesController extends Controller
         return redirect()
             ->route('online-classes')
             ->with('success', 'Online class deleted successfully!');
+    }
+
+    /**
+     * Get sections based on class (AJAX).
+     */
+    public function getSections(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        
+        $sectionsQuery = Section::query();
+        if ($class) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        }
+        
+        $sections = $sectionsQuery->whereNotNull('name')
+            ->distinct()
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        // If no sections found, try fallback
+        if ($sections->isEmpty() && $class) {
+            $sectionsFromOnlineClasses = OnlineClass::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section')
+                ->distinct()
+                ->pluck('section')
+                ->sort()
+                ->values();
+            
+            $sections = $sectionsFromOnlineClasses;
+        }
+        
+        return response()->json(['sections' => $sections]);
     }
 
     /**

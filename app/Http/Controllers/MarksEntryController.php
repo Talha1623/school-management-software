@@ -90,29 +90,31 @@ class MarksEntryController extends Controller
             ->sort()
             ->values();
 
-        // Get subjects (filtered by other criteria if provided, otherwise show all)
+        // Get subjects (filtered by class and section - strict filtering)
         $subjectsQuery = Subject::query();
         
-        $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
-        if ($campusName) {
-            $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
-        }
+        // Class is required for subjects
         if ($filterClass) {
             $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-        }
-        if ($filterSection) {
-            $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
-        }
-        
-        $subjects = $subjectsQuery->whereNotNull('subject_name')
-            ->distinct()
-            ->pluck('subject_name')
-            ->sort()
-            ->values();
-        
-        // If no subjects found and no filters applied, show all subjects
-        if ($subjects->isEmpty() && !$campusName && !$filterClass && !$filterSection) {
-            $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            
+            $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
+            if ($campusName) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
+            }
+            
+            // If section is provided, MUST filter by section (strict filtering)
+            if ($filterSection) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            }
+            
+            $subjects = $subjectsQuery->whereNotNull('subject_name')
+                ->distinct()
+                ->pluck('subject_name')
+                ->sort()
+                ->values();
+        } else {
+            // If no class selected, show empty subjects
+            $subjects = collect();
         }
 
         // Query students based on filters
@@ -224,12 +226,20 @@ class MarksEntryController extends Controller
         
         $subjectsQuery = Subject::query();
         
+        // Class is required - if not provided, return empty
+        if (!$class) {
+            return response()->json(['subjects' => []]);
+        }
+        
+        // Always filter by class
+        $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        
+        // If campus is provided, filter by campus
         if ($campus) {
             $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
-        if ($class) {
-            $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-        }
+        
+        // If section is provided, MUST filter by section (strict filtering)
         if ($section) {
             $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
         }

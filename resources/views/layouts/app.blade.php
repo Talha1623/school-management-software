@@ -51,6 +51,52 @@
     @include('partials.scripts')
 
     @stack('scripts')
+    
+    <!-- Dynamic Logo and System Name Script -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load saved logo and system name from localStorage
+        const savedLogo = localStorage.getItem('schoolLogo');
+        const savedName = localStorage.getItem('systemName');
+        
+        if (savedLogo) {
+            const sidebarLogo = document.querySelector('.sidebar-area .logo img');
+            if (sidebarLogo) sidebarLogo.src = savedLogo;
+            
+            const headerLogo = document.querySelector('#header-area .logo img, .header-area .logo img');
+            if (headerLogo) headerLogo.src = savedLogo;
+            
+            const preloaderLogo = document.getElementById('preloaderLogo');
+            if (preloaderLogo) preloaderLogo.src = savedLogo;
+        }
+       
+        if (savedName) {
+            const sidebarText = document.querySelector('.sidebar-area .logo-text');
+            if (sidebarText) sidebarText.textContent = savedName;
+            
+            const headerText = document.querySelector('#header-area .logo-text, .header-area .logo-text');
+            if (headerText) headerText.textContent = savedName;
+            
+            // Update preloader text
+            const preloaderText = document.getElementById('preloaderText');
+            if (preloaderText) {
+                preloaderText.innerHTML = '';
+                for (let i = 0; i < savedName.length; i++) {
+                    const span = document.createElement('span');
+                    span.className = 'd-inline-block';
+                    span.textContent = savedName[i];
+                    preloaderText.appendChild(span);
+                }
+            }
+            
+            // Update page title
+            const currentTitle = document.title;
+            if (currentTitle.includes('ICMS')) {
+                document.title = currentTitle.replace('ICMS', savedName);
+            }
+        }
+    });
+    </script>
 </body>
 </html>
 

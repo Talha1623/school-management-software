@@ -6,9 +6,21 @@
 <div class="row">
     <div class="col-12">
         <!-- Dashboard Title -->
-        <div class="d-flex align-items-center mb-4">
-            <h2 class="mb-0 fs-20 fw-semibold text-dark me-2">Teacher Dashboard</h2>
-            <span class="material-symbols-outlined text-secondary" style="font-size: 20px;">arrow_forward</span>
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center">
+                <h2 class="mb-0 fs-20 fw-semibold text-dark me-2">Teacher Dashboard</h2>
+                <span class="material-symbols-outlined text-secondary" style="font-size: 20px;">arrow_forward</span>
+            </div>
+            @if(isset($assignedClasses) && $assignedClasses->isNotEmpty())
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-muted" style="font-size: 13px;">Assigned Classes:</span>
+                <div class="d-flex gap-1 flex-wrap">
+                    @foreach($assignedClasses as $class)
+                    <span class="badge bg-primary" style="font-size: 12px;">{{ $class }}</span>
+                    @endforeach
+                </div>
+            </div>
+            @endif
         </div>
 
 

@@ -164,6 +164,19 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="View" onclick="viewMaterial(this, {{ $material->id }})" data-bs-toggle="modal" data-bs-target="#viewMaterialModal"
+                                                    data-material-title="{{ $material->title }}"
+                                                    data-material-description="{{ $material->description ?? 'N/A' }}"
+                                                    data-material-campus="{{ $material->campus }}"
+                                                    data-material-class="{{ $material->class }}"
+                                                    data-material-section="{{ $material->section ?? 'N/A' }}"
+                                                    data-material-subject="{{ $material->subject ?? 'N/A' }}"
+                                                    data-material-file-type="{{ ucfirst($material->file_type) }}"
+                                                    data-material-youtube-url="{{ $material->youtube_url ?? '' }}"
+                                                    data-material-file-path="{{ $material->file_path ?? '' }}"
+                                                    data-material-file-url="{{ $material->file_path ? route('study-material.view-file', $material->id) : '' }}">
+                                                    <span class="material-symbols-outlined">visibility</span>
+                                                </button>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this study material?')) { document.getElementById('delete-form-{{ $material->id }}').submit(); }">
                                                     <span class="material-symbols-outlined">delete</span>
                                                 </button>
@@ -194,6 +207,81 @@
                 <p class="text-muted mb-0">Please select filters and click Filter to view study materials.</p>
             </div>
             @endif
+        </div>
+    </div>
+</div>
+
+<!-- View Study Material Modal -->
+<div class="modal fade" id="viewMaterialModal" tabindex="-1" aria-labelledby="viewMaterialModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2 text-white" id="viewMaterialModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">visibility</span>
+                    <span style="color: white;">View Study Material</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="materialDetails">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">Title</label>
+                                <div class="p-3 bg-light rounded-8" id="view-title">-</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">Description</label>
+                                <div class="p-3 bg-light rounded-8" id="view-description" style="min-height: 60px;">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">Campus</label>
+                                <div class="p-3 bg-light rounded-8" id="view-campus">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">Class</label>
+                                <div class="p-3 bg-light rounded-8" id="view-class">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">Section</label>
+                                <div class="p-3 bg-light rounded-8" id="view-section">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">Subject</label>
+                                <div class="p-3 bg-light rounded-8" id="view-subject">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">File Type</label>
+                                <div class="p-3 bg-light rounded-8" id="view-file-type">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color: #003471;">File/URL</label>
+                                <div class="p-3 bg-light rounded-8" id="view-file-url">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none; transition: all 0.3s ease;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                    Close
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -516,6 +604,10 @@
     color: white !important;
 }
 
+.default-table-area .btn-primary .material-symbols-outlined {
+    color: white !important;
+}
+
 /* Toast Notification Styling */
 .success-toast,
 .error-toast {
@@ -608,6 +700,45 @@
 </style>
 
 <script>
+// View Material Function
+function viewMaterial(button, materialId) {
+    const title = button.getAttribute('data-material-title');
+    const description = button.getAttribute('data-material-description');
+    const campus = button.getAttribute('data-material-campus');
+    const classValue = button.getAttribute('data-material-class');
+    const section = button.getAttribute('data-material-section');
+    const subject = button.getAttribute('data-material-subject');
+    const fileType = button.getAttribute('data-material-file-type');
+    const youtubeUrl = button.getAttribute('data-material-youtube-url');
+    const filePath = button.getAttribute('data-material-file-path');
+    const fileUrl = button.getAttribute('data-material-file-url');
+    
+    // Populate modal
+    document.getElementById('view-title').textContent = title || '-';
+    document.getElementById('view-description').textContent = description && description !== 'N/A' ? description : '-';
+    document.getElementById('view-campus').textContent = campus || '-';
+    document.getElementById('view-class').textContent = classValue || '-';
+    document.getElementById('view-section').textContent = section && section !== 'N/A' ? section : '-';
+    document.getElementById('view-subject').textContent = subject && subject !== 'N/A' ? subject : '-';
+    document.getElementById('view-file-type').textContent = fileType || '-';
+    
+    // Handle file/URL display
+    const fileUrlElement = document.getElementById('view-file-url');
+    if (fileType === 'Video' && youtubeUrl) {
+        fileUrlElement.innerHTML = `<a href="${youtubeUrl}" target="_blank" class="text-primary text-decoration-none d-inline-flex align-items-center gap-2">
+            <span class="material-symbols-outlined" style="font-size: 18px;">link</span>
+            <span>${youtubeUrl}</span>
+        </a>`;
+    } else if (fileUrl) {
+        fileUrlElement.innerHTML = `<a href="${fileUrl}" target="_blank" class="text-primary text-decoration-none d-inline-flex align-items-center gap-2">
+            <span class="material-symbols-outlined" style="font-size: 18px;">file_present</span>
+            <span>View File</span>
+        </a>`;
+    } else {
+        fileUrlElement.textContent = '-';
+    }
+}
+
 function resetForm() {
     document.getElementById('materialForm').reset();
     document.getElementById('materialModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">add</span><span style="color: white;">Add Study Material / Lecture</span>';

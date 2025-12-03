@@ -6,10 +6,12 @@ use App\Models\Student;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Subject;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class StudentController extends Controller
 {
@@ -344,27 +346,59 @@ class StudentController extends Controller
             });
         }
         
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-        if ($classes->isEmpty()) {
-            $classesFromStudents = Student::whereNotNull('class')->distinct()->pluck('class')->sort();
-            $classes = $classesFromStudents;
-        }
+        // Get classes - filter by teacher's assigned classes if teacher
+        $classes = collect();
+        $staff = Auth::guard('staff')->user();
         
-        $sections = collect();
-        if ($request->filled('filter_class')) {
-            $sections = Section::where('class', $request->filter_class)
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get classes from teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            $classes = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
                 ->sort()
                 ->values();
-            if ($sections->isEmpty()) {
-                $sectionsFromStudents = Student::where('class', $request->filter_class)
-                    ->whereNotNull('section')
+        } else {
+            // For non-teachers, get all classes
+            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+            if ($classes->isEmpty()) {
+                $classesFromStudents = Student::whereNotNull('class')->distinct()->pluck('class')->sort();
+                $classes = $classesFromStudents;
+            }
+        }
+        
+        // Get sections - filter by teacher's assigned subjects if teacher
+        $sections = collect();
+        if ($request->filled('filter_class')) {
+            if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+                // Get sections from teacher's assigned subjects for this class
+                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->filter_class))])
+                    ->get();
+                
+                $sections = $assignedSubjects->pluck('section')
+                    ->unique()
+                    ->filter()
+                    ->sort()
+                    ->values();
+            } else {
+                // For non-teachers, get all sections
+                $sections = Section::where('class', $request->filter_class)
+                    ->whereNotNull('name')
                     ->distinct()
-                    ->pluck('section')
-                    ->sort();
-                $sections = $sectionsFromStudents;
+                    ->pluck('name')
+                    ->sort()
+                    ->values();
+                if ($sections->isEmpty()) {
+                    $sectionsFromStudents = Student::where('class', $request->filter_class)
+                        ->whereNotNull('section')
+                        ->distinct()
+                        ->pluck('section')
+                        ->sort();
+                    $sections = $sectionsFromStudents;
+                }
             }
         }
         
@@ -384,20 +418,38 @@ class StudentController extends Controller
             return response()->json(['sections' => []]);
         }
         
-        $sections = Section::where('class', $class)
-            ->whereNotNull('name')
-            ->distinct()
-            ->pluck('name')
-            ->sort()
-            ->values();
+        $staff = Auth::guard('staff')->user();
+        $sections = collect();
+        
+        // Filter by teacher's assigned subjects if teacher
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get sections from teacher's assigned subjects for this class
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
             
-        if ($sections->isEmpty()) {
-            $sections = Student::where('class', $class)
-                ->whereNotNull('section')
-                ->distinct()
-                ->pluck('section')
+            $sections = $assignedSubjects->pluck('section')
+                ->unique()
+                ->filter()
                 ->sort()
                 ->values();
+        } else {
+            // For non-teachers, get all sections
+            $sections = Section::where('class', $class)
+                ->whereNotNull('name')
+                ->distinct()
+                ->pluck('name')
+                ->sort()
+                ->values();
+                
+            if ($sections->isEmpty()) {
+                $sections = Student::where('class', $class)
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+            }
         }
         
         return response()->json(['sections' => $sections]);

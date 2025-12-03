@@ -66,23 +66,31 @@ class TeacherRemarksController extends Controller
             }
         }
 
-        // Get subjects (filtered by other criteria if provided, otherwise show all)
+        // Get subjects (filtered by class and section - strict filtering)
         $subjectsQuery = Subject::query();
-        $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
-        if ($campusName) {
-            $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
-        }
+        
+        // Class is required for subjects
         if ($filterClass) {
             $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-        }
-        if ($filterSection) {
-            $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
-        }
-        $subjects = $subjectsQuery->whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
-        
-        // If no subjects found and no filters applied, show all subjects
-        if ($subjects->isEmpty() && !$campusName && !$filterClass && !$filterSection) {
-            $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            
+            $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
+            if ($campusName) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
+            }
+            
+            // If section is provided, MUST filter by section (strict filtering)
+            if ($filterSection) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            }
+            
+            $subjects = $subjectsQuery->whereNotNull('subject_name')
+                ->distinct()
+                ->pluck('subject_name')
+                ->sort()
+                ->values();
+        } else {
+            // If no class selected, show empty subjects
+            $subjects = collect();
         }
 
         // Get tests (filtered by other criteria if provided) - Only show tests where result_status = 1 (declared)
@@ -350,14 +358,22 @@ class TeacherRemarksController extends Controller
         $class = $request->get('class');
         $section = $request->get('section');
         
+        // Class is required - if not provided, return empty
+        if (!$class) {
+            return response()->json(['subjects' => []]);
+        }
+        
         $subjectsQuery = Subject::query();
         
+        // Always filter by class
+        $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        
+        // If campus is provided, filter by campus
         if ($campus) {
             $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
-        if ($class) {
-            $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-        }
+        
+        // If section is provided, MUST filter by section (strict filtering)
         if ($section) {
             $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
         }
@@ -381,13 +397,18 @@ class TeacherRemarksController extends Controller
         $section = $request->get('section');
         $subject = $request->get('subject');
         
+        // Class is required - if not provided, return empty
+        if (!$class) {
+            return response()->json(['tests' => []]);
+        }
+        
         $testsQuery = Test::where('result_status', 1); // Only declared results
+        
+        // Always filter by class
+        $testsQuery->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($class))]);
         
         if ($campus) {
             $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-        }
-        if ($class) {
-            $testsQuery->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($class))]);
         }
         if ($section) {
             $testsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);

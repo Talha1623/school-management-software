@@ -110,6 +110,24 @@
                                 Marks Entry
                             </a>
                         </li>
+                        <li class="menu-item {{ request()->routeIs('exam.teacher-remarks*') ? 'open' : '' }}">
+                            <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('exam.teacher-remarks*') ? 'active' : '' }}">
+                                <span class="material-symbols-outlined menu-icon">comment</span>
+                                <span class="title">Teacher Remarks</span>
+                            </a>
+                            <ul class="menu-sub">
+                                <li class="menu-item">
+                                    <a href="{{ route('exam.teacher-remarks.particular') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.particular') ? 'active' : '' }}">
+                                        For Particular Test
+                                    </a>
+                                </li>
+                                <li class="menu-item">
+                                    <a href="{{ route('exam.teacher-remarks.final') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.final') ? 'active' : '' }}">
+                                        For Combine Test
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
                     </ul>
                 </li>
                 
@@ -1363,34 +1381,44 @@
                         </ul>
                     </li>
                     <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') ? 'active' : '' }}">
+                        <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('thermal-printer*') || request()->routeIs('settings.*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">settings</span>
                             <span class="title">Settings</span>
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
-                                <a href="{{ route('account-settings') }}" class="menu-link {{ request()->routeIs('account-settings') ? 'active' : '' }}">
-                                    Account Settings
+                                <a href="{{ route('settings.general') }}" class="menu-link {{ request()->routeIs('settings.general') ? 'active' : '' }}">
+                                    General Setting
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('connections') }}" class="menu-link {{ request()->routeIs('connections') ? 'active' : '' }}">
-                                    Connections
+                                <a href="{{ route('settings.automation') }}" class="menu-link {{ request()->routeIs('settings.automation') ? 'active' : '' }}">
+                                    Automation Setting
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('settings.sms') }}" class="menu-link {{ request()->routeIs('settings.sms') ? 'active' : '' }}">
+                                    SMS Setting
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('settings.email') }}" class="menu-link {{ request()->routeIs('settings.email') ? 'active' : '' }}">
+                                    Email Setting
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('settings.payment') }}" class="menu-link {{ request()->routeIs('settings.payment') ? 'active' : '' }}">
+                                    Payment Setting
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('settings.exam') }}" class="menu-link {{ request()->routeIs('settings.exam') ? 'active' : '' }}">
+                                    Exam Setting
                                 </a>
                             </li>
                             <li class="menu-item">
                                 <a href="{{ route('thermal-printer.setting') }}" class="menu-link {{ request()->routeIs('thermal-printer*') ? 'active' : '' }}">
                                     Thermal Printer Setting
-                                </a>
-                            </li>
-                            <li class="menu-item">
-                                <a href="{{ route('privacy-policy') }}" class="menu-link {{ request()->routeIs('privacy-policy') ? 'active' : '' }}">
-                                    Privacy Policy
-                                </a>
-                            </li>
-                            <li class="menu-item">
-                                <a href="{{ route('terms-conditions') }}" class="menu-link {{ request()->routeIs('terms-conditions') ? 'active' : '' }}">
-                                    Terms & Conditions
                                 </a>
                             </li>
                         </ul>

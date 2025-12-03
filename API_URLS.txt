@@ -1,0 +1,173 @@
+===========================================
+TEACHER SELF ATTENDANCE API URLs
+Base URL: https://school.ritpk.com/api/teacher
+===========================================
+
+1. LOGIN
+POST https://school.ritpk.com/api/teacher/login
+
+2. GET DASHBOARD (Statistics with Assigned Classes Students)
+GET https://school.ritpk.com/api/teacher/dashboard
+Header: Authorization: Bearer {token}
+Returns: Assigned classes, total students, boys, girls, attendance percentage, present/absent today, latest admissions
+
+3. GET PROFILE (Complete Details with Assigned Subjects)
+GET https://school.ritpk.com/api/teacher/profile
+Header: Authorization: Bearer {token}
+Returns: Basic info, contact, personal, professional, assigned subjects, classes, sections
+
+4. MARK SELF ATTENDANCE
+POST https://school.ritpk.com/api/teacher/self-attendance/mark
+Header: Authorization: Bearer {token}
+Body: {
+  "attendance_date": "2025-12-22",
+  "status": "Present",
+  "start_time": "09:00:00",
+  "end_time": "17:00:00",
+  "remarks": "Optional"
+}
+
+5. CHECK TODAY'S ATTENDANCE
+GET https://school.ritpk.com/api/teacher/self-attendance/check
+Header: Authorization: Bearer {token}
+Optional: ?date=2025-12-22
+
+6. GET ATTENDANCE HISTORY
+GET https://school.ritpk.com/api/teacher/self-attendance/history
+Header: Authorization: Bearer {token}
+Optional: ?start_date=2025-12-01&end_date=2025-12-31&status=Present&per_page=30
+
+7. LOGOUT
+POST https://school.ritpk.com/api/teacher/logout
+Header: Authorization: Bearer {token}
+
+===========================================
+STATUS VALUES: Present, Absent, Holiday, Sunday, Leave, N/A
+===========================================
+
+8. CREATE EVENT (Academic Calendar)
+POST https://school.ritpk.com/api/teacher/events/create
+Header: Authorization: Bearer {token}
+Body: {
+  "event_title": "Eid Holiday",
+  "event_details": "Optional details",
+  "event_type": "holiday",
+  "event_date": "2025-04-10"
+}
+
+9. GET EVENTS LIST
+GET https://school.ritpk.com/api/teacher/events/list
+Header: Authorization: Bearer {token}
+Optional: ?year=2025&month=4&event_type=holiday&per_page=30
+
+10. GET SINGLE EVENT
+GET https://school.ritpk.com/api/teacher/events/{id}
+Header: Authorization: Bearer {token}
+
+11. UPDATE EVENT
+PUT https://school.ritpk.com/api/teacher/events/{id}
+Header: Authorization: Bearer {token}
+Body: {
+  "event_title": "Updated Title",
+  "event_details": "Updated details",
+  "event_type": "holiday",
+  "event_date": "2025-04-10"
+}
+
+12. DELETE EVENT
+DELETE https://school.ritpk.com/api/teacher/events/{id}
+Header: Authorization: Bearer {token}
+
+13. GET CALENDAR VIEW (Events by Month)
+GET https://school.ritpk.com/api/teacher/events/calendar/view
+Header: Authorization: Bearer {token}
+Optional: ?year=2025
+
+===========================================
+EVENT TYPES: holiday, event, other
+===========================================
+
+14. GET FILTER OPTIONS (Homework Diary)
+GET https://school.ritpk.com/api/teacher/homework-diary/filter-options
+Header: Authorization: Bearer {token}
+
+15. GET SECTIONS BY CLASS (Homework Diary)
+GET https://school.ritpk.com/api/teacher/homework-diary/sections?class=5th
+Header: Authorization: Bearer {token}
+
+16. GET MY SUBJECTS (Only Assigned Subjects)
+GET https://school.ritpk.com/api/teacher/homework-diary/my-subjects
+Header: Authorization: Bearer {token}
+Optional: ?campus=Main Campus&class=5th&section=A
+
+17. GET HOMEWORK ENTRIES
+GET https://school.ritpk.com/api/teacher/homework-diary/entries?campus=Main Campus&class=5th&section=A&date=2025-12-22
+Header: Authorization: Bearer {token}
+
+18. CREATE SINGLE HOMEWORK
+POST https://school.ritpk.com/api/teacher/homework-diary/create
+Header: Authorization: Bearer {token}
+Body: {
+  "campus": "Main Campus",
+  "class": "5th",
+  "section": "A",
+  "date": "2025-12-22",
+  "subject_id": 5,
+  "homework_content": "Complete exercise 1-5"
+}
+
+19. CREATE BULK HOMEWORK
+POST https://school.ritpk.com/api/teacher/homework-diary/create-bulk
+Header: Authorization: Bearer {token}
+Body: {
+  "campus": "Main Campus",
+  "class": "5th",
+  "section": "A",
+  "date": "2025-12-22",
+  "diaries": [
+    {
+      "subject_id": 5,
+      "homework_content": "Complete exercise 1-5"
+    }
+  ]
+}
+
+20. GET HOMEWORK LIST
+GET https://school.ritpk.com/api/teacher/homework-diary/list
+Header: Authorization: Bearer {token}
+Optional: ?class=5th&start_date=2025-12-01&end_date=2025-12-31&per_page=30
+
+21. UPDATE HOMEWORK
+PUT https://school.ritpk.com/api/teacher/homework-diary/{id}
+Header: Authorization: Bearer {token}
+Body: {
+  "homework_content": "Updated content"
+}
+
+22. DELETE HOMEWORK
+DELETE https://school.ritpk.com/api/teacher/homework-diary/{id}
+Header: Authorization: Bearer {token}
+
+===========================================
+IMPORTANT: Teachers can only access homework for their assigned subjects
+Subject assignment: subjects.teacher = staff.name (case-insensitive)
+===========================================
+
+23. GET/POST MONTHLY ATTENDANCE REPORT (Same as Web)
+GET https://school.ritpk.com/api/teacher/attendance-report/monthly?campus=icms&class=Ninth&section=A&month=12&year=2025
+POST https://school.ritpk.com/api/teacher/attendance-report/monthly
+Header: Authorization: Bearer {token}
+Body (for POST): { "campus": "icms", "class": "Ninth", "section": "A", "month": "12", "year": 2025 }
+Returns: Monthly attendance report with daily breakdown (P/A/H/S/L), present/absent days count
+
+24. GET ATTENDANCE REPORT FILTER OPTIONS
+GET https://school.ritpk.com/api/teacher/attendance-report/filter-options
+Header: Authorization: Bearer {token}
+Optional: ?class=5th (to get sections for specific class)
+Returns: Campuses, classes, sections (only teacher's assigned), months, years
+
+===========================================
+ATTENDANCE STATUS CODES: P=Present, A=Absent, H=Holiday, S=Sunday, L=Leave
+Teachers can only access reports for their assigned classes/sections
+===========================================
+

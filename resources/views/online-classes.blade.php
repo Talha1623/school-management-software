@@ -121,7 +121,6 @@
                                 <th>Section</th>
                                 <th>Date</th>
                                 <th>Timing</th>
-                                <th>Created By</th>
                                 <th>Options</th>
                                 <th>Action</th>
                             </tr>
@@ -150,9 +149,6 @@
                                             <span class="text-muted">{{ $class->timing }}</span>
                                         </td>
                                         <td>
-                                            <span class="text-muted">{{ $class->created_by ?? 'N/A' }}</span>
-                                        </td>
-                                        <td>
                                             <button type="button" class="btn btn-sm btn-primary px-2 py-1 join-class-btn" onclick="joinClass({{ $class->id }}, '{{ addslashes($class->class_topic) }}', '{{ addslashes($class->password) }}')" title="Join Class">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">videocam</span>
                                                 <span>Join</span>
@@ -170,7 +166,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="10" class="text-center py-4">
+                                        <td colspan="9" class="text-center py-4">
                                             <div class="d-flex flex-column align-items-center gap-2">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">video_library</span>
                                                 <p class="text-muted mb-0">No online classes found.</p>
@@ -180,7 +176,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="10" class="text-center py-4">
+                                    <td colspan="9" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center gap-2">
                                             <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">video_library</span>
                                             <p class="text-muted mb-0">No online classes found.</p>
@@ -258,11 +254,8 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">group</span>
                                 </span>
-                                <select class="form-select online-class-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff;">
+                                <select class="form-select online-class-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff;" disabled>
                                     <option value="">Select Section</option>
-                                    @foreach($sections as $section)
-                                        <option value="{{ $section }}">{{ $section }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -309,15 +302,6 @@
                                     <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
                                 </span>
                                 <input type="text" class="form-control online-class-input" name="password" id="password" placeholder="Enter password" required minlength="4">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Created By</label>
-                            <div class="input-group input-group-sm online-class-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                    <span class="material-symbols-outlined" style="font-size: 15px;">person</span>
-                                </span>
-                                <input type="text" class="form-control online-class-input" name="created_by" id="created_by" placeholder="Enter creator name">
                             </div>
                         </div>
                     </div>
@@ -660,6 +644,9 @@
     function resetForm() {
         document.getElementById('onlineClassForm').reset();
         document.getElementById('methodField').innerHTML = '';
+        const sectionSelect = document.getElementById('section');
+        sectionSelect.innerHTML = '<option value="">Select Section</option>';
+        sectionSelect.disabled = true;
         const modalLabel = document.getElementById('onlineClassModalLabel');
         modalLabel.innerHTML = `
             <span class="material-symbols-outlined" style="font-size: 20px; color: white;">video_library</span>
@@ -668,17 +655,21 @@
         document.getElementById('onlineClassForm').action = '{{ route("online-classes.store") }}';
     }
 
-    function editClass(id, campus, classVal, section, classTopic, startDate, startTime, timing, password, createdBy) {
+    function editClass(id, campus, classVal, section, classTopic, startDate, startTime, timing, password) {
         resetForm();
         document.getElementById('campus').value = campus;
         document.getElementById('class').value = classVal;
-        document.getElementById('section').value = section;
+        
+        // Load sections for the selected class
+        if (classVal) {
+            loadSections(classVal, section);
+        }
+        
         document.getElementById('class_topic').value = classTopic;
         document.getElementById('start_date').value = startDate;
         document.getElementById('start_time').value = startTime || '';
         document.getElementById('timing').value = timing;
         document.getElementById('password').value = password;
-        document.getElementById('created_by').value = createdBy || '';
         
         const modalLabel = document.getElementById('onlineClassModalLabel');
         modalLabel.innerHTML = `
@@ -690,6 +681,51 @@
         
         new bootstrap.Modal(document.getElementById('onlineClassModal')).show();
     }
+    
+    function loadSections(selectedClass, selectedSection = null) {
+        const sectionSelect = document.getElementById('section');
+        if (!selectedClass) {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            sectionSelect.disabled = true;
+            return;
+        }
+        
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+        
+        fetch(`{{ route('online-classes.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            .then(response => response.json())
+            .then(data => {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                if (data.sections && data.sections.length > 0) {
+                    data.sections.forEach(section => {
+                        const option = document.createElement('option');
+                        option.value = section;
+                        option.textContent = section;
+                        if (selectedSection && section === selectedSection) {
+                            option.selected = true;
+                        }
+                        sectionSelect.appendChild(option);
+                    });
+                }
+                sectionSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                sectionSelect.disabled = false;
+            });
+    }
+    
+    // Dynamic section loading when class changes
+    document.addEventListener('DOMContentLoaded', function() {
+        const classSelect = document.getElementById('class');
+        if (classSelect) {
+            classSelect.addEventListener('change', function() {
+                loadSections(this.value);
+            });
+        }
+    });
 
     function joinClass(id, classTopic, password) {
         // Show meeting details and join confirmation
