@@ -6,6 +6,7 @@ use App\Models\Staff;
 use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -342,6 +343,73 @@ class StaffManagementController extends Controller
                 
             default:
                 return redirect()->back()->with('error', 'Invalid export format');
+        }
+    }
+
+    /**
+     * Toggle staff status (Active/Inactive)
+     */
+    public function toggleStatus(Request $request, Staff $staff)
+    {
+        try {
+            // Check if user is super admin
+            if (!Auth::guard('admin')->check()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Please login.',
+                ], 403);
+            }
+
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isSuperAdmin()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Super Admin access required.',
+                ], 403);
+            }
+
+            // Get current status (default to Active if null or empty)
+            $currentStatus = $staff->status;
+            if (empty($currentStatus) || is_null($currentStatus)) {
+                $currentStatus = 'Active';
+            }
+            
+            // Toggle status
+            $newStatus = (strtolower(trim($currentStatus)) === 'active') ? 'Inactive' : 'Active';
+            
+            // Update status
+            $staff->status = $newStatus;
+            $result = $staff->save();
+
+            if (!$result) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update status. Please try again.',
+                ], 500);
+            }
+
+            // Create success message
+            $message = $newStatus === 'Active' 
+                ? $staff->name . ' is now Active.' 
+                : $staff->name . ' is now Inactive.';
+
+            // Return JSON response
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'status' => $staff->status,
+            ], 200);
+
+        } catch (\Exception $e) {
+            // Log error for debugging
+            \Log::error('Toggle status error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred: ' . $e->getMessage(),
+                'error_details' => config('app.debug') ? $e->getTraceAsString() : null,
+            ], 500);
         }
     }
 }

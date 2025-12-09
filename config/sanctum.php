@@ -42,9 +42,11 @@ return [
     | considered expired. This will override any values set in the token's
     | "expires_at" attribute, but first-party sessions are not affected.
     |
+    | Set to null to make tokens never expire.
+    |
     */
 
-    'expiration' => null,
+    'expiration' => null, // null = tokens never expire
 
     /*
     |--------------------------------------------------------------------------

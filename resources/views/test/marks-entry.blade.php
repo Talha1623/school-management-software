@@ -145,6 +145,9 @@
                                 </thead>
                                 <tbody id="studentsTableBody">
                                     @forelse($students as $index => $student)
+                                    @php
+                                        $existingMark = $existingMarks->get($student->id);
+                                    @endphp
                                     <tr class="student-row" data-student-id="{{ $student->id }}" data-student-name="{{ strtolower($student->student_name) }}" data-student-code="{{ strtolower($student->student_code ?? '') }}">
                                         <td>{{ $index + 1 }}</td>
                                         <td>{{ $student->student_code ?? $student->gr_number ?? 'N/A' }}</td>
@@ -153,13 +156,13 @@
                                         </td>
                                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="0.01" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="0.01" style="width: 100px;" value="{{ $existingMark ? ($existingMark->marks_obtained ?? '') : '' }}">
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="0.01" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="0.01" style="width: 100px;" value="{{ $existingMark ? ($existingMark->total_marks ?? '') : '' }}">
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="0.01" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="0.01" style="width: 100px;" value="{{ $existingMark ? ($existingMark->passing_marks ?? '') : '' }}">
                                         </td>
                                     </tr>
                                     @empty

@@ -169,7 +169,93 @@ class TeacherEventController extends Controller
     }
 
     /**
-     * Get Single Event
+     * Get Events by Month and Year
+     * 
+     * @param Request $request
+     * @param int $month
+     * @param int $year
+     * @return JsonResponse
+     */
+    public function getEventsByMonthYear(Request $request, int $month, int $year): JsonResponse
+    {
+        try {
+            // Get logged-in teacher
+            $teacher = $request->user();
+            
+            // Validate that user is a teacher
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can view events.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Validate month (1-12)
+            if ($month < 1 || $month > 12) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid month. Month must be between 1 and 12.',
+                    'token' => $request->bearerToken(),
+                ], 422);
+            }
+
+            // Validate year (reasonable range)
+            if ($year < 2000 || $year > 2100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid year. Year must be between 2000 and 2100.',
+                    'token' => $request->bearerToken(),
+                ], 422);
+            }
+
+            // Get events for the specified month and year
+            $events = Event::whereYear('event_date', $year)
+                ->whereMonth('event_date', $month)
+                ->orderBy('event_date', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+
+            // Format events data
+            $eventsData = $events->map(function($event) {
+                return [
+                    'id' => $event->id,
+                    'event_title' => $event->event_title,
+                    'event_details' => $event->event_details,
+                    'event_type' => $event->event_type,
+                    'event_date' => $event->event_date->format('Y-m-d'),
+                    'event_date_formatted' => $event->event_date->format('d M Y'),
+                    'day_name' => $event->event_date->format('l'),
+                    'created_at' => $event->created_at->format('Y-m-d H:i:s'),
+                    'updated_at' => $event->updated_at->format('Y-m-d H:i:s'),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Events retrieved successfully',
+                'data' => [
+                    'month' => $month,
+                    'year' => $year,
+                    'month_name' => date('F', mktime(0, 0, 0, $month, 1, $year)),
+                    'total_events' => $events->count(),
+                    'events' => $eventsData->values()->toArray(),
+                ],
+                'token' => $request->bearerToken(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving events: ' . $e->getMessage(),
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'token' => $request->bearerToken(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Single Event by ID
      * 
      * @param Request $request
      * @param int $id

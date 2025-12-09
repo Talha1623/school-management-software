@@ -323,22 +323,62 @@ class TeacherHomeworkDiaryController extends Controller
                 ], 403);
             }
 
+            // Get teacher's assigned subject IDs first
+            $teacherSubjectIds = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($teacherSubjectIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No subjects assigned to you. Please contact administrator.',
+                ], 403);
+            }
+
             $validated = $request->validate([
                 'campus' => ['required', 'string'],
                 'class' => ['required', 'string'],
                 'section' => ['required', 'string'],
                 'date' => ['required', 'date'],
-                'subject_id' => ['required', 'exists:subjects,id'],
+                'subject_id' => ['required', 'integer', 'in:' . implode(',', $teacherSubjectIds)],
                 'homework_content' => ['nullable', 'string'],
+            ], [
+                'subject_id.in' => 'The selected subject is not assigned to you. You can only add homework for your assigned subjects.',
+                'subject_id.required' => 'Subject ID is required.',
+                'subject_id.integer' => 'Subject ID must be a valid number.',
             ]);
 
-            // Validate that subject belongs to logged-in teacher
+            // Get subject for further use
             $subject = Subject::findOrFail($validated['subject_id']);
-            
+
+            // Additional security check: Verify subject is assigned to this teacher
+            // and matches the provided class, section, and campus
             if (strtolower(trim($subject->teacher ?? '')) !== strtolower(trim($teacher->name ?? ''))) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You can only add homework for your assigned subjects.',
+                    'message' => 'This subject is not assigned to you. You can only add homework for your assigned subjects.',
+                ], 403);
+            }
+
+            // Verify subject's class, section, and campus match the request
+            if (strtolower(trim($subject->class ?? '')) !== strtolower(trim($validated['class']))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject class does not match. This subject is assigned to class: ' . ($subject->class ?? 'N/A'),
+                ], 403);
+            }
+
+            if (strtolower(trim($subject->section ?? '')) !== strtolower(trim($validated['section']))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject section does not match. This subject is assigned to section: ' . ($subject->section ?? 'N/A'),
+                ], 403);
+            }
+
+            if (strtolower(trim($subject->campus ?? '')) !== strtolower(trim($validated['campus']))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject campus does not match. This subject is assigned to campus: ' . ($subject->campus ?? 'N/A'),
                 ], 403);
             }
 
@@ -425,15 +465,45 @@ class TeacherHomeworkDiaryController extends Controller
                 ], 403);
             }
 
+            // Get teacher's assigned subject IDs first
+            $teacherSubjectIds = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($teacherSubjectIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No subjects assigned to you. Please contact administrator.',
+                ], 403);
+            }
+
             $validated = $request->validate([
                 'campus' => ['required', 'string'],
                 'class' => ['required', 'string'],
                 'section' => ['required', 'string'],
                 'date' => ['required', 'date'],
-                'diaries' => ['required', 'array'],
-                'diaries.*.subject_id' => ['required', 'exists:subjects,id'],
+                'diaries' => ['required', 'array', 'min:1'],
+                'diaries.*.subject_id' => ['required', 'integer', 'in:' . implode(',', $teacherSubjectIds)],
                 'diaries.*.homework_content' => ['nullable', 'string'],
+            ], [
+                'diaries.required' => 'The diaries field is required.',
+                'diaries.array' => 'The diaries must be an array.',
+                'diaries.min' => 'At least one diary entry is required.',
+                'diaries.*.subject_id.required' => 'Subject ID is required for each diary entry.',
+                'diaries.*.subject_id.integer' => 'Subject ID must be a valid number.',
+                'diaries.*.subject_id.in' => 'The selected subject is not assigned to you. You can only add homework for your assigned subjects.',
             ]);
+
+            // Check if diaries array is empty
+            if (empty($validated['diaries']) || count($validated['diaries']) === 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'At least one diary entry is required. Please provide at least one subject with homework content.',
+                    'errors' => [
+                        'diaries' => ['The diaries array must contain at least one entry.']
+                    ],
+                ], 422);
+            }
 
             $savedCount = 0;
             $updatedCount = 0;
@@ -442,11 +512,28 @@ class TeacherHomeworkDiaryController extends Controller
 
             foreach ($validated['diaries'] as $index => $diaryData) {
                 try {
-                    // Validate that subject belongs to logged-in teacher
+                    // Subject validation already done in request validation
                     $subject = Subject::findOrFail($diaryData['subject_id']);
-                    
+
+                    // Additional security check: Verify subject is assigned to this teacher
                     if (strtolower(trim($subject->teacher ?? '')) !== strtolower(trim($teacher->name ?? ''))) {
-                        $errors[] = "Subject ID {$diaryData['subject_id']}: You can only add homework for your assigned subjects.";
+                        $errors[] = "Subject ID {$diaryData['subject_id']}: This subject is not assigned to you.";
+                        continue;
+                    }
+
+                    // Verify subject's class, section, and campus match the request
+                    if (strtolower(trim($subject->class ?? '')) !== strtolower(trim($validated['class']))) {
+                        $errors[] = "Subject ID {$diaryData['subject_id']}: Subject class does not match. Expected: {$validated['class']}, Found: " . ($subject->class ?? 'N/A');
+                        continue;
+                    }
+
+                    if (strtolower(trim($subject->section ?? '')) !== strtolower(trim($validated['section']))) {
+                        $errors[] = "Subject ID {$diaryData['subject_id']}: Subject section does not match. Expected: {$validated['section']}, Found: " . ($subject->section ?? 'N/A');
+                        continue;
+                    }
+
+                    if (strtolower(trim($subject->campus ?? '')) !== strtolower(trim($validated['campus']))) {
+                        $errors[] = "Subject ID {$diaryData['subject_id']}: Subject campus does not match. Expected: {$validated['campus']}, Found: " . ($subject->campus ?? 'N/A');
                         continue;
                     }
 
@@ -770,6 +857,331 @@ class TeacherHomeworkDiaryController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while deleting homework: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get All Teacher's Assigned Subjects (Simple List)
+     * Lists all subjects assigned to the logged-in teacher for homework
+     * Optional: Filter by class - agar class select kiya to sirf us class ke subjects return honge
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getTeacherSubjects(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                ], 403);
+            }
+
+            // Get optional class and section filters
+            $classFilter = $request->get('class');
+            $sectionFilter = $request->get('section');
+
+            // Get all subjects assigned to this teacher
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereNotNull('subject_name');
+
+            // Filter by class if provided
+            if ($classFilter) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($classFilter))]);
+            }
+
+            // Filter by section if provided
+            if ($sectionFilter) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($sectionFilter))]);
+            }
+
+            $subjects = $subjectsQuery->get();
+
+            // Sort by class, then by subject name (case-insensitive)
+            $subjects = $subjects->sortBy(function($subject) {
+                return [
+                    strtolower(trim($subject->class ?? '')),
+                    strtolower(trim($subject->subject_name ?? '')),
+                    strtolower(trim($subject->section ?? '')),
+                ];
+            })->values();
+
+            $subjectsData = $subjects->map(function($subject) {
+                return [
+                    'id' => $subject->id,
+                    'subject_name' => $subject->subject_name,
+                    'campus' => $subject->campus,
+                    'class' => $subject->class,
+                    'section' => $subject->section,
+                ];
+            });
+
+            // Group by class for better organization (optional - can be used in frontend)
+            $subjectsByClass = $subjectsData->groupBy(function($subject) {
+                return strtolower(trim($subject['class'] ?? ''));
+            })->map(function($classSubjects) {
+                return $classSubjects->values();
+            });
+
+            // Build response message
+            $message = 'Teacher subjects retrieved successfully';
+            $filters = [];
+            if ($classFilter) {
+                $filters[] = 'class: ' . $classFilter;
+            }
+            if ($sectionFilter) {
+                $filters[] = 'section: ' . $sectionFilter;
+            }
+            if (!empty($filters)) {
+                $message .= ' for ' . implode(', ', $filters);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'teacher' => [
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id,
+                    ],
+                    'class_filter' => $classFilter ? $classFilter : null,
+                    'section_filter' => $sectionFilter ? $sectionFilter : null,
+                    'subjects' => $subjectsData->values(),
+                    'subjects_by_class' => $subjectsByClass,
+                    'total_subjects' => $subjectsData->count(),
+                    'classes' => $subjectsData->pluck('class')->unique()->values(),
+                ],
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving teacher subjects: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get All Subjects by Class
+     * Lists all subjects assigned to a specific class (regardless of teacher/section)
+     * Sirf us class ke assigned subjects return karta hai, mix nahi hota
+     * Har class ka apna subject hai, jo assign kiya hai wo hi list hota hai
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getSubjectsByClass(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                ], 403);
+            }
+
+            $request->validate([
+                'class' => ['required', 'string'],
+            ]);
+
+            $class = trim($request->get('class'));
+
+            // Get all subjects for this specific class only
+            // Strict filtering: sirf us class ke subjects jo assign kiye gaye hain
+            // Case-insensitive matching to ensure proper filtering
+            $subjects = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereNotNull('subject_name')
+                ->whereNotNull('class')
+                ->orderBy('subject_name', 'asc')
+                ->orderBy('section', 'asc')
+                ->get();
+
+            // Verify that all subjects belong to the requested class (double check)
+            $subjects = $subjects->filter(function($subject) use ($class) {
+                return strtolower(trim($subject->class ?? '')) === strtolower($class);
+            });
+
+            $subjectsData = $subjects->map(function($subject) use ($class) {
+                return [
+                    'id' => $subject->id,
+                    'subject_name' => $subject->subject_name,
+                    'campus' => $subject->campus,
+                    'class' => $class, // Ensure exact requested class name is returned
+                    'section' => $subject->section,
+                    'teacher' => $subject->teacher,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Subjects retrieved successfully for class: ' . $class,
+                'data' => [
+                    'class' => $class,
+                    'subjects' => $subjectsData->values(),
+                    'total_subjects' => $subjectsData->count(),
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving subjects: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Subjects with Homework for Class and Section
+     * Lists all subjects assigned to a specific class and section with their homework entries
+     * Sirf us class aur section ke assigned subjects return karta hai, unke homework ke saath
+     * Example: Class 5 Section A ko 3 subjects assign hain, to sirf wo 3 subjects list honge with their homework
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getSubjectsWithHomework(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                ], 403);
+            }
+
+            $request->validate([
+                'class' => ['required', 'string'],
+                'section' => ['required', 'string'],
+                'date' => ['nullable', 'date'], // Optional: if provided, filter homework by date
+            ]);
+
+            $class = trim($request->get('class'));
+            $section = trim($request->get('section'));
+            $date = $request->get('date');
+
+            // Get all subjects for this specific class and section only
+            // Sirf us class aur section ke subjects jo assign kiye gaye hain
+            $subjects = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)])
+                ->whereNotNull('subject_name')
+                ->whereNotNull('class')
+                ->whereNotNull('section')
+                ->orderBy('subject_name', 'asc')
+                ->get();
+
+            // Verify that all subjects belong to the requested class and section (double check)
+            $subjects = $subjects->filter(function($subject) use ($class, $section) {
+                return strtolower(trim($subject->class ?? '')) === strtolower($class) 
+                    && strtolower(trim($subject->section ?? '')) === strtolower($section);
+            });
+
+            if ($subjects->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No subjects found for class: ' . $class . ', section: ' . $section,
+                    'data' => [
+                        'class' => $class,
+                        'section' => $section,
+                        'subjects' => [],
+                        'total_subjects' => 0,
+                    ],
+                ], 200);
+            }
+
+            // Get subject IDs
+            $subjectIds = $subjects->pluck('id');
+
+            // Get homework entries for these subjects
+            $homeworkQuery = HomeworkDiary::whereIn('subject_id', $subjectIds)
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+
+            // Filter by date if provided
+            if ($date) {
+                $homeworkQuery->whereDate('date', $date);
+            }
+
+            $homeworkEntries = $homeworkQuery->get()->groupBy('subject_id');
+
+            // Map subjects with their homework
+            $subjectsData = $subjects->map(function($subject) use ($homeworkEntries, $date, $class, $section) {
+                $homework = $homeworkEntries->get($subject->id, collect());
+                
+                // If date is provided, return single homework entry for that date
+                // Otherwise, return all homework entries for this subject
+                if ($date) {
+                    $homeworkData = $homework->first(); // Should be only one entry for specific date
+                    $homeworkList = $homeworkData ? [[
+                        'id' => $homeworkData->id,
+                        'homework_content' => $homeworkData->homework_content,
+                        'date' => $homeworkData->date->format('Y-m-d'),
+                        'created_at' => $homeworkData->created_at->format('Y-m-d H:i:s'),
+                    ]] : [];
+                } else {
+                    // Return all homework entries for this subject
+                    $homeworkList = $homework->map(function($entry) {
+                        return [
+                            'id' => $entry->id,
+                            'homework_content' => $entry->homework_content,
+                            'date' => $entry->date->format('Y-m-d'),
+                            'created_at' => $entry->created_at->format('Y-m-d H:i:s'),
+                        ];
+                    })->sortByDesc('date')->values()->toArray();
+                }
+
+                return [
+                    'id' => $subject->id,
+                    'subject_name' => $subject->subject_name,
+                    'campus' => $subject->campus,
+                    'class' => $class, // Ensure exact requested class name is returned
+                    'section' => $section, // Ensure exact requested section name is returned
+                    'teacher' => $subject->teacher,
+                    'homework' => $homeworkList,
+                    'homework_count' => count($homeworkList),
+                ];
+            });
+
+            $message = 'Subjects with homework retrieved successfully for class: ' . $class . ', section: ' . $section;
+            if ($date) {
+                $message .= ', date: ' . $date;
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'class' => $class,
+                    'section' => $section,
+                    'date_filter' => $date ? $date : null,
+                    'subjects' => $subjectsData->values(),
+                    'total_subjects' => $subjectsData->count(),
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving subjects with homework: ' . $e->getMessage(),
             ], 500);
         }
     }

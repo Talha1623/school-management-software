@@ -35,11 +35,14 @@ class Staff extends Authenticatable
         'home_address',
         'photo',
         'cv_resume',
+        'api_token',
+        'status',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'api_token',
     ];
 
     protected $casts = [

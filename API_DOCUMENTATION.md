@@ -697,8 +697,73 @@ GET /api/teacher/events/list?search=eid
 
 ---
 
-### 3. Get Single Event
-**GET** `/api/teacher/events/{id}`
+### 3. Get Events by Month and Year
+**GET** `/api/teacher/events/{month}/{year}`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**URL Parameters:**
+- `month` - Month number (1-12, e.g., 1 for January, 12 for December)
+- `year` - Year (2000-2100, e.g., 2025)
+
+**Examples:**
+```
+GET /api/teacher/events/4/2025
+GET /api/teacher/events/12/2024
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Events retrieved successfully",
+  "data": {
+    "month": 4,
+    "year": 2025,
+    "month_name": "April",
+    "total_events": 3,
+    "events": [
+      {
+        "id": 1,
+        "event_title": "Eid Holiday",
+        "event_details": "Eid ul Fitr holiday - school will be closed",
+        "event_type": "holiday",
+        "event_date": "2025-04-10",
+        "event_date_formatted": "10 Apr 2025",
+        "day_name": "Thursday",
+        "created_at": "2025-12-22 10:30:00",
+        "updated_at": "2025-12-22 10:30:00"
+      },
+      {
+        "id": 2,
+        "event_title": "Parent-Teacher Meeting",
+        "event_details": "Quarterly parent-teacher meeting",
+        "event_type": "event",
+        "event_date": "2025-04-15",
+        "event_date_formatted": "15 Apr 2025",
+        "day_name": "Tuesday",
+        "created_at": "2025-12-22 11:00:00",
+        "updated_at": "2025-12-22 11:00:00"
+      }
+    ]
+  },
+  "token": "1|xxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+**Full URLs:**
+- April 2025: `https://school.ritpk.com/api/teacher/events/4/2025`
+- December 2024: `https://school.ritpk.com/api/teacher/events/12/2024`
+
+**Note:** Returns all events for the specified month and year in a list format, sorted by date.
+
+---
+
+### 3a. Get Single Event by ID
+**GET** `/api/teacher/events/show/{id}`
 
 **Headers:**
 ```
@@ -724,7 +789,7 @@ Authorization: Bearer {token}
 }
 ```
 
-**Full URL:** `https://school.ritpk.com/api/teacher/events/1`
+**Full URL:** `https://school.ritpk.com/api/teacher/events/show/1`
 
 ---
 
@@ -861,6 +926,12 @@ curl -X POST https://school.ritpk.com/api/teacher/events/create \
 ### Get Events List
 ```bash
 curl -X GET "https://school.ritpk.com/api/teacher/events/list?year=2025&month=4" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+### Get Events by Month and Year
+```bash
+curl -X GET "https://school.ritpk.com/api/teacher/events/4/2025" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 

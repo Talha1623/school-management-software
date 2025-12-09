@@ -866,5 +866,564 @@ class TeacherAttendanceController extends Controller
             ], 200);
         }
     }
+
+    /**
+     * Get Attendance Report List (Students attendance with present/absent status and time)
+     * Returns list of students with their attendance for specified month/year
+     * Includes present time (created_at) for each attendance record
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getReportList(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access attendance reports.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Validate required parameters
+            $validated = $request->validate([
+                'campus' => ['required', 'string'],
+                'class' => ['required', 'string'],
+                'section' => ['nullable', 'string'],
+                'month' => ['required', 'string', 'regex:/^(0[1-9]|1[0-2])$/'],
+                'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            ]);
+
+            $campus = trim($validated['campus']);
+            $class = trim($validated['class']);
+            $section = $validated['section'] ? trim($validated['section']) : null;
+            $month = (int)$validated['month'];
+            $year = (int)$validated['year'];
+
+            // Verify teacher has access to this class/section (from assigned subjects)
+            // Check from subjects table - don't require exact campus match, just class/section
+            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+
+            if ($section) {
+                $teacherSubjects->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+            }
+
+            $hasAccessFromSubjects = $teacherSubjects->exists();
+
+            // Also check from sections table
+            $hasAccessFromSections = false;
+            if (!$hasAccessFromSubjects) {
+                $teacherSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+
+                if ($section) {
+                    $teacherSections->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($section)]);
+                }
+
+                $hasAccessFromSections = $teacherSections->exists();
+            }
+
+            $hasAccess = $hasAccessFromSubjects || $hasAccessFromSections;
+
+            if (!$hasAccess) {
+                // Debug info - get teacher's assigned classes for better error message
+                $assignedClasses = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                    ->whereNotNull('class')
+                    ->distinct()
+                    ->pluck('class')
+                    ->map(function($c) {
+                        return trim($c);
+                    })
+                    ->unique()
+                    ->values();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this class/section. Only your assigned classes/sections are accessible.',
+                    'debug' => [
+                        'requested_class' => $class,
+                        'requested_section' => $section,
+                        'requested_campus' => $campus,
+                        'teacher_name' => $teacher->name,
+                        'assigned_classes' => $assignedClasses,
+                    ],
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get students
+            $studentsQuery = Student::query();
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+
+            if ($section) {
+                $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+            }
+
+            $students = $studentsQuery->orderBy('student_code', 'asc')
+                ->orderBy('student_name', 'asc')
+                ->get();
+
+            // Get month details
+            $date = Carbon::create($year, $month, 1);
+            $daysInMonth = $date->daysInMonth;
+            $monthName = $date->format('F');
+
+            // Get attendance data for the month
+            $studentIds = $students->pluck('id');
+            $startDate = Carbon::create($year, $month, 1)->startOfDay();
+            $endDate = Carbon::create($year, $month, $daysInMonth)->endOfDay();
+
+            $attendances = StudentAttendance::whereIn('student_id', $studentIds)
+                ->whereBetween('attendance_date', [$startDate, $endDate])
+                ->orderBy('attendance_date', 'asc')
+                ->orderBy('created_at', 'asc')
+                ->get()
+                ->groupBy('student_id');
+
+            // Build attendance list for each student
+            $studentsList = [];
+            foreach ($students as $student) {
+                $attendanceRecords = [];
+                $presentDays = 0;
+                $absentDays = 0;
+
+                // Get attendance records for this student
+                if (isset($attendances[$student->id])) {
+                    foreach ($attendances[$student->id] as $attendance) {
+                        $attendanceDate = Carbon::parse($attendance->attendance_date);
+                        $status = $attendance->status;
+                        $statusUpper = strtoupper($status);
+
+                        // Count present and absent days
+                        if ($statusUpper === 'PRESENT') {
+                            $presentDays++;
+                        } elseif ($statusUpper === 'ABSENT') {
+                            $absentDays++;
+                        }
+
+                        // Get present time (created_at timestamp)
+                        $presentTime = null;
+                        if ($statusUpper === 'PRESENT' && $attendance->created_at) {
+                            $presentTime = Carbon::parse($attendance->created_at)->format('Y-m-d H:i:s');
+                        }
+
+                        $attendanceRecords[] = [
+                            'date' => $attendanceDate->format('Y-m-d'),
+                            'day' => $attendanceDate->day,
+                            'status' => $status,
+                            'status_code' => $statusUpper === 'PRESENT' ? 'P' : ($statusUpper === 'ABSENT' ? 'A' : ($statusUpper === 'HOLIDAY' ? 'H' : ($statusUpper === 'SUNDAY' ? 'S' : ($statusUpper === 'LEAVE' ? 'L' : '')))),
+                            'present_time' => $presentTime,
+                            'remarks' => $attendance->remarks ?? null,
+                        ];
+                    }
+                }
+
+                $studentsList[] = [
+                    'student_id' => $student->id,
+                    'roll_number' => $student->student_code ?? $student->gr_number ?? null,
+                    'student_name' => $student->student_name,
+                    'surname_caste' => $student->surname_caste ?? null,
+                    'father_name' => $student->father_name ?? null,
+                    'campus' => $student->campus,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'present_days' => $presentDays,
+                    'absent_days' => $absentDays,
+                    'attendance_records' => $attendanceRecords,
+                    'total_records' => count($attendanceRecords),
+                ];
+            }
+
+            // Calculate summary
+            $totalStudents = count($studentsList);
+            $totalPresentDays = collect($studentsList)->sum('present_days');
+            $totalAbsentDays = collect($studentsList)->sum('absent_days');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance report list retrieved successfully',
+                'data' => [
+                    'header' => [
+                        'campus' => $campus,
+                        'class' => $class,
+                        'section' => $section,
+                        'month' => $monthName,
+                        'year' => $year,
+                        'month_number' => str_pad($month, 2, '0', STR_PAD_LEFT),
+                        'days_in_month' => $daysInMonth,
+                    ],
+                    'summary' => [
+                        'total_students' => $totalStudents,
+                        'total_present_days' => $totalPresentDays,
+                        'total_absent_days' => $totalAbsentDays,
+                    ],
+                    'students' => $studentsList,
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving attendance report list: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Students for Attendance by Class/Section
+     * Support both GET (query params) and POST (body)
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getClassStudents(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Support both GET (query params) and POST (body) requests
+            $validated = $request->validate([
+                'class' => ['required', 'string'],
+                'section' => ['nullable', 'string'],
+                'date' => ['nullable', 'date'],
+            ]);
+
+            $className = trim($validated['class']);
+            $sectionName = $validated['section'] ? trim($validated['section']) : null;
+            $attendanceDate = $validated['date'] ?? Carbon::today()->format('Y-m-d');
+
+            // Get teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            // Get teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            // Get assigned classes from both sources
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter()
+                ->unique()
+                ->values();
+
+            // Verify that the requested class is assigned to teacher
+            $isClassAssigned = $assignedClasses->contains(function($c) use ($className) {
+                return strtolower(trim($c)) === strtolower(trim($className));
+            });
+
+            if (!$isClassAssigned) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. This class is not assigned to you.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get assigned sections for this class
+            $assignedSectionsForClass = $assignedSubjects->where('class', $className)
+                ->pluck('section')
+                ->merge($assignedSections->where('class', $className)->pluck('name'))
+                ->map(function($section) {
+                    return trim($section);
+                })
+                ->filter()
+                ->unique()
+                ->values();
+
+            // If section is provided, verify it's assigned
+            if ($sectionName && !$assignedSectionsForClass->contains(function($s) use ($sectionName) {
+                return strtolower(trim($s)) === strtolower(trim($sectionName));
+            })) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. This section is not assigned to you.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get students for the class/section
+            $studentsQuery = Student::query();
+
+            // Filter by teacher's campus
+            if ($teacher->campus) {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($teacher->campus))]);
+            }
+
+            // Filter by class
+            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+
+            // Filter by section if provided
+            if ($sectionName) {
+                $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($sectionName))]);
+            }
+
+            $students = $studentsQuery->orderBy('student_name', 'asc')->get();
+
+            // Get attendance data for the selected date
+            $studentIds = $students->pluck('id');
+            $attendances = StudentAttendance::whereIn('student_id', $studentIds)
+                ->whereDate('attendance_date', $attendanceDate)
+                ->get()
+                ->keyBy('student_id');
+
+            // Get all attendance records for each student to calculate percentage
+            $allAttendances = StudentAttendance::whereIn('student_id', $studentIds)
+                ->get()
+                ->groupBy('student_id');
+
+            // Format students data with attendance status and percentage
+            $studentsData = $students->map(function($student) use ($attendances, $allAttendances) {
+                $attendance = $attendances->get($student->id);
+                
+                // Calculate attendance percentage
+                $studentAttendances = $allAttendances->get($student->id, collect());
+                $totalDays = $studentAttendances->whereIn('status', ['Present', 'Absent'])->count();
+                $presentDays = $studentAttendances->where('status', 'Present')->count();
+                $attendancePercentage = 0;
+                
+                if ($totalDays > 0) {
+                    $attendancePercentage = round(($presentDays / $totalDays) * 100, 2);
+                }
+                
+                return [
+                    'id' => $student->id,
+                    'student_code' => $student->student_code,
+                    'student_name' => $student->student_name,
+                    'surname_caste' => $student->surname_caste,
+                    'father_name' => $student->father_name,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'gender' => $student->gender,
+                    'photo' => $student->photo ? asset('storage/' . $student->photo) : null,
+                    'attendance_percentage' => $attendancePercentage,
+                    'current_attendance' => [
+                        'status' => $attendance ? $attendance->status : null,
+                        'marked' => $attendance !== null,
+                        'remarks' => $attendance ? $attendance->remarks : null,
+                    ],
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Students retrieved successfully',
+                'data' => [
+                    'class' => $className,
+                    'section' => $sectionName,
+                    'date' => $attendanceDate,
+                    'total_students' => $students->count(),
+                    'students' => $studentsData,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving students: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Mark Attendance for Class/Section Students
+     * Mark attendance for all students in one request
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function markClassAttendance(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'class' => ['required', 'string'],
+                'section' => ['nullable', 'string'],
+                'attendance_date' => ['required', 'date'],
+                'attendances' => ['required', 'array', 'min:1'],
+                'attendances.*.student_id' => ['required', 'exists:students,id'],
+                'attendances.*.status' => ['required', 'string'],
+                'attendances.*.remarks' => ['nullable', 'string', 'max:500'],
+            ]);
+
+            $className = trim($validated['class']);
+            $sectionName = $validated['section'] ? trim($validated['section']) : null;
+            $attendanceDate = $validated['attendance_date'];
+
+            // Get teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            // Get teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            // Get assigned classes from both sources
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter()
+                ->unique()
+                ->values();
+
+            // Verify that the requested class is assigned to teacher
+            $isClassAssigned = $assignedClasses->contains(function($c) use ($className) {
+                return strtolower(trim($c)) === strtolower(trim($className));
+            });
+
+            if (!$isClassAssigned) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. This class is not assigned to you.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Status mapping function
+            $normalizeStatus = function($status) {
+                $statusLower = strtolower(trim($status));
+                $statusMap = [
+                    'present' => 'Present',
+                    'absent' => 'Absent',
+                    'holiday' => 'Holiday',
+                    'sunday' => 'Sunday',
+                    'leave' => 'Leave',
+                    'n/a' => 'N/A',
+                    'na' => 'N/A',
+                ];
+                return $statusMap[$statusLower] ?? null;
+            };
+
+            $markedCount = 0;
+            $errors = [];
+
+            foreach ($validated['attendances'] as $attendanceData) {
+                try {
+                    // Normalize status
+                    $normalizedStatus = $normalizeStatus($attendanceData['status']);
+                    if (!$normalizedStatus) {
+                        $errors[] = "Student ID {$attendanceData['student_id']}: Invalid status '{$attendanceData['status']}'. Allowed: Present, Absent, Holiday, Sunday, Leave, N/A";
+                        continue;
+                    }
+
+                    $student = Student::findOrFail($attendanceData['student_id']);
+
+                    // Verify class matches
+                    if (strtolower(trim($student->class ?? '')) !== strtolower(trim($className))) {
+                        $errors[] = "Student ID {$attendanceData['student_id']} does not belong to class '{$className}'";
+                        continue;
+                    }
+
+                    // Verify section matches if provided
+                    if ($sectionName && strtolower(trim($student->section ?? '')) !== strtolower(trim($sectionName))) {
+                        $errors[] = "Student ID {$attendanceData['student_id']} does not belong to section '{$sectionName}'";
+                        continue;
+                    }
+
+                    // Verify student is in teacher's assigned classes
+                    $studentClass = trim($student->class ?? '');
+                    $isStudentClassAssigned = $assignedClasses->contains(function($c) use ($studentClass) {
+                        return strtolower(trim($c)) === strtolower(trim($studentClass));
+                    });
+
+                    if (!$isStudentClassAssigned) {
+                        $errors[] = "Student ID {$attendanceData['student_id']}: Access denied. This student's class is not assigned to you.";
+                        continue;
+                    }
+
+                    // Create or update attendance
+                    StudentAttendance::updateOrCreate(
+                        [
+                            'student_id' => $attendanceData['student_id'],
+                            'attendance_date' => $attendanceDate,
+                        ],
+                        [
+                            'status' => $normalizedStatus,
+                            'campus' => $student->campus,
+                            'class' => $student->class,
+                            'section' => $student->section,
+                            'remarks' => $attendanceData['remarks'] ?? null,
+                        ]
+                    );
+
+                    $markedCount++;
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to mark attendance for student ID {$attendanceData['student_id']}: " . $e->getMessage();
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Attendance marked for {$markedCount} student(s)",
+                'data' => [
+                    'class' => $className,
+                    'section' => $sectionName,
+                    'attendance_date' => $attendanceDate,
+                    'marked_count' => $markedCount,
+                    'total_count' => count($validated['attendances']),
+                    'errors' => $errors,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while marking attendance: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
 }
 

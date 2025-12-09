@@ -2,6 +2,7 @@
 
 @php
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 @endphp
 
 @section('title', 'Staff Management')
@@ -184,6 +185,9 @@ use Illuminate\Support\Facades\Storage;
                                 <th style="padding: 12px 15px; font-size: 14px;">Email</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Phone</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Gender</th>
+                                @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin())
+                                <th style="padding: 12px 15px; font-size: 14px; text-align: center;">Status</th>
+                                @endif
                                 <th style="padding: 12px 15px; font-size: 14px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
@@ -256,6 +260,17 @@ use Illuminate\Support\Facades\Storage;
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
+                                    @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin())
+                                    <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
+                                        <div class="form-check form-switch d-inline-block">
+                                            <input class="form-check-input status-switch" type="checkbox" 
+                                                   data-staff-id="{{ $member->id }}"
+                                                   id="statusSwitch{{ $member->id }}"
+                                                   {{ ($member->status ?? 'Active') === 'Active' ? 'checked' : '' }}
+                                                   style="cursor: pointer; width: 3rem; height: 1.5rem;">
+                                        </div>
+                                    </td>
+                                    @endif
                                     <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
                                         <div class="d-inline-flex gap-1">
                                             <a href="{{ route('staff.management.show', $member) }}" class="btn btn-sm btn-info px-2 py-1" title="View">
@@ -276,7 +291,7 @@ use Illuminate\Support\Facades\Storage;
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="10" class="text-center text-muted py-5">
+                                    <td colspan="{{ Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin() ? '11' : '10' }}" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No staff members found.</p>
                                     </td>
@@ -1004,5 +1019,110 @@ function printTable() {
     document.body.innerHTML = originalContents;
     window.location.reload();
 }
+
+// Status toggle functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const statusSwitches = document.querySelectorAll('.status-switch');
+    
+    statusSwitches.forEach(function(switchElement) {
+        switchElement.addEventListener('change', function() {
+            const staffId = this.getAttribute('data-staff-id');
+            const isChecked = this.checked;
+            const switchRef = this; // Store reference
+            
+            // Disable switch during request
+            this.disabled = true;
+            
+            // Get CSRF token
+            const csrfToken = document.querySelector('meta[name="csrf-token"]');
+            if (!csrfToken) {
+                switchRef.checked = !isChecked;
+                switchRef.disabled = false;
+                alert('CSRF token not found. Please refresh the page.');
+                return;
+            }
+            
+            // Create form data for POST request
+            const formData = new FormData();
+            formData.append('_token', csrfToken.getAttribute('content'));
+            
+            // Send AJAX request
+            fetch(`/staff/management/${staffId}/toggle-status`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken.getAttribute('content'),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                // Check if response is ok
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        try {
+                            const err = JSON.parse(text);
+                            throw new Error(err.message || 'Network response was not ok');
+                        } catch (e) {
+                            throw new Error('Network response was not ok: ' + response.status);
+                        }
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Update switch state based on returned status
+                    if (data.status === 'Active') {
+                        switchRef.checked = true;
+                    } else {
+                        switchRef.checked = false;
+                    }
+                    
+                    // Show success message
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                    alertDiv.style.marginBottom = '15px';
+                    alertDiv.innerHTML = `
+                        <strong>Success!</strong> ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    `;
+                    
+                    // Insert alert at the top of the card
+                    const cardElement = document.querySelector('.card.bg-white');
+                    if (cardElement) {
+                        const firstChild = cardElement.firstElementChild;
+                        if (firstChild && firstChild.classList.contains('alert')) {
+                            firstChild.remove(); // Remove existing alert if any
+                        }
+                        cardElement.insertBefore(alertDiv, cardElement.firstChild);
+                    }
+                    
+                    // Auto-dismiss after 4 seconds
+                    setTimeout(() => {
+                        if (alertDiv.parentNode) {
+                            alertDiv.remove();
+                        }
+                    }, 4000);
+                } else {
+                    // Revert switch if failed
+                    switchRef.checked = !isChecked;
+                    alert(data.message || 'Failed to update status');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Revert switch on error
+                switchRef.checked = !isChecked;
+                alert('An error occurred while updating status: ' + (error.message || 'Please try again.'));
+            })
+            .finally(() => {
+                // Re-enable switch
+                switchRef.disabled = false;
+            });
+        });
+    });
+});
 </script>
 @endsection

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Subject;
+use App\Models\Section;
 use App\Models\Student;
 use App\Models\StudentAttendance;
 use Illuminate\Http\Request;
@@ -146,6 +147,120 @@ class TeacherController extends Controller
                 'message' => 'An error occurred while retrieving dashboard data: ' . $e->getMessage(),
                 'token' => null,
             ], 200);
+        }
+    }
+
+    /**
+     * Get Teacher's Assigned Classes and Sections
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function assignedClasses(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get classes and sections from teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            // Get classes and sections from teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            // Get unique classes from both sources
+            $allClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
+                ->unique()
+                ->sort()
+                ->values();
+
+            // Build classes with their sections - each section as separate entry
+            $classesData = [];
+            
+            foreach ($allClasses as $className) {
+                // Get sections from subjects for this class
+                $sectionsFromSubjects = $assignedSubjects
+                    ->where('class', $className)
+                    ->pluck('section')
+                    ->map(function($section) {
+                        return trim($section);
+                    })
+                    ->filter(function($section) {
+                        return !empty($section);
+                    })
+                    ->unique()
+                    ->values();
+
+                // Get sections from sections table for this class
+                $sectionsFromSections = $assignedSections
+                    ->where('class', $className)
+                    ->pluck('name')
+                    ->map(function($section) {
+                        return trim($section);
+                    })
+                    ->filter(function($section) {
+                        return !empty($section);
+                    })
+                    ->unique()
+                    ->values();
+
+                // Merge sections from both sources
+                $allSections = $sectionsFromSubjects
+                    ->merge($sectionsFromSections)
+                    ->unique()
+                    ->sort()
+                    ->values();
+
+                // Create separate entry for each section
+                foreach ($allSections as $section) {
+                    $formattedSection = strtolower(trim($className)) . ' ' . strtolower(trim($section));
+                    
+                    $classesData[] = [
+                        'class' => $className,
+                        'section' => trim($section),
+                        'formatted_sections' => $formattedSection,
+                    ];
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Assigned classes and sections retrieved successfully',
+                'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id,
+                        'campus' => $teacher->campus,
+                    ],
+                    'total_classes' => count($classesData),
+                    'classes' => $classesData,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving assigned classes: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
         }
     }
 }

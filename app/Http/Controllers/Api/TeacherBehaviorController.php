@@ -24,41 +24,44 @@ class TeacherBehaviorController extends Controller
     public function getFilterOptions(Request $request): JsonResponse
     {
         try {
-            // Get Classes
-            $classes = ClassModel::whereNotNull('class_name')
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access behavior recording.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get classes from teacher's assigned subjects
+            $classes = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereNotNull('class')
                 ->distinct()
-                ->pluck('class_name')
+                ->pluck('class')
                 ->sort()
                 ->values();
             
+            // If no classes assigned, return empty
             if ($classes->isEmpty()) {
-                $classesFromSubjects = Subject::whereNotNull('class')
-                    ->distinct()
-                    ->pluck('class')
-                    ->sort();
-                $classes = $classesFromSubjects->isEmpty() 
-                    ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
-                    : $classesFromSubjects;
+                $classes = collect();
             }
             
-            // Get Sections (filtered by class if provided)
+            // Get Sections (filtered by class if provided) - from teacher's assigned subjects
             $sections = collect();
             if ($request->filled('class')) {
-                $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))])
-                    ->whereNotNull('name')
-                    ->distinct()
-                    ->pluck('name')
+                $class = trim($request->class);
+                
+                // Get sections from teacher's assigned subjects for this class
+                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                    ->get();
+                
+                $sections = $assignedSubjects->pluck('section')
+                    ->unique()
+                    ->filter()
                     ->sort()
                     ->values();
-                
-                if ($sections->isEmpty()) {
-                    $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))])
-                        ->whereNotNull('section')
-                        ->distinct()
-                        ->pluck('section')
-                        ->sort()
-                        ->values();
-                }
             }
             
             // Behavior Types
@@ -96,6 +99,16 @@ class TeacherBehaviorController extends Controller
     public function getSections(Request $request): JsonResponse
     {
         try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access behavior recording.',
+                    'token' => null,
+                ], 403);
+            }
+
             $class = $request->get('class');
             
             if (!$class) {
@@ -108,21 +121,16 @@ class TeacherBehaviorController extends Controller
                 ], 200);
             }
 
-            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
+            // Get sections from teacher's assigned subjects for this class
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
+            
+            $sections = $assignedSubjects->pluck('section')
+                ->unique()
+                ->filter()
                 ->sort()
                 ->values();
-            
-            if ($sections->isEmpty()) {
-                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                    ->whereNotNull('section')
-                    ->distinct()
-                    ->pluck('section')
-                    ->sort()
-                    ->values();
-            }
 
             return response()->json([
                 'success' => true,
@@ -152,6 +160,16 @@ class TeacherBehaviorController extends Controller
     public function getStudents(Request $request): JsonResponse
     {
         try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access behavior recording.',
+                    'token' => null,
+                ], 403);
+            }
+
             $request->validate([
                 'class' => ['required', 'string'],
                 'section' => ['nullable', 'string'],
@@ -163,6 +181,44 @@ class TeacherBehaviorController extends Controller
             $filterSection = $request->section;
             $filterDate = $request->date;
             $filterType = $request->type ?? 'daily behavior';
+
+            // Validate that class is in teacher's assigned classes
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+            
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
+                ->values();
+            
+            $assignedSections = $assignedSubjects->where(function($subject) use ($filterClass) {
+                return strtolower(trim($subject->class ?? '')) === strtolower(trim($filterClass));
+            })->pluck('section')
+                ->unique()
+                ->filter()
+                ->values();
+            
+            // Check if class is assigned to teacher
+            if (!$assignedClasses->contains(function($c) use ($filterClass) {
+                return strtolower(trim($c)) === strtolower(trim($filterClass));
+            })) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. This class is not assigned to you.',
+                    'token' => null,
+                ], 403);
+            }
+            
+            // Check if section is assigned to teacher (if section is provided)
+            if ($filterSection && !$assignedSections->contains(function($s) use ($filterSection) {
+                return strtolower(trim($s)) === strtolower(trim($filterSection));
+            })) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. This section is not assigned to you.',
+                    'token' => null,
+                ], 403);
+            }
 
             // Get students based on filters - only those connected to parents
             $studentsQuery = Student::query();
@@ -257,6 +313,25 @@ class TeacherBehaviorController extends Controller
     public function saveRecord(Request $request): JsonResponse
     {
         try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can save behavior records.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+            
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
+                ->values();
+
             // Check if it's a single record or array of records
             $records = $request->has('student_id') 
                 ? [$request->all()] 
@@ -286,6 +361,19 @@ class TeacherBehaviorController extends Controller
                         'campus' => ['required', 'string'],
                         'date' => ['required', 'date'],
                     ])->validate();
+
+                    // Validate that class is in teacher's assigned classes
+                    $class = trim($validated['class']);
+                    if (!$assignedClasses->contains(function($c) use ($class) {
+                        return strtolower(trim($c)) === strtolower(trim($class));
+                    })) {
+                        $errors[] = [
+                            'index' => $index,
+                            'student_id' => $validated['student_id'],
+                            'message' => 'Access denied. This class is not assigned to you.',
+                        ];
+                        continue;
+                    }
 
                     // Store first record for getting updated students list
                     if ($firstRecord === null) {
@@ -404,21 +492,68 @@ class TeacherBehaviorController extends Controller
     public function getRecords(Request $request): JsonResponse
     {
         try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access behavior records.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+            
+            // Get assigned classes and sections
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->unique()
+                ->filter()
+                ->values();
+            
+            $assignedSections = $assignedSubjects->pluck('section')
+                ->unique()
+                ->filter()
+                ->values();
+
             $query = BehaviorRecord::query();
+
+            // Filter by teacher's assigned classes ONLY
+            if ($assignedClasses->isNotEmpty()) {
+                $query->where(function($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $class) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                    }
+                });
+            } else {
+                // If no classes assigned, return empty result
+                $query->whereRaw('1 = 0');
+            }
 
             // Filter by student_id
             if ($request->filled('student_id')) {
                 $query->where('student_id', $request->student_id);
             }
 
-            // Filter by class
+            // Filter by class - validate it's in assigned classes
             if ($request->filled('class')) {
-                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
+                $class = trim($request->class);
+                if ($assignedClasses->contains(function($c) use ($class) {
+                    return strtolower(trim($c)) === strtolower(trim($class));
+                })) {
+                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+                }
             }
 
-            // Filter by section
+            // Filter by section - validate it's in assigned sections
             if ($request->filled('section')) {
-                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->section))]);
+                $section = trim($request->section);
+                if ($assignedSections->contains(function($s) use ($section) {
+                    return strtolower(trim($s)) === strtolower(trim($section));
+                })) {
+                    $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+                }
             }
 
             // Filter by date
@@ -512,9 +647,12 @@ class TeacherBehaviorController extends Controller
                 ], 403);
             }
 
+            // Support both GET (query params) and POST (body) requests
             $validated = $request->validate([
                 'attendance_date' => ['required', 'date'],
                 'status' => ['required', 'string'],
+                'class' => ['nullable', 'string'],
+                'section' => ['nullable', 'string'],
                 'start_time' => ['nullable', 'string', 'regex:/^([0-1][0-9]|2[0-3]):[0-5][0-9](:([0-5][0-9]))?$/'],
                 'end_time' => ['nullable', 'string', 'regex:/^([0-1][0-9]|2[0-3]):[0-5][0-9](:([0-5][0-9]))?$/'],
                 'remarks' => ['nullable', 'string', 'max:500'],
@@ -560,20 +698,86 @@ class TeacherBehaviorController extends Controller
             $startTime = null;
             $endTime = null;
             
-            if (!empty($validated['start_time'])) {
-                $startTime = $validated['start_time'];
+            // Handle start_time - trim and check if not empty
+            if (!empty($validated['start_time']) && trim($validated['start_time']) !== '') {
+                $startTime = trim($validated['start_time']);
                 // If format is H:i, convert to H:i:s
                 if (preg_match('/^\d{2}:\d{2}$/', $startTime)) {
                     $startTime .= ':00';
                 }
             }
             
-            if (!empty($validated['end_time'])) {
-                $endTime = $validated['end_time'];
+            // Handle end_time - trim and check if not empty
+            if (!empty($validated['end_time']) && trim($validated['end_time']) !== '') {
+                $endTime = trim($validated['end_time']);
                 // If format is H:i, convert to H:i:s
                 if (preg_match('/^\d{2}:\d{2}$/', $endTime)) {
                     $endTime .= ':00';
                 }
+            }
+
+            // Check if there's existing attendance for this date
+            $existingAttendance = StaffAttendance::where('staff_id', $teacher->id)
+                ->whereDate('attendance_date', $validated['attendance_date'])
+                ->first();
+
+            // Check if start_time was explicitly provided in request (even if empty string)
+            $startTimeKeyExists = $request->has('start_time');
+
+            // Validation: Check if trying to checkout without checkin
+            // If end_time is provided but start_time is empty or not provided
+            if (!empty($endTime) && empty($startTime)) {
+                // If start_time key exists in request but is empty/null, return error (don't use existing)
+                if ($startTimeKeyExists) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Check-in is required first. Please check-in before checking out.',
+                    ], 422);
+                }
+                
+                // If start_time was not provided at all, check existing attendance
+                if (!$startTimeKeyExists) {
+                    // If no existing attendance or existing attendance doesn't have start_time
+                    if (!$existingAttendance || empty($existingAttendance->start_time)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Check-in is required first. Please check-in before checking out.',
+                        ], 422);
+                    }
+                    
+                    // Use existing start_time if available
+                    $startTime = $existingAttendance->start_time;
+                }
+            }
+
+            // Prepare data for update/create
+            $attendanceData = [
+                'status' => $validated['status'],
+                'campus' => $teacher->campus,
+                'designation' => $teacher->designation,
+                'class' => !empty($validated['class']) ? trim($validated['class']) : ($existingAttendance ? $existingAttendance->class : null),
+                'section' => !empty($validated['section']) ? trim($validated['section']) : ($existingAttendance ? $existingAttendance->section : null),
+                'remarks' => $validated['remarks'] ?? ($existingAttendance ? $existingAttendance->remarks : null),
+            ];
+
+            // Handle start_time: use provided value, or keep existing, or set null
+            if (!empty($startTime)) {
+                $attendanceData['start_time'] = $startTime;
+            } else if ($existingAttendance && !empty($existingAttendance->start_time)) {
+                // Preserve existing start_time if not being updated
+                $attendanceData['start_time'] = $existingAttendance->start_time;
+            } else {
+                $attendanceData['start_time'] = null;
+            }
+
+            // Handle end_time: use provided value, or keep existing, or set null
+            if (!empty($endTime)) {
+                $attendanceData['end_time'] = $endTime;
+            } else if ($existingAttendance && !empty($existingAttendance->end_time)) {
+                // Preserve existing end_time if not being updated
+                $attendanceData['end_time'] = $existingAttendance->end_time;
+            } else {
+                $attendanceData['end_time'] = null;
             }
 
             // Create or update attendance
@@ -582,14 +786,7 @@ class TeacherBehaviorController extends Controller
                     'staff_id' => $teacher->id,
                     'attendance_date' => $validated['attendance_date'],
                 ],
-                [
-                    'status' => $validated['status'],
-                    'start_time' => $startTime,
-                    'end_time' => $endTime,
-                    'campus' => $teacher->campus,
-                    'designation' => $teacher->designation,
-                    'remarks' => $validated['remarks'] ?? null,
-                ]
+                $attendanceData
             );
 
             return response()->json([
@@ -604,7 +801,8 @@ class TeacherBehaviorController extends Controller
                         'designation' => $teacher->designation,
                         'attendance_date' => $attendance->attendance_date->format('Y-m-d'),
                         'status' => $attendance->status,
-                        'start_time' => $attendance->start_time ? date('H:i:s', strtotime($attendance->start_time)) : null,
+                        'class' => $attendance->class,
+                        'section' => $attendance->section,
                         'end_time' => $attendance->end_time ? date('H:i:s', strtotime($attendance->end_time)) : null,
                         'campus' => $attendance->campus,
                         'remarks' => $attendance->remarks,
@@ -643,11 +841,13 @@ class TeacherBehaviorController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can check self-attendance.',
+                    'token' => null,
                 ], 403);
             }
 
+            // Support both GET (query params) and POST (body) requests
             // Get date from request or use today
-            $date = $request->get('date', now()->format('Y-m-d'));
+            $date = $request->get('date', $request->input('date', now()->format('Y-m-d')));
 
             // Check if attendance exists for this date
             $attendance = StaffAttendance::where('staff_id', $teacher->id)
@@ -670,6 +870,8 @@ class TeacherBehaviorController extends Controller
                     'attendance' => $attendance ? [
                         'id' => $attendance->id,
                         'status' => $attendance->status,
+                        'class' => $attendance->class,
+                        'section' => $attendance->section,
                         'start_time' => $attendance->start_time ? date('H:i:s', strtotime($attendance->start_time)) : null,
                         'end_time' => $attendance->end_time ? date('H:i:s', strtotime($attendance->end_time)) : null,
                         'remarks' => $attendance->remarks,
@@ -682,6 +884,257 @@ class TeacherBehaviorController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while checking attendance: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Check-In API
+     * Teacher check-in karta hai (start_time set karta hai)
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function checkIn(Request $request): JsonResponse
+    {
+        try {
+            // Get logged-in teacher
+            $teacher = $request->user();
+            
+            // Validate that user is a teacher
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can check-in.',
+                ], 403);
+            }
+
+            // Support both GET (query params) and POST (body) requests
+            $validated = $request->validate([
+                'attendance_date' => ['required', 'date'],
+                'start_time' => ['required', 'string', 'regex:/^([0-1][0-9]|2[0-3]):[0-5][0-9](:([0-5][0-9]))?$/'],
+                'status' => ['nullable', 'string'],
+                'class' => ['nullable', 'string'],
+                'section' => ['nullable', 'string'],
+                'remarks' => ['nullable', 'string', 'max:500'],
+            ]);
+
+            // Normalize start_time format (accept H:i or H:i:s)
+            $startTime = trim($validated['start_time']);
+            if (preg_match('/^\d{2}:\d{2}$/', $startTime)) {
+                $startTime .= ':00';
+            }
+
+            // Normalize status if provided
+            $status = 'Present'; // Default status
+            if (!empty($validated['status'])) {
+                $statusInput = trim($validated['status']);
+                $statusLower = strtolower($statusInput);
+                
+                $statusMap = [
+                    'present' => 'Present',
+                    'absent' => 'Absent',
+                    'holiday' => 'Holiday',
+                    'sunday' => 'Sunday',
+                    'leave' => 'Leave',
+                    'n/a' => 'N/A',
+                    'na' => 'N/A',
+                ];
+                
+                if (isset($statusMap[$statusLower])) {
+                    $status = $statusMap[$statusLower];
+                }
+            }
+
+            // Check if there's existing attendance for this date
+            $existingAttendance = StaffAttendance::where('staff_id', $teacher->id)
+                ->whereDate('attendance_date', $validated['attendance_date'])
+                ->first();
+
+            // If already checked in today, return error
+            if ($existingAttendance && !empty($existingAttendance->start_time)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have already checked in today. Check-in time: ' . date('H:i:s', strtotime($existingAttendance->start_time)),
+                ], 422);
+            }
+
+            // Prepare data for check-in
+            $attendanceData = [
+                'status' => $status,
+                'campus' => $teacher->campus,
+                'designation' => $teacher->designation,
+                'start_time' => $startTime,
+                'class' => !empty($validated['class']) ? trim($validated['class']) : ($existingAttendance ? $existingAttendance->class : null),
+                'section' => !empty($validated['section']) ? trim($validated['section']) : ($existingAttendance ? $existingAttendance->section : null),
+                'remarks' => $validated['remarks'] ?? ($existingAttendance ? $existingAttendance->remarks : null),
+            ];
+
+            // Preserve existing end_time if attendance already exists
+            if ($existingAttendance && !empty($existingAttendance->end_time)) {
+                $attendanceData['end_time'] = $existingAttendance->end_time;
+            }
+
+            // Create or update attendance (only start_time)
+            $attendance = StaffAttendance::updateOrCreate(
+                [
+                    'staff_id' => $teacher->id,
+                    'attendance_date' => $validated['attendance_date'],
+                ],
+                $attendanceData
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Check-in successful',
+                'data' => [
+                    'attendance' => [
+                        'id' => $attendance->id,
+                        'staff_id' => $attendance->staff_id,
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id,
+                        'designation' => $teacher->designation,
+                        'attendance_date' => $attendance->attendance_date->format('Y-m-d'),
+                        'status' => $attendance->status,
+                        'class' => $attendance->class,
+                        'section' => $attendance->section,
+                        'start_time' => date('H:i:s', strtotime($attendance->start_time)),
+                        'end_time' => $attendance->end_time ? date('H:i:s', strtotime($attendance->end_time)) : null,
+                        'campus' => $attendance->campus,
+                        'remarks' => $attendance->remarks,
+                    ],
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while checking in: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Check-Out API
+     * Teacher check-out karta hai (end_time set karta hai)
+     * Check-in pehle hona chahiye
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function checkOut(Request $request): JsonResponse
+    {
+        try {
+            // Get logged-in teacher
+            $teacher = $request->user();
+            
+            // Validate that user is a teacher
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can check-out.',
+                ], 403);
+            }
+
+            // Support both GET (query params) and POST (body) requests
+            $validated = $request->validate([
+                'attendance_date' => ['required', 'date'],
+                'end_time' => ['required', 'string', 'regex:/^([0-1][0-9]|2[0-3]):[0-5][0-9](:([0-5][0-9]))?$/'],
+                'remarks' => ['nullable', 'string', 'max:500'],
+            ]);
+
+            // Normalize end_time format (accept H:i or H:i:s)
+            $endTime = trim($validated['end_time']);
+            if (preg_match('/^\d{2}:\d{2}$/', $endTime)) {
+                $endTime .= ':00';
+            }
+
+            // Check if there's existing attendance for this date
+            $existingAttendance = StaffAttendance::where('staff_id', $teacher->id)
+                ->whereDate('attendance_date', $validated['attendance_date'])
+                ->first();
+
+            // Validation: Check-in pehle hona chahiye
+            if (!$existingAttendance || empty($existingAttendance->start_time)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Check-in is required first. Please check-in before checking out.',
+                ], 422);
+            }
+
+            // Validation: End time should be after start time
+            $startTime = strtotime($existingAttendance->start_time);
+            $endTimeStamp = strtotime($endTime);
+            if ($endTimeStamp <= $startTime) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Check-out time must be after check-in time. Check-in time: ' . date('H:i:s', $startTime),
+                ], 422);
+            }
+
+            // If already checked out today, return error
+            if (!empty($existingAttendance->end_time)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have already checked out today. Check-out time: ' . date('H:i:s', strtotime($existingAttendance->end_time)),
+                ], 422);
+            }
+
+            // Update attendance with end_time
+            $existingAttendance->update([
+                'end_time' => $endTime,
+                'remarks' => $validated['remarks'] ?? $existingAttendance->remarks,
+            ]);
+
+            // Calculate total hours and minutes
+            $startTimeStamp = strtotime($existingAttendance->start_time);
+            $endTimeStamp = strtotime($existingAttendance->end_time);
+            $totalSeconds = $endTimeStamp - $startTimeStamp;
+            $totalHours = floor($totalSeconds / 3600);
+            $totalMinutes = floor(($totalSeconds % 3600) / 60);
+            $totalSecondsRemaining = $totalSeconds % 60;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Check-out successful',
+                'data' => [
+                    'attendance' => [
+                        'id' => $existingAttendance->id,
+                        'staff_id' => $existingAttendance->staff_id,
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id,
+                        'designation' => $teacher->designation,
+                        'attendance_date' => $existingAttendance->attendance_date->format('Y-m-d'),
+                        'status' => $existingAttendance->status,
+                        'class' => $existingAttendance->class,
+                        'section' => $existingAttendance->section,
+                        'end_time' => date('H:i:s', strtotime($existingAttendance->end_time)),
+                        'campus' => $existingAttendance->campus,
+                        'remarks' => $existingAttendance->remarks,
+                        'total_hours' => $totalHours,
+                        'total_minutes' => $totalMinutes,
+                        'total_time' => sprintf('%d hours %d minutes', $totalHours, $totalMinutes),
+                    ],
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while checking out: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -756,6 +1209,8 @@ class TeacherBehaviorController extends Controller
                     'id' => $attendance->id,
                     'attendance_date' => $attendance->attendance_date->format('Y-m-d'),
                     'status' => $attendance->status,
+                    'class' => $attendance->class,
+                    'section' => $attendance->section,
                     'start_time' => $attendance->start_time ? date('H:i:s', strtotime($attendance->start_time)) : null,
                     'end_time' => $attendance->end_time ? date('H:i:s', strtotime($attendance->end_time)) : null,
                     'campus' => $attendance->campus,

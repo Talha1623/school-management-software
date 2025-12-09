@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\ViewErrorBag;
 use Illuminate\View\View;
 
 class AdminAuthController extends Controller
@@ -21,7 +22,10 @@ class AdminAuthController extends Controller
             return redirect()->route('dashboard');
         }
         
-        return view('admin.login');
+        // Ensure $errors variable is available in view
+        $errors = session('errors') ?: new ViewErrorBag();
+        
+        return view('admin.login', ['errors' => $errors]);
     }
 
     /**

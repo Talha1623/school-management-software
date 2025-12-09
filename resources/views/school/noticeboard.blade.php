@@ -3,15 +3,24 @@
 @section('title', 'School Noticeboard')
 
 @section('content')
+@php
+    $isSuperAdmin = false;
+    if (Auth::guard('admin')->check()) {
+        $admin = Auth::guard('admin')->user();
+        $isSuperAdmin = $admin && $admin->isSuperAdmin();
+    }
+@endphp
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">School Noticeboard</h4>
-                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 noticeboard-add-btn" data-bs-toggle="modal" data-bs-target="#noticeboardModal" onclick="resetForm()">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Notice</span>
-                </button>
+                @if($isSuperAdmin)
+                    <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 noticeboard-add-btn" data-bs-toggle="modal" data-bs-target="#noticeboardModal" onclick="resetForm()">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+                        <span>Add New Notice</span>
+                    </button>
+                @endif
             </div>
 
             @if(session('success'))
@@ -154,18 +163,22 @@
                                             @endif
                                         </td>
                                         <td class="text-end">
-                                            <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editNoticeboard({{ $noticeboard->id }}, '{{ addslashes($noticeboard->campus ?? '') }}', '{{ addslashes($noticeboard->title) }}', '{{ addslashes($noticeboard->notice ?? '') }}', '{{ $noticeboard->date->format('Y-m-d') }}', '{{ $noticeboard->show_on ?? '' }}', '{{ $noticeboard->image ? asset('storage/' . $noticeboard->image) : '' }}')">
-                                                    <span class="material-symbols-outlined">edit</span>
-                                                </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this noticeboard?')) { document.getElementById('delete-form-{{ $noticeboard->id }}').submit(); }">
-                                                    <span class="material-symbols-outlined">delete</span>
-                                                </button>
-                                                <form id="delete-form-{{ $noticeboard->id }}" action="{{ route('school.noticeboard.destroy', $noticeboard->id) }}" method="POST" class="d-none">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                </form>
-                                            </div>
+                                            @if($isSuperAdmin)
+                                                <div class="d-inline-flex gap-1">
+                                                    <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editNoticeboard({{ $noticeboard->id }}, '{{ addslashes($noticeboard->campus ?? '') }}', '{{ addslashes($noticeboard->title) }}', '{{ addslashes($noticeboard->notice ?? '') }}', '{{ $noticeboard->date->format('Y-m-d') }}', '{{ $noticeboard->show_on ?? '' }}', '{{ $noticeboard->image ? asset('storage/' . $noticeboard->image) : '' }}')">
+                                                        <span class="material-symbols-outlined">edit</span>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this noticeboard?')) { document.getElementById('delete-form-{{ $noticeboard->id }}').submit(); }">
+                                                        <span class="material-symbols-outlined">delete</span>
+                                                    </button>
+                                                    <form id="delete-form-{{ $noticeboard->id }}" action="{{ route('school.noticeboard.destroy', $noticeboard->id) }}" method="POST" class="d-none">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                    </form>
+                                                </div>
+                                            @else
+                                                <span class="text-muted">View Only</span>
+                                            @endif
                                         </td>
                                     </tr>
                                 @empty

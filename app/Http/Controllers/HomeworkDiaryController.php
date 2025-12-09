@@ -47,9 +47,20 @@ class HomeworkDiaryController extends Controller
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
             
+            // Get classes from teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            // Merge classes from both sources
             $classes = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
                 ->unique()
-                ->filter()
                 ->sort()
                 ->values();
         } else {
@@ -72,9 +83,21 @@ class HomeworkDiaryController extends Controller
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
                     ->get();
                 
+                // Get sections from teacher's assigned sections for this class
+                $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->get();
+                
+                // Merge sections from both sources
                 $sections = $assignedSubjects->pluck('section')
+                    ->merge($assignedSections->pluck('name'))
+                    ->map(function($section) {
+                        return trim($section);
+                    })
+                    ->filter(function($section) {
+                        return !empty($section);
+                    })
                     ->unique()
-                    ->filter()
                     ->sort()
                     ->values();
             } else {
@@ -112,6 +135,11 @@ class HomeworkDiaryController extends Controller
                       ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
                       ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
             });
+            
+            // Filter by teacher's assigned subjects if teacher
+            if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+                $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+            }
             
             $subjects = $subjectsQuery->orderBy('subject_name', 'asc')->get();
             
@@ -156,16 +184,28 @@ class HomeworkDiaryController extends Controller
         $staff = Auth::guard('staff')->user();
         $sections = collect();
         
-        // Filter by teacher's assigned subjects if teacher
+        // Filter by teacher's assigned subjects and sections if teacher
         if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
             // Get sections from teacher's assigned subjects for this class
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                 ->get();
             
+            // Get sections from teacher's assigned sections for this class
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
+            
+            // Merge sections from both sources
             $sections = $assignedSubjects->pluck('section')
+                ->merge($assignedSections->pluck('name'))
+                ->map(function($section) {
+                    return trim($section);
+                })
+                ->filter(function($section) {
+                    return !empty($section);
+                })
                 ->unique()
-                ->filter()
                 ->sort()
                 ->values();
         } else {

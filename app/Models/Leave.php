@@ -4,34 +4,31 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class StaffAttendance extends Model
+class Leave extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'staff_id',
-        'attendance_date',
+        'leave_reason',
+        'from_date',
+        'to_date',
         'status',
-        'start_time',
-        'end_time',
-        'campus',
-        'designation',
-        'class',
-        'section',
         'remarks',
     ];
 
     protected $casts = [
-        'attendance_date' => 'date',
+        'from_date' => 'date',
+        'to_date' => 'date',
     ];
 
     /**
-     * Get the staff member that owns the attendance.
+     * Get the staff member that owns the leave.
      */
-    public function staff()
+    public function staff(): BelongsTo
     {
         return $this->belongsTo(Staff::class);
     }
 }
-

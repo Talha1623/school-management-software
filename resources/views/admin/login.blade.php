@@ -415,7 +415,7 @@
                         <i class="ri-mail-line input-icon"></i>
                         <input 
                             type="email" 
-                            class="form-control @error('email') is-invalid @enderror" 
+                            class="form-control {{ isset($errors) && $errors->has('email') ? 'is-invalid' : '' }}" 
                             id="email" 
                             name="email" 
                             value="{{ old('email') }}" 
@@ -424,9 +424,9 @@
                             autofocus
                         >
                     </div>
-                    @error('email')
-                        <div class="error-message">{{ $message }}</div>
-                    @enderror
+                    @if(isset($errors) && $errors->has('email'))
+                        <div class="error-message">{{ $errors->first('email') }}</div>
+                    @endif
                 </div>
 
                 <div class="form-group">
@@ -435,16 +435,16 @@
                         <i class="ri-lock-line input-icon"></i>
                         <input 
                             type="password" 
-                            class="form-control @error('password') is-invalid @enderror" 
+                            class="form-control {{ isset($errors) && $errors->has('password') ? 'is-invalid' : '' }}" 
                             id="password" 
                             name="password" 
                             placeholder="Enter your password" 
                             required
                         >
                     </div>
-                    @error('password')
-                        <div class="error-message">{{ $message }}</div>
-                    @enderror
+                    @if(isset($errors) && $errors->has('password'))
+                        <div class="error-message">{{ $errors->first('password') }}</div>
+                    @endif
                 </div>
 
                 <div class="remember-forgot">
@@ -465,5 +465,76 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Auto-refresh CSRF token to prevent "Page Expired" error
+        document.addEventListener('DOMContentLoaded', function() {
+            function refreshCSRFToken() {
+                // Use route helper to get correct URL (without /api prefix)
+                const loginUrl = '{{ route("admin.login") }}';
+                
+                fetch(loginUrl, {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'text/html',
+                        'Cache-Control': 'no-cache'
+                    },
+                    cache: 'no-store'
+                })
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newToken = doc.querySelector('meta[name="csrf-token"]');
+                    
+                    if (newToken) {
+                        // Update CSRF token in meta tag
+                        const metaToken = document.querySelector('meta[name="csrf-token"]');
+                        if (metaToken) {
+                            metaToken.setAttribute('content', newToken.getAttribute('content'));
+                        }
+                        
+                        // Update CSRF token in form
+                        const formToken = document.querySelector('input[name="_token"]');
+                        if (formToken) {
+                            formToken.value = newToken.getAttribute('content');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.log('CSRF token refresh failed:', error);
+                });
+            }
+
+            // Refresh token when user focuses on the page (comes back to tab)
+            window.addEventListener('focus', refreshCSRFToken);
+            
+            // Refresh token every 30 minutes to keep it fresh
+            setInterval(refreshCSRFToken, 1800000); // 30 minutes
+
+            // Refresh token before form submission if page is older than 30 minutes
+            const form = document.querySelector('form[method="POST"]');
+            if (form) {
+                const pageLoadTime = Date.now();
+                
+                form.addEventListener('submit', function(e) {
+                    const pageAge = Date.now() - pageLoadTime;
+                    
+                    // If page is older than 30 minutes, refresh token first
+                    if (pageAge > 1800000) {
+                        e.preventDefault();
+                        
+                        refreshCSRFToken();
+                        
+                        // Wait a bit for token to refresh, then submit
+                        setTimeout(function() {
+                            form.submit();
+                        }, 500);
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>

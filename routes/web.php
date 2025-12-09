@@ -163,6 +163,7 @@ Route::post('/staff/management', [App\Http\Controllers\StaffManagementController
 Route::delete('/staff/management/delete-all', [App\Http\Controllers\StaffManagementController::class, 'deleteAll'])->name('staff.management.delete-all');
 Route::get('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'show'])->name('staff.management.show');
 Route::put('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'update'])->name('staff.management.update');
+Route::post('/staff/management/{staff}/toggle-status', [App\Http\Controllers\StaffManagementController::class, 'toggleStatus'])->name('staff.management.toggle-status');
 Route::delete('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'destroy'])->name('staff.management.destroy');
 Route::get('/staff/management/export/{format}', [App\Http\Controllers\StaffManagementController::class, 'export'])->name('staff.management.export');
 
@@ -777,10 +778,11 @@ Route::delete('/study-material/lms/{studyMaterial}', [App\Http\Controllers\Study
 Route::get('/study-material/get-sections-by-class', [App\Http\Controllers\StudyMaterialController::class, 'getSectionsByClass'])->name('study-material.get-sections-by-class');
 Route::get('/study-material/get-subjects-by-class-section', [App\Http\Controllers\StudyMaterialController::class, 'getSubjectsByClassSection'])->name('study-material.get-subjects-by-class-section');
 
-// Leave Management Route
-Route::get('/leave-management', function () {
-    return view('leave-management');
-})->name('leave-management');
+// Leave Management Routes
+Route::get('/leave-management', [App\Http\Controllers\LeaveManagementController::class, 'index'])->name('leave-management');
+Route::post('/leave-management', [App\Http\Controllers\LeaveManagementController::class, 'store'])->name('leave-management.store');
+Route::put('/leave-management/{leave}', [App\Http\Controllers\LeaveManagementController::class, 'update'])->name('leave-management.update');
+Route::delete('/leave-management/{leave}', [App\Http\Controllers\LeaveManagementController::class, 'destroy'])->name('leave-management.destroy');
 
 // SMS Management Routes
 Route::get('/sms/parent', [App\Http\Controllers\SmsController::class, 'parent'])->name('sms.parent');
