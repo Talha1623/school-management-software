@@ -155,6 +155,44 @@ class AccountantAuthController extends Controller
         // Balance This Month
         $balanceThisMonth = $incomeThisMonth - $expenseThisMonth;
         
+        // Monthly Income Data for Chart (Last 12 months)
+        $monthlyIncomeData = [];
+        $monthlyExpenseData = [];
+        $monthLabels = [];
+        
+        for ($i = 11; $i >= 0; $i--) {
+            $monthStart = Carbon::now()->subMonths($i)->startOfMonth();
+            $monthEnd = Carbon::now()->subMonths($i)->endOfMonth();
+            
+            $monthIncome = StudentPayment::whereBetween('payment_date', [$monthStart, $monthEnd])
+                ->when($accountant->campus, function($q) use ($accountant) {
+                    return $q->where('campus', $accountant->campus);
+                })
+                ->sum('payment_amount');
+            
+            $monthIncome += CustomPayment::whereBetween('payment_date', [$monthStart, $monthEnd])
+                ->when($accountant->campus, function($q) use ($accountant) {
+                    return $q->where('campus', $accountant->campus);
+                })
+                ->sum('payment_amount');
+            
+            $monthIncome += SaleRecord::whereBetween('sale_date', [$monthStart, $monthEnd])
+                ->when($accountant->campus, function($q) use ($accountant) {
+                    return $q->where('campus', $accountant->campus);
+                })
+                ->sum('total_amount');
+            
+            $monthExpense = ManagementExpense::whereBetween('date', [$monthStart, $monthEnd])
+                ->when($accountant->campus, function($q) use ($accountant) {
+                    return $q->where('campus', $accountant->campus);
+                })
+                ->sum('amount');
+            
+            $monthlyIncomeData[] = round($monthIncome, 2);
+            $monthlyExpenseData[] = round($monthExpense, 2);
+            $monthLabels[] = $monthStart->format('M');
+        }
+        
         return view('accountant.dashboard', compact(
             'accountant',
             'incomeToday',
@@ -162,7 +200,10 @@ class AccountantAuthController extends Controller
             'balanceToday',
             'incomeThisMonth',
             'expenseThisMonth',
-            'balanceThisMonth'
+            'balanceThisMonth',
+            'monthlyIncomeData',
+            'monthlyExpenseData',
+            'monthLabels'
         ));
     }
 }

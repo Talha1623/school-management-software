@@ -100,5 +100,13 @@ class Student extends Authenticatable
             ? Storage::url($this->photo)
             : null;
     }
+
+    /**
+     * Get the parent account for this student.
+     */
+    public function parentAccount()
+    {
+        return $this->belongsTo(ParentAccount::class, 'parent_account_id');
+    }
 }
 

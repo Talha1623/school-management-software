@@ -131,6 +131,7 @@
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">credit_card</span></span>
                                     <input type="text" class="form-control border-start-0 py-1" id="father_id_card" name="father_id_card" placeholder="Father ID Card" style="height: 32px; font-size: 13px;">
                                 </div>
+                                <div id="parent-found-message" class="mt-1" style="display: none;"></div>
                             </div>
                             
                             <div class="mb-2">
@@ -149,6 +150,32 @@
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">email</span></span>
                                     <input type="email" class="form-control border-start-0 py-1" id="father_email" name="father_email" placeholder="Father Email" style="height: 32px; font-size: 13px;">
                                 </div>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <label for="create_parent_account" class="form-label mb-0 fs-13 fw-medium">Create Parent Account</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">account_circle</span></span>
+                                    <select class="form-select border-start-0 py-1" id="create_parent_account" name="create_parent_account" style="height: 32px; font-size: 13px;">
+                                        <option value="">Select</option>
+                                        <option value="1" {{ old('create_parent_account') == '1' ? 'selected' : '' }}>Yes</option>
+                                        <option value="0" {{ old('create_parent_account') == '0' ? 'selected' : '' }}>No</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-2" id="parent_password_field" style="display: none;">
+                                <label for="parent_password" class="form-label mb-0 fs-13 fw-medium">
+                                    Parent Password <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">lock</span></span>
+                                    <input type="password" class="form-control border-start-0 py-1" id="parent_password" name="parent_password" placeholder="Parent Password" style="height: 32px; font-size: 13px;">
+                                </div>
+                                <small class="text-muted fs-11 mt-0 d-block">
+                                    <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">info</span>
+                                    Password for parent account login
+                                </small>
                             </div>
                             
                             <div class="mb-2">
@@ -255,18 +282,6 @@
                                         <option value="sms_only" {{ old('admission_notification') == 'sms_only' ? 'selected' : '' }}>SMS Only</option>
                                         <option value="whatsapp_app" {{ old('admission_notification') == 'whatsapp_app' ? 'selected' : '' }}>WhatsApp & App</option>
                                         <option value="dont_notify" {{ old('admission_notification') == 'dont_notify' ? 'selected' : '' }}>Don't Notify</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-2">
-                                <label for="create_parent_account" class="form-label mb-0 fs-13 fw-medium">Create Parent Account</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">account_circle</span></span>
-                                    <select class="form-select border-start-0 py-1" id="create_parent_account" name="create_parent_account" style="height: 32px; font-size: 13px;">
-                                        <option value="">Select</option>
-                                        <option value="1" {{ old('create_parent_account') == '1' ? 'selected' : '' }}>Yes</option>
-                                        <option value="0" {{ old('create_parent_account') == '0' ? 'selected' : '' }}>No</option>
                                     </select>
                                 </div>
                             </div>
@@ -489,6 +504,133 @@ function retakePhoto() {
     document.getElementById('captured_photo_input').value = '';
     startLiveCapture();
 }
+
+// Show/hide parent password field based on "Create Parent Account" selection
+function toggleParentPasswordField() {
+    const createParentAccount = document.getElementById('create_parent_account');
+    const parentPasswordField = document.getElementById('parent_password_field');
+    const parentPasswordInput = document.getElementById('parent_password');
+    
+    if (createParentAccount && parentPasswordField && parentPasswordInput) {
+        if (createParentAccount.value === '1') {
+            parentPasswordField.style.display = 'block';
+            parentPasswordInput.required = true;
+        } else {
+            parentPasswordField.style.display = 'none';
+            parentPasswordInput.required = false;
+            parentPasswordInput.value = '';
+        }
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleParentPasswordField();
+    
+    // Add event listener for "Create Parent Account" dropdown
+    const createParentAccount = document.getElementById('create_parent_account');
+    if (createParentAccount) {
+        createParentAccount.addEventListener('change', toggleParentPasswordField);
+    }
+    
+    // Add event listener for Father ID Card field to auto-fill parent details
+    const fatherIdCardInput = document.getElementById('father_id_card');
+    if (fatherIdCardInput) {
+        let searchTimeout;
+        
+        fatherIdCardInput.addEventListener('input', function() {
+            const fatherIdCard = this.value.trim();
+            const parentFoundMessage = document.getElementById('parent-found-message');
+            
+            // Clear previous timeout
+            clearTimeout(searchTimeout);
+            
+            // Hide message if input is empty
+            if (!fatherIdCard) {
+                parentFoundMessage.style.display = 'none';
+                parentFoundMessage.innerHTML = '';
+                return;
+            }
+            
+            // Show loading state
+            parentFoundMessage.style.display = 'block';
+            parentFoundMessage.innerHTML = '<small class="text-info"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">search</span> Searching for parent account...</small>';
+            
+            // Debounce: Wait 800ms after user stops typing
+            searchTimeout = setTimeout(function() {
+                // Fetch parent details by ID Card
+                fetch(`{{ route('admission.get-parent-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.found) {
+                            // Parent found - auto-fill form fields
+                            const parent = data.parent;
+                            
+                            // Fill parent details
+                            const fatherNameInput = document.getElementById('father_name');
+                            const fatherEmailInput = document.getElementById('father_email');
+                            const fatherPhoneInput = document.getElementById('father_phone');
+                            const whatsappInput = document.getElementById('whatsapp_number');
+                            const addressInput = document.getElementById('home_address');
+                            
+                            if (fatherNameInput && parent.name) {
+                                fatherNameInput.value = parent.name;
+                            }
+                            if (fatherEmailInput && parent.email) {
+                                fatherEmailInput.value = parent.email;
+                            }
+                            if (fatherPhoneInput && parent.phone) {
+                                fatherPhoneInput.value = parent.phone;
+                            }
+                            if (whatsappInput && parent.whatsapp) {
+                                whatsappInput.value = parent.whatsapp;
+                            }
+                            if (addressInput && parent.address) {
+                                addressInput.value = parent.address;
+                            }
+                            
+                            // Disable "Create Parent Account" dropdown and set to "No"
+                            const createParentAccountSelect = document.getElementById('create_parent_account');
+                            if (createParentAccountSelect) {
+                                createParentAccountSelect.value = '0';
+                                createParentAccountSelect.disabled = true;
+                                toggleParentPasswordField();
+                            }
+                            
+                            // Show success message
+                            parentFoundMessage.innerHTML = `<small class="text-success"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">check_circle</span> ${data.message}</small>`;
+                            parentFoundMessage.className = 'mt-1';
+                            
+                            // Highlight filled fields
+                            [fatherNameInput, fatherEmailInput, fatherPhoneInput, whatsappInput, addressInput].forEach(input => {
+                                if (input && input.value) {
+                                    input.style.backgroundColor = '#e8f5e9';
+                                    setTimeout(() => {
+                                        input.style.backgroundColor = '';
+                                    }, 2000);
+                                }
+                            });
+                        } else {
+                            // Parent not found
+                            parentFoundMessage.innerHTML = `<small class="text-muted"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">info</span> ${data.message}</small>`;
+                            parentFoundMessage.className = 'mt-1';
+                            
+                            // Enable "Create Parent Account" dropdown
+                            const createParentAccountSelect = document.getElementById('create_parent_account');
+                            if (createParentAccountSelect) {
+                                createParentAccountSelect.disabled = false;
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching parent details:', error);
+                        parentFoundMessage.innerHTML = '<small class="text-danger"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">error</span> Error searching for parent account. Please try again.</small>';
+                        parentFoundMessage.className = 'mt-1';
+                    });
+            }, 800);
+        });
+    }
+});
 
 // Load sections based on class selection
 document.getElementById('class').addEventListener('change', function() {

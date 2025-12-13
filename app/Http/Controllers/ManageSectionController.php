@@ -6,17 +6,22 @@ use App\Models\Section;
 use App\Models\ClassModel;
 use App\Models\Staff;
 use App\Models\Campus;
+use App\Models\Subject;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ManageSectionController extends Controller
 {
-    /**
+    /**     
      * Display a listing of sections.
      */
     public function index(Request $request): View
     {
+        // Clean up orphaned teachers (teachers that don't exist in staff table anymore)
+        $this->cleanupOrphanedTeachers();
+        
         $query = Section::query();
         
         // Filter functionality
@@ -289,6 +294,55 @@ class ManageSectionController extends Controller
         
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Clean up orphaned teachers from sections and subjects.
+     * Removes teachers that no longer exist in the staff table.
+     */
+    private function cleanupOrphanedTeachers(): void
+    {
+        // Get all existing teacher names from staff table (only teachers)
+        $existingTeachers = Staff::whereRaw('LOWER(TRIM(designation)) = ?', ['teacher'])
+            ->whereNotNull('name')
+            ->pluck('name')
+            ->map(function($name) {
+                return strtolower(trim($name));
+            })
+            ->unique()
+            ->toArray();
+
+        // Get all sections with teachers assigned
+        $sections = Section::whereNotNull('teacher')
+            ->where('teacher', '!=', '')
+            ->get();
+
+        foreach ($sections as $section) {
+            if (!empty($section->teacher)) {
+                $teacherName = strtolower(trim($section->teacher));
+                // If teacher doesn't exist in staff table, remove them
+                if (!in_array($teacherName, $existingTeachers)) {
+                    $section->teacher = null;
+                    $section->save();
+                }
+            }
+        }
+
+        // Get all subjects with teachers assigned
+        $subjects = Subject::whereNotNull('teacher')
+            ->where('teacher', '!=', '')
+            ->get();
+
+        foreach ($subjects as $subject) {
+            if (!empty($subject->teacher)) {
+                $teacherName = strtolower(trim($subject->teacher));
+                // If teacher doesn't exist in staff table, remove them
+                if (!in_array($teacherName, $existingTeachers)) {
+                    $subject->teacher = null;
+                    $subject->save();
+                }
+            }
+        }
     }
 }
 

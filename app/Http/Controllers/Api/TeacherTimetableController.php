@@ -390,5 +390,246 @@ class TeacherTimetableController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get Timetable by Class
+     * Returns timetable list for a specific class, section, and campus
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getTimetableByClass(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access timetable.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Validate required parameters
+            $validated = $request->validate([
+                'class' => ['required', 'string'],
+                'section' => ['nullable', 'string'],
+                'month' => ['nullable', 'integer', 'min:1', 'max:12'],
+                'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+                'date' => ['nullable', 'string'],
+            ]);
+
+            // Build query for timetables
+            $query = Timetable::query();
+
+            // Filter by class (required) - case insensitive
+            $className = strtolower(trim($validated['class']));
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
+
+            // Filter by section if provided - case insensitive
+            if (!empty($validated['section'])) {
+                $sectionName = strtolower(trim($validated['section']));
+                $query->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
+            }
+
+            // Debug: Check if any data exists for this class (without section filter)
+            $debugQuery = Timetable::query();
+            $debugQuery->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
+            $allClassTimetables = $debugQuery->get();
+
+            // Order by day and time
+            $timetables = $query->orderByRaw("
+                CASE day
+                    WHEN 'Monday' THEN 1
+                    WHEN 'Tuesday' THEN 2
+                    WHEN 'Wednesday' THEN 3
+                    WHEN 'Thursday' THEN 4
+                    WHEN 'Friday' THEN 5
+                    WHEN 'Saturday' THEN 6
+                    WHEN 'Sunday' THEN 7
+                    ELSE 8
+                END
+            ")
+            ->orderBy('starting_time')
+            ->get();
+
+            // Get day, month and year for date calculation
+            $dayForDate = null;
+            $monthForDate = null;
+            $yearForDate = null;
+            
+            // If date parameter is provided, parse it first
+            if ($request->filled('date')) {
+                try {
+                    $dateValue = $request->date;
+                    // Try to parse the date in various formats
+                    // Try YYYY-MM-DD format
+                    if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $dateValue, $matches)) {
+                        $yearForDate = (int)$matches[1];
+                        $monthForDate = (int)$matches[2];
+                        $dayForDate = (int)$matches[3];
+                    }
+                    // Try DD-MM-YYYY format
+                    elseif (preg_match('/^(\d{1,2})-(\d{1,2})-(\d{4})$/', $dateValue, $matches)) {
+                        $dayForDate = (int)$matches[1];
+                        $monthForDate = (int)$matches[2];
+                        $yearForDate = (int)$matches[3];
+                    }
+                    // Try other formats using strtotime
+                    else {
+                        $timestamp = strtotime($dateValue);
+                        if ($timestamp !== false) {
+                            $dayForDate = (int)date('j', $timestamp);
+                            $monthForDate = (int)date('n', $timestamp);
+                            $yearForDate = (int)date('Y', $timestamp);
+                        }
+                    }
+                    
+                    // Validate the parsed date
+                    if ($dayForDate && $monthForDate && $yearForDate) {
+                        if (!checkdate($monthForDate, $dayForDate, $yearForDate)) {
+                            $dayForDate = null;
+                            $monthForDate = null;
+                            $yearForDate = null;
+                        }
+                    }
+                } catch (\Exception $e) {
+                    // If date parsing fails, ignore it and use day/month/year separately
+                }
+            }
+            
+            // If date parameter not provided or parsing failed, use month/year separately
+            if ($dayForDate === null && $monthForDate === null && $yearForDate === null) {
+                if ($request->filled('month') && $request->filled('year')) {
+                    $monthForDate = (int)$request->month;
+                    $yearForDate = (int)$request->year;
+                }
+            }
+
+            // Format timetable data
+            $timetableData = $timetables->map(function($timetable) use ($dayForDate, $monthForDate, $yearForDate) {
+                $item = [
+                    'id' => $timetable->id,
+                    'campus' => $timetable->campus ?? null,
+                    'class' => $timetable->class,
+                    'section' => $timetable->section,
+                    'subject' => $timetable->subject,
+                    'day' => $timetable->day,
+                    'starting_time' => $timetable->starting_time,
+                    'ending_time' => $timetable->ending_time,
+                    'starting_time_formatted' => date('h:i A', strtotime($timetable->starting_time)),
+                    'ending_time_formatted' => date('h:i A', strtotime($timetable->ending_time)),
+                ];
+
+                // If exact date (day/month/year) is provided, use it directly
+                if ($dayForDate !== null && $monthForDate !== null && $yearForDate !== null) {
+                    // Validate the date exists
+                    if (checkdate($monthForDate, $dayForDate, $yearForDate)) {
+                        $calculatedDate = date('Y-m-d', mktime(0, 0, 0, $monthForDate, $dayForDate, $yearForDate));
+                        $item['date'] = $calculatedDate;
+                        $item['date_formatted'] = date('d M Y', mktime(0, 0, 0, $monthForDate, $dayForDate, $yearForDate));
+                        $item['day_number'] = $dayForDate;
+                    }
+                } elseif ($monthForDate !== null && $yearForDate !== null) {
+                    // If only month and year provided, calculate date from day name
+                    $dayName = ucfirst(strtolower(trim($timetable->day)));
+                    $dayNumber = ['Monday' => 1, 'Tuesday' => 2, 'Wednesday' => 3, 'Thursday' => 4, 'Friday' => 5, 'Saturday' => 6, 'Sunday' => 7];
+                    
+                    if (isset($dayNumber[$dayName]) && $monthForDate >= 1 && $monthForDate <= 12 && $yearForDate >= 2000 && $yearForDate <= 2100) {
+                        // Find the first occurrence of the day in the given month/year
+                        $firstDayOfMonth = date('N', mktime(0, 0, 0, $monthForDate, 1, $yearForDate)); // 1=Monday, 7=Sunday
+                        $targetDay = $dayNumber[$dayName];
+                        $firstOccurrence = 1 + (($targetDay - $firstDayOfMonth + 7) % 7);
+                        
+                        // Validate the date exists
+                        if (checkdate($monthForDate, $firstOccurrence, $yearForDate)) {
+                            $calculatedDate = date('Y-m-d', mktime(0, 0, 0, $monthForDate, $firstOccurrence, $yearForDate));
+                            $item['date'] = $calculatedDate;
+                            $item['date_formatted'] = date('d M Y', mktime(0, 0, 0, $monthForDate, $firstOccurrence, $yearForDate));
+                            $item['day_number'] = (int)date('j', strtotime($calculatedDate)); // 'j' gives day without leading zero (1-31)
+                        }
+                    }
+                }
+
+                return $item;
+            });
+
+            // Group by day
+            $timetableByDay = [];
+            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            
+            foreach ($days as $day) {
+                $dayTimetables = $timetableData->filter(function($item) use ($day) {
+                    return strtolower($item['day']) === strtolower($day);
+                })->values();
+                
+                if ($dayTimetables->isNotEmpty()) {
+                    $timetableByDay[$day] = $dayTimetables->toArray();
+                }
+            }
+
+            // Get actual campus from first timetable entry if available (for debugging)
+            $actualCampus = null;
+            if ($timetables->isNotEmpty()) {
+                $actualCampus = $timetables->first()->campus;
+            }
+
+            $responseData = [
+                'class' => $validated['class'],
+                'section' => $validated['section'] ?? null,
+                'timetable' => $timetableData->values()->toArray(),
+                'timetable_by_day' => $timetableByDay,
+                'total_periods' => $timetables->count(),
+            ];
+
+            // Add day, month and year info if provided
+            if ($dayForDate !== null && $monthForDate !== null && $yearForDate !== null) {
+                $responseData['day'] = $dayForDate;
+                $responseData['month'] = $monthForDate;
+                $responseData['year'] = $yearForDate;
+            } elseif ($monthForDate !== null && $yearForDate !== null) {
+                $responseData['month'] = $monthForDate;
+                $responseData['year'] = $yearForDate;
+            }
+
+            // Add debug info in development mode
+            if (config('app.debug')) {
+                $responseData['debug'] = [
+                    'query_class' => $className,
+                    'query_section' => $validated['section'] ?? null,
+                    'actual_campus_in_db' => $actualCampus,
+                    'total_found' => $timetables->count(),
+                    'total_for_class_only' => $allClassTimetables->count(),
+                    'available_sections' => $allClassTimetables->pluck('section')->unique()->values()->toArray(),
+                    'available_campuses' => $allClassTimetables->whereNotNull('campus')->pluck('campus')->unique()->values()->toArray(),
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $timetables->count() > 0 
+                    ? 'Timetable retrieved successfully.' 
+                    : 'No timetable found for the specified class/section/campus.',
+                'data' => $responseData,
+                'token' => $request->bearerToken(),
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => $request->bearerToken(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving timetable.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'token' => $request->bearerToken(),
+            ], 500);
+        }
+    }
 }
 

@@ -36,10 +36,20 @@ class TeacherController extends Controller
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
                 ->get();
 
-            // Step 2: Get unique classes from assigned subjects
+            // Get teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            // Step 2: Get unique classes from both assigned subjects and sections
             $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
                 ->unique()
-                ->filter()
                 ->values();
 
             // Step 3: Get students from assigned classes

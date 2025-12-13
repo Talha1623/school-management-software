@@ -26,7 +26,7 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 // Staff Authentication Routes
 Route::prefix('staff')->name('staff.')->group(function () {
     Route::get('/login', [App\Http\Controllers\StaffAuthController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [App\Http\Controllers\StaffAuthController::class, 'login'])->name('login');
+    Route::post('/login', [App\Http\Controllers\StaffAuthController::class, 'login'])->name('login.post');
     Route::post('/logout', [App\Http\Controllers\StaffAuthController::class, 'logout'])->name('logout');
     
     // Protected Staff Routes
@@ -45,6 +45,27 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
     // Protected Accountant Routes
     Route::middleware([App\Http\Middleware\AccountantMiddleware::class])->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\AccountantAuthController::class, 'dashboard'])->name('dashboard');
+        
+        // Accountant specific routes
+        Route::get('/task-management', [App\Http\Controllers\AccountantController::class, 'taskManagement'])->name('task-management');
+        Route::get('/fee-payment', [App\Http\Controllers\AccountantController::class, 'feePayment'])->name('fee-payment');
+        Route::get('/family-fee-calculator', [App\Http\Controllers\AccountantController::class, 'familyFeeCalculator'])->name('family-fee-calculator');
+        Route::get('/generate-monthly-fee', [App\Http\Controllers\AccountantController::class, 'generateMonthlyFee'])->name('generate-monthly-fee');
+        Route::get('/generate-custom-fee', [App\Http\Controllers\AccountantController::class, 'generateCustomFee'])->name('generate-custom-fee');
+        Route::get('/generate-transport-fee', [App\Http\Controllers\AccountantController::class, 'generateTransportFee'])->name('generate-transport-fee');
+        Route::get('/fee-type', [App\Http\Controllers\AccountantController::class, 'feeType'])->name('fee-type');
+        Route::get('/parents-credit-system', [App\Http\Controllers\AccountantController::class, 'parentsCreditSystem'])->name('parents-credit-system');
+        Route::get('/direct-payment', [App\Http\Controllers\AccountantController::class, 'directPayment'])->name('direct-payment');
+        Route::get('/direct-payment/student', [App\Http\Controllers\AccountantController::class, 'studentPayment'])->name('direct-payment.student');
+        Route::get('/direct-payment/custom', [App\Http\Controllers\AccountantController::class, 'customPayment'])->name('direct-payment.custom');
+        Route::get('/sms-fee-defaulters', [App\Http\Controllers\AccountantController::class, 'smsFeeDefaulters'])->name('sms-fee-defaulters');
+        Route::get('/deleted-fees', [App\Http\Controllers\AccountantController::class, 'deletedFees'])->name('deleted-fees');
+        Route::get('/print-fee-vouchers', [App\Http\Controllers\AccountantController::class, 'printFeeVouchers'])->name('print-fee-vouchers');
+        Route::get('/print-balance-sheet', [App\Http\Controllers\AccountantController::class, 'printBalanceSheet'])->name('print-balance-sheet');
+        Route::get('/expense-management', [App\Http\Controllers\AccountantController::class, 'expenseManagement'])->name('expense-management');
+        Route::get('/reporting-area', [App\Http\Controllers\AccountantController::class, 'reportingArea'])->name('reporting-area');
+        Route::get('/academic-calendar', [App\Http\Controllers\AccountantController::class, 'academicCalendar'])->name('academic-calendar');
+        Route::get('/stock-inventory', [App\Http\Controllers\AccountantController::class, 'stockInventory'])->name('stock-inventory');
     });
 });
 
@@ -76,6 +97,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 Route::get('/admission/admit-student', [App\Http\Controllers\AdmissionController::class, 'create'])->name('admission.admit-student');
 Route::post('/admission/admit-student', [App\Http\Controllers\AdmissionController::class, 'store'])->name('admission.admit-student.store');
 Route::get('/admission/get-sections', [App\Http\Controllers\AdmissionController::class, 'getSections'])->name('admission.get-sections');
+Route::get('/admission/get-parent-by-id-card', [App\Http\Controllers\AdmissionController::class, 'getParentByIdCard'])->name('admission.get-parent-by-id-card');
 
 Route::get('/admission/admit-bulk-student', function () {
     return view('admission.admit-bulk-student');
@@ -783,6 +805,13 @@ Route::get('/leave-management', [App\Http\Controllers\LeaveManagementController:
 Route::post('/leave-management', [App\Http\Controllers\LeaveManagementController::class, 'store'])->name('leave-management.store');
 Route::put('/leave-management/{leave}', [App\Http\Controllers\LeaveManagementController::class, 'update'])->name('leave-management.update');
 Route::delete('/leave-management/{leave}', [App\Http\Controllers\LeaveManagementController::class, 'destroy'])->name('leave-management.destroy');
+
+// Student Leave Request Routes (Public/Parent)
+Route::get('/leave-request', function() {
+    return view('leave-request');
+})->name('leave-request');
+Route::post('/leave-request', [App\Http\Controllers\LeaveManagementController::class, 'storeStudentLeave'])->name('leave-request.store');
+Route::get('/leave-request/get-students', [App\Http\Controllers\LeaveManagementController::class, 'getStudentsByParentPhone'])->name('leave-request.get-students');
 
 // SMS Management Routes
 Route::get('/sms/parent', [App\Http\Controllers\SmsController::class, 'parent'])->name('sms.parent');

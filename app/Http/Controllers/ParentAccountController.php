@@ -59,8 +59,7 @@ class ParentAccountController extends Controller
             'profession' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $validated['password'] = Hash::make($validated['password']);
-
+        // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
         ParentAccount::create($validated);
 
         return redirect()
@@ -84,9 +83,9 @@ class ParentAccountController extends Controller
             'profession' => ['nullable', 'string', 'max:255'],
         ]);
 
-        if (!empty($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
-        } else {
+        // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
+        // If password is empty, remove it from update data
+        if (empty($validated['password'])) {
             unset($validated['password']);
         }
 
@@ -118,7 +117,8 @@ class ParentAccountController extends Controller
             'password' => ['required', 'string', 'min:6', 'confirmed'],
         ]);
 
-        $parent_account->password = Hash::make($validated['password']);
+        // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
+        $parent_account->password = $validated['password'];
         $parent_account->save();
 
         return redirect()

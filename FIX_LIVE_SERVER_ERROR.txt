@@ -1,0 +1,99 @@
+===========================================
+LIVE SERVER ERROR FIX - STEP BY STEP
+===========================================
+
+ERROR: Cannot declare class App\Http\Controllers\StaffManagementController, because the name is already in use
+
+===========================================
+SOLUTION (3 Simple Steps):
+===========================================
+
+STEP 1: SSH se Live Server par Connect Karein
+-----------------------------------------------
+- Putty ya Terminal use karein
+- SSH credentials se connect karein
+
+STEP 2: Ye Commands Run Karein (Ek Ek Karke)
+-----------------------------------------------
+cd /path/to/your/project
+
+# Composer Autoload Regenerate
+composer dump-autoload -o
+
+# Laravel Cache Clear
+php artisan optimize:clear
+
+# Bootstrap Cache Clear
+rm -rf bootstrap/cache/*.php
+
+# Config & Route Cache
+php artisan config:cache
+php artisan route:cache
+
+STEP 3: File Verify Karein
+-----------------------------------------------
+# File name check karein (exact case)
+ls -la app/Http/Controllers/StaffManagementController.php
+
+# File content check karein
+head -5 app/Http/Controllers/StaffManagementController.php
+
+# Agar duplicate file hai to delete karein
+ls -la app/Http/Controllers/ | grep -i staffmanagement
+
+===========================================
+AGAR SSH ACCESS NAHI HAI:
+===========================================
+
+OPTION 1: cPanel Terminal
+--------------------------
+1. cPanel login karein
+2. Terminal section mein jao
+3. Same commands run karein
+
+OPTION 2: File Manager se
+---------------------------
+1. bootstrap/cache/ folder mein jao
+2. Sab .php files delete karein
+3. vendor/composer/ folder mein:
+   - autoload_classmap.php delete karein
+   - autoload_static.php delete karein
+4. Hosting provider se support lein composer dump-autoload ke liye
+
+OPTION 3: .htaccess Fix
+------------------------
+.htaccess file mein yeh add karein:
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php [L,QSA]
+</IfModule>
+
+===========================================
+QUICK ONE-LINER FIX:
+===========================================
+
+cd /path/to/your/project && composer dump-autoload -o && php artisan optimize:clear && rm -rf bootstrap/cache/*.php && php artisan config:cache && php artisan route:cache
+
+===========================================
+VERIFICATION:
+===========================================
+
+Error check karein:
+- Browser refresh karein
+- Error log check karein: tail -f storage/logs/laravel.log
+
+===========================================
+STILL NOT WORKING?
+===========================================
+
+1. File name verify karein - exactly "StaffManagementController.php" hona chahiye
+2. Duplicate files check karein
+3. File permissions check karein: chmod 644
+4. PHP syntax check: php -l app/Http/Controllers/StaffManagementController.php
+
+===========================================
+

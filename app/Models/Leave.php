@@ -12,6 +12,7 @@ class Leave extends Model
 
     protected $fillable = [
         'staff_id',
+        'student_id',
         'leave_reason',
         'from_date',
         'to_date',
@@ -30,5 +31,13 @@ class Leave extends Model
     public function staff(): BelongsTo
     {
         return $this->belongsTo(Staff::class);
+    }
+
+    /**
+     * Get the student that owns the leave.
+     */
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(Student::class);
     }
 }

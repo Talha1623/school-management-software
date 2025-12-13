@@ -6,6 +6,7 @@ use App\Models\Staff;
 use App\Models\Student;
 use App\Models\StudentAttendance;
 use App\Models\Subject;
+use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -95,13 +96,24 @@ class StaffAuthController extends Controller
         $assignedClasses = collect();
         
         if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
             
-            // Get unique classes from assigned subjects
+            // Get teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            // Get unique classes from both assigned subjects and sections
             $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
                 ->unique()
-                ->filter()
                 ->values();
         }
         
@@ -112,13 +124,18 @@ class StaffAuthController extends Controller
             $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($staff->campus))]);
         }
         
-        // If teacher has assigned classes, filter by those classes
-        if ($assignedClasses->isNotEmpty()) {
-            $studentsQuery->where(function($q) use ($assignedClasses) {
-                foreach ($assignedClasses as $class) {
-                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-                }
-            });
+        // If teacher, only show students from assigned classes
+        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            if ($assignedClasses->isNotEmpty()) {
+                $studentsQuery->where(function($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $class) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                    }
+                });
+            } else {
+                // If teacher has no assigned classes, return empty result
+                $studentsQuery->whereRaw('1 = 0');
+            }
         }
         
         $allStudents = $studentsQuery->get();
@@ -171,12 +188,17 @@ class StaffAuthController extends Controller
         }
         
         // Filter by assigned classes if teacher
-        if ($assignedClasses->isNotEmpty()) {
-            $latestAdmissionsQuery->where(function($q) use ($assignedClasses) {
-                foreach ($assignedClasses as $class) {
-                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-                }
-            });
+        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            if ($assignedClasses->isNotEmpty()) {
+                $latestAdmissionsQuery->where(function($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $class) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                    }
+                });
+            } else {
+                // If teacher has no assigned classes, return empty result
+                $latestAdmissionsQuery->whereRaw('1 = 0');
+            }
         }
         
         $latestAdmissions = $latestAdmissionsQuery
@@ -210,12 +232,24 @@ class StaffAuthController extends Controller
         $assignedClasses = collect();
         
         if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
             
+            // Get teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            // Get unique classes from both assigned subjects and sections
             $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
                 ->unique()
-                ->filter()
                 ->values();
         }
         
@@ -226,13 +260,18 @@ class StaffAuthController extends Controller
             $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($staff->campus))]);
         }
         
-        // If teacher has assigned classes, filter by those classes
-        if ($assignedClasses->isNotEmpty()) {
-            $studentsQuery->where(function($q) use ($assignedClasses) {
-                foreach ($assignedClasses as $class) {
-                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-                }
-            });
+        // If teacher, only show students from assigned classes
+        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            if ($assignedClasses->isNotEmpty()) {
+                $studentsQuery->where(function($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $class) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                    }
+                });
+            } else {
+                // If teacher has no assigned classes, return empty result
+                $studentsQuery->whereRaw('1 = 0');
+            }
         }
         
         $allStudents = $studentsQuery->get();

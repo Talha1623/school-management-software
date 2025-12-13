@@ -318,7 +318,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ route('staff.login') }}">
+            <form method="POST" action="{{ route('staff.login.post') }}">
                 @csrf
                 
                 <div class="form-group">

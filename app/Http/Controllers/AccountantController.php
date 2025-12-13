@@ -280,4 +280,156 @@ class AccountantController extends Controller
         return response($html)
             ->header('Content-Type', 'text/html');
     }
+
+    /**
+     * Accountant Pages - Task Management
+     */
+    public function taskManagement(): View
+    {
+        return view('accountant.task-management');
+    }
+
+    /**
+     * Accountant Pages - Fee Payment
+     */
+    public function feePayment(): View
+    {
+        return view('accountant.fee-payment');
+    }
+
+    /**
+     * Accountant Pages - Family Fee Calculator
+     */
+    public function familyFeeCalculator(): View
+    {
+        return view('accountant.family-fee-calculator');
+    }
+
+    /**
+     * Accountant Pages - Generate Monthly Fee
+     */
+    public function generateMonthlyFee(): View
+    {
+        return view('accountant.generate-monthly-fee');
+    }
+
+    /**
+     * Accountant Pages - Generate Custom Fee
+     */
+    public function generateCustomFee(): View
+    {
+        return view('accountant.generate-custom-fee');
+    }
+
+    /**
+     * Accountant Pages - Generate Transport Fee
+     */
+    public function generateTransportFee(): View
+    {
+        return view('accountant.generate-transport-fee');
+    }
+
+    /**
+     * Accountant Pages - Fee Type
+     */
+    public function feeType(): View
+    {
+        return view('accountant.fee-type');
+    }
+
+    /**
+     * Accountant Pages - Parents Credit System
+     */
+    public function parentsCreditSystem(): View
+    {
+        return view('accountant.parents-credit-system');
+    }
+
+    /**
+     * Accountant Pages - Direct Payment
+     */
+    public function directPayment(): View
+    {
+        return view('accountant.direct-payment');
+    }
+
+    /**
+     * Accountant Pages - Student Payment
+     */
+    public function studentPayment(): View
+    {
+        return view('accountant.student-payment');
+    }
+
+    /**
+     * Accountant Pages - Custom Payment
+     */
+    public function customPayment(): View
+    {
+        return view('accountant.custom-payment');
+    }
+
+    /**
+     * Accountant Pages - SMS to Fee Defaulters
+     */
+    public function smsFeeDefaulters(): View
+    {
+        return view('accountant.sms-fee-defaulters');
+    }
+
+    /**
+     * Accountant Pages - Deleted Fees
+     */
+    public function deletedFees(): View
+    {
+        return view('accountant.deleted-fees');
+    }
+
+    /**
+     * Accountant Pages - Print Fee Vouchers
+     */
+    public function printFeeVouchers(): View
+    {
+        return view('accountant.print-fee-vouchers');
+    }
+
+    /**
+     * Accountant Pages - Print Balance Sheet
+     */
+    public function printBalanceSheet(): View
+    {
+        return view('accountant.print-balance-sheet');
+    }
+
+    /**
+     * Accountant Pages - Expense Management
+     */
+    public function expenseManagement(): View
+    {
+        return view('accountant.expense-management');
+    }
+
+    /**
+     * Accountant Pages - Reporting Area
+     */
+    public function reportingArea(): View
+    {
+        return view('accountant.reporting-area');
+    }
+
+    /**
+     * Accountant Pages - Academic Calendar
+     */
+    public function academicCalendar(): View
+    {
+        return view('accountant.academic-calendar');
+    }
+
+    /**
+     * Accountant Pages - Stock & Inventory
+     */
+    public function stockInventory(): View
+    {
+        return view('accountant.stock-inventory');
+    }
 }

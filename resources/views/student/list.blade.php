@@ -17,6 +17,29 @@
                 </div>
             @endif
 
+            {{-- Temporary Debug Info - Remove after fixing --}}
+            @php
+                $staff = Auth::guard('staff')->user();
+                $isTeacherDebug = $staff && strtolower(trim($staff->designation ?? '')) === 'teacher';
+            @endphp
+            @if(config('app.debug'))
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <strong>Debug Info:</strong><br>
+                Staff Name: {{ $staff->name ?? 'N/A' }}<br>
+                Staff Email: {{ $staff->email ?? 'N/A' }}<br>
+                Designation: <strong>{{ $staff->designation ?? 'NULL' }}</strong><br>
+                Is Teacher: <strong>{{ $isTeacherDebug ? 'YES ✓' : 'NO ✗' }}</strong><br>
+                Classes Count: {{ $classes->count() }}<br>
+                @if(!$isTeacherDebug && $staff->designation)
+                    <div class="mt-2 p-2 bg-danger text-white rounded">
+                        <strong>⚠️ Issue Found:</strong> Designation is "{{ $staff->designation }}" but should be "teacher" for class filtering to work.<br>
+                        Please update the designation in the database to "teacher".
+                    </div>
+                @endif
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            @endif
+
             <!-- Filter Form -->
             <form method="GET" action="{{ route('student-list') }}" class="mb-3" id="filterForm">
                 <div class="row g-2 align-items-end">

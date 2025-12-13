@@ -326,6 +326,218 @@ GET /api/teacher/timetable/list?month=4&year=2025
 
 ---
 
+### 4. Get Timetable by Class
+
+**GET/POST** `/api/teacher/timetable/by-class`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+Accept: application/json
+```
+
+**Request Body (POST) or Query Parameters (GET):**
+```json
+{
+  "class": "5th",
+  "section": "A",
+  "month": 4,
+  "year": 2025,
+  "date": "2025-04-15"
+}
+```
+
+**Query Parameters (GET):**
+- `class` (string, **required**): Class name (e.g., "5th", "ninth", "four")
+- `section` (string, optional): Section name (e.g., "A", "B")
+- `month` (integer, optional): Month number (1-12, e.g., 1 for January, 12 for December) - used with year
+- `year` (integer, optional): Year (2000-2100, e.g., 2025) - used with month
+- `date` (string, optional): Date in format YYYY-MM-DD or DD-MM-YYYY (e.g., "2025-04-15" or "15-04-2025")
+
+**Example GET Requests:**
+```
+GET /api/teacher/timetable/by-class?class=5th
+GET /api/teacher/timetable/by-class?class=ninth&section=A
+GET /api/teacher/timetable/by-class?class=four&section=A&month=4&year=2025
+GET /api/teacher/timetable/by-class?class=four&section=A&date=2025-04-15
+GET /api/teacher/timetable/by-class?class=5th&section=A&month=4&year=2025
+```
+
+**Example POST Request:**
+```json
+{
+  "class": "5th",
+  "section": "A",
+  "month": 4,
+  "year": 2025,
+  "date": "2025-04-15"
+}
+```
+
+**Description:** Returns timetable list for a specific class. This endpoint directly filters by class (required), section (optional), and campus (optional). Returns all timetable entries for the specified class regardless of teacher's assigned subjects.
+
+**Date Parameters:**
+- If `day`, `month`, and `year` are provided: The exact date will be calculated and added to each timetable entry
+- If only `month` and `year` are provided: The date will be calculated for each timetable entry based on its day name (e.g., first Monday of the month)
+- If no date parameters: Timetable entries will be returned without date information
+
+**Response (Success - 200):**
+```json
+{
+  "success": true,
+  "message": "Timetable retrieved successfully.",
+  "data": {
+    "class": "5th",
+    "section": "A",
+    "campus": "icms",
+    "timetable": [
+      {
+        "id": 1,
+        "campus": "icms",
+        "class": "5th",
+        "section": "A",
+        "subject": "Mathematics",
+        "day": "Monday",
+        "starting_time": "09:00:00",
+        "ending_time": "10:00:00",
+        "starting_time_formatted": "09:00 AM",
+        "ending_time_formatted": "10:00 AM"
+      },
+      {
+        "id": 2,
+        "campus": "icms",
+        "class": "5th",
+        "section": "A",
+        "subject": "English",
+        "day": "Monday",
+        "starting_time": "10:00:00",
+        "ending_time": "11:00:00",
+        "starting_time_formatted": "10:00 AM",
+        "ending_time_formatted": "11:00 AM"
+      }
+    ],
+    "timetable_by_day": {
+      "Monday": [
+        {
+          "id": 1,
+          "campus": "icms",
+          "class": "5th",
+          "section": "A",
+          "subject": "Mathematics",
+          "day": "Monday",
+          "starting_time": "09:00:00",
+          "ending_time": "10:00:00",
+          "starting_time_formatted": "09:00 AM",
+          "ending_time_formatted": "10:00 AM"
+        },
+        {
+          "id": 2,
+          "campus": "icms",
+          "class": "5th",
+          "section": "A",
+          "subject": "English",
+          "day": "Monday",
+          "starting_time": "10:00:00",
+          "ending_time": "11:00:00",
+          "starting_time_formatted": "10:00 AM",
+          "ending_time_formatted": "11:00 AM"
+        }
+      ]
+    },
+    "total_periods": 2
+  },
+  "token": "1|xxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+**Response (Success - 200) - With Date (when day/month/year provided):**
+```json
+{
+  "success": true,
+  "message": "Timetable retrieved successfully.",
+  "data": {
+    "class": "four",
+    "section": "A",
+    "campus": null,
+    "timetable": [
+      {
+        "id": 6,
+        "campus": "icms",
+        "class": "Four",
+        "section": "A",
+        "subject": "English",
+        "day": "Monday",
+        "day_number": 15,
+        "date": "2025-04-15",
+        "date_formatted": "15 Apr 2025",
+        "starting_time": "03:46:00",
+        "ending_time": "07:45:00",
+        "starting_time_formatted": "03:46 AM",
+        "ending_time_formatted": "07:45 AM"
+      }
+    ],
+    "timetable_by_day": {
+      "Monday": [
+        {
+          "id": 6,
+          "campus": "icms",
+          "class": "Four",
+          "section": "A",
+          "subject": "English",
+          "day": "Monday",
+          "day_number": 15,
+          "date": "2025-04-15",
+          "date_formatted": "15 Apr 2025",
+          "starting_time": "03:46:00",
+          "ending_time": "07:45:00",
+          "starting_time_formatted": "03:46 AM",
+          "ending_time_formatted": "07:45 AM"
+        }
+      ]
+    },
+    "total_periods": 1,
+    "day": 15,
+    "month": 4,
+    "year": 2025
+  },
+  "token": "1|xxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+**Response (Validation Error - 422):**
+```json
+{
+  "success": false,
+  "message": "Validation failed.",
+  "errors": {
+    "class": [
+      "The class field is required."
+    ]
+  },
+  "token": "1|xxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+**Response (Access Denied - 403):**
+```json
+{
+  "success": false,
+  "message": "Access denied. Only teachers can access timetable.",
+  "token": null
+}
+```
+
+**Full URLs:**
+- Basic: `https://school.ritpk.com/api/teacher/timetable/by-class?class=5th`
+- With Section: `https://school.ritpk.com/api/teacher/timetable/by-class?class=ninth&section=A`
+- With Date: `https://school.ritpk.com/api/teacher/timetable/by-class?class=four&section=A&date=2025-04-15`
+- With Month/Year: `https://school.ritpk.com/api/teacher/timetable/by-class?class=four&section=A&month=4&year=2025`
+
+**Note:** This endpoint returns timetable for the specified class regardless of teacher's assigned subjects. Use this when you want to see the complete timetable for a class. When date parameters are provided, the actual date will be calculated and included in the response. You can use either `date` parameter (YYYY-MM-DD or DD-MM-YYYY format) or `month` and `year` parameters together.
+
+---
+
 ## 📝 Field Descriptions
 
 ### Timetable Fields:
@@ -473,6 +685,47 @@ Headers:
   Authorization: Bearer {token}
 ```
 
+### Get Timetable by Class
+```
+Method: GET
+URL: https://school.ritpk.com/api/teacher/timetable/by-class?class=5th&section=A&campus=icms
+Headers:
+  Authorization: Bearer {token}
+```
+
+### Get Timetable by Class with Date
+```
+Method: GET
+URL: https://school.ritpk.com/api/teacher/timetable/by-class?class=four&section=A&date=2025-04-15
+Headers:
+  Authorization: Bearer {token}
+```
+
+### Get Timetable by Class with Month/Year
+```
+Method: GET
+URL: https://school.ritpk.com/api/teacher/timetable/by-class?class=four&section=A&month=4&year=2025
+Headers:
+  Authorization: Bearer {token}
+```
+
+**POST Method:**
+```
+Method: POST
+URL: https://school.ritpk.com/api/teacher/timetable/by-class
+Headers:
+  Authorization: Bearer {token}
+  Content-Type: application/json
+Body:
+{
+  "class": "5th",
+  "section": "A",
+  "month": 4,
+  "year": 2025,
+  "date": "2025-04-15"
+}
+```
+
 ---
 
 ## 🎯 Use Cases
@@ -499,6 +752,19 @@ Headers:
 ### 4. Display Subject-wise Schedule:
 - Call `/timetable/list?subject=Mathematics`
 - Shows all Mathematics periods across all classes
+
+### 5. Display Complete Timetable for a Class:
+- Call `/timetable/by-class?class=5th&section=A`
+- Shows complete timetable for that specific class and section
+- Returns all subjects/periods for the class (not filtered by teacher's assigned subjects)
+
+### 6. Display Timetable for a Specific Date:
+- Call `/timetable/by-class?class=four&section=A&day=15&month=4&year=2025`
+- Shows timetable for that specific date with calculated dates for each period
+
+### 7. Display Timetable for a Month:
+- Call `/timetable/by-class?class=5th&section=A&month=4&year=2025`
+- Shows timetable for the month with dates calculated based on day names (e.g., first Monday of April 2025)
 
 ---
 

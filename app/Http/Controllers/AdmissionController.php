@@ -7,9 +7,11 @@ use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Transport;
+use App\Models\ParentAccount;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
 
 class AdmissionController extends Controller
@@ -108,11 +110,61 @@ class AdmissionController extends Controller
     }
 
     /**
+     * Get parent account details by Father ID Card (AJAX endpoint).
+     */
+    public function getParentByIdCard(Request $request)
+    {
+        $fatherIdCard = $request->get('father_id_card');
+        
+        if (!$fatherIdCard) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Father ID Card is required'
+            ], 400);
+        }
+        
+        // Find parent account by ID card number
+        $parentAccount = ParentAccount::where('id_card_number', $fatherIdCard)->first();
+        
+        if ($parentAccount) {
+            // Get connected students count
+            $studentsCount = $parentAccount->students()->count();
+            
+            return response()->json([
+                'success' => true,
+                'found' => true,
+                'parent' => [
+                    'id' => $parentAccount->id,
+                    'name' => $parentAccount->name,
+                    'email' => $parentAccount->email,
+                    'phone' => $parentAccount->phone,
+                    'whatsapp' => $parentAccount->whatsapp,
+                    'id_card_number' => $parentAccount->id_card_number,
+                    'address' => $parentAccount->address,
+                    'profession' => $parentAccount->profession,
+                    'students_count' => $studentsCount,
+                ],
+                'message' => "Existing parent account found! This parent has {$studentsCount} child/children already connected."
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'found' => false,
+            'message' => 'No existing parent account found with this ID Card. You can create a new parent account.'
+        ]);
+    }
+
+    /**
      * Store a newly admitted student in storage.
      */
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
+        // Check if creating parent account
+        $createParentAccount = $request->input('create_parent_account') == '1';
+        
+        // Validation rules
+        $rules = [
             'student_name' => ['required', 'string', 'max:255'],
             'surname_caste' => ['nullable', 'string', 'max:255'],
             'gender' => ['required', 'in:male,female,other'],
@@ -143,16 +195,83 @@ class AdmissionController extends Controller
             'admission_date' => ['required', 'date'],
             'reference_remarks' => ['nullable', 'string'],
             'captured_photo' => ['nullable', 'string'],
-        ]);
+        ];
+
+        // Check if parent account already exists by Father ID Card
+        $existingParentAccount = null;
+        if (!empty($request->input('father_id_card'))) {
+            $existingParentAccount = ParentAccount::where('id_card_number', $request->input('father_id_card'))->first();
+        }
+        
+        // Add validation for parent password if creating parent account
+        if ($createParentAccount && !$existingParentAccount) {
+            $rules['parent_password'] = ['required', 'string', 'min:6'];
+            $rules['father_email'] = ['required', 'email', 'max:255', 'unique:parent_accounts,email'];
+        }
+
+        $validated = $request->validate($rules);
 
         $photoPath = $this->handlePhotoUpload($request);
+
+        // Check if parent account already exists by Father ID Card (re-check after validation)
+        $parentAccountId = null;
+        
+        if (!empty($validated['father_id_card'])) {
+            // Re-check existing parent account (in case it was created between validation and submission)
+            $existingParentAccount = ParentAccount::where('id_card_number', $validated['father_id_card'])->first();
+            
+            if ($existingParentAccount) {
+                // Parent account already exists, link student to it
+                $parentAccountId = $existingParentAccount->id;
+                
+                // Update parent account details if new information is provided
+                $updateData = [];
+                if (!empty($validated['father_name']) && $existingParentAccount->name !== $validated['father_name']) {
+                    $updateData['name'] = $validated['father_name'];
+                }
+                if (!empty($validated['father_email']) && $existingParentAccount->email !== $validated['father_email']) {
+                    $updateData['email'] = $validated['father_email'];
+                }
+                if (!empty($validated['father_phone']) && $existingParentAccount->phone !== $validated['father_phone']) {
+                    $updateData['phone'] = $validated['father_phone'];
+                }
+                if (!empty($validated['whatsapp_number']) && $existingParentAccount->whatsapp !== $validated['whatsapp_number']) {
+                    $updateData['whatsapp'] = $validated['whatsapp_number'];
+                }
+                if (!empty($validated['home_address']) && $existingParentAccount->address !== $validated['home_address']) {
+                    $updateData['address'] = $validated['home_address'];
+                }
+                
+                if (!empty($updateData)) {
+                    $existingParentAccount->update($updateData);
+                }
+            }
+        }
+
+        // Create new parent account only if:
+        // 1. create_parent_account is checked AND
+        // 2. No existing parent account found
+        if ($createParentAccount && !$existingParentAccount) {
+            $parentAccount = ParentAccount::create([
+                'name' => $validated['father_name'],
+                'email' => $validated['father_email'],
+                'password' => Hash::make($validated['parent_password']),
+                'phone' => $validated['father_phone'] ?? null,
+                'whatsapp' => $validated['whatsapp_number'] ?? null,
+                'id_card_number' => $validated['father_id_card'] ?? null,
+                'address' => $validated['home_address'] ?? null,
+            ]);
+            
+            $parentAccountId = $parentAccount->id;
+        }
 
         // Prepare student data
         $studentData = [
             ...$validated,
             'photo' => $photoPath,
             'discounted_student' => $request->has('discounted_student'),
-            'create_parent_account' => $request->has('create_parent_account'),
+            'create_parent_account' => $createParentAccount,
+            'parent_account_id' => $parentAccountId,
         ];
 
         // Hash B-Form Number as password if provided
@@ -162,9 +281,17 @@ class AdmissionController extends Controller
 
         Student::create($studentData);
 
+        $successMessage = 'Student admitted successfully!';
+        if ($existingParentAccount) {
+            $studentsCount = $existingParentAccount->students()->count();
+            $successMessage .= " Student has been linked to existing parent account ({$existingParentAccount->name}). This parent now has {$studentsCount} child/children.";
+        } elseif ($createParentAccount && $parentAccountId) {
+            $successMessage .= ' Parent account has been created and linked to the student.';
+        }
+
         return redirect()
             ->route('admission.admit-student')
-            ->with('success', 'Student admitted successfully!');
+            ->with('success', $successMessage);
     }
 
     /**

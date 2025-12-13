@@ -91,7 +91,8 @@
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Staff Name</th>
+                                <th>Type</th>
+                                <th>Name</th>
                                 <th>Leave Reason</th>
                                 <th>From Date</th>
                                 <th>To Date</th>
@@ -105,7 +106,23 @@
                                     <tr>
                                         <td>{{ $loop->iteration + (($leaves->currentPage() - 1) * $leaves->perPage()) }}</td>
                                         <td>
-                                            <strong class="text-primary">{{ $leave->staff->name ?? 'N/A' }}</strong>
+                                            @if($leave->student_id)
+                                                <span class="badge bg-info text-white">Student</span>
+                                            @else
+                                                <span class="badge bg-secondary text-white">Staff</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if($leave->student_id)
+                                                <strong class="text-success">
+                                                    {{ $leave->student->student_name ?? 'N/A' }}
+                                                    @if($leave->student)
+                                                        <br><small class="text-muted">{{ $leave->student->student_code ?? '' }} - {{ $leave->student->class ?? '' }} {{ $leave->student->section ?? '' }}</small>
+                                                    @endif
+                                                </strong>
+                                            @else
+                                                <strong class="text-primary">{{ $leave->staff->name ?? 'N/A' }}</strong>
+                                            @endif
                                         </td>
                                         <td>{{ $leave->leave_reason }}</td>
                                         <td>{{ $leave->from_date->format('d M Y') }}</td>
@@ -123,6 +140,14 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
+                                                @if($leave->status == 'Pending')
+                                                    <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Approve" onclick="updateStatus({{ $leave->id }}, 'Approved')">
+                                                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">check</span>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Reject" onclick="updateStatus({{ $leave->id }}, 'Rejected')">
+                                                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">close</span>
+                                                    </button>
+                                                @endif
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this leave application?')) { document.getElementById('delete-form-{{ $leave->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
@@ -130,12 +155,22 @@
                                                     @csrf
                                                     @method('DELETE')
                                                 </form>
+                                                <form id="status-form-{{ $leave->id }}" action="{{ route('leave-management.update', $leave->id) }}" method="POST" class="d-none">
+                                                    @csrf
+                                                    @method('PUT')
+                                                    <input type="hidden" name="staff_id" value="{{ $leave->staff_id }}">
+                                                    <input type="hidden" name="student_id" value="{{ $leave->student_id }}">
+                                                    <input type="hidden" name="leave_reason" value="{{ $leave->leave_reason }}">
+                                                    <input type="hidden" name="from_date" value="{{ $leave->from_date->format('Y-m-d') }}">
+                                                    <input type="hidden" name="to_date" value="{{ $leave->to_date->format('Y-m-d') }}">
+                                                    <input type="hidden" name="status" id="status-{{ $leave->id }}" value="">
+                                                </form>
                                             </div>
                                         </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-5">
+                                        <td colspan="8" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No leaves found.</p>
                                         </td>
@@ -143,7 +178,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
+                                    <td colspan="8" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No leaves found.</p>
                                     </td>
@@ -246,6 +281,13 @@ function clearSearch() {
     url.searchParams.delete('search');
     url.searchParams.delete('page');
     window.location.href = url.toString();
+}
+
+function updateStatus(leaveId, status) {
+    if (confirm(`Are you sure you want to ${status.toLowerCase()} this leave request?`)) {
+        document.getElementById('status-' + leaveId).value = status;
+        document.getElementById('status-form-' + leaveId).submit();
+    }
 }
 </script>
 @endsection

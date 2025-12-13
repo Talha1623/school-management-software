@@ -954,5 +954,283 @@ class TeacherTestManagementController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get Test List - Returns all tests created by the current teacher
+     * Tests are identified by matching test.subject with teacher's assigned subjects
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getTestList(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access test list.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get teacher's assigned subjects
+            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereNotNull('subject_name')
+                ->whereNotNull('class')
+                ->get();
+
+            if ($teacherSubjects->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No tests found. You have no assigned subjects.',
+                    'data' => [
+                        'teacher' => [
+                            'id' => $teacher->id,
+                            'name' => $teacher->name,
+                            'email' => $teacher->email,
+                        ],
+                        'tests' => [],
+                        'total' => 0,
+                    ],
+                ], 200);
+            }
+
+            // Get unique test names from StudentMark table where teacher has entered marks
+            // This is the most reliable way - if teacher entered marks, they created/managed that test
+            $teacherSubjectNames = $teacherSubjects->pluck('subject_name')->unique()->filter()->toArray();
+            
+            // Get all test names from StudentMark where subject matches teacher's subjects
+            $teacherTestNames = [];
+            if (!empty($teacherSubjectNames)) {
+                $teacherTestNames = StudentMark::query()
+                    ->whereIn('subject', $teacherSubjectNames)
+                    ->distinct()
+                    ->pluck('test_name')
+                    ->filter()
+                    ->unique()
+                    ->toArray();
+            }
+
+            // Build query to get tests
+            $testsQuery = Test::query();
+            
+            // Method 1: Get tests from StudentMark (where teacher entered marks) - Most reliable
+            // Method 2: Match by subject and class from Subject table (section optional)
+            $testsQuery->where(function($query) use ($teacherTestNames, $teacherSubjects, $teacherSubjectNames) {
+                // Primary: Tests from StudentMark (where teacher entered marks)
+                if (!empty($teacherTestNames)) {
+                    $query->whereIn('test_name', $teacherTestNames);
+                }
+                
+                // Fallback: Match by subject and class (section is completely optional)
+                // Match any test where subject matches teacher's assigned subjects
+                if (!empty($teacherSubjectNames)) {
+                    $query->orWhereIn('subject', array_map(function($name) {
+                        return strtolower(trim($name));
+                    }, $teacherSubjectNames));
+                }
+                
+                // Also match by subject + class combination
+                if (!empty($teacherSubjects)) {
+                    $query->orWhere(function($q) use ($teacherSubjects) {
+                        foreach ($teacherSubjects as $subject) {
+                            $q->orWhere(function($subQ) use ($subject) {
+                                $subQ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject->subject_name ?? ''))])
+                                     ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($subject->class ?? ''))]);
+                            });
+                        }
+                    });
+                }
+            });
+            
+            // Remove duplicates
+            $testsQuery->distinct();
+
+            // Optional filters
+            if ($request->has('campus') && $request->get('campus')) {
+                $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->get('campus')))]);
+            }
+
+            if ($request->has('class') && $request->get('class')) {
+                $testsQuery->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($request->get('class')))]);
+            }
+
+            if ($request->has('section') && $request->get('section')) {
+                $testsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->get('section')))]);
+            }
+
+            if ($request->has('subject') && $request->get('subject')) {
+                $testsQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($request->get('subject')))]);
+            }
+
+            if ($request->has('test_type') && $request->get('test_type')) {
+                $testsQuery->whereRaw('LOWER(TRIM(test_type)) = ?', [strtolower(trim($request->get('test_type')))]);
+            }
+
+            if ($request->has('session') && $request->get('session')) {
+                $testsQuery->where('session', $request->get('session'));
+            }
+
+            // Order by date (newest first) or created_at
+            $testsQuery->orderBy('date', 'desc')
+                      ->orderBy('created_at', 'desc');
+
+            // Get pagination parameters
+            $perPage = $request->get('per_page', 30);
+            $perPage = in_array($perPage, [10, 25, 30, 50, 100]) ? (int)$perPage : 30;
+            
+            $tests = $testsQuery->paginate($perPage);
+
+            // Format tests data
+            $testsData = $tests->map(function($test) use ($teacher) {
+                // Get teacher name from Subject table for this test
+                $testTeacher = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($test->subject ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($test->for_class ?? ''))])
+                    ->when($test->section, function($query) use ($test) {
+                        $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($test->section ?? ''))]);
+                    })
+                    ->first();
+                
+                return [
+                    'id' => $test->id,
+                    'campus' => $test->campus,
+                    'test_name' => $test->test_name,
+                    'for_class' => $test->for_class,
+                    'section' => $test->section,
+                    'subject' => $test->subject,
+                    'test_type' => $test->test_type,
+                    'description' => $test->description,
+                    'date' => $test->date ? $test->date->format('Y-m-d') : null,
+                    'date_formatted' => $test->date ? $test->date->format('d M Y') : null,
+                    'session' => $test->session,
+                    'result_status' => $test->result_status ? true : false,
+                    'teacher_name' => $testTeacher ? ($testTeacher->teacher ?? $teacher->name) : $teacher->name,
+                    'created_at' => $test->created_at ? $test->created_at->format('Y-m-d H:i:s') : null,
+                    'updated_at' => $test->updated_at ? $test->updated_at->format('Y-m-d H:i:s') : null,
+                ];
+            });
+
+            // Debug info (only if no tests found)
+            $debugInfo = null;
+            if ($tests->total() == 0) {
+                $debugInfo = [
+                    'teacher_subjects_count' => $teacherSubjects->count(),
+                    'teacher_subject_names' => $teacherSubjectNames,
+                    'teacher_test_names_from_marks' => $teacherTestNames,
+                    'total_tests_in_db' => Test::count(),
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Test list retrieved successfully',
+                'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'email' => $teacher->email,
+                    ],
+                    'tests' => $testsData,
+                    'pagination' => [
+                        'current_page' => $tests->currentPage(),
+                        'last_page' => $tests->lastPage(),
+                        'per_page' => $tests->perPage(),
+                        'total' => $tests->total(),
+                        'from' => $tests->firstItem(),
+                        'to' => $tests->lastItem(),
+                    ],
+                    'debug' => $debugInfo,
+                ],
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving test list: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Assigned Subjects - Returns all subjects assigned to the current teacher
+     * Detailed list with campus, class, section information
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getAssignedSubjects(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access assigned subjects.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get all subjects assigned to this teacher
+            $subjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereNotNull('subject_name')
+                ->whereNotNull('class')
+                ->orderBy('subject_name', 'asc')
+                ->orderBy('class', 'asc')
+                ->orderBy('section', 'asc')
+                ->get();
+
+            // Format subjects data
+            $subjectsData = $subjects->map(function($subject) {
+                return [
+                    'id' => $subject->id,
+                    'subject_name' => $subject->subject_name,
+                    'campus' => $subject->campus ?? null,
+                    'class' => $subject->class ?? null,
+                    'section' => $subject->section ?? null,
+                    'teacher' => $subject->teacher ?? null,
+                    'created_at' => $subject->created_at ? $subject->created_at->format('Y-m-d H:i:s') : null,
+                    'updated_at' => $subject->updated_at ? $subject->updated_at->format('Y-m-d H:i:s') : null,
+                ];
+            });
+
+            // Get unique values for filters
+            $uniqueCampuses = $subjects->whereNotNull('campus')->pluck('campus')->unique()->sort()->values();
+            $uniqueClasses = $subjects->whereNotNull('class')->pluck('class')->unique()->sort()->values();
+            $uniqueSections = $subjects->whereNotNull('section')->pluck('section')->unique()->sort()->values();
+            $uniqueSubjectNames = $subjects->whereNotNull('subject_name')->pluck('subject_name')->unique()->sort()->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Assigned subjects retrieved successfully',
+                'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'email' => $teacher->email,
+                    ],
+                    'subjects' => $subjectsData,
+                    'summary' => [
+                        'total_subjects' => $subjectsData->count(),
+                        'unique_subject_names' => $uniqueSubjectNames->count(),
+                        'campuses' => $uniqueCampuses,
+                        'classes' => $uniqueClasses,
+                        'sections' => $uniqueSections,
+                        'subject_names' => $uniqueSubjectNames,
+                    ],
+                ],
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving assigned subjects: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
 }
 

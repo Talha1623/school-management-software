@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Staff;
 use App\Models\Campus;
+use App\Models\Section;
+use App\Models\Subject;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -225,6 +228,53 @@ class StaffManagementController extends Controller
      */
     public function destroy(Staff $staff): RedirectResponse
     {
+        // Get staff name before deletion for removing from sections and subjects
+        $staffName = trim($staff->name ?? '');
+        $isTeacher = strtolower(trim($staff->designation ?? '')) === 'teacher';
+
+        // Remove staff member from all sections where they are assigned (for ALL staff, not just teachers)
+        if (!empty($staffName)) {
+            $normalizedStaffName = strtolower(trim($staffName));
+            
+            // Remove staff from all sections where they are assigned (case-insensitive match)
+            // Using DB raw query to handle case-insensitive comparison
+            DB::table('sections')
+                ->whereRaw('LOWER(TRIM(teacher)) = ?', [$normalizedStaffName])
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
+                ->update(['teacher' => null]);
+            
+            // Also try exact match and LIKE match as fallback
+            Section::where('teacher', $staffName)
+                ->update(['teacher' => null]);
+            
+            Section::where('teacher', 'like', $staffName)
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
+                ->update(['teacher' => null]);
+        }
+
+        // If this is a teacher, also remove them from all subjects
+        if ($isTeacher && !empty($staffName)) {
+            $normalizedStaffName = strtolower(trim($staffName));
+            
+            // Remove teacher from all subjects where they are assigned (case-insensitive match)
+            DB::table('subjects')
+                ->whereRaw('LOWER(TRIM(teacher)) = ?', [$normalizedStaffName])
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
+                ->update(['teacher' => null]);
+            
+            // Also try exact match and LIKE match as fallback
+            Subject::where('teacher', $staffName)
+                ->update(['teacher' => null]);
+            
+            Subject::where('teacher', 'like', $staffName)
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
+                ->update(['teacher' => null]);
+        }
+
         // Delete associated files
         if ($staff->photo) {
             Storage::disk('public')->delete($staff->photo);
@@ -235,9 +285,17 @@ class StaffManagementController extends Controller
 
         $staff->delete();
 
+        $message = 'Staff member deleted successfully!';
+        if (!empty($staffName)) {
+            $message .= ' Staff has been removed from all assigned sections.';
+        }
+        if ($isTeacher) {
+            $message .= ' Teacher has also been removed from all assigned subjects.';
+        }
+
         return redirect()
             ->route('staff.management')
-            ->with('success', 'Staff member deleted successfully!');
+            ->with('success', $message);
     }
 
     /**
@@ -256,11 +314,23 @@ class StaffManagementController extends Controller
             }
         }
 
+        // Remove all staff from sections before deleting
+        DB::table('sections')
+            ->whereNotNull('teacher')
+            ->where('teacher', '!=', '')
+            ->update(['teacher' => null]);
+
+        // Remove all teachers from subjects before deleting
+        DB::table('subjects')
+            ->whereNotNull('teacher')
+            ->where('teacher', '!=', '')
+            ->update(['teacher' => null]);
+
         Staff::truncate();
 
         return redirect()
             ->route('staff.management')
-            ->with('success', 'All staff members deleted successfully!');
+            ->with('success', 'All staff members deleted successfully! All staff have been removed from sections and subjects.');
     }
 
     /**
