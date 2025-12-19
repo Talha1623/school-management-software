@@ -1,12 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Family Fee Calculator')
+@section('title', 'Fee Calculator')
 
 @section('content')
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3">
-            <h3 class="mb-3 fw-semibold" style="color: #003471;">Family Fee Calculator</h3>
+            <h3 class="mb-3 fw-semibold" style="color: #003471;">Fee Calculator</h3>
             
             @if(session('success'))
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -26,148 +26,113 @@
                 </div>
             @endif
 
-            <div class="card bg-light border-0 rounded-10 p-3 mb-3">
-                <form id="familyFeeCalculatorForm">
-                    <div class="row mb-3">
-                        <div class="col-md-12">
-                            <label for="family_id" class="form-label mb-1 fs-13 fw-medium">Family ID / Parent Name <span class="text-danger">*</span></label>
-                            <select class="form-select form-select-sm py-2" id="family_id" name="family_id" required style="height: 38px;">
-                                <option value="">Select Family / Parent Name</option>
-                                @if(isset($families) && $families->count() > 0)
-                                    @foreach($families as $family)
-                                        <option value="{{ $family['id'] }}">{{ $family['name'] }}</option>
-                                    @endforeach
-                                @endif
-                            </select>
-                            <small class="text-muted" style="font-size: 11px;">Select a parent to automatically load connected students</small>
+            <!-- Search Section -->
+            <div class="card bg-light border-0 rounded-10 p-4 mb-4" style="text-align: center;">
+                <h4 class="mb-3 fw-semibold" style="color: #003471;">Search Unpaid Invoices Via Father Id Card</h4>
+                
+                <form id="fatherIdCardForm" class="mb-4">
+                    <div class="row justify-content-center">
+                        <div class="col-md-8">
+                            <div class="input-group input-group-lg">
+                                <input type="text" 
+                                       class="form-control form-control-lg" 
+                                       id="father_id_card" 
+                                       name="father_id_card" 
+                                       placeholder="Type Father ID Card Number..." 
+                                       style="height: 50px; font-size: 16px;">
+                                <button type="submit" 
+                                        class="btn btn-primary" 
+                                        id="calculateBtn" 
+                                        style="background-color: #003471; border-color: #003471; color: white; height: 50px; padding: 0 30px;">
+                                    <span class="material-symbols-outlined me-2" style="font-size: 20px; vertical-align: middle; color: white;">search</span>
+                                    <span style="color: white;">Calculate</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </form>
-            </div>
 
-            <!-- Students List -->
-            <div id="studentsList" class="card bg-light border-0 rounded-10 p-3 mb-3" style="display: none;">
-                <h5 class="mb-3 fw-semibold" style="color: #003471;">Family Students</h5>
-                <div class="table-responsive">
-                    <table class="table table-bordered table-sm">
-                        <thead style="background-color: #003471; color: white;">
-                            <tr>
-                                <th>Select</th>
-                                <th>Student Name</th>
-                                <th>Class</th>
-                                <th>Section</th>
-                                <th>Admission No</th>
-                            </tr>
-                        </thead>
-                        <tbody id="studentsTableBody">
-                            <!-- Students will be populated here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Fee Calculation Section -->
-            <div id="feeCalculationSection" class="card bg-light border-0 rounded-10 p-3 mb-3" style="display: none;">
-                <!-- Print Header (Hidden on screen, visible in print) -->
-                <div id="printHeader" style="display: none;">
-                    <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #003471;">
-                        <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 10px;">
-                            <img src="{{ asset('assets/images/logo-icon.png') }}" alt="Logo" style="width: 60px; height: 60px; object-fit: contain;" onerror="this.style.display='none'">
-                            <div style="text-align: left;">
-                                <h3 style="margin: 0; color: #003471; font-weight: 700; font-size: 24px;">{{ config('app.name', 'ICMS Management System') }}</h3>
-                                @if(config('app.url'))
-                                <p style="margin: 2px 0; color: #666; font-size: 12px;">Website: {{ config('app.url') }}</p>
-                                @endif
-                                @if(config('app.contact'))
-                                <p style="margin: 2px 0; color: #666; font-size: 12px;">Phone: {{ config('app.contact') }}</p>
-                                @endif
+                <!-- ID Card Graphic -->
+                <div class="mb-4" style="display: flex; justify-content: center; align-items: center;">
+                    <div style="position: relative; width: 300px; height: 300px;">
+                        <!-- Yellow Circle Background -->
+                        <div style="position: absolute; width: 100%; height: 100%; background: #FFD700; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                            <!-- White Cards -->
+                            <div style="position: absolute; width: 80px; height: 100px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); left: 20%; top: 20%; transform: rotate(-15deg);"></div>
+                            <div style="position: absolute; width: 80px; height: 100px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); right: 20%; top: 20%; transform: rotate(15deg);"></div>
+                            
+                            <!-- Red ID Card -->
+                            <div style="position: absolute; width: 120px; height: 150px; background: #DC143C; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: space-between; padding: 15px;">
+                                <!-- Person Icon -->
+                                <div style="width: 40px; height: 40px; background: #1a1a2e; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <div style="width: 30px; height: 30px; background: #1a1a2e; border-radius: 50%; border: 2px solid white;"></div>
+                                </div>
+                                <!-- Lines -->
+                                <div style="flex: 1; margin-left: 10px;">
+                                    <div style="width: 100%; height: 3px; background: white; margin-bottom: 5px; border-radius: 2px;"></div>
+                                    <div style="width: 80%; height: 3px; background: white; margin-bottom: 5px; border-radius: 2px;"></div>
+                                    <div style="width: 90%; height: 3px; background: white; border-radius: 2px;"></div>
+                                </div>
                             </div>
                         </div>
-                        <h4 style="margin: 10px 0 0 0; color: #003471; font-weight: 600; font-size: 18px;">Family Fee Calculator</h4>
-                    </div>
-                </div>
-                
-                <h5 class="mb-3 fw-semibold no-print" style="color: #003471;">Fee Calculation</h5>
-                
-                <div class="row mb-3 no-print">
-                    <div class="col-md-4">
-                        <label for="fee_month" class="form-label mb-1 fs-13 fw-medium">Fee Month</label>
-                        <select class="form-select form-select-sm py-2" id="fee_month" name="fee_month" style="height: 38px;">
-                            <option value="">Select Month</option>
-                            <option value="January">January</option>
-                            <option value="February">February</option>
-                            <option value="March">March</option>
-                            <option value="April">April</option>
-                            <option value="May">May</option>
-                            <option value="June">June</option>
-                            <option value="July">July</option>
-                            <option value="August">August</option>
-                            <option value="September">September</option>
-                            <option value="October">October</option>
-                            <option value="November">November</option>
-                            <option value="December">December</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="fee_year" class="form-label mb-1 fs-13 fw-medium">Fee Year</label>
-                        <select class="form-select form-select-sm py-2" id="fee_year" name="fee_year" style="height: 38px;">
-                            <option value="">Select Year</option>
-                            @for($year = date('Y'); $year >= date('Y') - 5; $year--)
-                                <option value="{{ $year }}" {{ $year == date('Y') ? 'selected' : '' }}>{{ $year }}</option>
-                            @endfor
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="discount_percentage" class="form-label mb-1 fs-13 fw-medium">Discount (%)</label>
-                        <input type="number" class="form-control form-control-sm py-2" id="discount_percentage" name="discount_percentage" placeholder="Enter discount %" min="0" max="100" value="0" style="height: 38px;">
-                    </div>
-                </div>
-                
-                <!-- Print Info Section (Hidden on screen, visible in print) -->
-                <div id="printInfo" style="display: none; margin-bottom: 15px; padding: 10px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
-                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 12px;">
-                        <div><strong>Fee Month:</strong> <span id="printFeeMonth"></span></div>
-                        <div><strong>Fee Year:</strong> <span id="printFeeYear"></span></div>
-                        <div><strong>Discount:</strong> <span id="printDiscount"></span>%</div>
-                        <div><strong>Parent Name:</strong> <span id="printParentName"></span></div>
-                        <div><strong>Date:</strong> <span id="printDate"></span></div>
                     </div>
                 </div>
 
-                <div class="table-responsive">
-                    <table class="table table-bordered table-sm">
-                        <thead style="background-color: #003471; color: white;">
-                            <tr>
-                                <th>Student Name</th>
-                                <th>Class</th>
-                                <th>Section</th>
-                                <th>Monthly Fee</th>
-                                <th>Transport Fee</th>
-                                <th>Custom Fee</th>
-                                <th>Total Fee</th>
-                                <th>Discount</th>
-                                <th>Final Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody id="feeCalculationTableBody">
-                            <!-- Fee calculation will be populated here -->
-                        </tbody>
-                        <tfoot>
-                            <tr class="fw-bold" style="background-color: #f0f0f0;">
-                                <td colspan="8" class="text-end">Grand Total:</td>
-                                <td id="grandTotal">0.00</td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                <p class="text-muted mb-0" style="font-size: 14px;">Scan Father ID Card For Quick Calculations...!</p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="text-center" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Searching for father and students...</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorMessage" class="alert alert-danger" style="display: none;">
+                <span id="errorText"></span>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" style="display: none;">
+                <!-- Father Information -->
+                <div class="card bg-light border-0 rounded-10 p-3 mb-3">
+                    <h5 class="mb-3 fw-semibold" style="color: #003471;">Father Information</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-2"><strong>Name:</strong> <span id="fatherName"></span></p>
+                            <p class="mb-2"><strong>ID Card:</strong> <span id="fatherIdCard"></span></p>
+                            <p class="mb-2"><strong>Phone:</strong> <span id="fatherPhone"></span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-2"><strong>Email:</strong> <span id="fatherEmail"></span></p>
+                            <p class="mb-2"><strong>Address:</strong> <span id="fatherAddress"></span></p>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="mt-3 text-end">
-                    <button type="button" class="btn btn-sm px-4 py-2" id="calculateBtn" style="background-color: #003471; color: white;">
-                        <i class="fas fa-calculator me-1"></i> Calculate Fee
-                    </button>
-                    <button type="button" class="btn btn-sm px-4 py-2 btn-success ms-2" id="printBtn" style="display: none;">
-                        <i class="fas fa-print me-1"></i> Print
-                    </button>
+                <!-- Students List -->
+                <div class="card bg-light border-0 rounded-10 p-3 mb-3">
+                    <h5 class="mb-3 fw-semibold" style="color: #003471;">Children Information</h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm">
+                            <thead style="background-color: #003471; color: white;">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Student Name</th>
+                                    <th>Student Code</th>
+                                    <th>Class</th>
+                                    <th>Section</th>
+                                    <th>Campus</th>
+                                    <th>Monthly Fee</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody">
+                                <!-- Students will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -175,125 +140,58 @@
 </div>
 
 <style>
-    /* Print Styles */
-    @media print {
-        /* Hide sidebar, header, footer, and other non-printable elements */
-        .sidebar-menu,
-        .header,
-        .footer,
-        .preloader,
-        .theme-settings,
-        .btn,
-        .card:not(#feeCalculationSection),
-        #studentsList,
-        #familyFeeCalculatorForm,
-        .alert,
-        h3:not(#printHeader h3),
-        h4:not(#printHeader h4) {
-            display: none !important;
-        }
-        
-        /* Show print header and info */
-        #printHeader,
-        #printInfo {
-            display: block !important;
-        }
-        
-        /* Show fee calculation section */
-        #feeCalculationSection {
-            display: block !important;
-            page-break-inside: avoid;
-        }
-        
-        /* Remove card styling for print */
-        #feeCalculationSection.card {
-            border: none !important;
-            box-shadow: none !important;
-            background: white !important;
-            padding: 0 !important;
-        }
-        
-        /* Hide form inputs in print, show values */
-        #feeCalculationSection select,
-        #feeCalculationSection input[type="number"] {
-            border: none !important;
-            background: transparent !important;
-            padding: 0 !important;
-            appearance: none !important;
-            -webkit-appearance: none !important;
-            -moz-appearance: none !important;
-        }
-        
-        /* Table styling for print */
-        #feeCalculationSection table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-        }
-        
-        #feeCalculationSection table th,
-        #feeCalculationSection table td {
-            border: 1px solid #000 !important;
-            padding: 8px !important;
-            text-align: left !important;
-        }
-        
-        #feeCalculationSection table thead th {
-            background-color: #003471 !important;
-            color: white !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-        }
-        
-        /* Page setup */
-        @page {
-            margin: 1cm;
-            size: A4;
-        }
-        
-        body {
-            background: white !important;
-            color: black !important;
-        }
-        
-        /* Hide screen-only elements */
-        .no-print {
-            display: none !important;
-        }
+    .input-group-text {
+        border-right: none;
     }
     
-    /* Screen styles - hide print header */
-    @media screen {
-        #printHeader {
-            display: none !important;
-        }
+    .form-control:focus {
+        border-color: #003471;
+        box-shadow: 0 0 0 0.2rem rgba(0, 52, 113, 0.25);
+    }
+    
+    table thead th {
+        font-size: 13px;
+        font-weight: 600;
+        padding: 12px 15px;
+    }
+    
+    table tbody td {
+        font-size: 13px;
+        padding: 12px 15px;
+        vertical-align: middle;
     }
 </style>
 
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const feeCalculationSection = document.getElementById('feeCalculationSection');
-    const calculateBtn = document.getElementById('calculateBtn');
-    const printBtn = document.getElementById('printBtn');
-    
-    let selectedStudents = [];
-    const familySelect = document.getElementById('family_id');
-    const studentsList = document.getElementById('studentsList');
-    const tbody = document.getElementById('studentsTableBody');
+    const form = document.getElementById('fatherIdCardForm');
+    const fatherIdCardInput = document.getElementById('father_id_card');
+    const loadingState = document.getElementById('loadingState');
+    const errorMessage = document.getElementById('errorMessage');
+    const errorText = document.getElementById('errorText');
+    const resultsSection = document.getElementById('resultsSection');
+    const studentsTableBody = document.getElementById('studentsTableBody');
 
-    // Function to load students for selected parent
-    function loadStudents(familyId) {
-        if (!familyId) {
-            studentsList.style.display = 'none';
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const fatherIdCard = fatherIdCardInput.value.trim();
+        
+        if (!fatherIdCard) {
+            errorText.textContent = 'Please enter Father ID Card Number';
+            errorMessage.style.display = 'block';
+            resultsSection.style.display = 'none';
             return;
         }
 
         // Show loading state
-        studentsList.style.display = 'block';
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><i class="fas fa-spinner fa-spin me-2"></i>Loading students...</td></tr>';
+        loadingState.style.display = 'block';
+        errorMessage.style.display = 'none';
+        resultsSection.style.display = 'none';
 
-        // Make AJAX call to fetch students
-        fetch(`{{ route('accounting.family-fee-calculator.students') }}?family_id=${encodeURIComponent(familyId)}`, {
+        // Make AJAX call to search by Father ID Card
+        fetch(`{{ route('accounting.family-fee-calculator.search-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}`, {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
@@ -302,159 +200,55 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
-            if (data.students && data.students.length > 0) {
-                displayStudents(data.students);
-                studentsList.style.display = 'block';
+            loadingState.style.display = 'none';
+            
+            if (data.success) {
+                if (data.found) {
+                    // Display father information
+                    document.getElementById('fatherName').textContent = data.father.name || 'N/A';
+                    document.getElementById('fatherIdCard').textContent = data.father.id_card_number || 'N/A';
+                    document.getElementById('fatherPhone').textContent = data.father.phone || 'N/A';
+                    document.getElementById('fatherEmail').textContent = data.father.email || 'N/A';
+                    document.getElementById('fatherAddress').textContent = data.father.address || 'N/A';
+
+                    // Display students
+                    if (data.students && data.students.length > 0) {
+                        studentsTableBody.innerHTML = '';
+                        data.students.forEach((student, index) => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${index + 1}</td>
+                                <td>${student.student_name || 'N/A'}</td>
+                                <td>${student.student_code || 'N/A'}</td>
+                                <td>${student.class || 'N/A'}</td>
+                                <td>${student.section || 'N/A'}</td>
+                                <td>${student.campus || 'N/A'}</td>
+                                <td>${student.monthly_fee ? parseFloat(student.monthly_fee).toFixed(2) : '0.00'}</td>
+                            `;
+                            studentsTableBody.appendChild(row);
+                        });
+                    } else {
+                        studentsTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No students found for this father.</td></tr>';
+                    }
+
+                    resultsSection.style.display = 'block';
+                } else {
+                    errorText.textContent = data.message || 'No father found with this ID Card Number';
+                    errorMessage.style.display = 'block';
+                }
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No students found for this family.</td></tr>';
-                studentsList.style.display = 'block';
+                errorText.textContent = data.message || 'An error occurred. Please try again.';
+                errorMessage.style.display = 'block';
             }
         })
         .catch(error => {
+            loadingState.style.display = 'none';
             console.error('Error:', error);
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error loading students. Please try again.</td></tr>';
-            studentsList.style.display = 'block';
+            errorText.textContent = 'An error occurred while searching. Please try again.';
+            errorMessage.style.display = 'block';
         });
-    }
-
-    // Auto-load students when parent is selected
-    familySelect.addEventListener('change', function() {
-        const familyId = this.value;
-        loadStudents(familyId);
-    });
-
-    function displayStudents(students) {
-        const tbody = document.getElementById('studentsTableBody');
-        tbody.innerHTML = '';
-
-        students.forEach(student => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>
-                    <input type="checkbox" class="form-check-input student-checkbox" value="${student.id}" data-name="${student.name}" data-class="${student.class}" data-section="${student.section}">
-                </td>
-                <td>${student.name}</td>
-                <td>${student.class}</td>
-                <td>${student.section}</td>
-                <td>${student.admission_no}</td>
-            `;
-            tbody.appendChild(row);
-        });
-
-        // Add event listeners to checkboxes
-        document.querySelectorAll('.student-checkbox').forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                updateSelectedStudents();
-            });
-        });
-    }
-
-    function updateSelectedStudents() {
-        selectedStudents = [];
-        document.querySelectorAll('.student-checkbox:checked').forEach(checkbox => {
-            selectedStudents.push({
-                id: checkbox.value,
-                name: checkbox.dataset.name,
-                class: checkbox.dataset.class,
-                section: checkbox.dataset.section
-            });
-        });
-
-        if (selectedStudents.length > 0) {
-            feeCalculationSection.style.display = 'block';
-            populateFeeCalculation();
-        } else {
-            feeCalculationSection.style.display = 'none';
-        }
-    }
-
-    function populateFeeCalculation() {
-        const tbody = document.getElementById('feeCalculationTableBody');
-        tbody.innerHTML = '';
-
-        selectedStudents.forEach(student => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${student.name}</td>
-                <td>${student.class}</td>
-                <td>${student.section}</td>
-                <td><input type="number" class="form-control form-control-sm monthly-fee" value="0" min="0" step="0.01"></td>
-                <td><input type="number" class="form-control form-control-sm transport-fee" value="0" min="0" step="0.01"></td>
-                <td><input type="number" class="form-control form-control-sm custom-fee" value="0" min="0" step="0.01"></td>
-                <td class="total-fee">0.00</td>
-                <td class="discount-amount">0.00</td>
-                <td class="final-amount">0.00</td>
-            `;
-            tbody.appendChild(row);
-        });
-
-        // Add event listeners to fee inputs
-        document.querySelectorAll('.monthly-fee, .transport-fee, .custom-fee').forEach(input => {
-            input.addEventListener('input', calculateFees);
-        });
-    }
-
-    calculateBtn.addEventListener('click', function() {
-        calculateFees();
-        printBtn.style.display = 'inline-block';
-    });
-
-    function calculateFees() {
-        const discountPercentage = parseFloat(document.getElementById('discount_percentage').value) || 0;
-        let grandTotal = 0;
-
-        document.querySelectorAll('#feeCalculationTableBody tr').forEach(row => {
-            const monthlyFee = parseFloat(row.querySelector('.monthly-fee').value) || 0;
-            const transportFee = parseFloat(row.querySelector('.transport-fee').value) || 0;
-            const customFee = parseFloat(row.querySelector('.custom-fee').value) || 0;
-            
-            const totalFee = monthlyFee + transportFee + customFee;
-            const discountAmount = (totalFee * discountPercentage) / 100;
-            const finalAmount = totalFee - discountAmount;
-
-            row.querySelector('.total-fee').textContent = totalFee.toFixed(2);
-            row.querySelector('.discount-amount').textContent = discountAmount.toFixed(2);
-            row.querySelector('.final-amount').textContent = finalAmount.toFixed(2);
-
-            grandTotal += finalAmount;
-        });
-
-        document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
-    }
-
-    printBtn.addEventListener('click', function() {
-        // Update print info
-        const feeMonth = document.getElementById('fee_month').value || 'N/A';
-        const feeYear = document.getElementById('fee_year').value || 'N/A';
-        const discount = document.getElementById('discount_percentage').value || '0';
-        const parentName = familySelect.options[familySelect.selectedIndex].text || 'N/A';
-        const currentDate = new Date().toLocaleDateString('en-GB', { 
-            day: '2-digit', 
-            month: '2-digit', 
-            year: 'numeric' 
-        });
-        
-        document.getElementById('printFeeMonth').textContent = feeMonth;
-        document.getElementById('printFeeYear').textContent = feeYear;
-        document.getElementById('printDiscount').textContent = discount;
-        document.getElementById('printParentName').textContent = parentName;
-        document.getElementById('printDate').textContent = currentDate;
-        
-        // Show print header and info
-        document.getElementById('printHeader').style.display = 'block';
-        document.getElementById('printInfo').style.display = 'block';
-        
-        // Trigger print
-        window.print();
-        
-        // Hide print header and info after print (for screen view)
-        setTimeout(function() {
-            document.getElementById('printHeader').style.display = 'none';
-            document.getElementById('printInfo').style.display = 'none';
-        }, 100);
     });
 });
 </script>
 @endpush
 @endsection
-

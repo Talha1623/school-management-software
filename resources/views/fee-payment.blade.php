@@ -146,8 +146,42 @@
                 </div>
             </div>
 
+            <!-- Search Results Section -->
+            <div id="searchResultsSection" class="mt-4" style="display: none;">
+                <div class="mb-2 p-2 rounded-8" style="background-color: #fff3cd; border: 1px solid #ffc107;">
+                    <h5 class="mb-0 fs-15 fw-semibold d-flex align-items-center gap-2" style="color: #856404;">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">search</span>
+                        <span style="color: #856404;">Search Results</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick="closeSearchResults()" style="padding: 2px 10px; font-size: 12px;">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">close</span> Close
+                        </button>
+                    </h5>
+                </div>
+
+                <div class="default-table-area" style="margin-top: 0;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Student Name</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Father Name</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Class/Section</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Campus</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Monthly Fee</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="searchResultsBody">
+                                <!-- Search results will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- Latest Payments Table -->
-            <div class="mt-4">
+            <div class="mt-4" id="latestPaymentsSection">
                 <div class="mb-2 p-2 rounded-8" style="background-color: #d4edda; border: 1px solid #c3e6cb;">
                     <h5 class="mb-0 fs-15 fw-semibold d-flex align-items-center gap-2" style="color: #155724;">
                         <span class="material-symbols-outlined" style="font-size: 18px; color: #000;">add</span>
@@ -327,13 +361,84 @@
 <script>
 function searchByName() {
     const searchValue = document.getElementById('searchByName').value.trim();
-    if (searchValue) {
-        // TODO: Implement search functionality
-        console.log('Searching by name/code:', searchValue);
-        // You can add AJAX call or form submission here
-    } else {
+    if (!searchValue) {
         alert('Please enter student name or code');
+        return;
     }
+
+    // Show loading state
+    const searchResultsSection = document.getElementById('searchResultsSection');
+    const searchResultsBody = document.getElementById('searchResultsBody');
+    const latestPaymentsSection = document.getElementById('latestPaymentsSection');
+    
+    searchResultsSection.style.display = 'block';
+    latestPaymentsSection.style.display = 'none';
+    searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
+
+    // Make AJAX call to search students
+    fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(searchValue)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        searchResultsBody.innerHTML = '';
+        
+        if (data.success && data.students && data.students.length > 0) {
+            data.students.forEach((student, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="padding: 8px 12px; font-size: 13px;">
+                        <strong>${student.student_code || 'N/A'}</strong>
+                    </td>
+                    <td style="padding: 8px 12px; font-size: 13px;">
+                        ${student.student_name || 'N/A'}
+                    </td>
+                    <td style="padding: 8px 12px; font-size: 13px;">
+                        ${student.father_name || 'N/A'}
+                    </td>
+                    <td style="padding: 8px 12px; font-size: 13px;">
+                        ${student.class ? (student.class + (student.section ? '/' + student.section : '')) : 'N/A'}
+                    </td>
+                    <td style="padding: 8px 12px; font-size: 13px;">
+                        ${student.campus || 'N/A'}
+                    </td>
+                    <td style="padding: 8px 12px; font-size: 13px;">
+                        <strong style="color: #28a745;">${student.monthly_fee ? parseFloat(student.monthly_fee).toFixed(2) : '0.00'}</strong>
+                    </td>
+                    <td style="padding: 8px 12px; font-size: 13px;">
+                        <button class="btn btn-sm btn-primary" onclick="makePayment('${student.student_code}', '${student.student_name}')" style="padding: 4px 12px; font-size: 12px;">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">payments</span>
+                            Make Payment
+                        </button>
+                    </td>
+                `;
+                searchResultsBody.appendChild(row);
+            });
+        } else {
+            searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No students found matching your search.</td></tr>';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
+    });
+}
+
+function closeSearchResults() {
+    document.getElementById('searchResultsSection').style.display = 'none';
+    document.getElementById('latestPaymentsSection').style.display = 'block';
+    document.getElementById('searchByName').value = '';
+}
+
+function makePayment(studentCode, studentName) {
+    // Redirect to payment page or open payment modal
+    alert('Make payment for: ' + studentName + ' (' + studentCode + ')');
+    // You can implement payment functionality here
+    // window.location.href = '/accounting/direct-payment/student?student_code=' + studentCode;
 }
 
 function searchByCNIC() {

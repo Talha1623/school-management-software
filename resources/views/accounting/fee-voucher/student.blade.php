@@ -10,7 +10,7 @@
             
             <!-- Filter Form -->
             <div class="card bg-light border-0 rounded-10 p-3 mb-3">
-                <form method="GET" action="{{ route('accounting.fee-voucher.student') }}" id="filterForm">
+                <form method="GET" action="{{ route('accounting.fee-voucher.print') }}" id="filterForm" target="_blank">
                     <div class="row g-3">
                         <!-- Type -->
                         <div class="col-md-3">
@@ -38,14 +38,8 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="class" id="class" style="height: 38px;">
                                     <option value="">All Classes</option>
-                                    @php
-                                        $classes = \App\Models\ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort();
-                                        if ($classes->isEmpty()) {
-                                            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
-                                        }
-                                    @endphp
-                                    @foreach($classes as $className)
-                                        <option value="{{ $className }}" {{ request('class') == $className ? 'selected' : '' }}>{{ $className }}</option>
+                                    @foreach($classes as $class)
+                                        <option value="{{ $class->class_name }}" {{ request('class') == $class->class_name ? 'selected' : '' }}>{{ $class->class_name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -60,14 +54,8 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="section" id="section" style="height: 38px;">
                                     <option value="">All Sections</option>
-                                    @php
-                                        $sections = \App\Models\Section::whereNotNull('name')->distinct()->pluck('name')->sort();
-                                        if ($sections->isEmpty()) {
-                                            $sections = collect(['A', 'B', 'C', 'D', 'E']);
-                                        }
-                                    @endphp
-                                    @foreach($sections as $sectionName)
-                                        <option value="{{ $sectionName }}" {{ request('section') == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
+                                    @foreach($sections as $section)
+                                        <option value="{{ $section->name }}" {{ request('section') == $section->name ? 'selected' : '' }}>{{ $section->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -81,12 +69,19 @@
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">receipt</span>
                                 </span>
                                 <select class="form-select form-select-sm" name="vouchers_for" id="vouchers_for" style="height: 38px;">
-                                    <option value="">All</option>
-                                    <option value="Monthly" {{ request('vouchers_for') == 'Monthly' ? 'selected' : '' }}>Monthly</option>
-                                    <option value="Quarterly" {{ request('vouchers_for') == 'Quarterly' ? 'selected' : '' }}>Quarterly</option>
-                                    <option value="Half Yearly" {{ request('vouchers_for') == 'Half Yearly' ? 'selected' : '' }}>Half Yearly</option>
-                                    <option value="Yearly" {{ request('vouchers_for') == 'Yearly' ? 'selected' : '' }}>Yearly</option>
-                                    <option value="Custom" {{ request('vouchers_for') == 'Custom' ? 'selected' : '' }}>Custom</option>
+                                    <option value="">Select Month</option>
+                                    <option value="January" {{ request('vouchers_for') == 'January' ? 'selected' : '' }}>January</option>
+                                    <option value="February" {{ request('vouchers_for') == 'February' ? 'selected' : '' }}>February</option>
+                                    <option value="March" {{ request('vouchers_for') == 'March' ? 'selected' : '' }}>March</option>
+                                    <option value="April" {{ request('vouchers_for') == 'April' ? 'selected' : '' }}>April</option>
+                                    <option value="May" {{ request('vouchers_for') == 'May' ? 'selected' : '' }}>May</option>
+                                    <option value="June" {{ request('vouchers_for') == 'June' ? 'selected' : '' }}>June</option>
+                                    <option value="July" {{ request('vouchers_for') == 'July' ? 'selected' : '' }}>July</option>
+                                    <option value="August" {{ request('vouchers_for') == 'August' ? 'selected' : '' }}>August</option>
+                                    <option value="September" {{ request('vouchers_for') == 'September' ? 'selected' : '' }}>September</option>
+                                    <option value="October" {{ request('vouchers_for') == 'October' ? 'selected' : '' }}>October</option>
+                                    <option value="November" {{ request('vouchers_for') == 'November' ? 'selected' : '' }}>November</option>
+                                    <option value="December" {{ request('vouchers_for') == 'December' ? 'selected' : '' }}>December</option>
                                 </select>
                             </div>
                         </div>
@@ -107,61 +102,6 @@
                 </form>
             </div>
 
-            <!-- Results Table -->
-            @if(isset($students) && $students->count() > 0)
-                <div class="card bg-light border-0 rounded-10 p-3">
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-sm">
-                            <thead style="background-color: #003471; color: white;">
-                                <tr>
-                                    <th>#</th>
-                                    <th>Student Name</th>
-                                    <th>Student Code</th>
-                                    <th>Class</th>
-                                    <th>Section</th>
-                                    <th>Type</th>
-                                    <th>Vouchers For</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($students as $index => $student)
-                                    <tr>
-                                        <td>{{ $index + 1 + (($students->currentPage() - 1) * $students->perPage()) }}</td>
-                                        <td>{{ $student->student_name ?? 'N/A' }}</td>
-                                        <td>{{ $student->student_code ?? 'N/A' }}</td>
-                                        <td>{{ $student->class ?? 'N/A' }}</td>
-                                        <td>{{ $student->section ?? 'N/A' }}</td>
-                                        <td>
-                                            <span class="badge bg-info">{{ request('type') ?: 'N/A' }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-success">{{ request('vouchers_for') ?: 'N/A' }}</span>
-                                        </td>
-                                        <td>
-                                            <button type="button" class="btn btn-sm btn-primary" onclick="generateVoucher({{ $student->id }})">
-                                                <span class="material-symbols-outlined" style="font-size: 14px;">print</span>
-                                                Generate Voucher
-                                            </button>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    @if($students->hasPages())
-                        <div class="mt-3">
-                            {{ $students->links() }}
-                        </div>
-                    @endif
-                </div>
-            @else
-                <div class="alert alert-info">
-                    <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">info</span>
-                    No students found. Please adjust your filters.
-                </div>
-            @endif
         </div>
     </div>
 </div>
@@ -211,6 +151,46 @@
 </style>
 
 <script>
+// Load sections when class is selected
+document.getElementById('class').addEventListener('change', function() {
+    const classValue = this.value;
+    const sectionSelect = document.getElementById('section');
+    
+    // Clear existing options except "All Sections"
+    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+    
+    if (classValue) {
+        // Show loading state
+        sectionSelect.disabled = true;
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        
+        // Fetch sections via AJAX
+        fetch(`{{ route('accounting.fee-voucher.get-sections-by-class') }}?class=${encodeURIComponent(classValue)}`)
+            .then(response => response.json())
+            .then(data => {
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                
+                if (data.sections && data.sections.length > 0) {
+                    data.sections.forEach(section => {
+                        const option = document.createElement('option');
+                        option.value = section.name;
+                        option.textContent = section.name;
+                        sectionSelect.appendChild(option);
+                    });
+                }
+                
+                sectionSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                sectionSelect.disabled = false;
+            });
+    } else {
+        sectionSelect.disabled = false;
+    }
+});
+
 function generateVoucher(studentId) {
     // Add voucher generation logic here
     alert('Generate voucher for student ID: ' + studentId);

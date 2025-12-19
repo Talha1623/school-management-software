@@ -6,6 +6,8 @@ use App\Models\OnlineClass;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
+use App\Models\Subject;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +21,41 @@ class OnlineClassesController extends Controller
     public function index(Request $request): View
     {
         $query = OnlineClass::query();
+        
+        // If logged-in user is a teacher (staff guard), restrict to their assigned classes
+        $staff = Auth::guard('staff')->user();
+        $assignedClasses = collect();
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+
+            // Merge classes from both sources
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function ($class) {
+                    return trim($class);
+                })
+                ->filter(function ($class) {
+                    return !empty($class);
+                })
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($assignedClasses->isNotEmpty()) {
+                $query->where(function ($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $class) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                    }
+                });
+            } else {
+                // If teacher has no assigned classes, show nothing
+                $query->whereRaw('1 = 0');
+            }
+        }
         
         // Search functionality
         if ($request->filled('search')) {
@@ -65,7 +102,15 @@ class OnlineClassesController extends Controller
             }
         }
         
-        // Get classes from ClassModel
+        // Build classes list for dropdown
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // For teachers, show only their assigned classes
+            $classes = collect();
+            foreach ($assignedClasses as $className) {
+                $classes->push((object)['class_name' => $className]);
+            }
+        } else {
+            // For non-teachers, get all classes
         $classes = ClassModel::orderBy('class_name', 'asc')->get();
         
         // If no classes found, get from online classes
@@ -80,6 +125,7 @@ class OnlineClassesController extends Controller
             $classes = collect();
             foreach ($classesFromOnlineClasses as $className) {
                 $classes->push((object)['class_name' => $className]);
+                }
             }
         }
         
@@ -119,6 +165,7 @@ class OnlineClassesController extends Controller
             'start_time' => ['nullable', 'string'],
             'timing' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'min:4'],
+            'link' => ['nullable', 'url', 'max:500'],
         ]);
 
         OnlineClass::create($validated);
@@ -142,6 +189,7 @@ class OnlineClassesController extends Controller
             'start_time' => ['nullable', 'string'],
             'timing' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'min:4'],
+            'link' => ['nullable', 'url', 'max:500'],
         ]);
 
         $online_class->update($validated);
@@ -247,7 +295,7 @@ class OnlineClassesController extends Controller
             // Add BOM for UTF-8
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             
-            fputcsv($file, ['ID', 'Campus', 'Class', 'Section', 'Class Topic', 'Start Date', 'Timing', 'Password', 'Created At']);
+            fputcsv($file, ['ID', 'Campus', 'Class', 'Section', 'Class Topic', 'Start Date', 'Timing', 'Password', 'Link', 'Created At']);
             
             foreach ($onlineClasses as $class) {
                 fputcsv($file, [
@@ -259,6 +307,7 @@ class OnlineClassesController extends Controller
                     $class->start_date->format('Y-m-d'),
                     $class->timing,
                     $class->password,
+                    $class->link ?? 'N/A',
                     $class->created_at->format('Y-m-d H:i:s'),
                 ]);
             }
@@ -284,7 +333,7 @@ class OnlineClassesController extends Controller
         $callback = function() use ($onlineClasses) {
             $file = fopen('php://output', 'w');
             
-            fputcsv($file, ['ID', 'Campus', 'Class', 'Section', 'Class Topic', 'Start Date', 'Timing', 'Password', 'Created At']);
+            fputcsv($file, ['ID', 'Campus', 'Class', 'Section', 'Class Topic', 'Start Date', 'Timing', 'Password', 'Link', 'Created At']);
             
             foreach ($onlineClasses as $class) {
                 fputcsv($file, [
@@ -296,6 +345,7 @@ class OnlineClassesController extends Controller
                     $class->start_date->format('Y-m-d'),
                     $class->timing,
                     $class->password,
+                    $class->link ?? 'N/A',
                     $class->created_at->format('Y-m-d H:i:s'),
                 ]);
             }

@@ -7,9 +7,11 @@ use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Student;
+use App\Models\StudentPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Carbon\Carbon;
 
 class MonthlyFeeController extends Controller
 {
@@ -103,23 +105,92 @@ class MonthlyFeeController extends Controller
         $studentsQuery = Student::query();
         
         if ($validated['campus']) {
-            $studentsQuery->where('campus', $validated['campus']);
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))]);
         }
         
         if ($validated['class']) {
-            $studentsQuery->where('class', $validated['class']);
+            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))]);
         }
         
         if ($validated['section']) {
-            $studentsQuery->where('section', $validated['section']);
+            $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))]);
         }
         
         $students = $studentsQuery->get();
         $studentCount = $students->count();
+        
+        // Generate fee for each student
+        $dueDate = Carbon::parse($validated['due_date']);
+        $paymentTitle = "Monthly Fee - {$validated['fee_month']} {$validated['fee_year']}";
+        $lateFeeAmount = (float) $validated['late_fee'];
+        
+        $generatedCount = 0;
+        $skippedCount = 0;
+        
+        foreach ($students as $student) {
+            // Skip if student doesn't have monthly_fee or student_code
+            if (empty($student->monthly_fee) || $student->monthly_fee <= 0 || empty($student->student_code)) {
+                $skippedCount++;
+                continue;
+            }
+            
+            // Check if fee already exists for this student, month, and year
+            $existingFee = StudentPayment::where('student_code', $student->student_code)
+                ->where('payment_title', $paymentTitle)
+                ->first();
+            
+            if ($existingFee) {
+                $skippedCount++;
+                continue;
+            }
+            
+            // Create fee record for this student
+            StudentPayment::create([
+                'campus' => $student->campus ?? $validated['campus'],
+                'student_code' => $student->student_code,
+                'payment_title' => $paymentTitle,
+                'payment_amount' => (float) $student->monthly_fee,
+                'discount' => 0,
+                'method' => 'Generated', // Indicates this is a generated fee, not actual payment
+                'payment_date' => $dueDate->format('Y-m-d'), // Due date (will be updated when payment is made)
+                'sms_notification' => 'Yes',
+                'late_fee' => 0, // Will be calculated when actual payment is made
+                'accountant' => auth()->user()->name ?? 'System',
+            ]);
+            
+            $generatedCount++;
+        }
+
+        // If no fees were generated, show warning/error message
+        if ($generatedCount == 0) {
+            if ($studentCount == 0) {
+                // No students found in the selected class/section
+                $message = "Is class mein students nahi hain. Please check the selected Campus, Class, and Section.";
+            } else {
+                // Students found but fees couldn't be generated
+                $message = "No fees were generated. ";
+                $message .= "{$studentCount} student(s) found, but ";
+                if ($skippedCount > 0) {
+                    $message .= "all were skipped (no monthly fee set or fees already exist for this month/year).";
+                } else {
+                    $message .= "none have monthly fee configured.";
+                }
+            }
+            
+            return redirect()
+                ->route('accounting.generate-monthly-fee')
+                ->with('error', $message);
+        }
+
+        // Success message only if fees were generated
+        $message = "Monthly fee generated successfully for {$generatedCount} student(s)!";
+        if ($skippedCount > 0) {
+            $message .= " {$skippedCount} student(s) skipped (no monthly fee set or already exists).";
+        }
 
         return redirect()
             ->route('accounting.generate-monthly-fee')
-            ->with('success', "Monthly fee generated successfully for {$studentCount} student(s)!");
+            ->with('success', $message);
     }
 
     /**

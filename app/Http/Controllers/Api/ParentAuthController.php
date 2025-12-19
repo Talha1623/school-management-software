@@ -27,8 +27,11 @@ class ParentAuthController extends Controller
                 'password' => ['required', 'string'],
             ]);
 
-            // Find parent by email
-            $parent = ParentAccount::where('email', $credentials['email'])->first();
+            // Trim and normalize email (case-insensitive search)
+            $email = trim(strtolower($credentials['email']));
+
+            // Find parent by email (case-insensitive, trimmed comparison)
+            $parent = ParentAccount::whereRaw('LOWER(TRIM(email)) = ?', [$email])->first();
 
             // Check if parent exists
             if (!$parent) {
@@ -79,8 +82,13 @@ class ParentAuthController extends Controller
             // Delete all existing Sanctum tokens for this parent
             $parent->tokens()->delete();
 
-            // Create new token without expiration (never expires)
-            $token = $parent->createToken('parent-api-token', ['*'], null)->plainTextToken;
+            // Create new token (without expiration - never expires)
+            try {
+                $token = $parent->createToken('parent-api-token', ['*'])->plainTextToken;
+            } catch (\Exception $tokenException) {
+                \Log::error('Token creation failed: ' . $tokenException->getMessage());
+                throw $tokenException;
+            }
 
             // Store the token in parent_accounts table for future logins
             $parent->api_token = $token;
@@ -97,12 +105,21 @@ class ParentAuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
+                'errors' => $e->errors(),
                 'token' => null,
             ], 200);
         } catch (\Exception $e) {
+            // Log the error for debugging
+            \Log::error('Parent login error: ' . $e->getMessage(), [
+                'email' => $request->input('email'),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred during login',
+                'message' => 'An error occurred during login: ' . $e->getMessage(),
                 'token' => null,
             ], 200);
         }

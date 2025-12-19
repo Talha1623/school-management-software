@@ -33,6 +33,10 @@ Route::prefix('staff')->name('staff.')->group(function () {
     Route::middleware([App\Http\Middleware\StaffMiddleware::class])->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\StaffAuthController::class, 'dashboard'])->name('dashboard');
         Route::get('/dashboard/attendance-stats', [App\Http\Controllers\StaffAuthController::class, 'getAttendanceStats'])->name('dashboard.attendance-stats');
+
+        // Live chat for teachers (staff) with admin
+        Route::get('/chat', [App\Http\Controllers\StaffChatController::class, 'index'])->name('chat');
+        Route::post('/chat', [App\Http\Controllers\StaffChatController::class, 'send'])->name('chat.send');
     });
 });
 
@@ -99,9 +103,8 @@ Route::post('/admission/admit-student', [App\Http\Controllers\AdmissionControlle
 Route::get('/admission/get-sections', [App\Http\Controllers\AdmissionController::class, 'getSections'])->name('admission.get-sections');
 Route::get('/admission/get-parent-by-id-card', [App\Http\Controllers\AdmissionController::class, 'getParentByIdCard'])->name('admission.get-parent-by-id-card');
 
-Route::get('/admission/admit-bulk-student', function () {
-    return view('admission.admit-bulk-student');
-})->name('admission.admit-bulk-student');
+Route::get('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkCreate'])->name('admission.admit-bulk-student');
+Route::post('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkStore'])->name('admission.admit-bulk-student.store');
 
 // Admission Request Routes
 Route::get('/admission/request', [App\Http\Controllers\AdmissionRequestController::class, 'index'])->name('admission.request');
@@ -233,18 +236,20 @@ Route::get('/accountants/export/{format}', [App\Http\Controllers\AccountantContr
 
 Route::get('/dashboard/hr-management', [DashboardController::class, 'hrManagement'])->name('dashboard.hr-management');
 
-// Accounting Routes
-Route::get('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'create'])->name('accounting.generate-monthly-fee');
-Route::post('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'store'])->name('accounting.generate-monthly-fee.store');
-Route::get('/accounting/get-sections-by-class', [App\Http\Controllers\MonthlyFeeController::class, 'getSectionsByClass'])->name('accounting.get-sections-by-class');
+// Accounting Routes (Protected - Admin & Super Admin Access)
+Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function () {
+    Route::get('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'create'])->name('accounting.generate-monthly-fee');
+    Route::post('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'store'])->name('accounting.generate-monthly-fee.store');
+    Route::get('/accounting/get-sections-by-class', [App\Http\Controllers\MonthlyFeeController::class, 'getSectionsByClass'])->name('accounting.get-sections-by-class');
 
-Route::get('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'create'])->name('accounting.generate-custom-fee');
-Route::post('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'store'])->name('accounting.generate-custom-fee.store');
-Route::get('/accounting/custom-fee/get-sections-by-class', [App\Http\Controllers\CustomFeeController::class, 'getSectionsByClass'])->name('accounting.custom-fee.get-sections-by-class');
+    Route::get('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'create'])->name('accounting.generate-custom-fee');
+    Route::post('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'store'])->name('accounting.generate-custom-fee.store');
+    Route::get('/accounting/custom-fee/get-sections-by-class', [App\Http\Controllers\CustomFeeController::class, 'getSectionsByClass'])->name('accounting.custom-fee.get-sections-by-class');
 
-Route::get('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'create'])->name('accounting.generate-transport-fee');
-Route::post('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'store'])->name('accounting.generate-transport-fee.store');
-Route::get('/accounting/transport-fee/get-sections-by-class', [App\Http\Controllers\TransportFeeController::class, 'getSectionsByClass'])->name('accounting.transport-fee.get-sections-by-class');
+    Route::get('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'create'])->name('accounting.generate-transport-fee');
+    Route::post('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'store'])->name('accounting.generate-transport-fee.store');
+    Route::get('/accounting/transport-fee/get-sections-by-class', [App\Http\Controllers\TransportFeeController::class, 'getSectionsByClass'])->name('accounting.transport-fee.get-sections-by-class');
+});
 
 // Fee Type Routes
 Route::get('/accounting/fee-type', [App\Http\Controllers\FeeTypeController::class, 'index'])->name('accounting.fee-type');
@@ -305,6 +310,59 @@ Route::get('/accounting/family-fee-calculator/students', function (\Illuminate\H
     
     return response()->json(['students' => $formattedStudents]);
 })->name('accounting.family-fee-calculator.students');
+
+// Family Fee Calculator - Search by Father ID Card
+Route::get('/accounting/family-fee-calculator/search-by-id-card', function (\Illuminate\Http\Request $request) {
+    $fatherIdCard = $request->get('father_id_card');
+    
+    if (!$fatherIdCard) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Father ID Card is required'
+        ], 400);
+    }
+    
+    // Find parent account by ID card number
+    $parentAccount = \App\Models\ParentAccount::where('id_card_number', $fatherIdCard)->first();
+    
+    if (!$parentAccount) {
+        return response()->json([
+            'success' => true,
+            'found' => false,
+            'message' => 'No father found with this ID Card Number'
+        ]);
+    }
+    
+    // Get all students connected to this parent
+    $students = \App\Models\Student::where('parent_account_id', $parentAccount->id)
+        ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee')
+        ->orderBy('student_name', 'asc')
+        ->get();
+    
+    return response()->json([
+        'success' => true,
+        'found' => true,
+        'father' => [
+            'id' => $parentAccount->id,
+            'name' => $parentAccount->name,
+            'id_card_number' => $parentAccount->id_card_number,
+            'phone' => $parentAccount->phone,
+            'email' => $parentAccount->email,
+            'address' => $parentAccount->address,
+        ],
+        'students' => $students->map(function ($student) {
+            return [
+                'id' => $student->id,
+                'student_name' => $student->student_name,
+                'student_code' => $student->student_code,
+                'class' => $student->class,
+                'section' => $student->section,
+                'campus' => $student->campus,
+                'monthly_fee' => $student->monthly_fee,
+            ];
+        })
+    ]);
+})->name('accounting.family-fee-calculator.search-by-id-card');
 
 // Manage Advance Fee Routes
 Route::get('/accounting/manage-advance-fee', [App\Http\Controllers\AdvanceFeeController::class, 'index'])->name('accounting.manage-advance-fee.index');
@@ -367,18 +425,17 @@ Route::post('/accounting/fee-document/decrement-percentage', [App\Http\Controlle
 
 Route::get('/accounting/fee-document/decrement-amount', [App\Http\Controllers\FeeDecrementAmountController::class, 'create'])->name('accounting.fee-document.decrement-amount');
 Route::post('/accounting/fee-document/decrement-amount', [App\Http\Controllers\FeeDecrementAmountController::class, 'store'])->name('accounting.fee-document.decrement-amount.store');
-
+ 
 // Fee Voucher Routes
 Route::get('/accounting/fee-voucher/student', [App\Http\Controllers\StudentVoucherController::class, 'index'])->name('accounting.fee-voucher.student');
-
+Route::get('/accounting/fee-voucher/get-sections-by-class', [App\Http\Controllers\StudentVoucherController::class, 'getSectionsByClass'])->name('accounting.fee-voucher.get-sections-by-class');
+Route::get('/accounting/fee-voucher/print', [App\Http\Controllers\StudentVoucherController::class, 'print'])->name('accounting.fee-voucher.print');
 Route::get('/accounting/fee-voucher/family', [App\Http\Controllers\FamilyVoucherController::class, 'index'])->name('accounting.fee-voucher.family');
 
 // Parent Complain Route
-Route::get('/parent-complain', function () {
-    return view('parent-complain');
-})->name('parent-complain');
+Route::get('/parent-complain', [App\Http\Controllers\ParentComplaintController::class, 'index'])->name('parent-complain');
 Route::get('/parent-complain/export/{format}', function () {
-    // TODO: Add controller and export functionality
+    // TODO: Add export functionality for parent complaints if needed
     return redirect()->route('parent-complain')->with('error', 'Export functionality will be implemented soon.');
 })->name('parent-complain.export');
 
@@ -470,6 +527,47 @@ Route::get('/fee-management', [App\Http\Controllers\FeeManagementController::cla
 
 // Fee Payment Route
 Route::get('/fee-payment', [App\Http\Controllers\FeePaymentController::class, 'index'])->name('fee-payment');
+
+// Fee Payment - Search Student
+Route::get('/fee-payment/search-student', function (\Illuminate\Http\Request $request) {
+    $search = $request->get('search');
+    
+    if (!$search) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Search term is required'
+        ], 400);
+    }
+    
+    $searchLower = strtolower(trim($search));
+    
+    // Search students by name or code
+    $students = \App\Models\Student::where(function($query) use ($search, $searchLower) {
+            $query->whereRaw('LOWER(student_name) LIKE ?', ["%{$searchLower}%"])
+                  ->orWhere('student_code', 'like', "%{$search}%")
+                  ->orWhere('gr_number', 'like', "%{$search}%");
+        })
+        ->select('id', 'student_name', 'student_code', 'father_name', 'class', 'section', 'campus', 'monthly_fee')
+        ->orderBy('student_name', 'asc')
+        ->limit(50)
+        ->get();
+    
+    return response()->json([
+        'success' => true,
+        'students' => $students->map(function ($student) {
+            return [
+                'id' => $student->id,
+                'student_name' => $student->student_name,
+                'student_code' => $student->student_code,
+                'father_name' => $student->father_name,
+                'class' => $student->class,
+                'section' => $student->section,
+                'campus' => $student->campus,
+                'monthly_fee' => $student->monthly_fee,
+            ];
+        })
+    ]);
+})->name('fee-payment.search-student');
 
 // Expense Management Routes
 Route::get('/expense-management/add', [App\Http\Controllers\ManagementExpenseController::class, 'index'])->name('expense-management.add');
@@ -1575,9 +1673,9 @@ Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function 
     Route::get('/change-password', [App\Http\Controllers\ChangePasswordController::class, 'index'])->name('change-password');
     Route::put('/change-password', [App\Http\Controllers\ChangePasswordController::class, 'update'])->name('change-password.update');
     
-    Route::get('/live-chat', function () {
-        return view('live-chat');
-    })->name('live-chat');
+    // Live Chat (Admin/Super Admin with Teachers)
+    Route::get('/live-chat', [App\Http\Controllers\ChatController::class, 'index'])->name('live-chat');
+    Route::post('/live-chat/teacher/{teacherId}', [App\Http\Controllers\ChatController::class, 'sendToTeacher'])->name('live-chat.send-teacher');
 });
 
 // Settings Routes (Super Admin Only)

@@ -7,10 +7,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\HasApiTokens;
 
 class Student extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.
@@ -50,11 +51,13 @@ class Student extends Authenticatable
         'parent_account_id',
         'email',
         'password',
+        'api_token',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'api_token',
     ];
 
     /**
@@ -107,6 +110,14 @@ class Student extends Authenticatable
     public function parentAccount()
     {
         return $this->belongsTo(ParentAccount::class, 'parent_account_id');
+    }
+
+    /**
+     * Get the behavior records for this student.
+     */
+    public function behaviorRecords()
+    {
+        return $this->hasMany(BehaviorRecord::class);
     }
 }
 

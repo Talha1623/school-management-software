@@ -18,6 +18,7 @@ class OnlineClass extends Model
         'start_time',
         'timing',
         'password',
+        'link',
         'created_by',
     ];
 

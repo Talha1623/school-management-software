@@ -121,6 +121,7 @@
                                 <th>Section</th>
                                 <th>Date</th>
                                 <th>Timing</th>
+                                <th>Link</th>
                                 <th>Options</th>
                                 <th>Action</th>
                             </tr>
@@ -149,7 +150,17 @@
                                             <span class="text-muted">{{ $class->timing }}</span>
                                         </td>
                                         <td>
-                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1 join-class-btn" onclick="joinClass({{ $class->id }}, '{{ addslashes($class->class_topic) }}', '{{ addslashes($class->password) }}')" title="Join Class">
+                                            @if($class->link)
+                                                <a href="{{ $class->link }}" target="_blank" class="btn btn-sm btn-info px-2 py-1" title="Open Meeting Link">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">open_in_new</span>
+                                                    <span>Link</span>
+                                                </a>
+                                            @else
+                                                <span class="text-muted" style="font-size: 12px;">No link</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1 join-class-btn" onclick="joinClass({{ $class->id }}, '{{ addslashes($class->class_topic) }}', '{{ addslashes($class->password) }}', '{{ addslashes($class->link ?? '') }}')" title="Join Class">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">videocam</span>
                                                 <span>Join</span>
                                             </button>
@@ -166,7 +177,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="9" class="text-center py-4">
+                                        <td colspan="10" class="text-center py-4">
                                             <div class="d-flex flex-column align-items-center gap-2">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">video_library</span>
                                                 <p class="text-muted mb-0">No online classes found.</p>
@@ -176,7 +187,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="9" class="text-center py-4">
+                                    <td colspan="10" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center gap-2">
                                             <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">video_library</span>
                                             <p class="text-muted mb-0">No online classes found.</p>
@@ -303,6 +314,16 @@
                                 </span>
                                 <input type="text" class="form-control online-class-input" name="password" id="password" placeholder="Enter password" required minlength="4">
                             </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Meeting Link</label>
+                            <div class="input-group input-group-sm online-class-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">link</span>
+                                </span>
+                                <input type="url" class="form-control online-class-input" name="link" id="link" placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij">
+                            </div>
+                            <small class="text-muted" style="font-size: 11px;">Enter Zoom, Google Meet, or other meeting platform link</small>
                         </div>
                     </div>
                 </div>
@@ -655,7 +676,7 @@
         document.getElementById('onlineClassForm').action = '{{ route("online-classes.store") }}';
     }
 
-    function editClass(id, campus, classVal, section, classTopic, startDate, startTime, timing, password) {
+    function editClass(id, campus, classVal, section, classTopic, startDate, startTime, timing, password, link) {
         resetForm();
         document.getElementById('campus').value = campus;
         document.getElementById('class').value = classVal;
@@ -670,6 +691,7 @@
         document.getElementById('start_time').value = startTime || '';
         document.getElementById('timing').value = timing;
         document.getElementById('password').value = password;
+        document.getElementById('link').value = link || '';
         
         const modalLabel = document.getElementById('onlineClassModalLabel');
         modalLabel.innerHTML = `
@@ -727,38 +749,29 @@
         }
     });
 
-    function joinClass(id, classTopic, password) {
-        // Show meeting details and join confirmation
-        const confirmJoin = confirm(`Join Meeting: ${classTopic}\n\nPassword: ${password}\n\nClick OK to join the meeting.`);
-        
-        if (confirmJoin) {
-            // You can customize this to open your video conferencing platform
-            // For example: Zoom, Google Meet, Microsoft Teams, etc.
-            // For now, we'll show the password and allow user to copy it
+    function joinClass(id, classTopic, password, link) {
+        // If link is provided, open it directly
+        if (link && link.trim() !== '') {
+            const confirmJoin = confirm(`Join Meeting: ${classTopic}\n\nPassword: ${password}\n\nClick OK to open the meeting link.`);
+            if (confirmJoin) {
+                window.open(link, '_blank', 'width=1200,height=800');
+            }
+        } else {
+            // Show meeting details and copy password
+            const confirmJoin = confirm(`Join Meeting: ${classTopic}\n\nPassword: ${password}\n\nClick OK to copy password to clipboard.`);
             
-            // Create a temporary input to copy password
-            const tempInput = document.createElement('input');
-            tempInput.value = password;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            document.execCommand('copy');
-            document.body.removeChild(tempInput);
-            
-            // Show success message
-            alert(`Meeting Password copied to clipboard!\n\nClass: ${classTopic}\nPassword: ${password}\n\nPlease use this password to join the meeting.`);
-            
-            // If you have a meeting URL stored, you can fetch it here:
-            // fetch(`/online-classes/${id}/join`)
-            //     .then(response => response.json())
-            //     .then(data => {
-            //         if (data.meeting_url) {
-            //             window.open(data.meeting_url, '_blank', 'width=1200,height=800');
-            //         }
-            //     })
-            //     .catch(error => {
-            //         console.error('Error:', error);
-            //         alert('Unable to join meeting. Please contact the administrator.');
-            //     });
+            if (confirmJoin) {
+                // Create a temporary input to copy password
+                const tempInput = document.createElement('input');
+                tempInput.value = password;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                
+                // Show success message
+                alert(`Meeting Password copied to clipboard!\n\nClass: ${classTopic}\nPassword: ${password}\n\nPlease use this password to join the meeting.`);
+            }
         }
     }
 

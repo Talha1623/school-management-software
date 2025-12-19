@@ -341,5 +341,77 @@ class ParentLeaveController extends Controller
             ], 200);
         }
     }
+
+    /**
+     * Delete Leave Request by ID
+     * 
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function delete(Request $request, int $id): JsonResponse
+    {
+        try {
+            $parent = $request->user();
+            
+            if (!$parent) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'token' => null,
+                ], 404);
+            }
+
+            // Get parent's students IDs
+            $studentIds = $parent->students()->pluck('id');
+
+            if ($studentIds->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No students found for this parent',
+                    'token' => null,
+                ], 404);
+            }
+
+            // Get leave request and verify it belongs to parent's student
+            $leave = Leave::whereIn('student_id', $studentIds)
+                ->findOrFail($id);
+
+            // Store leave info before deletion for response
+            $leaveInfo = [
+                'id' => $leave->id,
+                'student_id' => $leave->student_id,
+                'leave_reason' => $leave->leave_reason,
+                'from_date' => $leave->from_date->format('Y-m-d'),
+                'to_date' => $leave->to_date->format('Y-m-d'),
+                'status' => $leave->status,
+            ];
+
+            // Delete the leave request
+            $leave->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Leave request deleted successfully',
+                'data' => [
+                    'deleted_leave' => $leaveInfo,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Leave request not found or does not belong to your students',
+                'token' => null,
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while deleting leave request: ' . $e->getMessage(),
+                'token' => null,
+            ], 200);
+        }
+    }
 }
 

@@ -38,10 +38,7 @@ class ParentHomeworkController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => 'No students found for this parent',
-                    'data' => [
-                        'homework' => [],
-                        'students' => [],
-                    ],
+                    'data' => [],
                     'token' => $request->user()->currentAccessToken()->token ?? null,
                 ], 200);
             }
@@ -52,63 +49,93 @@ class ParentHomeworkController extends Controller
                 ->where('homework_content', '!=', '')
                 ->whereRaw('TRIM(homework_content) != ?', ['']);
 
-            // Get unique combinations of campus, class, section from students
-            $studentFilters = [];
-            foreach ($students as $student) {
-                if ($student->campus && $student->class && $student->section) {
-                    $key = strtolower(trim($student->campus)) . '|' . 
-                           strtolower(trim($student->class)) . '|' . 
-                           strtolower(trim($student->section));
-                    
-                    if (!isset($studentFilters[$key])) {
-                        $studentFilters[$key] = [
-                            'campus' => $student->campus,
-                            'class' => $student->class,
-                            'section' => $student->section,
-                        ];
-                    }
-                }
-            }
-
-            // Filter homework by students' campus, class, section
-            if (!empty($studentFilters)) {
-                $query->where(function($q) use ($studentFilters) {
-                    foreach ($studentFilters as $filter) {
-                        $q->orWhere(function($subQ) use ($filter) {
-                            $subQ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filter['campus']))])
-                                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filter['class']))])
-                                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filter['section']))]);
-                        });
-                    }
-                });
-            } else {
-                // If no valid filters, return empty
-                return response()->json([
-                    'success' => true,
-                    'message' => 'No valid student information found',
-                    'data' => [
-                        'homework' => [],
-                        'students' => [],
-                    ],
-                    'token' => $request->user()->currentAccessToken()->token ?? null,
-                ], 200);
-            }
-
             // Filter by student_id (optional - specific student)
             if ($request->filled('student_id')) {
+                // If student_id is provided, date is also required
+                if (!$request->filled('date')) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Date is required when student_id is provided',
+                        'token' => null,
+                    ], 400);
+                }
+                // Verify student belongs to this parent
                 $student = $students->firstWhere('id', $request->student_id);
-                if ($student && $student->campus && $student->class && $student->section) {
-                    $query->where(function($q) use ($student) {
-                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                          ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                          ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))]);
+                
+                if (!$student) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Student not found or does not belong to this parent',
+                        'token' => null,
+                    ], 404);
+                }
+
+                if (!$student->campus || !$student->class || !$student->section) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Student information incomplete. Cannot fetch homework.',
+                        'token' => null,
+                    ], 400);
+                }
+
+                // Filter homework only for this specific student
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
+                      ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
+                      ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))]);
+            } else {
+                // Get unique combinations of campus, class, section from all students
+                $studentFilters = [];
+                foreach ($students as $student) {
+                    if ($student->campus && $student->class && $student->section) {
+                        $key = strtolower(trim($student->campus)) . '|' . 
+                               strtolower(trim($student->class)) . '|' . 
+                               strtolower(trim($student->section));
+                        
+                        if (!isset($studentFilters[$key])) {
+                            $studentFilters[$key] = [
+                                'campus' => $student->campus,
+                                'class' => $student->class,
+                                'section' => $student->section,
+                            ];
+                        }
+                    }
+                }
+
+                // Filter homework by students' campus, class, section
+                if (!empty($studentFilters)) {
+                    $query->where(function($q) use ($studentFilters) {
+                        foreach ($studentFilters as $filter) {
+                            $q->orWhere(function($subQ) use ($filter) {
+                                $subQ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filter['campus']))])
+                                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filter['class']))])
+                                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filter['section']))]);
+                            });
+                        }
                     });
+                } else {
+                    // If no valid filters, return empty
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'No valid student information found',
+                        'data' => [],
+                        'token' => $request->user()->currentAccessToken()->token ?? null,
+                    ], 200);
                 }
             }
 
-            // Filter by date (optional)
+            // Filter by date
             if ($request->filled('date')) {
-                $query->whereDate('date', $request->date);
+                // Validate date format
+                try {
+                    $homeworkDate = \Carbon\Carbon::parse($request->date);
+                    $query->whereDate('date', $homeworkDate->format('Y-m-d'));
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid date format. Please use Y-m-d format (e.g., 2024-01-15)',
+                        'token' => null,
+                    ], 400);
+                }
             }
 
             // Filter by date range (optional)
@@ -134,23 +161,8 @@ class ParentHomeworkController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage);
 
-            // Format homework data with student information
-            $homeworkData = $homeworkList->map(function($homework) use ($students) {
-                // Find which students this homework applies to
-                $applicableStudents = $students->filter(function($student) use ($homework) {
-                    return strtolower(trim($student->campus ?? '')) === strtolower(trim($homework->campus ?? '')) &&
-                           strtolower(trim($student->class ?? '')) === strtolower(trim($homework->class ?? '')) &&
-                           strtolower(trim($student->section ?? '')) === strtolower(trim($homework->section ?? ''));
-                })->map(function($student) {
-                    return [
-                        'id' => $student->id,
-                        'student_name' => $student->student_name,
-                        'student_code' => $student->student_code,
-                        'class' => $student->class,
-                        'section' => $student->section,
-                    ];
-                })->values();
-
+            // Format homework data - simple list only
+            $homeworkData = $homeworkList->map(function($homework) {
                 return [
                     'id' => $homework->id,
                     'subject_id' => $homework->subject_id,
@@ -160,44 +172,15 @@ class ParentHomeworkController extends Controller
                     'section' => $homework->section,
                     'date' => $homework->date->format('Y-m-d'),
                     'date_formatted' => $homework->date->format('d M Y'),
-                    'date_formatted_full' => $homework->date->format('l, d F Y'),
                     'homework_content' => $homework->homework_content,
-                    'applicable_students' => $applicableStudents,
-                    'applicable_students_count' => $applicableStudents->count(),
                     'created_at' => $homework->created_at->format('Y-m-d H:i:s'),
-                    'created_at_formatted' => $homework->created_at->format('d M Y, h:i A'),
-                ];
-            });
-
-            // Format students data
-            $studentsData = $students->map(function($student) {
-                return [
-                    'id' => $student->id,
-                    'student_name' => $student->student_name,
-                    'student_code' => $student->student_code,
-                    'class' => $student->class,
-                    'section' => $student->section,
-                    'campus' => $student->campus,
                 ];
             });
 
             return response()->json([
                 'success' => true,
                 'message' => 'Homework list retrieved successfully',
-                'data' => [
-                    'parent_id' => $parent->id,
-                    'total_students' => $students->count(),
-                    'students' => $studentsData,
-                    'homework' => $homeworkData,
-                    'pagination' => [
-                        'current_page' => $homeworkList->currentPage(),
-                        'last_page' => $homeworkList->lastPage(),
-                        'per_page' => $homeworkList->perPage(),
-                        'total' => $homeworkList->total(),
-                        'from' => $homeworkList->firstItem(),
-                        'to' => $homeworkList->lastItem(),
-                    ],
-                ],
+                'data' => $homeworkData,
                 'token' => $request->user()->currentAccessToken()->token ?? null,
             ], 200);
 
@@ -207,6 +190,127 @@ class ParentHomeworkController extends Controller
                 'message' => 'An error occurred while retrieving homework: ' . $e->getMessage(),
                 'token' => null,
             ], 200);
+        }
+    }
+
+    /**
+     * Get Homework by Date (similar to student API)
+     * Returns homework for a specific student on a specific date
+     * 
+     * GET /api/parent/homework/date/{date}?student_id=3
+     * 
+     * @param Request $request
+     * @param string $date (YYYY-MM-DD format)
+     * @return JsonResponse
+     */
+    public function getByDate(Request $request, string $date): JsonResponse
+    {
+        try {
+            $parent = $request->user();
+
+            if (!$parent) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'token' => null,
+                ], 404);
+            }
+
+            // Validate required student_id parameter
+            if (!$request->filled('student_id')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student ID is required',
+                    'token' => null,
+                ], 400);
+            }
+
+            $studentId = (int) $request->student_id;
+
+            // Verify student belongs to this parent
+            $student = $parent->students()->find($studentId);
+            
+            if (!$student) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student not found or does not belong to this parent',
+                    'token' => null,
+                ], 404);
+            }
+
+            // Check if student has complete information
+            if (!$student->campus || !$student->class || !$student->section) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student information incomplete. Cannot fetch homework.',
+                    'token' => null,
+                ], 400);
+            }
+
+            // Validate date format
+            try {
+                $dateObj = \Carbon\Carbon::parse($date);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid date format. Please use YYYY-MM-DD format.',
+                    'token' => null,
+                ], 422);
+            }
+
+            // Get homework for specific date
+            $homeworkList = HomeworkDiary::whereNotNull('homework_content')
+                ->where('homework_content', '!=', '')
+                ->whereRaw('TRIM(homework_content) != ?', [''])
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))])
+                ->whereDate('date', $date)
+                ->with('subject')
+                ->orderBy('subject_id', 'asc')
+                ->get();
+
+            // Format homework data (same format as student API)
+            $homeworkData = $homeworkList->map(function($homework) {
+                return [
+                    'id' => $homework->id,
+                    'subject_id' => $homework->subject_id,
+                    'subject_name' => $homework->subject->subject_name ?? null,
+                    'date' => $homework->date->format('Y-m-d'),
+                    'date_formatted' => $homework->date->format('d M Y'),
+                    'date_formatted_full' => $homework->date->format('l, d F Y'),
+                    'day_name' => $homework->date->format('l'),
+                    'homework_content' => $homework->homework_content,
+                    'created_at' => $homework->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Homework retrieved successfully',
+                'data' => [
+                    'student' => [
+                        'id' => $student->id,
+                        'name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                    ],
+                    'date' => $date,
+                    'date_formatted' => $dateObj->format('d M Y'),
+                    'date_formatted_full' => $dateObj->format('l, d F Y'),
+                    'total_homework' => $homeworkList->count(),
+                    'homework' => $homeworkData,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving homework: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
         }
     }
 

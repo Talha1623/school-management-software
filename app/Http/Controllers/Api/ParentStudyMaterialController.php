@@ -12,8 +12,11 @@ use Illuminate\Support\Facades\Storage;
 class ParentStudyMaterialController extends Controller
 {
     /**
-     * Get Study Materials List for Parent's Students
-     * Returns study materials for all students connected to this parent
+     * Get Study Materials List for Parent's Student (same format as student API)
+     * Returns study materials for a specific student
+     * 
+     * GET /api/parent/study-material/list?student_id=3
+     * Optional: subject, file_type, search
      * 
      * @param Request $request
      * @return JsonResponse
@@ -31,87 +34,59 @@ class ParentStudyMaterialController extends Controller
                 ], 404);
             }
 
-            // Get parent's students
-            $students = $parent->students()->get();
-
-            if ($students->isEmpty()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'No students found for this parent',
-                    'data' => [
-                        'study_materials' => [],
-                        'students' => [],
-                    ],
-                    'token' => $request->user()->currentAccessToken()->token ?? null,
-                ], 200);
-            }
-
-            // Build query to get study materials for all parent's students
-            $query = StudyMaterial::query();
-
-            // Get unique combinations of campus, class, section from students
-            $studentFilters = [];
-            foreach ($students as $student) {
-                if ($student->campus && $student->class && $student->section) {
-                    $key = strtolower(trim($student->campus)) . '|' . 
-                           strtolower(trim($student->class)) . '|' . 
-                           strtolower(trim($student->section));
-                    
-                    if (!isset($studentFilters[$key])) {
-                        $studentFilters[$key] = [
-                            'campus' => $student->campus,
-                            'class' => $student->class,
-                            'section' => $student->section,
-                        ];
-                    }
-                }
-            }
-
-            // Filter study materials by students' campus, class, section
-            if (!empty($studentFilters)) {
-                $query->where(function($q) use ($studentFilters) {
-                    foreach ($studentFilters as $filter) {
-                        $q->orWhere(function($subQ) use ($filter) {
-                            $subQ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filter['campus']))])
-                                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filter['class']))])
-                                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filter['section']))]);
-                        });
-                    }
-                });
-            } else {
-                // If no valid filters, return empty
-                return response()->json([
-                    'success' => true,
-                    'message' => 'No valid student information found',
-                    'data' => [
-                        'study_materials' => [],
-                        'students' => [],
-                    ],
-                    'token' => $request->user()->currentAccessToken()->token ?? null,
-                ], 200);
-            }
-
-            // Filter by student_id (optional - specific student)
+            // Optional student_id parameter - if not provided, use first student (similar to student API)
             if ($request->filled('student_id')) {
-                $student = $students->firstWhere('id', $request->student_id);
-                if ($student && $student->campus && $student->class && $student->section) {
-                    $query->where(function($q) use ($student) {
-                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                          ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                          ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))]);
-                    });
+                $studentId = (int) $request->student_id;
+                
+                // Verify student belongs to this parent
+                $student = $parent->students()->find($studentId);
+                
+                if (!$student) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Student not found or does not belong to this parent',
+                        'token' => null,
+                    ], 404);
                 }
+            } else {
+                // Get first student from parent's children (similar to student API using authenticated student)
+                $parentStudents = $parent->students()->get();
+                
+                if ($parentStudents->isEmpty()) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'No students found for this parent',
+                        'data' => [
+                            'student' => null,
+                            'study_materials' => [],
+                            'pagination' => [
+                                'current_page' => 1,
+                                'last_page' => 1,
+                                'per_page' => 30,
+                                'total' => 0,
+                                'from' => null,
+                                'to' => null,
+                            ],
+                        ],
+                        'token' => $request->user()->currentAccessToken()->token ?? null,
+                    ], 200);
+                }
+                
+                $student = $parentStudents->first();
             }
 
-            // Filter by class (optional)
-            if ($request->filled('class')) {
-                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
+            if (!$student->campus || !$student->class || !$student->section) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student information incomplete. Cannot fetch study materials.',
+                    'token' => null,
+                ], 400);
             }
 
-            // Filter by section (optional)
-            if ($request->filled('section')) {
-                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->section))]);
-            }
+            // Get study materials for this student's class, section, campus
+            $query = StudyMaterial::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))]);
 
             // Filter by subject (optional)
             if ($request->filled('subject')) {
@@ -144,32 +119,29 @@ class ParentStudyMaterialController extends Controller
                 ->orderBy('id', 'desc')
                 ->paginate($perPage);
 
-            // Format study materials data with student information
-            $studyMaterialsData = $studyMaterials->map(function($material) use ($students) {
-                // Find which students this material applies to
-                $applicableStudents = $students->filter(function($student) use ($material) {
-                    return strtolower(trim($student->campus ?? '')) === strtolower(trim($material->campus ?? '')) &&
-                           strtolower(trim($student->class ?? '')) === strtolower(trim($material->class ?? '')) &&
-                           strtolower(trim($student->section ?? '')) === strtolower(trim($material->section ?? ''));
-                })->map(function($student) {
-                    return [
-                        'id' => $student->id,
-                        'student_name' => $student->student_name,
-                        'student_code' => $student->student_code,
-                        'class' => $student->class,
-                        'section' => $student->section,
-                    ];
-                })->values();
-
-                // Get file URL or YouTube URL
+            // Format study materials data (same format as student API)
+            $studyMaterialsData = $studyMaterials->map(function($material) {
+                // Get file URL or YouTube URL based on file type
                 $fileUrl = null;
-                if ($material->file_type === 'video' && $material->youtube_url) {
-                    $fileUrl = $material->youtube_url;
-                } elseif ($material->file_path) {
-                    $fileUrl = asset('storage/' . $material->file_path);
-                    // Convert to full URL if needed
-                    if (!filter_var($fileUrl, FILTER_VALIDATE_URL)) {
-                        $fileUrl = url($fileUrl);
+                $youtubeUrl = null;
+                
+                if ($material->file_type === 'video') {
+                    // For video type, use YouTube URL
+                    if ($material->youtube_url) {
+                        $youtubeUrl = $material->youtube_url;
+                        $fileUrl = $material->youtube_url; // Also set in file_url for consistency
+                    }
+                } elseif ($material->file_type === 'picture' || $material->file_type === 'documents') {
+                    // For picture or documents, use file_path
+                    if ($material->file_path) {
+                        // Check if file exists in storage
+                        if (Storage::disk('public')->exists($material->file_path)) {
+                            $fileUrl = asset('storage/' . $material->file_path);
+                            // Convert to full URL if needed
+                            if (!filter_var($fileUrl, FILTER_VALIDATE_URL)) {
+                                $fileUrl = url($fileUrl);
+                            }
+                        }
                     }
                 }
 
@@ -181,27 +153,13 @@ class ParentStudyMaterialController extends Controller
                     'class' => $material->class,
                     'section' => $material->section ?? null,
                     'subject' => $material->subject ?? null,
-                    'file_type' => $material->file_type,
-                    'file_url' => $fileUrl,
-                    'youtube_url' => $material->youtube_url ?? null,
-                    'file_path' => $material->file_path ?? null,
-                    'applicable_students' => $applicableStudents,
-                    'applicable_students_count' => $applicableStudents->count(),
+                    'file_type' => $material->file_type, // video, picture, documents
+                    'file_url' => $fileUrl, // For picture/documents - direct file URL, For video - YouTube URL
+                    'youtube_url' => $youtubeUrl, // Only for video type
+                    'file_path' => $material->file_path ?? null, // Only for picture/documents
                     'created_at' => $material->created_at->format('Y-m-d H:i:s'),
                     'created_at_formatted' => $material->created_at->format('d M Y, h:i A'),
                     'updated_at' => $material->updated_at->format('Y-m-d H:i:s'),
-                ];
-            });
-
-            // Format students data
-            $studentsData = $students->map(function($student) {
-                return [
-                    'id' => $student->id,
-                    'student_name' => $student->student_name,
-                    'student_code' => $student->student_code,
-                    'class' => $student->class,
-                    'section' => $student->section,
-                    'campus' => $student->campus,
                 ];
             });
 
@@ -209,9 +167,14 @@ class ParentStudyMaterialController extends Controller
                 'success' => true,
                 'message' => 'Study materials retrieved successfully',
                 'data' => [
-                    'parent_id' => $parent->id,
-                    'total_students' => $students->count(),
-                    'students' => $studentsData,
+                    'student' => [
+                        'id' => $student->id,
+                        'student_name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                        'campus' => $student->campus,
+                    ],
                     'study_materials' => $studyMaterialsData,
                     'pagination' => [
                         'current_page' => $studyMaterials->currentPage(),

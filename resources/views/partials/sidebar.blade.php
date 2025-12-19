@@ -2,8 +2,7 @@
 <div class="sidebar-area" id="sidebar-area">
     <div class="logo position-relative d-flex align-items-center justify-content-between">
         <a href="{{ route('dashboard') }}" class="d-block text-decoration-none position-relative">
-            <img src="{{ asset('assets/images/logo-icon.png') }}" alt="logo-icon">
-            <span class="logo-text text-secondary fw-semibold">ICMS</span>
+            <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
         </a> 
         <button class="sidebar-burger-menu-close bg-transparent py-3 border-0 opacity-0 z-n1 position-absolute top-50 end-0 translate-middle-y" id="sidebar-burger-menu-close">
             <span class="border-1 d-block for-dark-burger" style="border-bottom: 1px solid #475569; height: 1px; width: 25px; transform: rotate(45deg);"></span>
@@ -21,6 +20,29 @@
             @php
                 $isStaff = Auth::guard('staff')->check();
                 $isAdmin = Auth::guard('admin')->check();
+
+                $staffUnreadChatCount = 0;
+                $adminUnreadChatCount = 0;
+
+                if ($isStaff) {
+                    $staffUser = Auth::guard('staff')->user();
+                    if ($staffUser) {
+                        $staffUnreadChatCount = \App\Models\Message::where('to_type', 'teacher')
+                            ->where('to_id', $staffUser->id)
+                            ->whereNull('read_at')
+                            ->count();
+                    }
+                }
+
+                if ($isAdmin) {
+                    $adminUser = Auth::guard('admin')->user();
+                    if ($adminUser) {
+                        $adminUnreadChatCount = \App\Models\Message::where('to_type', 'admin')
+                            ->where('to_id', $adminUser->id)
+                            ->whereNull('read_at')
+                            ->count();
+                    }
+                }
             @endphp
             
             @if($isStaff)
@@ -160,6 +182,17 @@
                     <a href="{{ route('online-classes') }}" class="menu-link {{ request()->routeIs('online-classes*') ? 'active' : '' }}">
                         <span class="material-symbols-outlined menu-icon">video_call</span>
                         <span class="title">Online Class</span>
+                    </a>
+                </li>
+
+                {{-- Live Chat --}}
+                <li class="menu-item {{ request()->routeIs('staff.chat*') ? 'active' : '' }}">
+                    <a href="{{ route('staff.chat') }}" class="menu-link {{ request()->routeIs('staff.chat*') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">chat</span>
+                        <span class="title">Live Chat</span>
+                        @if($staffUnreadChatCount > 0)
+                            <span class="badge bg-danger ms-auto" style="font-size: 11px; min-width: 20px;">{{ $staffUnreadChatCount }}</span>
+                        @endif
                     </a>
                 </li>
                 
@@ -1427,6 +1460,9 @@
                         <a href="{{ route('live-chat') }}" class="menu-link {{ request()->routeIs('live-chat') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">chat</span>
                             <span class="title">Live Chat</span>
+                            @if($adminUnreadChatCount > 0)
+                                <span class="badge bg-danger ms-auto" style="font-size: 11px; min-width: 20px;">{{ $adminUnreadChatCount }}</span>
+                            @endif
                         </a>
                     </li>
                     @endif

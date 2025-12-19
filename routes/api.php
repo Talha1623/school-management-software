@@ -69,6 +69,10 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         Route::get('/students', [App\Http\Controllers\Api\ParentAuthController::class, 'students'])->name('students');
         Route::post('/change-password', [App\Http\Controllers\Api\ParentAuthController::class, 'changePassword'])->name('change-password');
         
+        // Behavior Routes (Parent side)
+        Route::get('/behavior/summary', [App\Http\Controllers\Api\ParentBehaviorController::class, 'summary'])->name('behavior.summary');
+        Route::get('/behavior/records', [App\Http\Controllers\Api\ParentBehaviorController::class, 'records'])->name('behavior.records');
+        
         // Noticeboard Routes
         Route::match(['GET', 'POST'], '/notices', [App\Http\Controllers\Api\ParentNoticeboardController::class, 'list'])->name('notices.list');
         Route::get('/notices/{id}', [App\Http\Controllers\Api\ParentNoticeboardController::class, 'show'])->name('notices.show');
@@ -76,6 +80,7 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         
         // Homework Routes
         Route::match(['GET', 'POST'], '/homework', [App\Http\Controllers\Api\ParentHomeworkController::class, 'list'])->name('homework.list');
+        Route::get('/homework/date/{date}', [App\Http\Controllers\Api\ParentHomeworkController::class, 'getByDate'])->name('homework.by-date');
         Route::get('/homework/student/{studentId}', [App\Http\Controllers\Api\ParentHomeworkController::class, 'getByStudent'])->name('homework.by-student');
         Route::get('/homework/subjects', [App\Http\Controllers\Api\ParentHomeworkController::class, 'getSubjects'])->name('homework.subjects');
         
@@ -86,7 +91,7 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         Route::get('/academic-calendar/calendar-view', [App\Http\Controllers\Api\ParentEventController::class, 'calendarView'])->name('academic-calendar.calendar-view');
         
         // Study Material Routes
-        Route::match(['GET', 'POST'], '/study-material', [App\Http\Controllers\Api\ParentStudyMaterialController::class, 'list'])->name('study-material.list');
+        Route::match(['GET', 'POST'], '/study-material/list', [App\Http\Controllers\Api\ParentStudyMaterialController::class, 'list'])->name('study-material.list');
         Route::get('/study-material/student/{studentId}', [App\Http\Controllers\Api\ParentStudyMaterialController::class, 'getByStudent'])->name('study-material.by-student');
         Route::get('/study-material/subjects', [App\Http\Controllers\Api\ParentStudyMaterialController::class, 'getSubjects'])->name('study-material.subjects');
         
@@ -95,6 +100,96 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         Route::post('/leave/create', [App\Http\Controllers\Api\ParentLeaveController::class, 'create'])->name('leave.create');
         Route::match(['GET', 'POST'], '/leave/list', [App\Http\Controllers\Api\ParentLeaveController::class, 'list'])->name('leave.list');
         Route::get('/leave/{id}', [App\Http\Controllers\Api\ParentLeaveController::class, 'show'])->name('leave.show');
+        Route::delete('/leave/{id}', [App\Http\Controllers\Api\ParentLeaveController::class, 'delete'])->name('leave.delete');
+
+        // Parent Complaint Routes
+        Route::get('/complaints', [App\Http\Controllers\Api\ParentComplaintApiController::class, 'index'])->name('complaints.index');
+        Route::post('/complaints', [App\Http\Controllers\Api\ParentComplaintApiController::class, 'store'])->name('complaints.store');
+        Route::delete('/complaints/{id}', [App\Http\Controllers\Api\ParentComplaintApiController::class, 'delete'])->name('complaints.delete');
+
+        // Online Classes (Student/Parent view)
+        Route::get('/online-classes', [App\Http\Controllers\Api\ParentOnlineClassController::class, 'index'])->name('online-classes.index');
+
+        // Simple Student Fees List (per child)
+        Route::get('/student-fees', [App\Http\Controllers\Api\ParentFeeController::class, 'studentFees'])->name('student-fees');
+        
+        // Attendance Routes
+        Route::get('/attendance/class', [App\Http\Controllers\Api\ParentAttendanceController::class, 'classAttendance'])->name('attendance.class');
+        
+        // Timetable Routes
+        Route::get('/timetable/{student_id}/{date}', [App\Http\Controllers\Api\ParentTimetableController::class, 'getTimetable'])->name('timetable');
+        
+        // Test Results Routes
+        Route::get('/test-results', [App\Http\Controllers\Api\ParentTestResultController::class, 'getTestResults'])->name('test-results');
+        
+        // Exam Results Routes (same as test results)
+        Route::get('/exam-results', [App\Http\Controllers\Api\ParentTestResultController::class, 'getExamResults'])->name('exam-results');
+    });
+});
+
+// Student API Routes
+Route::prefix('student')->name('api.student.')->group(function () {
+    // Public routes (no authentication required)
+    Route::post('/login', [App\Http\Controllers\Api\StudentAuthController::class, 'login'])->name('login');
+    
+    // Protected routes (require authentication)
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::post('/logout', [App\Http\Controllers\Api\StudentAuthController::class, 'logout'])->name('logout');
+        Route::get('/profile', [App\Http\Controllers\Api\StudentAuthController::class, 'profile'])->name('profile');
+        Route::get('/personal-details', [App\Http\Controllers\Api\StudentAuthController::class, 'personalDetails'])->name('personal-details');
+        Route::post('/change-password', [App\Http\Controllers\Api\StudentAuthController::class, 'changePassword'])->name('change-password');
+        
+        // Behavior Routes
+        Route::get('/behavior/summary', [App\Http\Controllers\Api\StudentBehaviorController::class, 'summary'])->name('behavior.summary');
+        Route::match(['GET', 'POST'], '/behavior/records', [App\Http\Controllers\Api\StudentBehaviorController::class, 'records'])->name('behavior.records');
+        Route::get('/behavior/today', [App\Http\Controllers\Api\StudentBehaviorController::class, 'today'])->name('behavior.today');
+        
+        // Attendance Routes
+        Route::get('/attendance/class', [App\Http\Controllers\Api\StudentAttendanceController::class, 'classAttendance'])->name('attendance.class');
+        
+        // Leave Management Routes
+        Route::post('/leave/create', [App\Http\Controllers\Api\StudentLeaveController::class, 'create'])->name('leave.create');
+        Route::match(['GET', 'POST'], '/leave/list', [App\Http\Controllers\Api\StudentLeaveController::class, 'list'])->name('leave.list');
+        Route::get('/leave/{id}', [App\Http\Controllers\Api\StudentLeaveController::class, 'show'])->name('leave.show');
+        Route::post('/leave/{id}/cancel', [App\Http\Controllers\Api\StudentLeaveController::class, 'cancel'])->name('leave.cancel');
+        Route::delete('/leave/{id}', [App\Http\Controllers\Api\StudentLeaveController::class, 'delete'])->name('leave.delete');
+        
+        // Noticeboard Routes
+        Route::match(['GET', 'POST'], '/noticeboard/list', [App\Http\Controllers\Api\StudentNoticeboardController::class, 'list'])->name('noticeboard.list');
+        Route::get('/noticeboard/{id}', [App\Http\Controllers\Api\StudentNoticeboardController::class, 'show'])->name('noticeboard.show');
+        Route::get('/noticeboard/filter-options', [App\Http\Controllers\Api\StudentNoticeboardController::class, 'getFilterOptions'])->name('noticeboard.filter-options');
+        
+        // Academic Calendar Routes
+        Route::match(['GET', 'POST'], '/academic-calendar/list', [App\Http\Controllers\Api\StudentEventController::class, 'list'])->name('academic-calendar.list');
+        Route::get('/academic-calendar/{month}/{year}', [App\Http\Controllers\Api\StudentEventController::class, 'getEventsByMonthYear'])->name('academic-calendar.by-month-year');
+        Route::get('/academic-calendar/event/{id}', [App\Http\Controllers\Api\StudentEventController::class, 'show'])->name('academic-calendar.show');
+        Route::get('/academic-calendar/calendar-view', [App\Http\Controllers\Api\StudentEventController::class, 'calendarView'])->name('academic-calendar.calendar-view');
+        
+        // Homework Routes
+        Route::match(['GET', 'POST'], '/homework/list', [App\Http\Controllers\Api\StudentHomeworkController::class, 'list'])->name('homework.list');
+        Route::get('/homework/today', [App\Http\Controllers\Api\StudentHomeworkController::class, 'today'])->name('homework.today');
+        Route::get('/homework/date/{date}', [App\Http\Controllers\Api\StudentHomeworkController::class, 'getByDate'])->name('homework.by-date');
+        Route::get('/homework/subjects', [App\Http\Controllers\Api\StudentHomeworkController::class, 'getSubjects'])->name('homework.subjects');
+        
+        // Timetable Routes
+        Route::get('/timetable/{student_id}/{date}', [App\Http\Controllers\Api\StudentTimetableController::class, 'getTimetable'])->name('timetable');
+        
+        // Study Material Routes
+        Route::match(['GET', 'POST'], '/study-material/list', [App\Http\Controllers\Api\StudentStudyMaterialController::class, 'list'])->name('study-material.list');
+        Route::get('/study-material/subjects', [App\Http\Controllers\Api\StudentStudyMaterialController::class, 'getSubjects'])->name('study-material.subjects');
+        
+        // Online Classes Routes
+        Route::get('/online-classes', [App\Http\Controllers\Api\StudentOnlineClassController::class, 'index'])->name('online-classes.index');
+        
+        // Fee Routes
+        Route::get('/fees', [App\Http\Controllers\Api\StudentFeeController::class, 'getFees'])->name('fees');
+        Route::get('/fees/payment-history', [App\Http\Controllers\Api\StudentFeeController::class, 'getPaymentHistory'])->name('fees.payment-history');
+        
+        // Test Results Routes
+        Route::get('/test-results', [App\Http\Controllers\Api\StudentTestResultController::class, 'getTestResults'])->name('test-results');
+        
+        // Test List Routes
+        Route::get('/tests', [App\Http\Controllers\Api\StudentTestListController::class, 'getTests'])->name('tests');
     });
 });
 
@@ -122,6 +217,14 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::post('/behavior/students', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'getStudents'])->name('behavior.students');
         Route::post('/behavior/save', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'saveRecord'])->name('behavior.save');
         Route::get('/behavior/records', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'getRecords'])->name('behavior.records');
+
+        // Online Classes (Teacher create/list)
+        Route::get('/online-classes', [App\Http\Controllers\Api\TeacherOnlineClassController::class, 'index'])->name('online-classes.index');
+        Route::post('/online-classes', [App\Http\Controllers\Api\TeacherOnlineClassController::class, 'store'])->name('online-classes.store');
+
+        // Chat with Super Admin/Admin (Teacher side)
+        Route::get('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'index'])->name('chat.messages');
+        Route::post('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'store'])->name('chat.messages.store');
         
         // Attendance Routes
         Route::post('/attendance/mark', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'mark'])->name('attendance.mark');
