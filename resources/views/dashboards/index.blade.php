@@ -241,9 +241,9 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">calculate</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">52</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $unpaidInvoicesCount ?? 0 }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Unpaid Invoices</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">Amount: 64300.00</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">Amount: {{ number_format($unpaidInvoicesAmount ?? 0, 2) }}</p>
                     <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
                 </div>
             </div>
@@ -253,9 +253,9 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_downward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">0</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($incomeToday ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Income Today</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: 0</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($incomeThisMonth ?? 0, 2) }}</p>
                     <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
                 </div>
             </div>
@@ -265,9 +265,9 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_upward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">0</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($expenseToday ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Expense Today</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: 0</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($expenseThisMonth ?? 0, 2) }}</p>
                     <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
                 </div>
             </div>
@@ -277,9 +277,9 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">payments</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">0</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($profitToday ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Profit Today</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: 0</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($profitThisMonth ?? 0, 2) }}</p>
                     <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
                 </div>
             </div>
@@ -388,8 +388,8 @@
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="flex-grow-1">
                         <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.active_students') }}</h6>
-                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">38</h2>
-                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Boys: 7 Girls: 0 (No Gender Set: 31)</p>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $activeStudentsCount ?? 0 }}</h2>
+                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Boys: {{ $boysCount ?? 0 }} Girls: {{ $girlsCount ?? 0 }}@if(($noGenderSetCount ?? 0) > 0) (No Gender Set: {{ $noGenderSetCount ?? 0 }})@endif</p>
                     </div>
                     <div class="flex-shrink-0">
                         <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">person</span>
@@ -402,7 +402,7 @@
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="flex-grow-1">
                         <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.parents') }}</h6>
-                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">18</h2>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $totalParents ?? 0 }}</h2>
                         <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Total Registered Parents</p>
                     </div>
                     <div class="flex-shrink-0">
@@ -416,8 +416,8 @@
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="flex-grow-1">
                         <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.staff') }}</h6>
-                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">5</h2>
-                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Male: 5 Female: 0</p>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $totalStaff ?? 0 }}</h2>
+                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Male: {{ $maleStaff ?? 0 }} Female: {{ $femaleStaff ?? 0 }}</p>
                     </div>
                     <div class="flex-shrink-0">
                         <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">groups</span>
@@ -430,8 +430,8 @@
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="flex-grow-1">
                         <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.present_students_today') }}</h6>
-                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">0</h2>
-                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Attendance Percentage: 0%</p>
+                        <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $presentStudentsToday ?? 0 }}</h2>
+                        <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Attendance Percentage: {{ number_format($attendancePercentage ?? 0, 1) }}%</p>
                     </div>
                     <div class="flex-shrink-0">
                         <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">thumb_up</span>

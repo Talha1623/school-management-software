@@ -361,19 +361,51 @@ class ExamController extends Controller
             }
         }
 
-        // Get subjects (filtered by class and section if provided)
+        // Get subjects (filtered by class and section if provided, and by teacher if teacher)
         $subjectsQuery = Subject::query();
+        
+        // Filter by teacher's assigned subjects if teacher
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+        }
+        
         if ($filterClass) {
             $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
         }
+        
+        // Get subjects for class first (without section filter) - this ensures subjects always show
+        $subjectsForClass = clone $subjectsQuery;
+        $subjectsForClass = $subjectsForClass->whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+        
+        // Try filtering by section if provided
         if ($filterSection) {
             $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            $subjectsWithSection = $subjectsQuery->whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            
+            // If subjects found with section filter, use those; otherwise use class subjects
+            if ($subjectsWithSection->isNotEmpty()) {
+                $subjects = $subjectsWithSection;
+            } else {
+                // Fallback to class subjects if section filter doesn't match
+                $subjects = $subjectsForClass;
+            }
+        } else {
+            // No section filter, use class subjects
+            $subjects = $subjectsForClass;
         }
-        $subjects = $subjectsQuery->whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
         
-        // If no subjects found and no filters applied, show all subjects
+        // If no subjects found and no filters applied, show all subjects (or teacher's subjects if teacher)
         if ($subjects->isEmpty() && !$filterClass && !$filterSection) {
-            $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+                $subjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                    ->whereNotNull('subject_name')
+                    ->distinct()
+                    ->pluck('subject_name')
+                    ->sort()
+                    ->values();
+            } else {
+                $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            }
         }
 
         // Query students based on filters
@@ -489,20 +521,39 @@ class ExamController extends Controller
         $class = $request->get('class');
         $section = $request->get('section');
         
+        $staff = Auth::guard('staff')->user();
+        
         $subjectsQuery = Subject::query();
+        
+        // Filter by teacher's assigned subjects if teacher
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+        }
         
         if ($class) {
             $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
         }
+        
+        // Get subjects for class first (without section filter) - this ensures subjects always show
+        $subjectsForClass = clone $subjectsQuery;
+        $subjectsForClass = $subjectsForClass->whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+        
+        // Try filtering by section if provided
         if ($section) {
             $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            $subjectsWithSection = $subjectsQuery->whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            
+            // If subjects found with section filter, use those; otherwise use class subjects
+            if ($subjectsWithSection->isNotEmpty()) {
+                $subjects = $subjectsWithSection;
+            } else {
+                // Fallback to class subjects if section filter doesn't match
+                $subjects = $subjectsForClass;
+            }
+        } else {
+            // No section filter, use class subjects
+            $subjects = $subjectsForClass;
         }
-        
-        $subjects = $subjectsQuery->whereNotNull('subject_name')
-            ->distinct()
-            ->pluck('subject_name')
-            ->sort()
-            ->values();
         
         return response()->json(['subjects' => $subjects]);
     }
@@ -512,54 +563,111 @@ class ExamController extends Controller
      */
     public function saveExamMarks(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'exam_name' => ['required', 'string'],
-            'class' => ['required', 'string'],
-            'section' => ['nullable', 'string'],
-            'subject' => ['required', 'string'],
-            'marks' => ['required', 'array'],
-            'marks.*.obtained' => ['nullable', 'numeric', 'min:0'],
-            'marks.*.total' => ['nullable', 'numeric', 'min:0'],
-            'marks.*.passing' => ['nullable', 'numeric', 'min:0'],
-        ]);
+        try {
+            $validated = $request->validate([
+                'exam_name' => ['required', 'string'],
+                'class' => ['required', 'string'],
+                'section' => ['nullable', 'string'],
+                'subject' => ['required', 'string'],
+                'marks' => ['required', 'array', 'min:1'],
+                'marks.*.obtained' => ['nullable', 'numeric', 'min:0'],
+                'marks.*.total' => ['nullable', 'numeric', 'min:0'],
+                'marks.*.passing' => ['nullable', 'numeric', 'min:0'],
+            ], [
+                'marks.required' => 'Please enter marks for at least one student.',
+                'marks.min' => 'Please enter marks for at least one student.',
+                'exam_name.required' => 'Exam name is required.',
+                'subject.required' => 'Subject is required.',
+            ]);
 
-        // Get campus from first student or exam
-        $firstStudentId = array_key_first($validated['marks']);
-        $student = Student::find($firstStudentId);
-        $campus = $student ? $student->campus : '';
-
-        // Save or update marks for each student
-        foreach ($validated['marks'] as $studentId => $markData) {
-            if ($studentId) {
-                $student = Student::find($studentId);
-                $campus = $student ? $student->campus : $campus;
-                
-                StudentMark::updateOrCreate(
-                    [
-                        'student_id' => $studentId,
-                        'test_name' => $validated['exam_name'], // Using test_name field for exam_name
-                        'campus' => $campus,
-                        'class' => $validated['class'],
-                        'section' => $validated['section'] ?? null,
-                        'subject' => $validated['subject'],
-                    ],
-                    [
-                        'marks_obtained' => $markData['obtained'] ?? null,
-                        'total_marks' => $markData['total'] ?? null,
-                        'passing_marks' => $markData['passing'] ?? null,
-                    ]
-                );
+            // Check if marks array is empty or has no valid data
+            $hasValidMarks = false;
+            foreach ($validated['marks'] as $studentId => $markData) {
+                if (isset($markData['obtained']) || isset($markData['total']) || isset($markData['passing'])) {
+                    $hasValidMarks = true;
+                    break;
+                }
             }
+
+            if (!$hasValidMarks) {
+                return redirect()
+                    ->route('exam.marks-entry', [
+                        'filter_exam' => $validated['exam_name'],
+                        'filter_class' => $validated['class'],
+                        'filter_section' => $validated['section'] ?? '',
+                        'filter_subject' => $validated['subject'],
+                    ])
+                    ->with('error', 'Please enter at least one mark (obtained, total, or passing) for at least one student.');
+            }
+
+            // Get campus from first student or exam
+            $firstStudentId = array_key_first($validated['marks']);
+            $student = Student::find($firstStudentId);
+            $campus = $student ? $student->campus : '';
+
+            $savedCount = 0;
+            // Save or update marks for each student
+            foreach ($validated['marks'] as $studentId => $markData) {
+                if ($studentId) {
+                    $student = Student::find($studentId);
+                    if (!$student) {
+                        continue; // Skip if student not found
+                    }
+                    
+                    $campus = $student->campus ?? $campus;
+                    
+                    // Only save if at least one mark field has a value
+                    if (isset($markData['obtained']) || isset($markData['total']) || isset($markData['passing'])) {
+                        StudentMark::updateOrCreate(
+                            [
+                                'student_id' => $studentId,
+                                'test_name' => $validated['exam_name'], // Using test_name field for exam_name
+                                'campus' => $campus,
+                                'class' => $validated['class'],
+                                'section' => $validated['section'] ?? null,
+                                'subject' => $validated['subject'],
+                            ],
+                            [
+                                'marks_obtained' => !empty($markData['obtained']) ? $markData['obtained'] : null,
+                                'total_marks' => !empty($markData['total']) ? $markData['total'] : null,
+                                'passing_marks' => !empty($markData['passing']) ? $markData['passing'] : null,
+                            ]
+                        );
+                        $savedCount++;
+                    }
+                }
+            }
+            
+            if ($savedCount > 0) {
+                return redirect()
+                    ->route('exam.marks-entry', [
+                        'filter_exam' => $validated['exam_name'],
+                        'filter_class' => $validated['class'],
+                        'filter_section' => $validated['section'] ?? '',
+                        'filter_subject' => $validated['subject'],
+                    ])
+                    ->with('success', "Exam marks saved successfully for {$savedCount} student(s)!");
+            } else {
+                return redirect()
+                    ->route('exam.marks-entry', [
+                        'filter_exam' => $validated['exam_name'],
+                        'filter_class' => $validated['class'],
+                        'filter_section' => $validated['section'] ?? '',
+                        'filter_subject' => $validated['subject'],
+                    ])
+                    ->with('error', 'No marks were saved. Please enter at least one mark value.');
+            }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()
+                ->back()
+                ->withErrors($e->errors())
+                ->withInput();
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->with('error', 'An error occurred while saving marks: ' . $e->getMessage())
+                ->withInput();
         }
-        
-        return redirect()
-            ->route('exam.marks-entry', [
-                'filter_exam' => $validated['exam_name'],
-                'filter_class' => $validated['class'],
-                'filter_section' => $validated['section'] ?? '',
-                'filter_subject' => $validated['subject'],
-            ])
-            ->with('success', 'Exam marks saved successfully!');
     }
 
     /**

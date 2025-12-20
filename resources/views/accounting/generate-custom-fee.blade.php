@@ -111,6 +111,48 @@
                     </div>
                 </div>
                 
+                <!-- Student Selection Section -->
+                <div class="row mb-3" id="student-selection-section" style="display: none;">
+                    <div class="col-12">
+                        <div class="card bg-light border-0 rounded-10 p-3">
+                            <h5 class="mb-3 fw-semibold" style="color: #003471;">Student Selection</h5>
+                            
+                            <div class="mb-2 d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-success" onclick="selectAllStudents()">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">check_box</span>
+                                    Select All
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger" onclick="selectNoneStudents()">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">check_box_outline_blank</span>
+                                    Select None
+                                </button>
+                            </div>
+                            
+                            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                <table class="table table-sm table-hover">
+                                    <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 10;">
+                                        <tr>
+                                            <th style="width: 50px;">
+                                                <input type="checkbox" id="select-all-checkbox" onchange="toggleAllStudents(this)">
+                                            </th>
+                                            <th>Roll</th>
+                                            <th style="color: #dc3545;">Student</th>
+                                            <th>Parent</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="students-list">
+                                        <!-- Students will be loaded here dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div id="no-students-message" class="text-center text-muted py-3" style="display: none;">
+                                No students found for the selected criteria.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Submit Button -->
                 <div class="row mb-2">
                     <div class="col-12">
@@ -119,7 +161,7 @@
                                 <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">refresh</span>
                                 Reset
                             </button>
-                            <button type="submit" class="btn btn-sm px-4 py-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;">
+                            <button type="submit" class="btn btn-sm px-4 py-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;" id="generate-fee-btn">
                                 <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">payments</span>
                                 Generate Fee
                             </button>
@@ -156,18 +198,112 @@
 document.addEventListener('DOMContentLoaded', function() {
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
+    const campusSelect = document.getElementById('campus');
     
-    classSelect.addEventListener('change', function() {
-        const selectedClass = this.value;
+    // Function to load students
+    function loadStudents() {
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
         
-        // Reset section dropdown
-        sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
-        sectionSelect.disabled = true;
+        const studentSection = document.getElementById('student-selection-section');
+        const studentsList = document.getElementById('students-list');
+        const noStudentsMessage = document.getElementById('no-students-message');
         
-        if (!selectedClass) {
-            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+        // Check if elements exist
+        if (!studentSection || !studentsList) {
+            console.error('Student section elements not found');
             return;
         }
+        
+        // Hide student section if required fields are not filled
+        if (!campus || !classValue || !section) {
+            if (studentSection) studentSection.style.display = 'none';
+            if (studentsList) studentsList.innerHTML = '';
+            return;
+        }
+        
+        // Show loading state
+        studentsList.innerHTML = '<tr><td colspan="4" class="text-center">Loading students...</td></tr>';
+        studentSection.style.display = 'block';
+        if (noStudentsMessage) noStudentsMessage.style.display = 'none';
+        
+        // Build query parameters
+        const params = new URLSearchParams({
+            campus: campus,
+            class: classValue,
+            section: section
+        });
+        
+        // Fetch students
+        const url = `{{ route('accounting.custom-fee.get-students') }}?${params.toString()}`;
+        console.log('Fetching students from:', url);
+        
+        fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Students data received:', data);
+            studentsList.innerHTML = '';
+            
+            if (data.students && data.students.length > 0) {
+                data.students.forEach(student => {
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td>
+                            <input type="checkbox" 
+                                   name="selected_students[]" 
+                                   value="${student.id}" 
+                                   class="student-checkbox"
+                                   data-student-id="${student.id}">
+                        </td>
+                        <td>${student.student_code || 'N/A'}</td>
+                        <td style="color: #dc3545; font-weight: 500;">${student.student_name || 'N/A'}</td>
+                        <td>${student.parent_name || 'N/A'}</td>
+                    `;
+                    studentsList.appendChild(row);
+                });
+                
+                // Update select all checkbox
+                updateSelectAllCheckbox();
+                noStudentsMessage.style.display = 'none';
+            } else {
+                studentsList.innerHTML = '';
+                noStudentsMessage.style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching students:', error);
+            studentsList.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading students</td></tr>';
+        });
+    }
+    
+    // Event listeners
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            const selectedClass = this.value;
+            
+            if (!sectionSelect) return;
+            
+            // Reset section dropdown
+            sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
+            sectionSelect.disabled = true;
+            
+            if (!selectedClass) {
+                sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+                loadStudents();
+                return;
+            }
         
         // Fetch sections for selected class
         fetch(`{{ route('accounting.custom-fee.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`, {
@@ -191,30 +327,111 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 sectionSelect.innerHTML = '<option value="">No sections found</option>';
             }
+            
+            loadStudents();
         })
         .catch(error => {
             console.error('Error fetching sections:', error);
-            sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+            if (sectionSelect) {
+                sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+            }
+            loadStudents();
         });
-    });
+        });
+    }
+    
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', loadStudents);
+    }
+    
+    if (campusSelect) {
+        campusSelect.addEventListener('change', loadStudents);
+    }
+    
+    // Load students on page load if all fields are already filled
+    setTimeout(function() {
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
+        
+        if (campus && classValue && section) {
+            loadStudents();
+        }
+    }, 500);
     
     // Also handle form reset event
     document.getElementById('custom-fee-form').addEventListener('reset', function() {
         setTimeout(function() {
             sectionSelect.innerHTML = '<option value="">Select Class First</option>';
             sectionSelect.disabled = true;
+            document.getElementById('student-selection-section').style.display = 'none';
+            document.getElementById('students-list').innerHTML = '';
         }, 10);
     });
 });
 
-// Global function for reset button
+// Global functions
 function resetForm() {
     const sectionSelect = document.getElementById('section');
     if (sectionSelect) {
         sectionSelect.innerHTML = '<option value="">Select Class First</option>';
         sectionSelect.disabled = true;
     }
+    document.getElementById('student-selection-section').style.display = 'none';
+    document.getElementById('students-list').innerHTML = '';
     document.getElementById('custom-fee-form').reset();
 }
+
+function selectAllStudents() {
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateSelectAllCheckbox();
+}
+
+function selectNoneStudents() {
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectAllCheckbox();
+}
+
+function toggleAllStudents(checkbox) {
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+}
+
+function updateSelectAllCheckbox() {
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    const checkedBoxes = document.querySelectorAll('.student-checkbox:checked');
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    
+    if (selectAllCheckbox) {
+        if (checkboxes.length === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        } else if (checkedBoxes.length === checkboxes.length) {
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.indeterminate = false;
+        } else if (checkedBoxes.length > 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = true;
+        } else {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        }
+    }
+}
+
+// Update select all checkbox when individual checkboxes change
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('student-checkbox')) {
+        updateSelectAllCheckbox();
+    }
+});
 </script>
 @endsection

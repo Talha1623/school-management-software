@@ -50,7 +50,7 @@
                                 <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
                                     <option value="">Select Campus</option>
                                     @foreach($allCampuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                        <option value="{{ $campus }}" {{ (isset($student) && $student->campus == $campus) ? 'selected' : '' }}>{{ $campus }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -63,7 +63,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">school</span>
                                 </span>
-                                <input type="text" class="form-control form-control-sm" name="student_code" id="student_code" placeholder="Student Roll/Code" required style="height: 38px;">
+                                <input type="text" class="form-control form-control-sm" name="student_code" id="student_code" placeholder="Student Roll/Code" value="{{ $studentCode ?? '' }}" required style="height: 38px;">
                             </div>
                         </div>
 
@@ -210,7 +210,23 @@
 </style>
 
 <script>
-// Form is now connected to database, no need for preventDefault
-// Form will submit normally to the backend
+// Auto-fill student code from URL parameter
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const studentCode = urlParams.get('student_code');
+    
+    if (studentCode) {
+        const studentCodeInput = document.getElementById('student_code');
+        if (studentCodeInput && !studentCodeInput.value) {
+            studentCodeInput.value = studentCode;
+            
+            // Optionally, you can fetch student details and auto-fill campus
+            // This is already handled by the backend if student exists
+        }
+    }
+    
+    // Form is now connected to database, no need for preventDefault
+    // Form will submit normally to the backend
+});
 </script>
 @endsection

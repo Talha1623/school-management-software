@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Maatwebsite\Excel\Facades\Excel;
 
 class AdmissionController extends Controller
 {
@@ -85,6 +87,69 @@ class AdmissionController extends Controller
 
         // Return next number
         return 'ST0001-' . ($maxNumber + 1);
+    }
+
+    /**
+     * Parse date from various formats (Excel, CSV, etc.)
+     */
+    private function parseDate($dateString): ?string
+    {
+        if (empty($dateString)) {
+            return null;
+        }
+        
+        // If it's already a valid date format (YYYY-MM-DD)
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateString)) {
+            try {
+                $date = \Carbon\Carbon::createFromFormat('Y-m-d', $dateString);
+                return $date->format('Y-m-d');
+            } catch (\Exception $e) {
+                // Continue to try other formats
+            }
+        }
+        
+        // Try common date formats
+        $formats = [
+            'Y-m-d',
+            'd/m/Y',
+            'm/d/Y',
+            'd-m-Y',
+            'm-d-Y',
+            'Y/m/d',
+            'd M Y',
+            'M d, Y',
+        ];
+        
+        foreach ($formats as $format) {
+            try {
+                $date = \Carbon\Carbon::createFromFormat($format, $dateString);
+                return $date->format('Y-m-d');
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+        
+        // Try Excel date serial number (days since 1900-01-01)
+        if (is_numeric($dateString)) {
+            try {
+                $excelDate = \Carbon\Carbon::create(1900, 1, 1)->addDays((int)$dateString - 2);
+                return $excelDate->format('Y-m-d');
+            } catch (\Exception $e) {
+                // Not an Excel date
+            }
+        }
+        
+        // Try strtotime as last resort
+        try {
+            $timestamp = strtotime($dateString);
+            if ($timestamp !== false) {
+                return date('Y-m-d', $timestamp);
+            }
+        } catch (\Exception $e) {
+            // Failed
+        }
+        
+        return null;
     }
 
     /**
@@ -370,10 +435,268 @@ class AdmissionController extends Controller
             $inputMethod = $request->input('input_method', 'manual');
             
             if ($inputMethod === 'csv') {
-                // CSV upload will be handled later
+                // Validate CSV upload
+                $validated = $request->validate([
+                    'csv_campus' => ['required', 'string', 'max:255'],
+                    'csv_class' => ['required', 'string', 'max:255'],
+                    'csv_section' => ['nullable', 'string', 'max:255'],
+                    'csv_create_parent_accounts' => ['required', 'in:0,1'],
+                    'csv_file' => ['required', 'file', 'mimes:csv,txt,xlsx,xls', 'max:10240'], // 10MB max, allow Excel files
+                ]);
+
+                $campus = $validated['csv_campus'];
+                $class = $validated['csv_class'];
+                $section = $validated['csv_section'] ?? null;
+                $createParentAccounts = $request->input('csv_create_parent_accounts', '0') == '1';
+                $file = $request->file('csv_file');
+                $fileExtension = strtolower($file->getClientOriginalExtension());
+
+                // Map headers to expected field names
+                $headerMap = [
+                    'Student Code' => 'student_code',
+                    'Name' => 'student_name',
+                    'Gender' => 'gender',
+                    'Father Name' => 'father_name',
+                    'Father CNIC' => 'father_id_card',
+                    'Father Phone' => 'father_phone',
+                    'Mother Phone' => 'mother_phone',
+                    'Birthday' => 'date_of_birth',
+                    'Admission Date' => 'admission_date',
+                    'Address' => 'home_address',
+                    'Monthly Fee' => 'monthly_fee',
+                    'Arrears' => 'arrears',
+                ];
+
+                $rows = [];
+                
+                // Handle Excel files (.xlsx, .xls)
+                if (in_array($fileExtension, ['xlsx', 'xls'])) {
+                    try {
+                        $data = Excel::toArray([], $file);
+                        if (!empty($data[0])) {
+                            $rows = $data[0];
+                        }
+                    } catch (\Exception $e) {
+                        return redirect()
+                            ->route('admission.admit-bulk-student')
+                            ->with('error', 'Error reading Excel file: ' . $e->getMessage());
+                    }
+                } else {
+                    // Handle CSV files
+                    $handle = fopen($file->getRealPath(), 'r');
+                    
+                    // Check for BOM and skip it
+                    $bom = fread($handle, 3);
+                    if ($bom !== "\xEF\xBB\xBF") {
+                        rewind($handle);
+                    }
+                    
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rows[] = $row;
+                    }
+                    fclose($handle);
+                }
+                
+                if (empty($rows)) {
+                    return redirect()
+                        ->route('admission.admit-bulk-student')
+                        ->with('error', 'File is empty or could not be read.');
+                }
+                
+                // Parse header row (first row)
+                $headers = array_map('trim', $rows[0]);
+                
+                // Create column index map
+                $columnMap = [];
+                foreach ($headers as $index => $header) {
+                    $header = trim($header);
+                    if (isset($headerMap[$header])) {
+                        $columnMap[$index] = $headerMap[$header];
+                    }
+                }
+                
+                // Validate required columns
+                $requiredColumns = ['student_name', 'gender', 'father_name', 'date_of_birth'];
+                $missingColumns = [];
+                foreach ($requiredColumns as $required) {
+                    if (!in_array($required, $columnMap)) {
+                        $missingColumns[] = array_search($required, $headerMap);
+                    }
+                }
+                
+                if (!empty($missingColumns)) {
+                    return redirect()
+                        ->route('admission.admit-bulk-student')
+                        ->with('error', 'File is missing required columns: ' . implode(', ', $missingColumns));
+                }
+                
+                // Read data rows (skip header row)
+                $students = [];
+                for ($i = 1; $i < count($rows); $i++) {
+                    $row = $rows[$i];
+                    
+                    // Skip empty rows
+                    if (empty(array_filter($row))) {
+                        continue;
+                    }
+                    
+                    $studentData = [];
+                    foreach ($columnMap as $index => $field) {
+                        if (isset($row[$index])) {
+                            $value = $row[$index];
+                            // Convert to string and trim
+                            $studentData[$field] = is_null($value) ? '' : trim((string)$value);
+                        }
+                    }
+                    
+                    // Skip if no name (empty row)
+                    if (empty($studentData['student_name'] ?? '')) {
+                        continue;
+                    }
+                    
+                    // Normalize gender
+                    if (isset($studentData['gender'])) {
+                        $gender = strtolower(trim($studentData['gender']));
+                        if (in_array($gender, ['male', 'female', 'other', 'm', 'f', 'o'])) {
+                            $studentData['gender'] = in_array($gender, ['m', 'male']) ? 'male' : (in_array($gender, ['f', 'female']) ? 'female' : 'other');
+                        } else {
+                            $studentData['gender'] = 'male'; // default
+                        }
+                    }
+                    
+                    // Parse dates
+                    if (isset($studentData['date_of_birth']) && !empty($studentData['date_of_birth'])) {
+                        $date = $this->parseDate($studentData['date_of_birth']);
+                        if ($date) {
+                            $studentData['date_of_birth'] = $date;
+                        } else {
+                            $rowNumber = $i + 2; // +2 because we start from index 1 (after header) and rows are 1-indexed
+                            return redirect()
+                                ->route('admission.admit-bulk-student')
+                                ->with('error', "Row {$rowNumber}: Invalid date format for Birthday. Use YYYY-MM-DD format.");
+                        }
+                    }
+                    
+                    if (isset($studentData['admission_date']) && !empty($studentData['admission_date'])) {
+                        $date = $this->parseDate($studentData['admission_date']);
+                        if ($date) {
+                            $studentData['admission_date'] = $date;
+                        } else {
+                            // If admission date is invalid, use today's date
+                            $studentData['admission_date'] = now()->format('Y-m-d');
+                        }
+                    } else {
+                        // If admission date is not provided, use today's date
+                        $studentData['admission_date'] = now()->format('Y-m-d');
+                    }
+                    
+                    // Parse numeric fields
+                    if (isset($studentData['monthly_fee']) && !empty($studentData['monthly_fee'])) {
+                        $studentData['monthly_fee'] = is_numeric($studentData['monthly_fee']) ? $studentData['monthly_fee'] : null;
+                    }
+                    
+                    $students[] = $studentData;
+                }
+                
+                if (empty($students)) {
+                    return redirect()
+                        ->route('admission.admit-bulk-student')
+                        ->with('error', 'CSV file is empty or contains no valid student data.');
+                }
+                
+                // Process students similar to manual entry
+                $successCount = 0;
+                $errorCount = 0;
+                $errors = [];
+                $usedStudentCodes = [];
+                
+                foreach ($students as $index => $studentData) {
+                    try {
+                        $studentNumber = $index + 1;
+                        
+                        // Validate required fields
+                        if (empty($studentData['student_name'])) {
+                            throw new \Exception('Name is required');
+                        }
+                        if (empty($studentData['gender'])) {
+                            throw new \Exception('Gender is required');
+                        }
+                        if (empty($studentData['father_name'])) {
+                            throw new \Exception('Father Name is required');
+                        }
+                        if (empty($studentData['date_of_birth'])) {
+                            throw new \Exception('Birthday is required');
+                        }
+                        
+                        // Check if parent account exists or create new
+                        $parentAccountId = null;
+                        if ($createParentAccounts && !empty($studentData['father_id_card'])) {
+                            $existingParent = ParentAccount::where('id_card_number', $studentData['father_id_card'])->first();
+                            
+                            if ($existingParent) {
+                                $parentAccountId = $existingParent->id;
+                            } else {
+                                // Create new parent account
+                                $parentEmail = 'parent_' . time() . '_' . $index . '_' . ($studentData['father_id_card'] ?? uniqid()) . '@school.com';
+                                
+                                $parentAccount = ParentAccount::create([
+                                    'name' => $studentData['father_name'],
+                                    'email' => $parentEmail,
+                                    'password' => $studentData['father_id_card'] ?? 'password123',
+                                    'phone' => $studentData['father_phone'] ?? null,
+                                    'id_card_number' => $studentData['father_id_card'] ?? null,
+                                    'address' => $studentData['home_address'] ?? null,
+                                ]);
+                                
+                                $parentAccountId = $parentAccount->id;
+                            }
+                        }
+                        
+                        // Generate student code if not provided
+                        $studentCode = !empty($studentData['student_code']) 
+                            ? trim($studentData['student_code']) 
+                            : $this->generateNextStudentCode($usedStudentCodes);
+                        
+                        // Track used codes to avoid duplicates
+                        $usedStudentCodes[] = $studentCode;
+                        
+                        // Create student
+                        Student::create([
+                            'student_name' => $studentData['student_name'],
+                            'gender' => $studentData['gender'],
+                            'date_of_birth' => $studentData['date_of_birth'],
+                            'admission_date' => $studentData['admission_date'] ?? now()->format('Y-m-d'),
+                            'home_address' => $studentData['home_address'] ?? null,
+                            'father_name' => $studentData['father_name'],
+                            'father_id_card' => $studentData['father_id_card'] ?? null,
+                            'father_phone' => $studentData['father_phone'] ?? null,
+                            'mother_phone' => $studentData['mother_phone'] ?? null,
+                            'monthly_fee' => $studentData['monthly_fee'] ?? null,
+                            'student_code' => $studentCode,
+                            'campus' => $campus,
+                            'class' => $class,
+                            'section' => $section,
+                            'parent_account_id' => $parentAccountId,
+                            'password' => $studentData['father_id_card'] ?? $studentCode,
+                        ]);
+                        
+                        $successCount++;
+                    } catch (\Exception $e) {
+                        $errorCount++;
+                        $studentName = $studentData['student_name'] ?? 'Unknown';
+                        $errors[] = "Row " . ($index + 2) . " ({$studentName}): " . $e->getMessage();
+                    }
+                }
+                
+                $message = "CSV upload completed! Successfully admitted {$successCount} student(s).";
+                if ($errorCount > 0) {
+                    $message .= " {$errorCount} student(s) failed.";
+                }
+                
                 return redirect()
                     ->route('admission.admit-bulk-student')
-                    ->with('error', 'CSV upload functionality will be available soon.');
+                    ->with('success', $message)
+                    ->with('errors', $errors);
             }
 
             // Manual entry
@@ -449,6 +772,7 @@ class AdmissionController extends Controller
                         'student_name' => $studentData['student_name'],
                         'gender' => $studentData['gender'],
                         'date_of_birth' => $studentData['date_of_birth'],
+                        'admission_date' => now()->format('Y-m-d'), // Add admission_date for manual entry
                         'home_address' => $studentData['home_address'] ?? null,
                         'father_name' => $studentData['father_name'],
                         'father_id_card' => $studentData['father_id_card'] ?? null,
@@ -485,6 +809,73 @@ class AdmissionController extends Controller
                 ->route('admission.admit-bulk-student')
                 ->with('error', 'An error occurred: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Download CSV template for bulk student admission.
+     */
+    public function downloadCsvTemplate(): StreamedResponse
+    {
+        $headers = [
+            'Student Code',
+            'Name',
+            'Gender',
+            'Father Name',
+            'Father CNIC',
+            'Father Phone',
+            'Mother Phone',
+            'Birthday',
+            'Admission Date',
+            'Address',
+            'Monthly Fee',
+            'Arrears'
+        ];
+
+        $filename = 'student_bulk_admission_template.csv';
+
+        return response()->streamDownload(function () use ($headers) {
+            $file = fopen('php://output', 'w');
+            
+            // Add BOM for Excel UTF-8 support
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+            
+            // Write headers
+            fputcsv($file, $headers);
+            
+            // Close file
+            fclose($file);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * Show admission report page with dynamic statistics.
+     */
+    public function report(): View
+    {
+        // Calculate admissions today
+        $admissionsToday = Student::whereDate('admission_date', today())->count();
+        
+        // Calculate admissions this month
+        $admissionsThisMonth = Student::whereYear('admission_date', now()->year)
+            ->whereMonth('admission_date', now()->month)
+            ->count();
+        
+        // Calculate active students (students with admission_date)
+        $activeStudents = Student::whereNotNull('admission_date')->count();
+        
+        // Calculate deactivated students (students without admission_date or with deactivation flag)
+        // Note: Adjust this based on your deactivation logic
+        $deactivatedStudents = Student::whereNull('admission_date')->count();
+        
+        return view('admission.report', compact(
+            'admissionsToday',
+            'admissionsThisMonth',
+            'activeStudents',
+            'deactivatedStudents'
+        ));
     }
 }
 

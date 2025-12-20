@@ -194,9 +194,9 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="inquiryModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
-                    <span>Add New Inquiry</span>
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="inquiryModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white;">person_add</span>
+                    <span style="color: white;">Add New Inquiry</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
@@ -345,16 +345,17 @@
     }
     
     #inquiryModal .inquiry-submit-btn {
-        background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
-        color: white;
-        border: none;
+        background-color: white;
+        color: #003471;
+        border: 2px solid #003471;
         font-weight: 500;
         transition: all 0.3s ease;
-        box-shadow: 0 2px 8px rgba(0, 52, 113, 0.25);
+        box-shadow: 0 2px 8px rgba(0, 52, 113, 0.15);
     }
     
     #inquiryModal .inquiry-submit-btn:hover {
-        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+        background-color: #003471;
+        color: white;
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 52, 113, 0.35);
     }
@@ -661,7 +662,8 @@ function resetForm() {
 function editInquiry(id, name, parent, phone, gender, birthday, fullAddress) {
     document.getElementById('inquiryForm').action = '{{ route('admission.inquiry.update', ':id') }}'.replace(':id', id);
     document.getElementById('methodField').innerHTML = '@method('PUT')';
-    document.getElementById('inquiryModalLabel').textContent = 'Edit Inquiry';
+    const modalLabel = document.getElementById('inquiryModalLabel');
+    modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span><span style="color: white;">Edit Inquiry</span>';
     
     document.getElementById('name').value = name || '';
     document.getElementById('parent').value = parent || '';

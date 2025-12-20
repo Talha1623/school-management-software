@@ -91,6 +91,8 @@ class MonthlyFeeController extends Controller
             'fee_year' => ['required', 'string', 'max:255'],
             'due_date' => ['required', 'date'],
             'late_fee' => ['nullable', 'numeric', 'min:0'],
+            'selected_students' => ['nullable', 'array'],
+            'selected_students.*' => ['exists:students,id'],
         ]);
 
         // Set default value for late_fee if it's null or empty
@@ -98,28 +100,31 @@ class MonthlyFeeController extends Controller
             $validated['late_fee'] = 0;
         }
 
-        // Create the monthly fee configuration
-        $monthlyFee = MonthlyFee::create($validated);
+        // Check if students are selected
+        $selectedStudentIds = $request->input('selected_students', []);
+        
+        if (empty($selectedStudentIds)) {
+            return redirect()
+                ->route('accounting.generate-monthly-fee')
+                ->with('error', 'Please select at least one student to generate fees.');
+        }
 
-        // Get students matching the criteria
-        $studentsQuery = Student::query();
+        // Create the monthly fee configuration (if it doesn't exist)
+        $monthlyFee = MonthlyFee::firstOrCreate([
+            'campus' => $validated['campus'],
+            'class' => $validated['class'],
+            'section' => $validated['section'],
+            'fee_month' => $validated['fee_month'],
+            'fee_year' => $validated['fee_year'],
+        ], [
+            'due_date' => $validated['due_date'],
+            'late_fee' => $validated['late_fee'],
+        ]);
+
+        // Get selected students
+        $students = Student::whereIn('id', $selectedStudentIds)->get();
         
-        if ($validated['campus']) {
-            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))]);
-        }
-        
-        if ($validated['class']) {
-            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))]);
-        }
-        
-        if ($validated['section']) {
-            $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))]);
-        }
-        
-        $students = $studentsQuery->get();
-        $studentCount = $students->count();
-        
-        // Generate fee for each student
+        // Generate fee for each selected student
         $dueDate = Carbon::parse($validated['due_date']);
         $paymentTitle = "Monthly Fee - {$validated['fee_month']} {$validated['fee_year']}";
         $lateFeeAmount = (float) $validated['late_fee'];
@@ -163,18 +168,11 @@ class MonthlyFeeController extends Controller
 
         // If no fees were generated, show warning/error message
         if ($generatedCount == 0) {
-            if ($studentCount == 0) {
-                // No students found in the selected class/section
-                $message = "Is class mein students nahi hain. Please check the selected Campus, Class, and Section.";
+            $message = "No fees were generated. ";
+            if ($skippedCount > 0) {
+                $message .= "All selected students were skipped (no monthly fee set or fees already exist for this month/year).";
             } else {
-                // Students found but fees couldn't be generated
-                $message = "No fees were generated. ";
-                $message .= "{$studentCount} student(s) found, but ";
-                if ($skippedCount > 0) {
-                    $message .= "all were skipped (no monthly fee set or fees already exist for this month/year).";
-                } else {
-                    $message .= "none have monthly fee configured.";
-                }
+                $message .= "Selected students don't have monthly fee configured.";
             }
             
             return redirect()
@@ -216,6 +214,72 @@ class MonthlyFeeController extends Controller
             });
 
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Get students by campus, class, and section with fee status (AJAX).
+     */
+    public function getStudentsWithFeeStatus(Request $request)
+    {
+        $campus = $request->get('campus');
+        $class = $request->get('class');
+        $section = $request->get('section');
+        $feeMonth = $request->get('fee_month');
+        $feeYear = $request->get('fee_year');
+
+        if (!$campus || !$class || !$section) {
+            return response()->json(['students' => []]);
+        }
+
+        // Get students matching the criteria
+        $studentsQuery = Student::query();
+        
+        if ($campus) {
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        if ($class) {
+            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        }
+        
+        if ($section) {
+            $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+        }
+
+        $students = $studentsQuery->orderBy('student_code', 'asc')->get();
+
+        // Build payment title if month and year are provided
+        $paymentTitle = null;
+        if ($feeMonth && $feeYear) {
+            $paymentTitle = "Monthly Fee - {$feeMonth} {$feeYear}";
+        }
+
+        // Map students with fee status
+        $studentsWithStatus = $students->map(function($student) use ($paymentTitle) {
+            $hasFeeGenerated = false;
+            
+            if ($paymentTitle && $student->student_code) {
+                $existingFee = StudentPayment::where('student_code', $student->student_code)
+                    ->where('payment_title', $paymentTitle)
+                    ->first();
+                
+                $hasFeeGenerated = (bool) $existingFee;
+            }
+
+            // Get parent name
+            $parentName = $student->father_name ?? '';
+
+            return [
+                'id' => $student->id,
+                'student_code' => $student->student_code ?? '',
+                'student_name' => $student->student_name ?? '',
+                'parent_name' => $parentName,
+                'has_fee_generated' => $hasFeeGenerated,
+                'status' => $hasFeeGenerated ? 'Generated' : 'Ready',
+            ];
+        });
+
+        return response()->json(['students' => $studentsWithStatus]);
     }
 }
 

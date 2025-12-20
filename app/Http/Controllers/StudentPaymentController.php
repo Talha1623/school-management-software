@@ -15,26 +15,45 @@ class StudentPaymentController extends Controller
     /**
      * Show the student payment form.
      */
-    public function create(): View
+    public function create(Request $request): View
     {
-        return view('accounting.direct-payment.student');
+        $studentCode = $request->get('student_code');
+        $student = null;
+        
+        if ($studentCode) {
+            $student = Student::where('student_code', $studentCode)->first();
+        }
+        
+        return view('accounting.direct-payment.student', compact('student', 'studentCode'));
     }
 
     /**
      * Store a newly created student payment.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
-        $validated = $request->validate([
-            'campus' => ['nullable', 'string', 'max:255'],
-            'student_code' => ['required', 'string', 'max:255'],
-            'payment_title' => ['required', 'string', 'max:255'],
-            'payment_amount' => ['required', 'numeric', 'min:0'],
-            'discount' => ['nullable', 'numeric', 'min:0'],
-            'method' => ['required', 'string', 'max:255'],
-            'payment_date' => ['required', 'date'],
-            'sms_notification' => ['required', 'string', 'in:Yes,No'],
-        ]);
+        try {
+            $validated = $request->validate([
+                'campus' => ['nullable', 'string', 'max:255'],
+                'student_code' => ['required', 'string', 'max:255'],
+                'payment_title' => ['required', 'string', 'max:255'],
+                'payment_amount' => ['required', 'numeric', 'min:0'],
+                'discount' => ['nullable', 'numeric', 'min:0'],
+                'method' => ['required', 'string', 'max:255'],
+                'payment_date' => ['required', 'date'],
+                'sms_notification' => ['required', 'string', 'in:Yes,No'],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // If request expects JSON, return JSON response with validation errors
+            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        }
 
         // Initialize late_fee
         $lateFee = 0;
@@ -91,6 +110,14 @@ class StudentPaymentController extends Controller
                         $successMessage .= " Late fee of " . number_format($lateFee, 2) . " has been added.";
                     }
                     
+                    // If request is AJAX or expects JSON, return JSON response
+                    if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+                        return response()->json([
+                            'success' => true,
+                            'message' => $successMessage
+                        ]);
+                    }
+                    
                     return redirect()
                         ->route('accounting.direct-payment.student')
                         ->with('success', $successMessage);
@@ -106,11 +133,30 @@ class StudentPaymentController extends Controller
             $validated['accountant'] = auth()->user()->name ?? null;
         }
 
-        StudentPayment::create($validated);
+        try {
+            StudentPayment::create($validated);
+        } catch (\Exception $e) {
+            // If request expects JSON, return JSON response with error
+            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error creating payment record: ' . $e->getMessage()
+                ], 500);
+            }
+            throw $e;
+        }
 
         $successMessage = 'Payment recorded successfully!';
         if ($lateFee > 0) {
             $successMessage .= " Late fee of " . number_format($lateFee, 2) . " has been added.";
+        }
+
+        // If request is AJAX or expects JSON, return JSON response
+        if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+            return response()->json([
+                'success' => true,
+                'message' => $successMessage
+            ]);
         }
 
         return redirect()

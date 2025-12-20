@@ -119,6 +119,9 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         // Timetable Routes
         Route::get('/timetable/{student_id}/{date}', [App\Http\Controllers\Api\ParentTimetableController::class, 'getTimetable'])->name('timetable');
         
+        // Test List Routes
+        Route::get('/tests', [App\Http\Controllers\Api\ParentTestListController::class, 'getTests'])->name('tests');
+        
         // Test Results Routes
         Route::get('/test-results', [App\Http\Controllers\Api\ParentTestResultController::class, 'getTestResults'])->name('test-results');
         
@@ -187,6 +190,10 @@ Route::prefix('student')->name('api.student.')->group(function () {
         
         // Test Results Routes
         Route::get('/test-results', [App\Http\Controllers\Api\StudentTestResultController::class, 'getTestResults'])->name('test-results');
+        Route::get('/test-list', [App\Http\Controllers\Api\StudentTestResultController::class, 'getTestList'])->name('test-list');
+        
+        // Exam Results Routes
+        Route::get('/exam-results', [App\Http\Controllers\Api\StudentTestResultController::class, 'getExamResults'])->name('exam-results');
         
         // Test List Routes
         Route::get('/tests', [App\Http\Controllers\Api\StudentTestListController::class, 'getTests'])->name('tests');

@@ -13,7 +13,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Admissions Today</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">0</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $admissionsToday ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">today</span>
                         </div>
@@ -30,7 +30,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Admissions This Month</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">0</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $admissionsThisMonth ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">calendar_month</span>
                         </div>
@@ -47,7 +47,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Active Students</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">35</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $activeStudents ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">groups</span>
                         </div>
@@ -64,7 +64,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Deactivated Students</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">0</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $deactivatedStudents ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">person_off</span>
                         </div>

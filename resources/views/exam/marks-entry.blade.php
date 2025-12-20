@@ -148,10 +148,10 @@
                     <div class="table-responsive">
                         <form id="marksForm" method="POST" action="{{ route('exam.marks-entry.save') }}">
                             @csrf
-                            <input type="hidden" name="exam_name" value="{{ request('filter_exam') }}">
-                            <input type="hidden" name="class" value="{{ request('filter_class') }}">
-                            <input type="hidden" name="section" value="{{ request('filter_section') }}">
-                            <input type="hidden" name="subject" value="{{ request('filter_subject') }}">
+                            <input type="hidden" name="exam_name" value="{{ request('filter_exam') ?? $filterExam ?? '' }}" required>
+                            <input type="hidden" name="class" value="{{ request('filter_class') ?? $filterClass ?? '' }}" required>
+                            <input type="hidden" name="section" value="{{ request('filter_section') ?? $filterSection ?? '' }}">
+                            <input type="hidden" name="subject" value="{{ request('filter_subject') ?? $filterSubject ?? '' }}" required>
                             
                             <table class="table table-sm table-hover">
                                 <thead>
@@ -408,6 +408,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (classValue) params.append('class', classValue);
         if (section) params.append('section', section);
         
+        // Get the currently selected subject value before reloading
+        const currentSelectedSubject = subjectSelect ? subjectSelect.value : '';
+        
         fetch(`{{ route('exam.marks-entry.get-subjects') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
@@ -417,12 +420,19 @@ document.addEventListener('DOMContentLoaded', function() {
                         const option = document.createElement('option');
                         option.value = subject;
                         option.textContent = subject;
-                        // Preserve selected subject if it exists
-                        if (subject === '{{ $filterSubject }}') {
+                        // Preserve selected subject - check both server-side value and current selected value
+                        if (subject === '{{ $filterSubject }}' || subject === currentSelectedSubject) {
                             option.selected = true;
                         }
                         subjectSelect.appendChild(option);
                     });
+                } else {
+                    // If no subjects found, show a message
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No subjects found';
+                    option.disabled = true;
+                    subjectSelect.appendChild(option);
                 }
             })
             .catch(error => {
@@ -463,7 +473,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (subjectSelect) {
             subjectSelect.disabled = false;
         }
-        loadSubjects();
+        // Only load subjects via AJAX if dropdown is empty (not already loaded from server)
+        // Check if subject dropdown has more than just the default "Select Subject" option
+        if (subjectSelect && subjectSelect.options.length <= 1) {
+            loadSubjects();
+        }
     } else if (initialSection) {
         // If section is selected but class is not, disable subject
         if (subjectSelect) {
@@ -506,6 +520,45 @@ document.addEventListener('DOMContentLoaded', function() {
         clearSearchBtn.addEventListener('click', function() {
             searchInput.value = '';
             searchInput.dispatchEvent(new Event('input'));
+        });
+    }
+
+    // Form submission handler
+    const marksForm = document.getElementById('marksForm');
+    if (marksForm) {
+        marksForm.addEventListener('submit', function(e) {
+            // Check if exam_name, class, and subject are filled
+            const examName = this.querySelector('input[name="exam_name"]').value;
+            const className = this.querySelector('input[name="class"]').value;
+            const subject = this.querySelector('input[name="subject"]').value;
+            
+            if (!examName || !className || !subject) {
+                e.preventDefault();
+                alert('Please select Exam Name, Class, and Subject before saving marks.');
+                return false;
+            }
+            
+            // Check if at least one mark is entered
+            const marksInputs = this.querySelectorAll('input[name*="[obtained]"], input[name*="[total]"], input[name*="[passing]"]');
+            let hasMarks = false;
+            marksInputs.forEach(input => {
+                if (input.value && input.value.trim() !== '' && parseFloat(input.value) >= 0) {
+                    hasMarks = true;
+                }
+            });
+            
+            if (!hasMarks) {
+                e.preventDefault();
+                alert('Please enter at least one mark (Obtained, Total, or Passing) for at least one student.');
+                return false;
+            }
+            
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            }
         });
     }
 });

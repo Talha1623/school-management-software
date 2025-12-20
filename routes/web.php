@@ -105,6 +105,7 @@ Route::get('/admission/get-parent-by-id-card', [App\Http\Controllers\AdmissionCo
 
 Route::get('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkCreate'])->name('admission.admit-bulk-student');
 Route::post('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkStore'])->name('admission.admit-bulk-student.store');
+Route::get('/admission/download-csv-template', [App\Http\Controllers\AdmissionController::class, 'downloadCsvTemplate'])->name('admission.download-csv-template');
 
 // Admission Request Routes
 Route::get('/admission/request', [App\Http\Controllers\AdmissionRequestController::class, 'index'])->name('admission.request');
@@ -113,9 +114,7 @@ Route::put('/admission/request/{admission_request}', [App\Http\Controllers\Admis
 Route::delete('/admission/request/{admission_request}', [App\Http\Controllers\AdmissionRequestController::class, 'destroy'])->name('admission.request.destroy');
 Route::get('/admission/request/export/{format}', [App\Http\Controllers\AdmissionRequestController::class, 'export'])->name('admission.request.export');
 
-Route::get('/admission/report', function () {
-    return view('admission.report');
-})->name('admission.report');
+Route::get('/admission/report', [App\Http\Controllers\AdmissionController::class, 'report'])->name('admission.report');
 
 // Admission Inquiry Routes
 Route::get('/admission/inquiry/manage', [App\Http\Controllers\AdmissionInquiryController::class, 'index'])->name('admission.inquiry.manage');
@@ -147,6 +146,9 @@ Route::get('/student/transfer', [App\Http\Controllers\StudentTransferController:
 Route::post('/student/transfer', [App\Http\Controllers\StudentTransferController::class, 'transfer'])->name('student.transfer.store');
 Route::get('/student/transfer/get-students', [App\Http\Controllers\StudentTransferController::class, 'getStudents'])->name('student.transfer.get-students');
 Route::get('/student/transfer/search-student', [App\Http\Controllers\StudentTransferController::class, 'searchStudent'])->name('student.transfer.search-student');
+
+// Student Delete Route (must be before /student/{student} route)
+Route::delete('/student/{student}', [App\Http\Controllers\StudentController::class, 'destroy'])->name('student.delete');
 
 // Student View Route (must be last to avoid conflicts)
 Route::get('/student/{student}', [App\Http\Controllers\StudentController::class, 'show'])->name('student.view');
@@ -241,10 +243,12 @@ Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function 
     Route::get('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'create'])->name('accounting.generate-monthly-fee');
     Route::post('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'store'])->name('accounting.generate-monthly-fee.store');
     Route::get('/accounting/get-sections-by-class', [App\Http\Controllers\MonthlyFeeController::class, 'getSectionsByClass'])->name('accounting.get-sections-by-class');
+    Route::get('/accounting/get-students-with-fee-status', [App\Http\Controllers\MonthlyFeeController::class, 'getStudentsWithFeeStatus'])->name('accounting.get-students-with-fee-status');
 
     Route::get('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'create'])->name('accounting.generate-custom-fee');
     Route::post('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'store'])->name('accounting.generate-custom-fee.store');
     Route::get('/accounting/custom-fee/get-sections-by-class', [App\Http\Controllers\CustomFeeController::class, 'getSectionsByClass'])->name('accounting.custom-fee.get-sections-by-class');
+    Route::get('/accounting/custom-fee/get-students', [App\Http\Controllers\CustomFeeController::class, 'getStudents'])->name('accounting.custom-fee.get-students');
 
     Route::get('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'create'])->name('accounting.generate-transport-fee');
     Route::post('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'store'])->name('accounting.generate-transport-fee.store');
@@ -322,34 +326,108 @@ Route::get('/accounting/family-fee-calculator/search-by-id-card', function (\Ill
         ], 400);
     }
     
-    // Find parent account by ID card number
-    $parentAccount = \App\Models\ParentAccount::where('id_card_number', $fatherIdCard)->first();
+    // Clean the input CNIC
+    $cleanedIdCard = trim($fatherIdCard);
+    $lowerIdCard = strtolower($cleanedIdCard);
+    $normalizedIdCard = str_replace(['-', ' ', '_'], '', $lowerIdCard);
     
-    if (!$parentAccount) {
+    // Find parent account by ID card number (case-insensitive, trimmed)
+    $parentAccount = \App\Models\ParentAccount::where(function($query) use ($lowerIdCard, $normalizedIdCard) {
+        $query->whereRaw('LOWER(TRIM(id_card_number)) = ?', [$lowerIdCard])
+              ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", "")) = ?', [$normalizedIdCard]);
+    })->first();
+    
+    // Get ALL students by father_id_card - use comprehensive query that handles all cases
+    $studentsByFatherIdCard = \App\Models\Student::where(function($query) use ($cleanedIdCard) {
+        // Try all possible matching strategies
+        $query->where('father_id_card', $cleanedIdCard)  // Exact match
+              ->orWhere('father_id_card', 'LIKE', $cleanedIdCard)  // LIKE exact
+              ->orWhere('father_id_card', 'LIKE', '%' . $cleanedIdCard . '%')  // LIKE partial
+              ->orWhereRaw('LOWER(father_id_card) = LOWER(?)', [$cleanedIdCard])  // Case-insensitive
+              ->orWhereRaw('TRIM(father_id_card) = ?', [$cleanedIdCard])  // Trimmed
+              ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [$cleanedIdCard])  // Case-insensitive trimmed
+              ->orWhereRaw('CAST(father_id_card AS CHAR) = ?', [$cleanedIdCard]);  // Cast to string (handles numeric types)
+    })
+    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+    ->get();
+    
+    // If still no results, try one more time with DB::raw for absolute certainty
+    if ($studentsByFatherIdCard->isEmpty()) {
+        $studentsByFatherIdCard = \App\Models\Student::whereRaw('father_id_card = ? OR father_id_card LIKE ? OR LOWER(father_id_card) = LOWER(?)', 
+            [$cleanedIdCard, '%' . $cleanedIdCard . '%', $cleanedIdCard])
+            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+            ->get();
+    }
+    
+    // If parent account exists, also get students connected via parent_account_id
+    $studentsByParentAccount = collect();
+    if ($parentAccount) {
+        $studentsByParentAccount = \App\Models\Student::where('parent_account_id', $parentAccount->id)
+            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee')
+            ->get();
+    }
+    
+    // Merge both collections and remove duplicates by student id, then sort by name
+    $students = $studentsByParentAccount->merge($studentsByFatherIdCard)->unique('id')->sortBy('student_name')->values();
+    
+    // Debug: Check how many students found from each source
+    \Log::info('Fee Calculator Search', [
+        'father_id_card' => $fatherIdCard,
+        'cleaned_id_card' => $cleanedIdCard,
+        'students_by_father_id_card' => $studentsByFatherIdCard->count(),
+        'students_by_parent_account' => $studentsByParentAccount->count(),
+        'total_students' => $students->count()
+    ]);
+    
+    // If no students found at all, return not found with detailed debug info
+    if ($students->isEmpty()) {
+        // Try one more direct query to see if ANY students exist with this ID
+        $testQuery = \App\Models\Student::where('father_id_card', 'LIKE', '%' . $cleanedIdCard . '%')->count();
+        
         return response()->json([
             'success' => true,
             'found' => false,
-            'message' => 'No father found with this ID Card Number'
+            'message' => 'No children found with this Father ID Card Number',
+            'debug' => [
+                'searched_id_card' => $cleanedIdCard,
+                'original_input' => $fatherIdCard,
+                'students_by_father_id_card_count' => $studentsByFatherIdCard->count(),
+                'students_by_parent_account_count' => $studentsByParentAccount->count(),
+                'parent_account_found' => $parentAccount ? true : false,
+                'test_like_query_count' => $testQuery,
+                'all_queries_tried' => 7
+            ]
         ]);
     }
     
-    // Get all students connected to this parent
-    $students = \App\Models\Student::where('parent_account_id', $parentAccount->id)
-        ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee')
-        ->orderBy('student_name', 'asc')
-        ->get();
-    
-    return response()->json([
-        'success' => true,
-        'found' => true,
-        'father' => [
+    // Prepare father information (use parent account if available, otherwise use first student's father info)
+    $fatherInfo = [];
+    if ($parentAccount) {
+        $fatherInfo = [
             'id' => $parentAccount->id,
             'name' => $parentAccount->name,
             'id_card_number' => $parentAccount->id_card_number,
             'phone' => $parentAccount->phone,
             'email' => $parentAccount->email,
             'address' => $parentAccount->address,
-        ],
+        ];
+    } else {
+        // If no parent account, try to get father info from first student
+        $firstStudent = $students->first();
+        $fatherInfo = [
+            'id' => null,
+            'name' => $firstStudent->father_name ?? 'N/A',
+            'id_card_number' => $fatherIdCard,
+            'phone' => $firstStudent->father_phone ?? 'N/A',
+            'email' => $firstStudent->father_email ?? 'N/A',
+            'address' => $firstStudent->home_address ?? 'N/A',
+        ];
+    }
+    
+    return response()->json([
+        'success' => true,
+        'found' => true,
+        'father' => $fatherInfo,
         'students' => $students->map(function ($student) {
             return [
                 'id' => $student->id,
@@ -360,7 +438,7 @@ Route::get('/accounting/family-fee-calculator/search-by-id-card', function (\Ill
                 'campus' => $student->campus,
                 'monthly_fee' => $student->monthly_fee,
             ];
-        })
+        })->values()->toArray()
     ]);
 })->name('accounting.family-fee-calculator.search-by-id-card');
 
@@ -408,6 +486,104 @@ Route::get('/accounting/parent-wallet/online-rejected-payments', function () {
 // Direct Payment Routes
 Route::get('/accounting/direct-payment/student', [App\Http\Controllers\StudentPaymentController::class, 'create'])->name('accounting.direct-payment.student');
 Route::post('/accounting/direct-payment/student', [App\Http\Controllers\StudentPaymentController::class, 'store'])->name('accounting.direct-payment.student.store');
+
+// Make Installment Route
+Route::get('/accounting/make-installment', function (\Illuminate\Http\Request $request) {
+    $studentCode = $request->get('student_code');
+    $student = null;
+    
+    if ($studentCode) {
+        $student = \App\Models\Student::where('student_code', $studentCode)->first();
+    }
+    
+    return view('accounting.parent-wallet.installments', compact('student', 'studentCode'));
+})->name('accounting.make-installment');
+
+// Particular Receipt Route
+Route::get('/accounting/particular-receipt', function (\Illuminate\Http\Request $request) {
+    $studentCode = $request->get('student_code');
+    $student = null;
+    
+    if ($studentCode) {
+        $student = \App\Models\Student::where('student_code', $studentCode)->first();
+    }
+    
+    // Get student's payment history
+    $payments = [];
+    if ($student) {
+        $payments = \App\Models\StudentPayment::where('student_code', $studentCode)
+            ->where('method', '!=', 'Generated')
+            ->orderBy('payment_date', 'desc')
+            ->get();
+    }
+    
+    return view('accounting.particular-receipt', compact('student', 'studentCode', 'payments'));
+})->name('accounting.particular-receipt');
+
+// Full Payment Route - Auto create payment record
+Route::post('/fee-payment/full-payment', function (\Illuminate\Http\Request $request) {
+    $studentCode = $request->get('student_code');
+    
+    if (!$studentCode) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Student code is required'
+        ], 400);
+    }
+    
+    // Get student data
+    $student = \App\Models\Student::where('student_code', $studentCode)->first();
+    
+    if (!$student) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Student not found'
+        ], 404);
+    }
+    
+    // Calculate unpaid amount
+    $totalPaid = \App\Models\StudentPayment::where('student_code', $studentCode)
+        ->where('method', '!=', 'Generated')
+        ->sum('payment_amount');
+    $monthlyFee = $student->monthly_fee ?? 0;
+    $unpaidAmount = max(0, $monthlyFee - $totalPaid);
+    
+    if ($unpaidAmount <= 0) {
+        return response()->json([
+            'success' => false,
+            'message' => 'No unpaid amount found. Fee is already paid.'
+        ], 400);
+    }
+    
+    // Get current month and year for payment title
+    $currentMonth = date('F');
+    $currentYear = date('Y');
+    $paymentTitle = "Monthly Fee - {$currentMonth} {$currentYear}";
+    
+    // Create payment record
+    $payment = \App\Models\StudentPayment::create([
+        'campus' => $student->campus,
+        'student_code' => $studentCode,
+        'payment_title' => $paymentTitle,
+        'payment_amount' => $unpaidAmount,
+        'discount' => 0,
+        'method' => 'Cash Payment',
+        'payment_date' => date('Y-m-d'),
+        'sms_notification' => 'Yes',
+        'late_fee' => 0,
+        'accountant' => auth()->check() ? (auth()->user()->name ?? null) : null,
+    ]);
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Full payment recorded successfully!',
+        'payment' => [
+            'id' => $payment->id,
+            'amount' => $payment->payment_amount,
+            'date' => $payment->payment_date,
+        ]
+    ]);
+})->name('fee-payment.full-payment');
 
 Route::get('/accounting/direct-payment/custom', [App\Http\Controllers\CustomPaymentController::class, 'create'])->name('accounting.direct-payment.custom');
 Route::post('/accounting/direct-payment/custom', [App\Http\Controllers\CustomPaymentController::class, 'store'])->name('accounting.direct-payment.custom.store');
@@ -555,6 +731,13 @@ Route::get('/fee-payment/search-student', function (\Illuminate\Http\Request $re
     return response()->json([
         'success' => true,
         'students' => $students->map(function ($student) {
+            // Check if student has unpaid fees
+            $totalPaid = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                ->sum('payment_amount');
+            $monthlyFee = $student->monthly_fee ?? 0;
+            $hasUnpaid = ($monthlyFee > 0 && $totalPaid < $monthlyFee);
+            $unpaidAmount = max(0, $monthlyFee - $totalPaid);
+            
             return [
                 'id' => $student->id,
                 'student_name' => $student->student_name,
@@ -564,10 +747,83 @@ Route::get('/fee-payment/search-student', function (\Illuminate\Http\Request $re
                 'section' => $student->section,
                 'campus' => $student->campus,
                 'monthly_fee' => $student->monthly_fee,
+                'has_unpaid' => $hasUnpaid,
+                'unpaid_amount' => $unpaidAmount,
             ];
         })
     ]);
 })->name('fee-payment.search-student');
+
+// Fee Payment - Search Student By CNIC / Parent ID
+Route::get('/fee-payment/search-by-cnic', function (\Illuminate\Http\Request $request) {
+    $cnic = $request->get('cnic');
+    
+    if (!$cnic) {
+        return response()->json([
+            'success' => false,
+            'message' => 'CNIC / Parent ID is required'
+        ], 400);
+    }
+    
+    // Clean and normalize the input CNIC
+    $cleanedCnic = trim($cnic);
+    $normalizedInputCnic = str_replace(['-', ' ', '_', '.'], '', strtolower($cleanedCnic));
+    
+    // Find parent account by ID card number (exact match after normalization)
+    $parentAccount = \App\Models\ParentAccount::where(function($query) use ($normalizedInputCnic, $cleanedCnic) {
+        $query->whereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", "")) = ?', [$normalizedInputCnic])
+              ->orWhereRaw('LOWER(TRIM(id_card_number)) = LOWER(TRIM(?))', [$cleanedCnic]);
+    })->first();
+    
+    // Get students by father_id_card - STRICT MATCHING (no partial matches)
+    // Only match if CNIC matches exactly after normalizing spaces, dashes, underscores, dots, and case
+    $studentsByFatherIdCard = \App\Models\Student::where(function($query) use ($normalizedInputCnic, $cleanedCnic) {
+        // Exact match after normalization (handles formatting differences)
+        $query->whereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", "")) = ?', [$normalizedInputCnic])
+              // Also try case-insensitive trimmed exact match
+              ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [$cleanedCnic])
+              // Also try exact match as-is
+              ->orWhere('father_id_card', $cleanedCnic);
+    })
+    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+    ->get();
+    
+    // If parent account exists, also get students connected via parent_account_id
+    $studentsByParentAccount = collect();
+    if ($parentAccount) {
+        $studentsByParentAccount = \App\Models\Student::where('parent_account_id', $parentAccount->id)
+            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+            ->get();
+    }
+    
+    // Merge both collections and remove duplicates by student id, then sort by name
+    $students = $studentsByParentAccount->merge($studentsByFatherIdCard)->unique('id')->sortBy('student_name')->values();
+    
+    return response()->json([
+        'success' => true,
+        'students' => $students->map(function ($student) {
+            // Check if student has unpaid fees
+            $totalPaid = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                ->sum('payment_amount');
+            $monthlyFee = $student->monthly_fee ?? 0;
+            $hasUnpaid = ($monthlyFee > 0 && $totalPaid < $monthlyFee);
+            $unpaidAmount = max(0, $monthlyFee - $totalPaid);
+            
+            return [
+                'id' => $student->id,
+                'student_name' => $student->student_name,
+                'student_code' => $student->student_code,
+                'father_name' => $student->father_name,
+                'class' => $student->class,
+                'section' => $student->section,
+                'campus' => $student->campus,
+                'monthly_fee' => $student->monthly_fee,
+                'has_unpaid' => $hasUnpaid,
+                'unpaid_amount' => $unpaidAmount,
+            ];
+        })
+    ]);
+})->name('fee-payment.search-by-cnic');
 
 // Expense Management Routes
 Route::get('/expense-management/add', [App\Http\Controllers\ManagementExpenseController::class, 'index'])->name('expense-management.add');

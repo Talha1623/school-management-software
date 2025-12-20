@@ -47,7 +47,26 @@ class ParentTimetableController extends Controller
             }
 
             // Verify student belongs to this parent
+            // First check via parent_account_id relationship
             $student = $parent->students()->find($studentId);
+            
+            // If not found via parent_account_id, check via father_id_card match
+            if (!$student) {
+                $student = Student::find($studentId);
+                
+                if ($student && $parent->id_card_number) {
+                    // Normalize both ID cards for comparison
+                    $parentIdCard = str_replace(['-', ' ', '_', '.'], '', strtolower(trim($parent->id_card_number)));
+                    $studentFatherIdCard = str_replace(['-', ' ', '_', '.'], '', strtolower(trim($student->father_id_card ?? '')));
+                    
+                    // Check if they match
+                    if ($parentIdCard !== $studentFatherIdCard || empty($studentFatherIdCard)) {
+                        $student = null; // Not a match
+                    }
+                } else {
+                    $student = null;
+                }
+            }
             
             if (!$student) {
                 return response()->json([

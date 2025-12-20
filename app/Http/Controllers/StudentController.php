@@ -8,6 +8,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -281,6 +282,29 @@ class StudentController extends Controller
     public function show(Student $student): View
     {
         return view('student.view', compact('student'));
+    }
+
+    /**
+     * Delete a student
+     */
+    public function destroy(Student $student): JsonResponse
+    {
+        try {
+            $studentCode = $student->student_code;
+            $studentName = $student->student_name;
+            
+            $student->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Student {$studentName} ({$studentCode}) deleted successfully."
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while deleting the student: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

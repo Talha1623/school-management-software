@@ -13,7 +13,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Total Parents</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">0</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $totalParents ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">groups</span>
                         </div>
@@ -30,7 +30,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Active Parents</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">0</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $activeParents ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">person_check</span>
                         </div>
@@ -47,7 +47,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Pending Requests</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">0</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $pendingRequests ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">pending</span>
                         </div>
@@ -64,7 +64,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Inactive Parents</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">0</h3>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $inactiveParents ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">person_off</span>
                         </div>
@@ -87,78 +87,99 @@
             
             <!-- Content Area -->
             <div class="card-body p-3">
-                <div class="row">
-                    <div class="col-md-8">
-                        <!-- Reports List -->
+                <!-- Reports List in 2 Columns -->
+                <div class="row g-3">
+                    <!-- Column 1 -->
+                    <div class="col-md-6">
                         <div class="report-list">
                             <!-- Parents Today -->
-                            <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Parents Today</h6>
-                                    <p class="mb-0 text-muted" style="font-size: 12px;">List of parents registered today so far.</p>
+                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
+                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">today</span>
+                                            Parents Today
+                                        </h6>
+                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">List of parents registered today so far.</p>
+                                    </div>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('today')" style="font-size: 12px; padding: 4px 12px;">
+                                <button class="btn btn-sm w-100 mt-2" onclick="printReport('today')" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
+                                    Print Report
                                 </button>
                             </div>
                             
                             <!-- Monthly Parents -->
-                            <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Monthly Parents</h6>
-                                    <p class="mb-0 text-muted" style="font-size: 12px;">List of total registered parents this month so far.</p>
+                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
+                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">calendar_month</span>
+                                            Monthly Parents
+                                        </h6>
+                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">List of total registered parents this month so far.</p>
+                                    </div>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('monthly')" style="font-size: 12px; padding: 4px 12px;">
+                                <button class="btn btn-sm w-100 mt-2" onclick="printReport('monthly')" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
+                                    Print Report
                                 </button>
                             </div>
                             
                             <!-- Parents This Year -->
-                            <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Parents This Year</h6>
-                                    <p class="mb-0 text-muted" style="font-size: 12px;">List of registered parents this year so far.</p>
+                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
+                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">event</span>
+                                            Parents This Year
+                                        </h6>
+                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">List of registered parents this year so far.</p>
+                                    </div>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('yearly')" style="font-size: 12px; padding: 4px 12px;">
+                                <button class="btn btn-sm w-100 mt-2" onclick="printReport('yearly')" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
-                                </button>
-                            </div>
-                            
-                            <!-- Parent Type Wise -->
-                            <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Parent Type Wise</h6>
-                                    <p class="mb-0 text-muted" style="font-size: 12px;">Parent type wise list with complete information.</p>
-                                </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('typewise')" style="font-size: 12px; padding: 4px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
-                                </button>
-                            </div>
-                            
-                            <!-- Complete Parent Info -->
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Complete Parent Info</h6>
-                                    <p class="mb-0 text-muted" style="font-size: 12px;">Print complete information of all parents.</p>
-                                </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('complete')" style="font-size: 12px; padding: 4px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
+                                    Print Report
                                 </button>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Illustration -->
-                    <div class="col-md-4 d-flex align-items-center justify-content-center">
-                        <div class="text-center">
-                            <div>
-                                <span class="material-symbols-outlined" style="font-size: 60px; color: #ddd;">family_restroom</span>
-                                <span class="material-symbols-outlined" style="font-size: 60px; color: #0d6efd; margin-left: -15px;">print</span>
+                    <!-- Column 2 -->
+                    <div class="col-md-6">
+                        <div class="report-list">
+                            <!-- Parent Type Wise -->
+                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
+                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">category</span>
+                                            Parent Type Wise
+                                        </h6>
+                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">Parent type wise list with complete information.</p>
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm w-100 mt-2" onclick="printReport('typewise')" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                    Print Report
+                                </button>
+                            </div>
+                            
+                            <!-- Complete Parent Info -->
+                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
+                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">description</span>
+                                            Complete Parent Info
+                                        </h6>
+                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">Print complete information of all parents.</p>
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm w-100 mt-2" onclick="printReport('complete')" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                    Print Report
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -176,15 +197,19 @@
 </div>
 
 <style>
-    .report-list .btn-light {
+    .report-item {
         transition: all 0.3s ease;
-        border: 1px solid #dee2e6;
     }
     
-    .report-list .btn-light:hover {
-        background-color: #f8f9fa !important;
-        border-color: #adb5bd;
+    .report-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 52, 113, 0.15) !important;
+        border-color: #003471 !important;
+    }
+    
+    .report-item .btn:hover {
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
     }
     
     .card {

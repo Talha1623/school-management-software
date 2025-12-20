@@ -102,10 +102,11 @@ class StudentBehaviorController extends Controller
      *
      * Examples:
      * - GET /api/student/behavior/records            -> all records
-     * - GET /api/student/behavior/records?student_id=7&date=2025-12-15
-     * - GET /api/student/behavior/records?date=2025-12-15
-     * - GET /api/student/behavior/records?date_from=2025-12-01&date_to=2025-12-31
-     * - GET /api/student/behavior/records?type=Positive
+     * - GET /api/student/behavior/records?student_id=7 -> all records for student_id 7
+     * - GET /api/student/behavior/records?student_id=7&date=2025-12-15 -> records for student_id 7 on specific date
+     * - GET /api/student/behavior/records?date=2025-12-15 -> records for authenticated student on specific date
+     * - GET /api/student/behavior/records?date_from=2025-12-01&date_to=2025-12-31 -> date range
+     * - GET /api/student/behavior/records?type=Positive -> filter by type
      */
     public function records(Request $request): JsonResponse
     {
@@ -132,16 +133,6 @@ class StudentBehaviorController extends Controller
                         'data' => null,
                         'token' => null,
                     ], 403);
-                }
-                
-                // If student_id is provided, date is also required
-                if (!$request->filled('date')) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Date is required when student_id is provided',
-                        'data' => null,
-                        'token' => null,
-                    ], 400);
                 }
             }
 
