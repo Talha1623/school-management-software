@@ -23,8 +23,8 @@ class AttendanceReportController extends Controller
         // Get filter values
         $filterCampus = $request->get('filter_campus');
         $filterClassSection = $request->get('filter_class_section');
-        $filterMonth = $request->get('filter_month', date('m'));
-        $filterYear = $request->get('filter_year', date('Y'));
+        $filterMonth = (int) $request->get('filter_month', date('m'));
+        $filterYear = (int) $request->get('filter_year', date('Y'));
 
         // Get logged-in staff/teacher
         $staff = Auth::guard('staff')->user();
@@ -34,14 +34,21 @@ class AttendanceReportController extends Controller
         $campuses = collect();
         if ($isTeacher) {
             // Get campuses from teacher's assigned subjects
-            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+            $campusesFromSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereNotNull('campus')
                 ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
+                ->pluck('campus');
             
-            $campuses = $assignedSubjects->map(function($campus) {
+            // Get campuses from teacher's assigned sections
+            $campusesFromSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus');
+            
+            // Merge all campuses and remove duplicates
+            $allCampuses = $campusesFromSubjects->merge($campusesFromSections)->unique()->sort()->values();
+            
+            $campuses = $allCampuses->map(function($campus) {
                 return (object)['campus_name' => $campus];
             });
         } else {
@@ -228,12 +235,10 @@ class AttendanceReportController extends Controller
             // Fetch actual attendance data from attendance table
             $studentIds = $students->pluck('id');
             
-            // Get attendance for the entire month
-            $startDate = Carbon::create($filterYear, $filterMonth, 1)->startOfDay();
-            $endDate = Carbon::create($filterYear, $filterMonth, $daysInMonth)->endOfDay();
-            
+            // Get attendance for the entire month - use whereYear and whereMonth for reliable matching
             $attendances = StudentAttendance::whereIn('student_id', $studentIds)
-                ->whereBetween('attendance_date', [$startDate, $endDate])
+                ->whereYear('attendance_date', $filterYear)
+                ->whereMonth('attendance_date', $filterMonth)
                 ->get()
                 ->groupBy('student_id');
             

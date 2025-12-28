@@ -222,25 +222,50 @@ class TeacherTimetableController extends Controller
             // Build query for timetables
             $query = Timetable::query();
 
-            // Filter by teacher's assigned subjects (campus, class, section, subject)
-            $query->where(function($q) use ($teacherSubjects) {
-                foreach ($teacherSubjects as $subject) {
-                    $q->orWhere(function($subQuery) use ($subject) {
-                        if ($subject->campus) {
-                            $subQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($subject->campus))]);
+            // Get unique classes and sections from teacher's assigned subjects
+            $teacherClasses = $teacherSubjects->pluck('class')->unique()->filter()->map(function($class) {
+                return trim($class);
+            })->filter()->toArray();
+            
+            $teacherSections = $teacherSubjects->pluck('section')->unique()->filter()->map(function($section) {
+                return trim($section);
+            })->filter()->toArray();
+
+            // Filter by teacher's assigned classes and sections (less restrictive)
+            // Show ALL timetables for assigned classes/sections, regardless of subject
+            // This ensures timetables added by super admin also show up
+            if (!empty($teacherClasses) || !empty($teacherSections)) {
+                $query->where(function($q) use ($teacherClasses, $teacherSections) {
+                    // Match by class AND section combination (preferred)
+                    if (!empty($teacherClasses) && !empty($teacherSections)) {
+                        foreach ($teacherClasses as $class) {
+                            foreach ($teacherSections as $section) {
+                                $q->orWhere(function($csQuery) use ($class, $section) {
+                                    $csQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                                           ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+                                });
+                            }
                         }
-                        if ($subject->class) {
-                            $subQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($subject->class))]);
+                    }
+                    
+                    // Also match by class only (if sections are empty)
+                    if (!empty($teacherClasses) && empty($teacherSections)) {
+                        foreach ($teacherClasses as $class) {
+                            $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
                         }
-                        if ($subject->section) {
-                            $subQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($subject->section))]);
+                    }
+                    
+                    // Also match by section only (if classes are empty)
+                    if (empty($teacherClasses) && !empty($teacherSections)) {
+                        foreach ($teacherSections as $section) {
+                            $q->orWhereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
                         }
-                        if ($subject->subject_name) {
-                            $subQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject->subject_name))]);
-                        }
-                    });
-                }
-            });
+                    }
+                });
+            } else {
+                // Fallback: If no classes/sections, return empty
+                $query->whereRaw('1 = 0');
+            }
 
             // Apply additional filters if provided
             if ($request->filled('campus')) {
@@ -259,10 +284,6 @@ class TeacherTimetableController extends Controller
                 $query->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($request->subject))]);
             }
 
-            if ($request->filled('day')) {
-                $query->whereRaw('LOWER(TRIM(day)) = ?', [strtolower(trim($request->day))]);
-            }
-
             // Get day, month and year for date calculation
             $dayForDate = null;
             $monthForDate = null;
@@ -274,6 +295,18 @@ class TeacherTimetableController extends Controller
             } elseif ($request->filled('month') && $request->filled('year')) {
                 $monthForDate = (int)$request->month;
                 $yearForDate = (int)$request->year;
+            }
+            
+            // Only filter by day name if it's a valid day name (not a numeric day)
+            // Valid day names: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+            $validDayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+            if ($request->filled('day')) {
+                $dayValue = strtolower(trim($request->day));
+                // Only apply day filter if it's a day name, not a numeric value
+                if (in_array($dayValue, $validDayNames)) {
+                    $query->whereRaw('LOWER(TRIM(day)) = ?', [$dayValue]);
+                }
+                // If it's a numeric value (date day), don't filter by day name
             }
 
             // Order by day and time

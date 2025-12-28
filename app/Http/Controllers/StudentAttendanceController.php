@@ -50,12 +50,14 @@ class StudentAttendanceController extends Controller
                 ->sort()
                 ->values();
         } else {
-            // For non-teachers, get all classes
-            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-            if ($classes->isEmpty()) {
-                $classesFromStudents = Student::whereNotNull('class')->distinct()->pluck('class')->sort();
-                $classes = $classesFromStudents;
-            }
+            // For non-teachers, get all classes from ClassModel only (dynamic - updates when classes are added/deleted)
+            $classes = ClassModel::whereNotNull('class_name')
+                ->orderBy('numeric_no', 'asc')
+                ->orderBy('class_name', 'asc')
+                ->distinct()
+                ->pluck('class_name')
+                ->unique()
+                ->values();
         }
         
         // Get sections for selected class (if class is selected)
@@ -112,17 +114,20 @@ class StudentAttendanceController extends Controller
         if ($filterClass && $filterDate) {
             $studentsQuery = Student::query();
             
+            // Use case-insensitive matching for class (same as API)
             if ($filterClass) {
-                $studentsQuery->where('class', $filterClass);
+                $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
             }
             
+            // Use case-insensitive matching for section (same as API)
             if ($filterSection) {
-                $studentsQuery->where('section', $filterSection);
+                $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
             }
             
             $allStudents = $studentsQuery->orderBy('student_name', 'asc')->get();
             
             // Get attendance data for the selected date
+            // Query attendance by student_id and date (case-insensitive matching not needed here as we're using IDs)
             $studentIds = $allStudents->pluck('id');
             $attendances = StudentAttendance::whereIn('student_id', $studentIds)
                 ->whereDate('attendance_date', $filterDate)

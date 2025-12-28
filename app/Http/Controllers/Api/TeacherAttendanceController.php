@@ -890,18 +890,18 @@ class TeacherAttendanceController extends Controller
 
             // Validate required parameters
             $validated = $request->validate([
-                'campus' => ['required', 'string'],
+                'campus' => ['nullable', 'string'],  // Make campus optional
                 'class' => ['required', 'string'],
                 'section' => ['nullable', 'string'],
                 'month' => ['required', 'string', 'regex:/^(0[1-9]|1[0-2])$/'],
                 'year' => ['required', 'integer', 'min:2000', 'max:2100'],
             ]);
 
-            $campus = trim($validated['campus']);
             $class = trim($validated['class']);
-            $section = $validated['section'] ? trim($validated['section']) : null;
+            $section = isset($validated['section']) && !empty($validated['section']) ? trim($validated['section']) : null;
             $month = (int)$validated['month'];
             $year = (int)$validated['year'];
+            $campus = isset($validated['campus']) && !empty($validated['campus']) ? trim($validated['campus']) : null;
 
             // Verify teacher has access to this class/section (from assigned subjects)
             // Check from subjects table - don't require exact campus match, just class/section
@@ -953,6 +953,49 @@ class TeacherAttendanceController extends Controller
                     ],
                     'token' => null,
                 ], 403);
+            }
+
+            // If campus is not provided, derive it from teacher's assigned subjects/sections
+            if (!$campus) {
+                // Get campus from teacher's assigned subjects for this class
+                $assignedSubject = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                    ->whereNotNull('campus')
+                    ->first();
+                
+                if ($assignedSubject && $assignedSubject->campus) {
+                    $campus = $assignedSubject->campus;
+                } else {
+                    // Get campus from teacher's assigned sections for this class
+                    $assignedSection = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                        ->whereNotNull('campus')
+                        ->first();
+                    
+                    if ($assignedSection && $assignedSection->campus) {
+                        $campus = $assignedSection->campus;
+                    } else {
+                        // Get campus from students matching this class/section
+                        $studentQuery = Student::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+                        if ($section) {
+                            $studentQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+                        }
+                        $student = $studentQuery->whereNotNull('campus')->first();
+                        
+                        if ($student && $student->campus) {
+                            $campus = $student->campus;
+                        }
+                    }
+                }
+            }
+
+            // If still no campus found, return error
+            if (!$campus) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Campus is required. Please provide campus parameter or ensure students/subjects have campus assigned.',
+                    'token' => null,
+                ], 400);
             }
 
             // Get students

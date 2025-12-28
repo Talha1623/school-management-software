@@ -242,9 +242,17 @@
                                         </span>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
-                                        <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="viewStudent({{ $student->id }})" title="View Details">
-                                            <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
-                                        </button>
+                                        <div class="d-flex gap-1 justify-content-center">
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="viewStudent({{ $student->id }})" title="View Details">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                                            </button>
+                                            <a href="{{ route('student.edit', $student->id) }}" class="btn btn-sm btn-warning px-2 py-1" title="Edit Student">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-danger px-2 py-1" onclick="deleteStudent({{ $student->id }}, '{{ $student->student_name }}', '{{ $student->student_code }}')" title="Delete Student">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
@@ -546,6 +554,33 @@ document.addEventListener('DOMContentLoaded', function() {
 // View student details
 function viewStudent(studentId) {
     window.location.href = '{{ route("student.view", ":id") }}'.replace(':id', studentId);
+}
+
+// Delete student
+function deleteStudent(studentId, studentName, studentCode) {
+    if (confirm(`Are you sure you want to delete student "${studentName}" (${studentCode})? This action cannot be undone!`)) {
+        fetch(`{{ route('student.delete', ':id') }}`.replace(':id', studentId), {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while deleting the student.');
+        });
+    }
 }
 </script>
 

@@ -28,56 +28,53 @@
                 
                 <div class="row g-3">
                     <!-- Late Arrival Time -->
-                    <div class="col-12">
-                        <div class="mb-3">
+                    <div class="col-md-4">
+                        <div class="mb-3" style="min-height: 90px;">
                             <label for="late_arrival_time" class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 14px;">Late Arrival Time</label>
-                            <div class="d-flex align-items-center gap-3">
-                                <div class="input-group" style="max-width: 200px;">
-                                    <input type="text" class="form-control" name="late_arrival_time" id="late_arrival_time" value="{{ $settings->late_arrival_time ? (strlen($settings->late_arrival_time) == 8 ? \Carbon\Carbon::parse('2000-01-01 ' . $settings->late_arrival_time)->format('h:i A') : $settings->late_arrival_time) : '08:00 AM' }}" required>
-                                    <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                        <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
-                                    </span>
-                                </div>
-                                <span class="text-primary" style="font-size: 13px; cursor: help;" title="Mark as late arrival on attendance after this time">
-                                    Mark as late arrival on attendance after this time
+                            <div class="input-group" style="height: 38px;">
+                                <input type="text" class="form-control" name="late_arrival_time" id="late_arrival_time" value="{{ $settings->late_arrival_time ? (strlen($settings->late_arrival_time) == 8 ? \Carbon\Carbon::parse('2000-01-01 ' . $settings->late_arrival_time)->format('h:i A') : $settings->late_arrival_time) : '08:00 AM' }}" required style="height: 38px;">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; height: 38px;">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
                                 </span>
                             </div>
+                            <small class="text-muted" style="font-size: 12px; cursor: help; display: block; margin-top: 4px;" title="Mark as late arrival on attendance after this time">
+                                Mark as late arrival on attendance after this time
+                            </small>
                         </div>
                     </div>
 
                     <!-- Free Absents -->
-                    <div class="col-12">
-                        <div class="mb-3">
+                    <div class="col-md-4">
+                        <div class="mb-3" style="min-height: 90px;">
                             <label for="free_absents" class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 14px;">Free Absents</label>
-                            <div class="d-flex align-items-center gap-3">
-                                <div class="input-group" style="max-width: 200px;">
-                                    <input type="number" class="form-control" name="free_absents" id="free_absents" value="{{ $settings->free_absents ?? 2 }}" min="0" required>
-                                </div>
-                                <span class="text-primary" style="font-size: 13px; cursor: help;" title="Do not deduct salary if absents are less or equal to this">
-                                    Do not deduct salary if absents are less or equal to this
+                            <div class="input-group" style="height: 38px;">
+                                <input type="number" class="form-control" name="free_absents" id="free_absents" value="{{ $settings->free_absents ?? 2 }}" min="0" required style="height: 38px;">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; height: 38px;">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">event_busy</span>
                                 </span>
                             </div>
+                            <small class="text-muted" style="font-size: 12px; cursor: help; display: block; margin-top: 4px;" title="Do not deduct salary if absents are less or equal to this">
+                                Do not deduct salary if absents are less or equal to this
+                            </small>
                         </div>
                     </div>
 
                     <!-- Leave Deduction -->
-                    <div class="col-12">
-                        <div class="mb-3">
+                    <div class="col-md-4">
+                        <div class="mb-3" style="min-height: 90px;">
                             <label for="leave_deduction" class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 14px;">Leave Deduction</label>
-                            <div class="d-flex align-items-center gap-3">
-                                <div class="input-group" style="max-width: 200px;">
-                                    <select class="form-select" name="leave_deduction" id="leave_deduction" required>
-                                        <option value="No" {{ ($settings->leave_deduction ?? 'No') == 'No' ? 'selected' : '' }}>No</option>
-                                        <option value="Yes" {{ ($settings->leave_deduction ?? 'No') == 'Yes' ? 'selected' : '' }}>Yes</option>
-                                    </select>
-                                    <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                        <span class="material-symbols-outlined" style="font-size: 18px;">arrow_drop_down</span>
-                                    </span>
-                                </div>
-                                <span class="text-primary" style="font-size: 13px; cursor: help;" title="deduct salary for the day if teacher is on leave">
-                                    deduct salary for the day if teacher is on leave
+                            <div class="input-group" style="height: 38px;">
+                                <select class="form-select" name="leave_deduction" id="leave_deduction" required style="height: 38px;">
+                                    <option value="No" {{ ($settings->leave_deduction ?? 'No') == 'No' ? 'selected' : '' }}>No</option>
+                                    <option value="Yes" {{ ($settings->leave_deduction ?? 'No') == 'Yes' ? 'selected' : '' }}>Yes</option>
+                                </select>
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; height: 38px;">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">arrow_drop_down</span>
                                 </span>
                             </div>
+                            <small class="text-muted" style="font-size: 12px; cursor: help; display: block; margin-top: 4px;" title="deduct salary for the day if teacher is on leave">
+                                deduct salary for the day if teacher is on leave
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -90,7 +87,7 @@
                 <!-- Save Button -->
                 <div class="d-flex justify-content-end">
                     <button type="submit" class="btn btn-success d-inline-flex align-items-center gap-2" style="background-color: #28a745; border: none; padding: 10px 20px; font-weight: 500;">
-                        <span>Save Changes</span>
+                        <span style="color: white;">Save Changes</span>
                         <span class="material-symbols-outlined" style="font-size: 18px; color: white;">thumb_up</span>
                     </button>
                 </div>

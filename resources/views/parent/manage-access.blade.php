@@ -7,7 +7,6 @@
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="mb-0 fs-16 fw-semibold">Manage Access</h4>
                 <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 parent-add-btn" data-bs-toggle="modal" data-bs-target="#parentModal" onclick="resetForm()">
                     <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
                     <span>Add New Parent</span>
@@ -218,8 +217,10 @@
             </div>
 
             @if($parents->hasPages())
-                <div class="mt-3">
-                    {{ $parents->links() }}
+                <div class="d-flex justify-content-center align-items-center mt-3 pt-3 border-top">
+                    <div class="pagination-wrapper">
+                        {{ $parents->links() }}
+                    </div>
                 </div>
             @endif
         </div>
@@ -367,7 +368,7 @@
                             <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                 <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
                             </span>
-                            <input type="password" class="form-control" id="reset_password_confirmation" placeholder="Confirm new password" required minlength="6">
+                            <input type="password" class="form-control" name="password_confirmation" id="reset_password_confirmation" placeholder="Confirm new password" required minlength="6">
                         </div>
                     </div>
                 </div>
@@ -859,9 +860,163 @@
     .default-table-area .btn-danger .material-symbols-outlined {
         color: white !important;
     }
+    
+    /* Pagination Styling - Only Show Next/Previous */
+    .pagination-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .pagination-wrapper .pagination {
+        margin-bottom: 0;
+        gap: 8px;
+    }
+    
+    .pagination-wrapper .pagination .page-link {
+        color: #003471;
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        padding: 0.5rem 1rem;
+        font-size: 14px;
+        border-radius: 6px;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    
+    .pagination-wrapper .pagination .page-link:hover {
+        color: #fff;
+        background-color: #003471;
+        border-color: #003471;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 52, 113, 0.2);
+    }
+    
+    .pagination-wrapper .pagination .page-item.disabled .page-link {
+        color: #6c757d;
+        background-color: #f8f9fa;
+        border-color: #dee2e6;
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
+    
+    .pagination-wrapper .pagination .page-item.disabled .page-link:hover {
+        transform: none;
+        box-shadow: none;
+        background-color: #f8f9fa;
+        color: #6c757d;
+    }
+    
+    .pagination-wrapper .pagination .page-link:focus {
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+        outline: none;
+    }
+    
+    /* Hide numbered page buttons - only show Previous/Next */
+    .pagination-wrapper .pagination .page-item:not(:first-child):not(:last-child) {
+        display: none !important;
+    }
+    
+    /* Show only Previous and Next buttons */
+    .pagination-wrapper .pagination .page-item:first-child,
+    .pagination-wrapper .pagination .page-item:last-child {
+        display: block !important;
+    }
+    
+    /* Hide arrow symbols from Previous/Next buttons */
+    .pagination-wrapper .pagination .page-link span:first-child,
+    .pagination-wrapper .pagination .page-link span:last-child {
+        display: none !important;
+    }
+    
+    /* Remove arrow symbols (», «) from text */
+    .pagination-wrapper .pagination .page-link::before,
+    .pagination-wrapper .pagination .page-link::after {
+        content: none !important;
+    }
+    
+    /* Hide active page number button */
+    .pagination-wrapper .pagination .page-item.active:not(:first-child):not(:last-child) {
+        display: none !important;
+    }
+    
 </style>
 
 <script>
+// Hide numbered page buttons and arrows, only show Previous/Next text
+function hideNumberedPaginationButtons() {
+    const paginations = document.querySelectorAll('.pagination-wrapper .pagination, .pagination');
+    
+    paginations.forEach(pagination => {
+        if (pagination) {
+            const pageItems = pagination.querySelectorAll('.page-item');
+            pageItems.forEach((item, index) => {
+                const link = item.querySelector('.page-link');
+                if (link) {
+                    const text = link.textContent.trim();
+                    const ariaLabel = link.getAttribute('aria-label');
+                    
+                    // Check if it's Previous or Next
+                    const isPrevious = ariaLabel === 'Previous' || text.includes('Previous');
+                    const isNext = ariaLabel === 'Next' || text.includes('Next');
+                    
+                    if (isPrevious || isNext) {
+                        // Remove arrow symbols from Previous/Next buttons
+                        link.innerHTML = link.innerHTML
+                            .replace(/«/g, '')
+                            .replace(/»/g, '')
+                            .replace(/&laquo;/g, '')
+                            .replace(/&raquo;/g, '')
+                            .replace(/Previous/g, 'Previous')
+                            .replace(/Next/g, 'Next')
+                            .trim();
+                        
+                        // Keep only the text, remove any span elements with arrows
+                        const spans = link.querySelectorAll('span');
+                        spans.forEach(span => {
+                            const spanText = span.textContent.trim();
+                            if (spanText === '«' || spanText === '»' || spanText === '&laquo;' || spanText === '&raquo;') {
+                                span.remove();
+                            }
+                        });
+                        
+                        // Set clean text
+                        if (isPrevious) {
+                            link.textContent = 'Previous';
+                        } else if (isNext) {
+                            link.textContent = 'Next';
+                        }
+                    } else {
+                        // Hide numbered buttons
+                        item.style.display = 'none';
+                    }
+                } else {
+                    // Hide if no link found and it's not first/last
+                    if (index !== 0 && index !== pageItems.length - 1) {
+                        item.style.display = 'none';
+                    }
+                }
+            });
+        }
+    });
+}
+
+// Run on page load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hideNumberedPaginationButtons);
+} else {
+    hideNumberedPaginationButtons();
+}
+
+// Also run after delays to catch dynamically loaded content
+setTimeout(hideNumberedPaginationButtons, 100);
+setTimeout(hideNumberedPaginationButtons, 500);
+
+// Watch for DOM changes
+const observer = new MutationObserver(hideNumberedPaginationButtons);
+observer.observe(document.body, { childList: true, subtree: true });
+
 function resetForm() {
     document.getElementById('parentForm').action = '{{ route('parent.manage-access.store') }}';
     document.getElementById('parentForm').reset();

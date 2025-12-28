@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Staff;
 use App\Models\Campus;
 use App\Models\Subject;
+use App\Models\Student;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -158,6 +159,19 @@ class ManageSectionController extends Controller
      */
     public function destroy(Section $section): RedirectResponse
     {
+        // Check if there are any students in this section
+        // Match by both class and section name (case-insensitive)
+        $studentsCount = Student::where(function($query) use ($section) {
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($section->class))])
+                  ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section->name))]);
+        })->count();
+
+        if ($studentsCount > 0) {
+            return redirect()
+                ->route('classes.manage-section')
+                ->with('error', "Cannot delete section '{$section->name}' of class '{$section->class}' because it has {$studentsCount} student(s) enrolled. Please transfer all students to another section first.");
+        }
+
         $section->delete();
 
         return redirect()

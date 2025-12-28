@@ -214,6 +214,11 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\Api\TeacherController::class, 'dashboard'])->name('dashboard');
         Route::get('/assigned-classes', [App\Http\Controllers\Api\TeacherController::class, 'assignedClasses'])->name('assigned-classes');
         
+        // Exam List Routes
+        Route::match(['GET', 'POST'], '/exam/list', [App\Http\Controllers\Api\TeacherController::class, 'examList'])->name('exam.list');
+        Route::match(['GET', 'POST'], '/exam/students', [App\Http\Controllers\Api\TeacherController::class, 'examStudents'])->name('exam.students');
+        Route::post('/exam/marks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveExamMarks'])->name('exam.marks.save');
+        
         // Student List Routes
         Route::match(['GET', 'POST'], '/students', [App\Http\Controllers\Api\TeacherStudentController::class, 'index'])->name('students.index');
         Route::get('/students/filter-options', [App\Http\Controllers\Api\TeacherStudentController::class, 'getFilterOptions'])->name('students.filter-options');
@@ -253,6 +258,9 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/self-attendance/history', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'getSelfAttendanceHistory'])->name('self-attendance.history');
         Route::match(['GET', 'POST'], '/self-attendance/check-in', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'checkIn'])->name('self-attendance.check-in');
         Route::match(['GET', 'POST'], '/self-attendance/check-out', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'checkOut'])->name('self-attendance.check-out');
+        
+        // Teacher Attendance Report
+        Route::match(['GET', 'POST'], '/attendance-report', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'getAttendanceReport'])->name('attendance-report');
         
         // Academic Calendar Events Routes
         Route::post('/events/create', [App\Http\Controllers\Api\TeacherEventController::class, 'create'])->name('events.create');

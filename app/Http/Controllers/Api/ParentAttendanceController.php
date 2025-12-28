@@ -83,7 +83,7 @@ class ParentAttendanceController extends Controller
                 ], 400);
             }
 
-            // If student_id is provided, return only that student's attendance
+            // If student_id is provided, return that student's attendance with monthly summary
             if ($request->filled('student_id')) {
                 $studentId = (int) $request->student_id;
                 
@@ -108,10 +108,58 @@ class ParentAttendanceController extends Controller
                     ], 400);
                 }
 
-                // Get attendance record for this specific student and date
+                // Get month and year from the provided date
+                $month = $attendanceDate->month;
+                $year = $attendanceDate->year;
+                
+                // Get start and end dates of the month
+                $monthStart = Carbon::create($year, $month, 1)->startOfDay();
+                $monthEnd = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+
+                // Get all attendance records for this student for the entire month
+                $monthlyAttendances = StudentAttendance::where('student_id', $studentId)
+                    ->whereBetween('attendance_date', [$monthStart->format('Y-m-d'), $monthEnd->format('Y-m-d')])
+                    ->orderBy('attendance_date', 'asc')
+                    ->get();
+
+                // Calculate monthly totals
+                $totalPresent = $monthlyAttendances->where('status', 'Present')->count();
+                $totalAbsent = $monthlyAttendances->where('status', 'Absent')->count();
+                $totalLeave = $monthlyAttendances->where('status', 'Leave')->count();
+
+                // Get attendance for the specific date
                 $attendance = StudentAttendance::where('student_id', $studentId)
                     ->whereDate('attendance_date', $attendanceDate->format('Y-m-d'))
                     ->first();
+
+                // Format date-wise attendance
+                $attendanceByDate = $monthlyAttendances->map(function($att) {
+                    return [
+                        'date' => Carbon::parse($att->attendance_date)->format('Y-m-d'),
+                        'date_formatted' => Carbon::parse($att->attendance_date)->format('d M Y'),
+                        'status' => $att->status,
+                        'remarks' => $att->remarks,
+                    ];
+                })->values();
+
+                // Get all dates in the month and fill missing dates with 'N/A'
+                $allDatesInMonth = [];
+                $currentDate = $monthStart->copy();
+                while ($currentDate->lte($monthEnd)) {
+                    $dateStr = $currentDate->format('Y-m-d');
+                    $existingAttendance = $monthlyAttendances->first(function($att) use ($dateStr) {
+                        return Carbon::parse($att->attendance_date)->format('Y-m-d') === $dateStr;
+                    });
+                    
+                    $allDatesInMonth[] = [
+                        'date' => $dateStr,
+                        'date_formatted' => $currentDate->format('d M Y'),
+                        'status' => $existingAttendance ? $existingAttendance->status : 'N/A',
+                        'remarks' => $existingAttendance ? $existingAttendance->remarks : null,
+                    ];
+                    
+                    $currentDate->addDay();
+                }
 
                 $studentsData = [[
                     'id' => $targetStudent->id,
@@ -123,6 +171,30 @@ class ParentAttendanceController extends Controller
                     'status' => $attendance ? $attendance->status : 'N/A',
                     'remarks' => $attendance ? $attendance->remarks : null,
                 ]];
+
+                // Return response with monthly summary and date-wise attendance
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Class attendance retrieved successfully',
+                    'data' => [
+                        'date' => $attendanceDate->format('Y-m-d'),
+                        'date_formatted' => $attendanceDate->format('d M Y'),
+                        'month' => $month,
+                        'year' => $year,
+                        'month_formatted' => $attendanceDate->format('F Y'),
+                        'class' => $targetStudent->class,
+                        'section' => $targetStudent->section,
+                        'campus' => $targetStudent->campus,
+                        'monthly_summary' => [
+                            'total_present' => $totalPresent,
+                            'total_absent' => $totalAbsent,
+                            'total_leave' => $totalLeave,
+                        ],
+                        'students' => $studentsData,
+                        'attendance_by_date' => $allDatesInMonth,
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
             } else {
                 // Get first student from parent's children (similar to student API using authenticated student)
                 $parentStudents = $parent->students()->get();

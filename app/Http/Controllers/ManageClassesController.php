@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ClassModel;
 use App\Models\Campus;
 use App\Models\Section;
+use App\Models\Student;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -107,6 +108,16 @@ class ManageClassesController extends Controller
      */
     public function destroy(ClassModel $class_model): RedirectResponse
     {
+        // Check if there are any students in this class
+        $studentsCount = Student::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class_model->class_name))])
+            ->count();
+
+        if ($studentsCount > 0) {
+            return redirect()
+                ->route('classes.manage-classes')
+                ->with('error', "Cannot delete class '{$class_model->class_name}' because it has {$studentsCount} student(s) enrolled. Please transfer all students to another class first.");
+        }
+
         $class_model->delete();
 
         return redirect()

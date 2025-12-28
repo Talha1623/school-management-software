@@ -94,7 +94,7 @@
                 </div>
             </div>
             <h6 class="mb-0 text-white" style="font-size: 11px; font-weight: 500;">Student Limit</h6>
-            <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">35/ 300</h5>
+            <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">{{ $studentLimitDisplay ?? '0 / 300' }}</h5>
         </div>
     </div>
     @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin())
@@ -111,20 +111,6 @@
     </div>
     @endif
     <div class="col">
-        <div class="card border-0 rounded-10 p-2 h-100" style="background-color: #32b4ee;">
-            <div class="d-flex align-items-center mb-1">
-                <div class="bg-white rounded-circle p-1 me-2" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
-                    <span class="material-symbols-outlined" style="font-size: 18px; color: #e91e63;">chat</span>
-                </div>
-            </div>
-            <h6 class="mb-0 text-white" style="font-size: 11px; font-weight: 500;">WhatsApp Left</h6>
-            <h5 class="mb-0">
-                <span class="text-white fw-medium" style="font-size: 14px;">0</span>
-                <span class="text-white ms-1" style="font-size: 10px; opacity: 0.8;">(Buy Now)</span>
-            </h5>
-        </div>
-    </div>
-    <div class="col">
         <div class="card border-0 rounded-10 p-2 h-100" style="background-color: #003471;">
             <div class="d-flex align-items-center mb-1">
                 <div class="bg-white rounded-circle p-1 me-2" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
@@ -132,7 +118,7 @@
                 </div>
             </div>
             <h6 class="mb-0 text-white" style="font-size: 11px; font-weight: 500;">Max Campuses</h6>
-            <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">1</h5>
+            <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">{{ $maxCampuses ?? 1 }}</h5>
         </div>
     </div>
     <div class="col">
@@ -449,86 +435,30 @@
         <div class="card bg-white p-3 rounded-10 border border-white h-100">
             <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.latest_admissions') }}</h4>
             <div class="row g-2 mt-2">
-                <!-- Admission Card 1 -->
+                @forelse($latestAdmissions ?? [] as $student)
                 <div class="col-6">
                     <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
                         <div class="d-flex flex-column align-items-center text-center">
                             <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
                                 <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
                             </div>
-                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Zubair Javed</h6>
-                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">C3-012</p>
-                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">21 Nov - 2025</span>
+                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">{{ $student->student_name ?? 'N/A' }}</h6>
+                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">{{ $student->student_code ?? 'N/A' }}</p>
+                            @php
+                                $admissionDate = $student->admission_date ?? $student->created_at;
+                                $formattedDate = $admissionDate ? \Carbon\Carbon::parse($admissionDate)->format('d M - Y') : 'N/A';
+                            @endphp
+                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">{{ $formattedDate }}</span>
                         </div>
                     </div>
                 </div>
-                <!-- Admission Card 2 -->
-                <div class="col-6">
-                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
-                        <div class="d-flex flex-column align-items-center text-center">
-                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
-                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
-                            </div>
-                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">korban</h6>
-                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">ST0001-12</p>
-                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">20 Nov - 2025</span>
-                        </div>
-                    </div>
+                @empty
+                <div class="col-12">
+                    <p class="text-center text-muted" style="font-size: 12px; padding: 20px;">No admissions found</p>
                 </div>
-                <!-- Admission Card 3 -->
-                <div class="col-6">
-                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
-                        <div class="d-flex flex-column align-items-center text-center">
-                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
-                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
-                            </div>
-                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Muhammad</h6>
-                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">ST0001-2</p>
-                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">12 Nov - 2025</span>
-                        </div>
-                    </div>
-                </div>
-                <!-- Admission Card 4 -->
-                <div class="col-6">
-                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
-                        <div class="d-flex flex-column align-items-center text-center">
-                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
-                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
-                            </div>
-                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Azhar</h6>
-                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">ST0001-1</p>
-                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">07 Oct - 2025</span>
-                        </div>
-                    </div>
-                </div>
-                <!-- Admission Card 5 -->
-                <div class="col-6">
-                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
-                        <div class="d-flex flex-column align-items-center text-center">
-                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
-                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
-                            </div>
-                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Aliyan Imran</h6>
-                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">C3-011</p>
-                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">10 Jan - 2025</span>
-                        </div>
-                    </div>
-                </div>
-                <!-- Admission Card 6 -->
-                <div class="col-6">
-                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
-                        <div class="d-flex flex-column align-items-center text-center">
-                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
-                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
-                            </div>
-                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">Hassam</h6>
-                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">C2-011</p>
-                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">01 Oct - 2025</span>
-                        </div>
-                    </div>
-                </div>
+                @endforelse
             </div>
-            <p class="text-dark mb-0 mt-3 text-center" style="font-size: 12px;">{{ __('dashboard.total_admissions_month') }}: 3</p>
+            <p class="text-dark mb-0 mt-3 text-center" style="font-size: 12px;">{{ __('dashboard.total_admissions_month') }}: {{ $totalAdmissionsThisMonth ?? 0 }}</p>
         </div>
     </div>
 
@@ -547,48 +477,40 @@
         <div class="card bg-white p-3 rounded-10 border border-white h-100">
             <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.tasks_overview') }}</h4>
             <div class="d-flex flex-column gap-2 mt-2">
-                <!-- Task 1 -->
-                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #F44336 0%, #E57373 100%);">
+                @forelse($latestTasks ?? [] as $task)
+                @php
+                    // Define gradient colors array (cycling through different colors)
+                    $gradientColors = [
+                        ['#F44336', '#E57373'], // Red
+                        ['#03A9F4', '#64B5F6'], // Blue
+                        ['#FF9800', '#FFB74D'], // Orange
+                        ['#2196F3', '#64B5F6'], // Light Blue
+                        ['#9C27B0', '#BA68C8'], // Purple
+                        ['#4CAF50', '#81C784'], // Green
+                    ];
+                    $colorIndex = $loop->index % count($gradientColors);
+                    $gradient = $gradientColors[$colorIndex];
+                    
+                    // Map status to badge class and text
+                    $statusMap = [
+                        'Completed' => ['class' => 'bg-success', 'text' => 'Completed'],
+                        'Pending' => ['class' => 'bg-warning', 'text' => 'Pending'],
+                        'Accepted' => ['class' => 'bg-info', 'text' => 'Accepted'],
+                        'Returned' => ['class' => 'bg-danger', 'text' => 'Returned'],
+                    ];
+                    $statusInfo = $statusMap[$task->status ?? 'Pending'] ?? $statusMap['Pending'];
+                @endphp
+                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, {{ $gradient[0] }} 0%, {{ $gradient[1] }} 100%);">
                     <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">test</h6>
-                        <span class="badge bg-success text-white" style="font-size: 10px; padding: 4px 8px;">Completed</span>
+                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">{{ $task->task_title ?? 'N/A' }}</h6>
+                        <span class="badge {{ $statusInfo['class'] }} text-white" style="font-size: 10px; padding: 4px 8px;">{{ $statusInfo['text'] }}</span>
                     </div>
                 </div>
-                <!-- Task 2 -->
-                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #03A9F4 0%, #64B5F6 100%);">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Chomu</h6>
-                        <span class="badge bg-warning text-white" style="font-size: 10px; padding: 4px 8px;">Pending</span>
-                    </div>
+                @empty
+                <div class="text-center text-muted" style="padding: 20px;">
+                    <p class="mb-0" style="font-size: 12px;">No tasks available</p>
                 </div>
-                <!-- Task 3 -->
-                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Public Holiday</h6>
-                        <span class="badge bg-warning text-white" style="font-size: 10px; padding: 4px 8px;">Pending</span>
-                    </div>
-                </div>
-                <!-- Task 4 -->
-                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Public Holiday</h6>
-                        <span class="badge bg-warning text-white" style="font-size: 10px; padding: 4px 8px;">Pending</span>
-                    </div>
-                </div>
-                <!-- Task 5 -->
-                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #9C27B0 0%, #BA68C8 100%);">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Meeting</h6>
-                        <span class="badge bg-success text-white" style="font-size: 10px; padding: 4px 8px;">Completed</span>
-                    </div>
-                </div>
-                <!-- Task 6 -->
-                <div class="card border-0 rounded-10 p-2" style="background: linear-gradient(135deg, #F44336 0%, #E57373 100%);">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <h6 class="text-white mb-0 fw-bold" style="font-size: 13px;">Exam Result Announcements</h6>
-                        <span class="badge text-white" style="font-size: 10px; padding: 4px 8px; background-color: #03A9F4;">Processing</span>
-                    </div>
-                </div>
+                @endforelse
             </div>
         </div>
     </div>
@@ -614,155 +536,69 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Row 1: Class One -->
+                        @forelse($classSectionData ?? [] as $row)
                         <tr>
-                            <td class="fw-bold" style="padding: 12px;">One</td>
-                            <td style="padding: 12px;">
-                                <div class="d-flex gap-1 flex-wrap">
-                                    <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> A: 2
-                                    </span>
-                                    <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> I: 0
-                                    </span>
-                                </div>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge text-white rounded-pill" style="padding: 6px 10px; font-size: 11px; background-color: #1a237e;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span> 0
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-warning text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">credit_card</span> 0
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 2234
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 1200
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 1200
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
-                                </span>
-                            </td>
-                        </tr>
-                        <!-- Row 2: Class Two -->
-                        <tr>
-                            <td class="fw-bold" style="padding: 12px;">Two</td>
+                            <td class="fw-bold" style="padding: 12px;">{{ $row['class'] }}</td>
                             <td style="padding: 12px;">
                                 <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> A: 1
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> {{ $row['section'] != 'N/A' ? $row['section'] : 'N/A' }}: {{ $row['section_strength'] }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> {{ number_format($row['present_today']) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge text-white rounded-pill" style="padding: 6px 10px; font-size: 11px; background-color: #1a237e;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span> 0
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span> {{ number_format($row['absent_today']) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge bg-warning text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">credit_card</span> 0
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">credit_card</span> {{ number_format($row['on_leave']) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 650
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> {{ number_format($row['expected']) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 0
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> {{ number_format($row['generated'], 2) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                <span class="badge {{ $row['paid_amount'] > 0 ? 'bg-success' : 'bg-danger' }} text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> {{ number_format($row['paid_amount'], 2) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
+                                <span class="badge {{ $row['balance'] <= 0 ? 'bg-success' : 'bg-danger' }} text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> {{ number_format($row['balance'], 2) }}
                                 </span>
                             </td>
                         </tr>
-                        <!-- Row 3: Class Three -->
+                        @empty
                         <tr>
-                            <td class="fw-bold" style="padding: 12px;">Three</td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-secondary text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">groups</span> A: 35
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge text-white rounded-pill" style="padding: 6px 10px; font-size: 11px; background-color: #1a237e;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span> 0
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-warning text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">credit_card</span> 0
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 48400
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> 15400
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 0
-                                </span>
-                            </td>
-                            <td style="padding: 12px;">
-                                <span class="badge bg-success text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> 15400
-                                </span>
-                            </td>
+                            <td colspan="9" class="text-center" style="padding: 20px;">No data available</td>
                         </tr>
+                        @endforelse
                         <!-- Total Row -->
+                        @if(isset($classSectionData) && count($classSectionData) > 0)
                         <tr style="background-color: #ffebee;">
                             <td class="fw-bold text-dark" style="padding: 12px;">Total</td>
-                            <td class="text-dark" style="padding: 12px;">38</td>
-                            <td class="text-dark" style="padding: 12px;">0</td>
-                            <td class="text-dark" style="padding: 12px;">0</td>
-                            <td class="text-dark" style="padding: 12px;">0</td>
-                            <td class="text-dark" style="padding: 12px;">51284</td>
-                            <td class="text-dark" style="padding: 12px;">16600</td>
-                            <td class="text-dark" style="padding: 12px;">1200</td>
-                            <td class="text-dark" style="padding: 12px;">15400</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalSectionStrength ?? 0) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalPresentToday ?? 0) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalAbsentToday ?? 0) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalOnLeave ?? 0) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalExpected ?? 0) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalGenerated ?? 0, 2) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalPaidAmount ?? 0, 2) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalBalance ?? 0, 2) }}</td>
                         </tr>
+                        @endif
                     </tbody>
                 </table>
             </div>
@@ -805,6 +641,32 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// Month-wise fee data from PHP
+@php
+    $paidFeeData = $monthWisePaidFee ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    $unpaidFeeData = $monthWiseUnpaidFee ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    $labelsData = $monthLabels ?? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Weekly income/expense data
+    $weeklyIncomeData = $weeklyIncome ?? [0, 0, 0, 0, 0, 0, 0];
+    $weeklyExpenseData = $weeklyExpense ?? [0, 0, 0, 0, 0, 0, 0];
+    $weeklyLabelsData = $weeklyLabels ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    // Monthly income/expense data
+    $monthlyIncomeData = $monthlyIncome ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    $monthlyExpenseData = $monthlyExpense ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    $monthlyLabelsData = $monthlyLabels ?? ['Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025', 'May 2025', 'Jun 2025', 'Jul 2025', 'Aug 2025', 'Sep 2025', 'Oct 2025', 'Nov 2025', 'Dec 2025'];
+@endphp
+var monthWisePaidFeeData = @json($paidFeeData);
+var monthWiseUnpaidFeeData = @json($unpaidFeeData);
+var monthLabelsData = @json($labelsData);
+var weeklyIncomeData = @json($weeklyIncomeData);
+var weeklyExpenseData = @json($weeklyExpenseData);
+var weeklyLabelsData = @json($weeklyLabelsData);
+var monthlyIncomeData = @json($monthlyIncomeData);
+var monthlyExpenseData = @json($monthlyExpenseData);
+var monthlyLabelsData = @json($monthlyLabelsData);
+
 function initializeCharts() {
     // Admissions Overview Pie Chart
     const admissionsChartId = document.getElementById('admissions_overview_chart');
@@ -838,18 +700,18 @@ function initializeCharts() {
         chart.render();
     }
 
-    // Daily Income & Expense Chart
+    // Daily Income & Expense Chart (Weekly - Last 7 Days)
     const dailyChartId = document.getElementById('daily_income_expense_chart');
     if (dailyChartId) {
         var options = {
             series: [
                 {
                     name: 'Daily Income',
-                    data: [0, 0, 0, 0, 0, 0, 0]
+                    data: weeklyIncomeData
                 },
                 {
                     name: 'Daily Expenses',
-                    data: [0, 0, 0, 0, 0, 0, 0]
+                    data: weeklyExpenseData
                 }
             ],
             chart: {
@@ -865,7 +727,7 @@ function initializeCharts() {
                 curve: 'smooth'
             },
             xaxis: {
-                categories: ['Tue 18', 'Wed 19', 'Thu 20', 'Fri 21', 'Sat 22', 'Sun 23', 'Mon 24'],
+                categories: weeklyLabelsData,
                 labels: {
                     style: {
                         fontSize: '10px',
@@ -903,18 +765,18 @@ function initializeCharts() {
         chart.render();
     }
 
-    // Monthly Income & Expense Chart
+    // Monthly Income & Expense Chart (Last 12 Months)
     const monthlyChartId = document.getElementById('monthly_income_expense_chart');
     if (monthlyChartId) {
         var options = {
             series: [
                 {
                     name: 'Monthly Income',
-                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 2000, 2200, 2400]
+                    data: monthlyIncomeData
                 },
                 {
                     name: 'Monthly Expenses',
-                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1800, 2000, 2100]
+                    data: monthlyExpenseData
                 }
             ],
             chart: {
@@ -938,7 +800,7 @@ function initializeCharts() {
                 }
             },
             xaxis: {
-                categories: ['Dec 2024', 'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025', 'May 2025', 'Jun 2025', 'Jul 2025', 'Aug 2025', 'Sep 2025', 'Oct 2025', 'Nov 2025'],
+                categories: monthlyLabelsData,
                 labels: {
                     rotate: -45,
                     style: {
@@ -984,11 +846,11 @@ function initializeCharts() {
             series: [
                 {
                     name: 'Paid Fee',
-                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]
+                    data: monthWisePaidFeeData
                 },
                 {
                     name: 'Unpaid Fee',
-                    data: [0, 0, 1, 0, 0, 0, 0, 0, 0, 6, 35, 11]
+                    data: monthWiseUnpaidFeeData
                 }
             ],
             chart: {
@@ -1016,7 +878,7 @@ function initializeCharts() {
                 colors: ['transparent']
             },
             xaxis: {
-                categories: ['Dec-24', 'Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25', 'Jun-25', 'Jul-25', 'Aug-25', 'Sep-25', 'Oct-25', 'Nov-25'],
+                categories: monthLabelsData,
                 labels: {
                     style: {
                         fontSize: '11px',

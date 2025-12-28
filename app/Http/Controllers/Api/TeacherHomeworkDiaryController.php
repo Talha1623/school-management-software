@@ -910,13 +910,39 @@ class TeacherHomeworkDiaryController extends Controller
                 ];
             })->values();
 
-            $subjectsData = $subjects->map(function($subject) {
+            // Get all subject IDs to fetch homework
+            $subjectIds = $subjects->pluck('id');
+            
+            // Get homework diaries for these subjects (latest first)
+            $homeworkDiaries = HomeworkDiary::whereIn('subject_id', $subjectIds)
+                ->orderBy('date', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->groupBy('subject_id');
+            
+            $subjectsData = $subjects->map(function($subject) use ($homeworkDiaries) {
+                // Get homework for this subject
+                $homeworkList = [];
+                if (isset($homeworkDiaries[$subject->id])) {
+                    $homeworkList = $homeworkDiaries[$subject->id]->map(function($homework) {
+                        return [
+                            'id' => $homework->id,
+                            'date' => $homework->date->format('Y-m-d'),
+                            'homework_content' => $homework->homework_content,
+                            'created_at' => $homework->created_at ? $homework->created_at->format('Y-m-d H:i:s') : null,
+                            'updated_at' => $homework->updated_at ? $homework->updated_at->format('Y-m-d H:i:s') : null,
+                        ];
+                    })->values()->toArray();
+                }
+                
                 return [
                     'id' => $subject->id,
                     'subject_name' => $subject->subject_name,
                     'campus' => $subject->campus,
                     'class' => $subject->class,
                     'section' => $subject->section,
+                    'homework' => $homeworkList,
+                    'homework_count' => count($homeworkList),
                 ];
             });
 

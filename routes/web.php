@@ -147,6 +147,10 @@ Route::post('/student/transfer', [App\Http\Controllers\StudentTransferController
 Route::get('/student/transfer/get-students', [App\Http\Controllers\StudentTransferController::class, 'getStudents'])->name('student.transfer.get-students');
 Route::get('/student/transfer/search-student', [App\Http\Controllers\StudentTransferController::class, 'searchStudent'])->name('student.transfer.search-student');
 
+// Student Edit Route (must be before /student/{student} route)
+Route::get('/student/{student}/edit', [App\Http\Controllers\StudentController::class, 'edit'])->name('student.edit');
+Route::put('/student/{student}', [App\Http\Controllers\StudentController::class, 'update'])->name('student.update');
+
 // Student Delete Route (must be before /student/{student} route)
 Route::delete('/student/{student}', [App\Http\Controllers\StudentController::class, 'destroy'])->name('student.delete');
 
@@ -639,9 +643,8 @@ Route::get('/attendance/student', [App\Http\Controllers\StudentAttendanceControl
 Route::get('/attendance/student/get-sections-by-class', [App\Http\Controllers\StudentAttendanceController::class, 'getSectionsByClass'])->name('attendance.student.get-sections-by-class');
 Route::post('/attendance/student/store', [App\Http\Controllers\StudentAttendanceController::class, 'store'])->name('attendance.student.store')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 
-Route::get('/attendance/staff', function () {
-    return view('attendance.staff');
-})->name('attendance.staff');
+Route::get('/attendance/staff', [App\Http\Controllers\StaffAttendanceController::class, 'index'])->name('attendance.staff')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::post('/attendance/staff/store', [App\Http\Controllers\StaffAttendanceController::class, 'store'])->name('attendance.staff.store')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 
 Route::get('/attendance/barcode', function () {
     return view('attendance.barcode');
@@ -840,7 +843,11 @@ Route::get('/expense-management/categories/export/{format}', [App\Http\Controlle
 
 // Salary and Loan Management Routes
 Route::get('/salary-loan/generate-salary', [App\Http\Controllers\GenerateSalaryController::class, 'index'])->name('salary-loan.generate-salary');
+Route::get('/salary-loan/generate-salary/get-staff', [App\Http\Controllers\GenerateSalaryController::class, 'getStaffList'])->name('salary-loan.generate-salary.get-staff');
 Route::post('/salary-loan/generate-salary', [App\Http\Controllers\GenerateSalaryController::class, 'store'])->name('salary-loan.generate-salary.store');
+Route::put('/salary-loan/generate-salary/{salary}/payment', [App\Http\Controllers\GenerateSalaryController::class, 'updatePayment'])->name('salary-loan.generate-salary.payment');
+Route::get('/salary-loan/generate-salary/{salary}/print-slip', [App\Http\Controllers\GenerateSalaryController::class, 'printSlip'])->name('salary-loan.generate-salary.print-slip');
+Route::delete('/salary-loan/generate-salary/{salary}', [App\Http\Controllers\GenerateSalaryController::class, 'destroy'])->name('salary-loan.generate-salary.destroy');
 
 Route::get('/salary-loan/manage-salaries', [App\Http\Controllers\ManageSalariesController::class, 'index'])->name('salary-loan.manage-salaries');
 Route::get('/salary-loan/manage-salaries/{salary}', [App\Http\Controllers\ManageSalariesController::class, 'show'])->name('salary-loan.manage-salaries.show');

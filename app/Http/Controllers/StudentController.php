@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class StudentController extends Controller
 {
@@ -285,6 +286,101 @@ class StudentController extends Controller
     }
 
     /**
+     * Show the form for editing a student.
+     */
+    public function edit(Student $student): View
+    {
+        // Get campuses
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            if ($campuses->isEmpty()) {
+                $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            }
+        }
+
+        // Get classes
+        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        if ($classes->isEmpty()) {
+            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        }
+
+        // Get sections for the student's class
+        $sections = collect();
+        if ($student->class) {
+            $sections = Section::where('class', $student->class)
+                ->whereNotNull('name')
+                ->distinct()
+                ->pluck('name')
+                ->sort()
+                ->values();
+            if ($sections->isEmpty()) {
+                $sections = collect(['A', 'B', 'C', 'D', 'E']);
+            }
+        }
+
+        return view('student.edit', compact('student', 'campuses', 'classes', 'sections'));
+    }
+
+    /**
+     * Update the specified student.
+     */
+    public function update(Request $request, Student $student): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_name' => ['required', 'string', 'max:255'],
+            'surname_caste' => ['nullable', 'string', 'max:255'],
+            'gender' => ['required', 'in:male,female,other'],
+            'date_of_birth' => ['required', 'date'],
+            'place_of_birth' => ['nullable', 'string', 'max:255'],
+            'photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif', 'max:2048'],
+            'father_id_card' => ['nullable', 'string', 'max:255'],
+            'father_name' => ['required', 'string', 'max:255'],
+            'father_email' => ['nullable', 'email', 'max:255'],
+            'father_phone' => ['nullable', 'string', 'max:20'],
+            'mother_phone' => ['nullable', 'string', 'max:20'],
+            'whatsapp_number' => ['nullable', 'string', 'max:20'],
+            'religion' => ['nullable', 'string', 'max:255'],
+            'home_address' => ['nullable', 'string'],
+            'b_form_number' => ['nullable', 'string', 'max:255'],
+            'monthly_fee' => ['nullable', 'numeric', 'min:0'],
+            'discounted_student' => ['nullable', 'boolean'],
+            'transport_route' => ['nullable', 'string', 'max:255'],
+            'student_code' => ['nullable', 'string', 'max:255'],
+            'gr_number' => ['nullable', 'string', 'max:255'],
+            'campus' => ['nullable', 'string', 'max:255'],
+            'class' => ['required', 'string', 'max:255'],
+            'section' => ['nullable', 'string', 'max:255'],
+            'previous_school' => ['nullable', 'string', 'max:255'],
+            'admission_date' => ['required', 'date'],
+            'reference_remarks' => ['nullable', 'string'],
+        ]);
+
+        // Handle photo upload
+        if ($request->hasFile('photo')) {
+            // Delete old photo if exists
+            if ($student->photo && Storage::disk('public')->exists($student->photo)) {
+                Storage::disk('public')->delete($student->photo);
+            }
+            
+            // Store new photo
+            $photoPath = $request->file('photo')->store('student-photos', 'public');
+            $validated['photo'] = $photoPath;
+        }
+
+        // Handle discounted_student checkbox
+        $validated['discounted_student'] = $request->has('discounted_student');
+
+        $student->update($validated);
+
+        return redirect()
+            ->route('student.information')
+            ->with('success', "Student {$validated['student_name']} updated successfully!");
+    }
+
+    /**
      * Delete a student
      */
     public function destroy(Student $student): JsonResponse
@@ -292,6 +388,11 @@ class StudentController extends Controller
         try {
             $studentCode = $student->student_code;
             $studentName = $student->student_name;
+            
+            // Delete photo if exists
+            if ($student->photo && Storage::disk('public')->exists($student->photo)) {
+                Storage::disk('public')->delete($student->photo);
+            }
             
             $student->delete();
             

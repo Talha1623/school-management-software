@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 
 class StudyMaterialController extends Controller
 {
@@ -37,11 +38,38 @@ class StudyMaterialController extends Controller
             });
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        // Get classes - filter by teacher's assigned classes if teacher
+        $staff = Auth::guard('staff')->user();
+        $classes = collect();
         
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            // Get teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->get();
+            
+            // Merge classes from both sources
+            $classes = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
+                ->unique()
+                ->sort()
+                ->values();
+        } else {
+            // For non-teachers, get all classes
+            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+            
+            if ($classes->isEmpty()) {
+                $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+            }
         }
 
         // Get sections (filtered by class if provided)
@@ -169,6 +197,7 @@ class StudyMaterialController extends Controller
 
     /**
      * Get sections based on class (AJAX).
+     * Filter by teacher's assigned subjects if teacher.
      */
     public function getSectionsByClass(Request $request): JsonResponse
     {
@@ -177,20 +206,50 @@ class StudyMaterialController extends Controller
             return response()->json(['sections' => []]);
         }
         
-        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-            ->whereNotNull('name')
-            ->distinct()
-            ->pluck('name')
-            ->sort()
-            ->values();
+        $staff = Auth::guard('staff')->user();
+        $sections = collect();
         
-        if ($sections->isEmpty()) {
-            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('section')
-                ->distinct()
-                ->pluck('section')
+        // Filter by teacher's assigned subjects and sections if teacher
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get sections from teacher's assigned subjects for this class
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
+            
+            // Get sections from teacher's assigned sections for this class
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
+            
+            // Merge sections from both sources
+            $sections = $assignedSubjects->pluck('section')
+                ->merge($assignedSections->pluck('name'))
+                ->map(function($section) {
+                    return trim($section);
+                })
+                ->filter(function($section) {
+                    return !empty($section);
+                })
+                ->unique()
                 ->sort()
                 ->values();
+        } else {
+            // For non-teachers, get all sections
+            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('name')
+                ->distinct()
+                ->pluck('name')
+                ->sort()
+                ->values();
+            
+            if ($sections->isEmpty()) {
+                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+            }
         }
         
         return response()->json(['sections' => $sections]);
@@ -198,13 +257,20 @@ class StudyMaterialController extends Controller
 
     /**
      * Get subjects based on class and section (AJAX).
+     * Filter by teacher's assigned subjects if teacher.
      */
     public function getSubjectsByClassSection(Request $request): JsonResponse
     {
         $class = $request->get('class');
         $section = $request->get('section');
         
+        $staff = Auth::guard('staff')->user();
         $subjectsQuery = Subject::query();
+        
+        // Filter by teacher's assigned subjects if teacher
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+        }
         
         if ($class) {
             $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);

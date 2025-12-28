@@ -12,6 +12,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Carbon\Carbon;
 
 class TeacherBehaviorController extends Controller
 {
@@ -1254,6 +1255,252 @@ class TeacherBehaviorController extends Controller
                 'message' => 'An error occurred while retrieving attendance history: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Get Teacher Attendance Report
+     * Comprehensive attendance report with statistics, monthly summaries, and detailed records
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getAttendanceReport(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access attendance report.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Get date range filters
+            $startDate = $request->get('start_date');
+            $endDate = $request->get('end_date');
+            $month = $request->get('month'); // 1-12
+            $year = $request->get('year'); // e.g., 2025
+            
+            // Build query
+            $query = StaffAttendance::where('staff_id', $teacher->id);
+            
+            // If month and year provided, filter by that month
+            if ($month && $year) {
+                $month = (int)$month;
+                $year = (int)$year;
+                if ($month >= 1 && $month <= 12 && $year >= 2000 && $year <= 2100) {
+                    $query->whereYear('attendance_date', $year)
+                          ->whereMonth('attendance_date', $month);
+                }
+            }
+            
+            // If start_date and end_date provided, use date range
+            if ($startDate) {
+                $query->whereDate('attendance_date', '>=', $startDate);
+            }
+            if ($endDate) {
+                $query->whereDate('attendance_date', '<=', $endDate);
+            }
+            
+            // Filter by status if provided
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+            
+            // Get all attendances for statistics
+            $allAttendances = $query->orderBy('attendance_date', 'desc')->get();
+            
+            // Calculate statistics
+            $totalDays = $allAttendances->count();
+            $presentDays = $allAttendances->where('status', 'Present')->count();
+            $absentDays = $allAttendances->where('status', 'Absent')->count();
+            $leaveDays = $allAttendances->where('status', 'Leave')->count();
+            $holidayDays = $allAttendances->where('status', 'Holiday')->count();
+            $sundayDays = $allAttendances->where('status', 'Sunday')->count();
+            
+            // Calculate attendance percentage (excluding holidays and sundays)
+            $workingDays = $totalDays - $holidayDays - $sundayDays;
+            $attendancePercentage = $workingDays > 0 ? round(($presentDays / $workingDays) * 100, 2) : 0;
+            
+            // Get late arrivals count (if start_time is after a certain time, e.g., 9:00 AM)
+            $lateArrivals = $allAttendances->filter(function($attendance) {
+                if ($attendance->status === 'Present' && $attendance->start_time) {
+                    $startTime = strtotime($attendance->start_time);
+                    $expectedTime = strtotime('09:00:00'); // 9 AM
+                    return $startTime > $expectedTime;
+                }
+                return false;
+            })->count();
+            
+            // Monthly summary (if month/year not specified, show last 12 months)
+            $monthlySummary = [];
+            if ($month && $year) {
+                // Single month summary
+                $monthAttendances = $allAttendances;
+                $monthlySummary[] = [
+                    'month' => $month,
+                    'year' => $year,
+                    'month_name' => date('F Y', mktime(0, 0, 0, $month, 1, $year)),
+                    'total_days' => $monthAttendances->count(),
+                    'present' => $monthAttendances->where('status', 'Present')->count(),
+                    'absent' => $monthAttendances->where('status', 'Absent')->count(),
+                    'leave' => $monthAttendances->where('status', 'Leave')->count(),
+                    'holiday' => $monthAttendances->where('status', 'Holiday')->count(),
+                    'sunday' => $monthAttendances->where('status', 'Sunday')->count(),
+                ];
+            } else {
+                // Last 12 months summary
+                $currentDate = Carbon::now();
+                for ($i = 11; $i >= 0; $i--) {
+                    $date = $currentDate->copy()->subMonths($i);
+                    $monthNum = $date->month;
+                    $yearNum = $date->year;
+                    
+                    $monthAttendances = StaffAttendance::where('staff_id', $teacher->id)
+                        ->whereYear('attendance_date', $yearNum)
+                        ->whereMonth('attendance_date', $monthNum)
+                        ->get();
+                    
+                    $monthlySummary[] = [
+                        'month' => $monthNum,
+                        'year' => $yearNum,
+                        'month_name' => $date->format('F Y'),
+                        'total_days' => $monthAttendances->count(),
+                        'present' => $monthAttendances->where('status', 'Present')->count(),
+                        'absent' => $monthAttendances->where('status', 'Absent')->count(),
+                        'leave' => $monthAttendances->where('status', 'Leave')->count(),
+                        'holiday' => $monthAttendances->where('status', 'Holiday')->count(),
+                        'sunday' => $monthAttendances->where('status', 'Sunday')->count(),
+                    ];
+                }
+            }
+            
+            // Pagination for detailed records
+            $perPage = $request->get('per_page', 30);
+            $perPage = in_array($perPage, [10, 25, 30, 50, 100]) ? $perPage : 30;
+            
+            $paginatedAttendances = $query->orderBy('attendance_date', 'desc')->paginate($perPage);
+            
+            // Format attendance data
+            $attendancesData = $paginatedAttendances->map(function($attendance) {
+                return [
+                    'id' => $attendance->id,
+                    'attendance_date' => $attendance->attendance_date ? $attendance->attendance_date->format('Y-m-d') : null,
+                    'date_formatted' => $attendance->attendance_date ? $attendance->attendance_date->format('d M Y') : null,
+                    'day_name' => $attendance->attendance_date ? $attendance->attendance_date->format('l') : null,
+                    'status' => $attendance->status,
+                    'start_time' => $attendance->start_time,
+                    'start_time_formatted' => $attendance->start_time ? date('h:i A', strtotime($attendance->start_time)) : null,
+                    'end_time' => $attendance->end_time,
+                    'end_time_formatted' => $attendance->end_time ? date('h:i A', strtotime($attendance->end_time)) : null,
+                    'total_hours' => $this->calculateTotalHours($attendance->start_time, $attendance->end_time),
+                    'campus' => $attendance->campus,
+                    'remarks' => $attendance->remarks,
+                    'created_at' => $attendance->created_at ? $attendance->created_at->format('Y-m-d H:i:s') : null,
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance report retrieved successfully',
+                'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id,
+                        'designation' => $teacher->designation,
+                        'campus' => $teacher->campus,
+                    ],
+                    'statistics' => [
+                        'total_days' => $totalDays,
+                        'present_days' => $presentDays,
+                        'absent_days' => $absentDays,
+                        'leave_days' => $leaveDays,
+                        'holiday_days' => $holidayDays,
+                        'sunday_days' => $sundayDays,
+                        'working_days' => $workingDays,
+                        'attendance_percentage' => $attendancePercentage,
+                        'late_arrivals' => $lateArrivals,
+                    ],
+                    'monthly_summary' => $monthlySummary,
+                    'attendances' => $attendancesData,
+                    'pagination' => [
+                        'current_page' => $paginatedAttendances->currentPage(),
+                        'last_page' => $paginatedAttendances->lastPage(),
+                        'per_page' => $paginatedAttendances->perPage(),
+                        'total' => $paginatedAttendances->total(),
+                        'from' => $paginatedAttendances->firstItem(),
+                        'to' => $paginatedAttendances->lastItem(),
+                    ],
+                    'filters' => [
+                        'start_date' => $startDate,
+                        'end_date' => $endDate,
+                        'month' => $month,
+                        'year' => $year,
+                        'status' => $request->get('status'),
+                    ],
+                ],
+                'token' => $request->bearerToken(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving attendance report: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+    
+    /**
+     * Calculate total hours between start and end time
+     */
+    private function calculateTotalHours($startTime, $endTime)
+    {
+        if (!$startTime || !$endTime) {
+            return null;
+        }
+        
+        try {
+            $start = strtotime($startTime);
+            $end = strtotime($endTime);
+            
+            if ($start === false || $end === false) {
+                return null;
+            }
+            
+            $diff = $end - $start;
+            $hours = round($diff / 3600, 2);
+            
+            return [
+                'hours' => $hours,
+                'formatted' => $this->formatHours($hours),
+            ];
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+    
+    /**
+     * Format hours to readable string
+     */
+    private function formatHours($hours)
+    {
+        if ($hours < 1) {
+            $minutes = round($hours * 60);
+            return "{$minutes} minutes";
+        }
+        
+        $wholeHours = floor($hours);
+        $minutes = round(($hours - $wholeHours) * 60);
+        
+        if ($minutes > 0) {
+            return "{$wholeHours} hours {$minutes} minutes";
+        }
+        
+        return "{$wholeHours} hours";
     }
 }
 

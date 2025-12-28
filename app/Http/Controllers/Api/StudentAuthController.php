@@ -153,7 +153,18 @@ class StudentAuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         try {
-            $student = $request->user();
+            // Get authenticated user - ensure it's a Student instance
+            $user = $request->user();
+            
+            if (!$user || !($user instanceof Student)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid user type. Student authentication required.',
+                    'token' => null,
+                ], 403);
+            }
+            
+            $student = $user;
             
             // Revoke current token
             $student->currentAccessToken()->delete();
@@ -186,15 +197,20 @@ class StudentAuthController extends Controller
     public function profile(Request $request): JsonResponse
     {
         try {
-            $student = $request->user();
-
-            if (!$student) {
+            // Get authenticated user - ensure it's a Student instance
+            $user = $request->user();
+            
+            // Check if user is actually a Student model instance
+            // This prevents errors when a Staff or other user type token is used
+            if (!$user || !($user instanceof Student)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not found',
+                    'message' => 'Invalid user type. Student authentication required.',
                     'token' => null,
-                ], 404);
+                ], 403);
             }
+            
+            $student = $user;
 
             // Get photo URL if exists
             $photoUrl = null;
@@ -319,15 +335,18 @@ class StudentAuthController extends Controller
     public function personalDetails(Request $request): JsonResponse
     {
         try {
-            $student = $request->user();
-
-            if (!$student) {
+            // Get authenticated user - ensure it's a Student instance
+            $user = $request->user();
+            
+            if (!$user || !($user instanceof Student)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not found',
+                    'message' => 'Invalid user type. Student authentication required.',
                     'token' => null,
-                ], 404);
+                ], 403);
             }
+            
+            $student = $user;
 
             // Get photo URL if exists
             $photoUrl = null;
@@ -378,15 +397,18 @@ class StudentAuthController extends Controller
     public function changePassword(Request $request): JsonResponse
     {
         try {
-            $student = $request->user();
-
-            if (!$student) {
+            // Get authenticated user - ensure it's a Student instance
+            $user = $request->user();
+            
+            if (!$user || !($user instanceof Student)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not found',
+                    'message' => 'Invalid user type. Student authentication required.',
                     'token' => null,
-                ], 404);
+                ], 403);
             }
+            
+            $student = $user;
 
             // Validate request
             $validated = $request->validate([

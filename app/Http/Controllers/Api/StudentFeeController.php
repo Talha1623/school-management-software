@@ -163,18 +163,58 @@ class StudentFeeController extends Controller
             $perPage = $request->get('per_page', 30);
             $perPage = in_array((int)$perPage, [10, 25, 30, 50, 100], true) ? (int)$perPage : 30;
 
-            // Build query
-            $query = StudentPayment::where('student_code', $studentCode);
+            // Build query - use case-insensitive matching to handle any case variations
+            $normalizedStudentCode = strtolower(trim($studentCode));
+            
+            // Use case-insensitive matching to handle any case/whitespace variations
+            $query = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$normalizedStudentCode]);
 
             // Filter by year if provided
             if ($feeYear) {
                 $query->whereYear('payment_date', $feeYear);
             }
 
+            // Debug: Log query details and check all payments for this student
+            $allPaymentsForStudent = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$normalizedStudentCode])->get();
+            
+            \Log::info('Student Payment History Query', [
+                'student_id' => $student->id,
+                'student_code' => $studentCode,
+                'student_code_normalized' => $normalizedStudentCode,
+                'fee_year' => $feeYear,
+                'per_page' => $perPage,
+                'all_payments_count' => $allPaymentsForStudent->count(),
+                'all_payments' => $allPaymentsForStudent->map(function($p) {
+                    return [
+                        'id' => $p->id,
+                        'student_code' => $p->student_code,
+                        'payment_title' => $p->payment_title,
+                        'payment_amount' => $p->payment_amount,
+                        'payment_date' => $p->payment_date ? $p->payment_date->format('Y-m-d') : null,
+                    ];
+                })->toArray()
+            ]);
+
             // Pagination
             $payments = $query->orderBy('payment_date', 'desc')
                 ->orderBy('id', 'desc')
                 ->paginate($perPage);
+
+            // Debug: Log results
+            \Log::info('Student Payment History Results', [
+                'student_code' => $studentCode,
+                'total_payments' => $payments->total(),
+                'count' => $payments->count(),
+                'payments' => $payments->map(function($p) {
+                    return [
+                        'id' => $p->id,
+                        'student_code' => $p->student_code,
+                        'payment_title' => $p->payment_title,
+                        'payment_amount' => $p->payment_amount,
+                        'payment_date' => $p->payment_date ? $p->payment_date->format('Y-m-d') : null,
+                    ];
+                })->toArray()
+            ]);
 
             // Format payment history
             $paymentHistory = $payments->map(function ($payment) {
@@ -195,6 +235,27 @@ class StudentFeeController extends Controller
                 ];
             });
 
+            // Calculate fee summary
+            $monthlyFee = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
+            
+            // Calculate annual fee (monthly fee * 12)
+            $annualFee = $monthlyFee * 12;
+            
+            // Get all payments for fee calculation (not just paginated ones)
+            $allPaymentsQuery = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$normalizedStudentCode]);
+            if ($feeYear) {
+                $allPaymentsQuery->whereYear('payment_date', $feeYear);
+            }
+            $allPayments = $allPaymentsQuery->get();
+            
+            // Calculate totals from all payments
+            $totalPaid = (float) $allPayments->sum('payment_amount');
+            $totalDiscount = (float) $allPayments->sum('discount');
+            $totalLateFee = (float) $allPayments->sum('late_fee');
+            
+            // Calculate due amount: annual_fee - paid - discount + late_fee
+            $dueAmount = max($annualFee - $totalPaid - $totalDiscount + $totalLateFee, 0.0);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Payment history retrieved successfully',
@@ -203,7 +264,20 @@ class StudentFeeController extends Controller
                         'id' => $student->id,
                         'student_name' => $student->student_name,
                         'student_code' => $student->student_code,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                        'campus' => $student->campus,
                     ],
+                    'monthly_fee' => $monthlyFee,
+                    'fee_summary' => [
+                        'monthly_fee' => $monthlyFee,
+                        'annual_fee' => $annualFee,
+                        'total_paid' => $totalPaid,
+                        'total_discount' => $totalDiscount,
+                        'total_late_fee' => $totalLateFee,
+                        'due_amount' => $dueAmount,
+                    ],
+                    'fee_year' => $feeYear ? (int) $feeYear : (int) date('Y'),
                     'payment_history' => $paymentHistory,
                     'pagination' => [
                         'current_page' => $payments->currentPage(),

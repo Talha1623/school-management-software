@@ -493,7 +493,12 @@ use Illuminate\Support\Facades\Auth;
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">payments</span>
                                 </span>
-                                <input type="text" class="form-control staff-input" name="salary_type" id="salary_type" placeholder="Enter salary type">
+                                <select class="form-control staff-input" name="salary_type" id="salary_type">
+                                    <option value="">Select Salary Type</option>
+                                    <option value="full time">Full Time</option>
+                                    <option value="per hour">Per Hour</option>
+                                    <option value="lecture">Lecture</option>
+                                </select>
                             </div>
                         </div>
 

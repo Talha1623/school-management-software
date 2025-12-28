@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
+use App\Models\StudentMark;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,70 @@ class TestController extends Controller
     public function index(Request $request): View
     {
         $query = Test::query();
+        
+        // Filter tests for teachers based on their assigned subjects
+        $staff = Auth::guard('staff')->user();
+        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            // Get teacher's assigned subjects
+            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                ->whereNotNull('subject_name')
+                ->whereNotNull('class')
+                ->get();
+
+            if ($teacherSubjects->isNotEmpty()) {
+                // Get teacher's subject names
+                $teacherSubjectNames = $teacherSubjects->pluck('subject_name')->unique()->filter()->toArray();
+                
+                // Get all test names from StudentMark where teacher has entered marks
+                $teacherTestNames = [];
+                if (!empty($teacherSubjectNames)) {
+                    $teacherTestNames = StudentMark::query()
+                        ->whereIn('subject', $teacherSubjectNames)
+                        ->distinct()
+                        ->pluck('test_name')
+                        ->filter()
+                        ->unique()
+                        ->toArray();
+                }
+
+                // Filter tests: Method 1 - Tests from StudentMark (where teacher entered marks)
+                // Method 2 - Match by subject and class from Subject table
+                $query->where(function($q) use ($teacherTestNames, $teacherSubjects, $teacherSubjectNames) {
+                    // Primary: Tests from StudentMark (where teacher entered marks)
+                    if (!empty($teacherTestNames)) {
+                        $q->whereIn('test_name', $teacherTestNames);
+                    }
+                    
+                    // Fallback: Match by subject and class (section is optional)
+                    // Match any test where subject matches teacher's assigned subjects
+                    if (!empty($teacherSubjectNames)) {
+                        $q->orWhere(function($subjectQ) use ($teacherSubjectNames) {
+                            foreach ($teacherSubjectNames as $subjectName) {
+                                $subjectQ->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))]);
+                            }
+                        });
+                    }
+                    
+                    // Also match by subject + class combination
+                    if ($teacherSubjects->isNotEmpty()) {
+                        $q->orWhere(function($subQ) use ($teacherSubjects) {
+                            foreach ($teacherSubjects as $subject) {
+                                $subQ->orWhere(function($subSubQ) use ($subject) {
+                                    $subSubQ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject->subject_name ?? ''))])
+                                         ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($subject->class ?? ''))]);
+                                });
+                            }
+                        });
+                    }
+                });
+                
+                // Remove duplicates
+                $query->distinct();
+            } else {
+                // Teacher has no assigned subjects, show no tests
+                $query->whereRaw('1 = 0');
+            }
+        }
         
         // Search functionality
         if ($request->filled('search')) {
