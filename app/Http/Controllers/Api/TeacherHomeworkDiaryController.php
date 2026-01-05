@@ -25,7 +25,7 @@ class TeacherHomeworkDiaryController extends Controller
             // Get logged-in teacher
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access homework diary.',
@@ -88,7 +88,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access homework diary.',
@@ -152,7 +152,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access homework diary.',
@@ -222,7 +222,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access homework diary.',
@@ -316,7 +316,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can create homework.',
@@ -458,7 +458,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can create homework.',
@@ -623,7 +623,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can view homework.',
@@ -745,7 +745,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can update homework.',
@@ -824,7 +824,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can delete homework.',
@@ -874,7 +874,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -1005,7 +1005,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -1082,7 +1082,7 @@ class TeacherHomeworkDiaryController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',

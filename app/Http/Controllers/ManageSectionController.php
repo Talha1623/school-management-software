@@ -25,6 +25,33 @@ class ManageSectionController extends Controller
         
         $query = Section::query();
         
+        // Filter out sections with deleted classes or null/empty class names
+        $query->whereNotNull('class')
+              ->where('class', '!=', '');
+        
+        // Get all existing class names from ClassModel
+        $existingClassNames = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->pluck('class_name')
+            ->map(function($name) {
+                return strtolower(trim($name));
+            })
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        if (!empty($existingClassNames)) {
+            // Filter sections to only show those whose class exists in ClassModel
+            $query->where(function($q) use ($existingClassNames) {
+                foreach ($existingClassNames as $className) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                }
+            });
+        } else {
+            // If no classes exist, show no sections
+            $query->whereRaw('1 = 0');
+        }
+        
         // Filter functionality
         if ($request->filled('filter_campus')) {
             $query->where('campus', $request->filter_campus);
@@ -76,10 +103,10 @@ class ManageSectionController extends Controller
             }
         }
         
-        // Get classes from ClassModel
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
+        // Get classes from ClassModel (only non-deleted classes)
+        $classes = ClassModel::whereNotNull('class_name')->orderBy('class_name', 'asc')->get();
         
-        // If no classes found, get from sections
+        // If no classes found, get from sections (but verify against ClassModel)
         if ($classes->isEmpty()) {
             $classesFromSections = Section::whereNotNull('class')
                 ->distinct()
@@ -87,10 +114,18 @@ class ManageSectionController extends Controller
                 ->sort()
                 ->values();
             
+            // Verify classes exist in ClassModel (filter out deleted classes)
+            $existingClassNames = ClassModel::whereNotNull('class_name')->pluck('class_name')->map(function($name) {
+                return strtolower(trim($name));
+            })->toArray();
+            
             // Convert to collection of objects with class_name property
             $classes = collect();
             foreach ($classesFromSections as $className) {
-                $classes->push((object)['class_name' => $className]);
+                // Only include if class exists in ClassModel
+                if (in_array(strtolower(trim($className)), $existingClassNames)) {
+                    $classes->push((object)['class_name' => $className]);
+                }
             }
         }
         
@@ -107,7 +142,11 @@ class ManageSectionController extends Controller
             ]);
         }
         
-        $teachers = Staff::whereNotNull('name')->orderBy('name')->pluck('name', 'id');
+        // Get only teachers from staff table
+        $teachers = Staff::whereRaw('LOWER(TRIM(designation)) LIKE ?', ['%teacher%'])
+            ->whereNotNull('name')
+            ->orderBy('name')
+            ->pluck('name', 'id');
         
         return view('classes.manage-section', compact('sections', 'campuses', 'classes', 'allSessions', 'teachers'));
     }
@@ -125,6 +164,11 @@ class ManageSectionController extends Controller
             'teacher' => ['nullable', 'string', 'max:255'],
             'session' => ['nullable', 'string', 'max:255'],
         ]);
+
+        // Convert empty string to null for teacher field
+        if (isset($validated['teacher']) && trim($validated['teacher']) === '') {
+            $validated['teacher'] = null;
+        }
 
         Section::create($validated);
 
@@ -146,6 +190,11 @@ class ManageSectionController extends Controller
             'teacher' => ['nullable', 'string', 'max:255'],
             'session' => ['nullable', 'string', 'max:255'],
         ]);
+
+        // Convert empty string to null for teacher field
+        if (isset($validated['teacher']) && trim($validated['teacher']) === '') {
+            $validated['teacher'] = null;
+        }
 
         $section->update($validated);
 
@@ -185,6 +234,33 @@ class ManageSectionController extends Controller
     public function export(Request $request, string $format)
     {
         $query = Section::query();
+        
+        // Filter out sections with deleted classes or null/empty class names
+        $query->whereNotNull('class')
+              ->where('class', '!=', '');
+        
+        // Get all existing class names from ClassModel
+        $existingClassNames = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->pluck('class_name')
+            ->map(function($name) {
+                return strtolower(trim($name));
+            })
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        if (!empty($existingClassNames)) {
+            // Filter sections to only show those whose class exists in ClassModel
+            $query->where(function($q) use ($existingClassNames) {
+                foreach ($existingClassNames as $className) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                }
+            });
+        } else {
+            // If no classes exist, show no sections
+            $query->whereRaw('1 = 0');
+        }
         
         // Apply filters if present
         if ($request->has('filter_campus') && $request->filter_campus) {
@@ -317,7 +393,7 @@ class ManageSectionController extends Controller
     private function cleanupOrphanedTeachers(): void
     {
         // Get all existing teacher names from staff table (only teachers)
-        $existingTeachers = Staff::whereRaw('LOWER(TRIM(designation)) = ?', ['teacher'])
+        $existingTeachers = Staff::whereRaw('LOWER(TRIM(designation)) LIKE ?', ['%teacher%'])
             ->whereNotNull('name')
             ->pluck('name')
             ->map(function($name) {

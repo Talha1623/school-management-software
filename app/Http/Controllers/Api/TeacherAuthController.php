@@ -40,9 +40,8 @@ class TeacherAuthController extends Controller
                 ], 200);
             }
 
-            // Check if designation is teacher (case-insensitive)
-            $designation = strtolower(trim($teacher->designation ?? ''));
-            if ($designation !== 'teacher') {
+            // Check if designation contains "teacher"
+            if (!$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can login.',

@@ -118,6 +118,11 @@ class ManageClassesController extends Controller
                 ->with('error', "Cannot delete class '{$class_model->class_name}' because it has {$studentsCount} student(s) enrolled. Please transfer all students to another class first.");
         }
 
+        // Clear teacher field from all sections of this class before deleting
+        // This ensures that when class is re-added, sections won't have teachers automatically assigned
+        Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class_model->class_name))])
+            ->update(['teacher' => null]);
+
         $class_model->delete();
 
         return redirect()

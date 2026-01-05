@@ -26,7 +26,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access marks entry.',
@@ -81,7 +81,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access marks entry.',
@@ -150,7 +150,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access marks entry.',
@@ -211,7 +211,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access marks entry.',
@@ -281,7 +281,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access marks entry.',
@@ -398,7 +398,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can save marks entry.',
@@ -582,7 +582,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -647,7 +647,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -795,7 +795,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -892,7 +892,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can save remarks entry.',
@@ -967,7 +967,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access test list.',
@@ -1166,7 +1166,7 @@ class TeacherTestManagementController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access assigned subjects.',

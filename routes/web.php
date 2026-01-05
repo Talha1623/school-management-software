@@ -635,6 +635,8 @@ Route::get('/classes/manage-section/export/{format}', [App\Http\Controllers\Mana
 // Manage Subjects Routes
 Route::get('/manage-subjects', [App\Http\Controllers\ManageSubjectsController::class, 'index'])->name('manage-subjects');
 Route::post('/manage-subjects', [App\Http\Controllers\ManageSubjectsController::class, 'store'])->name('manage-subjects.store');
+Route::put('/manage-subjects/{subject}', [App\Http\Controllers\ManageSubjectsController::class, 'update'])->name('manage-subjects.update');
+Route::delete('/manage-subjects/{subject}', [App\Http\Controllers\ManageSubjectsController::class, 'destroy'])->name('manage-subjects.destroy');
 Route::get('/manage-subjects/get-sections-by-class', [App\Http\Controllers\ManageSubjectsController::class, 'getSectionsByClass'])->name('manage-subjects.get-sections-by-class');
 Route::get('/manage-subjects/export/{format}', [App\Http\Controllers\ManageSubjectsController::class, 'export'])->name('manage-subjects.export');
 
@@ -1939,6 +1941,7 @@ Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function 
     // Live Chat (Admin/Super Admin with Teachers)
     Route::get('/live-chat', [App\Http\Controllers\ChatController::class, 'index'])->name('live-chat');
     Route::post('/live-chat/teacher/{teacherId}', [App\Http\Controllers\ChatController::class, 'sendToTeacher'])->name('live-chat.send-teacher');
+    Route::post('/notifications/mark-all-read', [App\Http\Controllers\ChatController::class, 'markAllAsRead'])->name('notifications.mark-all-read');
 });
 
 // Settings Routes (Super Admin Only)

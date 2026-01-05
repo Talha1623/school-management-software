@@ -127,6 +127,10 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         
         // Exam Results Routes (same as test results)
         Route::get('/exam-results', [App\Http\Controllers\Api\ParentTestResultController::class, 'getExamResults'])->name('exam-results');
+        
+        // Quiz Routes
+        Route::match(['GET', 'POST'], '/quizzes', [App\Http\Controllers\Api\ParentQuizController::class, 'index'])->name('quizzes.index');
+        Route::get('/quizzes/{id}', [App\Http\Controllers\Api\ParentQuizController::class, 'show'])->name('quizzes.show');
     });
 });
 
@@ -167,6 +171,9 @@ Route::prefix('student')->name('api.student.')->group(function () {
         Route::get('/academic-calendar/{month}/{year}', [App\Http\Controllers\Api\StudentEventController::class, 'getEventsByMonthYear'])->name('academic-calendar.by-month-year');
         Route::get('/academic-calendar/event/{id}', [App\Http\Controllers\Api\StudentEventController::class, 'show'])->name('academic-calendar.show');
         Route::get('/academic-calendar/calendar-view', [App\Http\Controllers\Api\StudentEventController::class, 'calendarView'])->name('academic-calendar.calendar-view');
+        
+        // Events Routes (same as teacher format)
+        Route::get('/events/{month}/{year}', [App\Http\Controllers\Api\StudentEventController::class, 'getEventsByMonthYear'])->name('events.by-month-year');
         
         // Homework Routes
         Route::match(['GET', 'POST'], '/homework/list', [App\Http\Controllers\Api\StudentHomeworkController::class, 'list'])->name('homework.list');

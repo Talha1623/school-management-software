@@ -156,7 +156,7 @@ class StudentEventController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid month. Month must be between 1 and 12.',
-                    'token' => null,
+                    'token' => $request->bearerToken(),
                 ], 422);
             }
 
@@ -165,7 +165,7 @@ class StudentEventController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid year. Year must be between 2000 and 2100.',
-                    'token' => null,
+                    'token' => $request->bearerToken(),
                 ], 422);
             }
 
@@ -181,14 +181,11 @@ class StudentEventController extends Controller
                 return [
                     'id' => $event->id,
                     'event_title' => $event->event_title,
-                    'event_details' => $event->event_details ?? null,
-                    'event_type' => $event->event_type ?? null,
+                    'event_details' => $event->event_details,
+                    'event_type' => $event->event_type,
                     'event_date' => $event->event_date->format('Y-m-d'),
                     'event_date_formatted' => $event->event_date->format('d M Y'),
-                    'event_date_formatted_full' => $event->event_date->format('l, d F Y'),
                     'day_name' => $event->event_date->format('l'),
-                    'day_short' => $event->event_date->format('D'),
-                    'day_number' => (int) $event->event_date->format('j'),
                     'created_at' => $event->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $event->updated_at->format('Y-m-d H:i:s'),
                 ];
@@ -198,26 +195,21 @@ class StudentEventController extends Controller
                 'success' => true,
                 'message' => 'Events retrieved successfully',
                 'data' => [
-                    'student' => [
-                        'id' => $student->id,
-                        'name' => $student->student_name,
-                        'student_code' => $student->student_code,
-                    ],
                     'month' => $month,
                     'year' => $year,
                     'month_name' => date('F', mktime(0, 0, 0, $month, 1, $year)),
-                    'month_name_short' => date('M', mktime(0, 0, 0, $month, 1, $year)),
                     'total_events' => $events->count(),
                     'events' => $eventsData->values()->toArray(),
                 ],
-                'token' => $request->user()->currentAccessToken()->token ?? null,
+                'token' => $request->bearerToken(),
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving events: ' . $e->getMessage(),
-                'token' => null,
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'token' => $request->bearerToken(),
             ], 500);
         }
     }
@@ -331,13 +323,9 @@ class StudentEventController extends Controller
                 $eventsByMonth[$month][] = [
                     'id' => $event->id,
                     'event_title' => $event->event_title,
-                    'event_details' => $event->event_details ?? null,
-                    'event_type' => $event->event_type ?? null,
+                    'event_details' => $event->event_details,
+                    'event_type' => $event->event_type,
                     'event_date' => $event->event_date->format('Y-m-d'),
-                    'event_date_formatted' => $event->event_date->format('d M Y'),
-                    'event_date_formatted_full' => $event->event_date->format('l, d F Y'),
-                    'day_name' => $event->event_date->format('l'),
-                    'day_number' => (int) $event->event_date->format('j'),
                 ];
             }
 
@@ -346,18 +334,13 @@ class StudentEventController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Academic calendar view retrieved successfully',
+                'message' => 'Calendar view retrieved successfully',
                 'data' => [
-                    'student' => [
-                        'id' => $student->id,
-                        'name' => $student->student_name,
-                        'student_code' => $student->student_code,
-                    ],
-                    'year' => (int) $year,
+                    'year' => $year,
                     'total_events' => $totalEvents,
                     'events_by_month' => $eventsByMonth,
                 ],
-                'token' => $request->user()->currentAccessToken()->token ?? null,
+                'token' => $request->bearerToken(),
             ], 200);
 
         } catch (\Exception $e) {

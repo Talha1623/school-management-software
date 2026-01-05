@@ -155,9 +155,9 @@
         }
         
         .logo-container img {
-            width: 80px;
-            height: 80px;
-            border-radius: 16px;
+            max-width: 200px;
+            height: auto;
+            border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 52, 113, 0.2);
         }
         
@@ -368,8 +368,8 @@
             }
             
             .logo-container img {
-                width: 70px;
-                height: 70px;
+                max-width: 150px;
+                height: auto;
             }
         }
     </style>
@@ -386,7 +386,7 @@
         <div class="login-container">
             <div class="login-header">
                 <div class="logo-container">
-                    <img src="{{ asset('assets/images/logo-icon.png') }}" alt="ICMS Logo" onerror="this.style.display='none'">
+                    <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="SMS Logo" onerror="this.style.display='none'">
                 </div>
                 <h1>Admin Login</h1>
                 <p>Welcome back! Please login to your account</p>

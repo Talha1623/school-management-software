@@ -24,7 +24,7 @@ class TeacherTimetableController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access timetable.',
@@ -108,7 +108,7 @@ class TeacherTimetableController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access timetable.',
@@ -184,7 +184,7 @@ class TeacherTimetableController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access timetable.',
@@ -436,7 +436,7 @@ class TeacherTimetableController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access timetable.',

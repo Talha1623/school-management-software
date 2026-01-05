@@ -45,7 +45,7 @@ class MarksEntryController extends Controller
         $classes = collect();
         $staff = Auth::guard('staff')->user();
         
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get classes from teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
@@ -78,7 +78,7 @@ class MarksEntryController extends Controller
         // Get sections (will be filtered dynamically based on class selection) - filter by teacher's assigned subjects if teacher
         $sections = collect();
         if ($filterClass) {
-            if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            if ($staff && $staff->isTeacher()) {
                 // Get sections from teacher's assigned subjects for this class
                 $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
@@ -247,7 +247,7 @@ class MarksEntryController extends Controller
         $sections = collect();
         
         // Filter by teacher's assigned subjects and sections if teacher
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get sections from teacher's assigned subjects for this class
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])

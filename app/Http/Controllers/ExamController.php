@@ -286,7 +286,7 @@ class ExamController extends Controller
         $classes = collect();
         $staff = Auth::guard('staff')->user();
         
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get classes from teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
@@ -319,7 +319,7 @@ class ExamController extends Controller
         // Get sections (will be filtered dynamically based on class selection) - filter by teacher's assigned subjects if teacher
         $sections = collect(); // Initialized as empty, will be filled via AJAX
         if ($filterClass) {
-            if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            if ($staff && $staff->isTeacher()) {
                 // Get sections from teacher's assigned subjects for this class
                 $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
@@ -365,7 +365,7 @@ class ExamController extends Controller
         $subjectsQuery = Subject::query();
         
         // Filter by teacher's assigned subjects if teacher
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
         }
         
@@ -396,7 +396,7 @@ class ExamController extends Controller
         
         // If no subjects found and no filters applied, show all subjects (or teacher's subjects if teacher)
         if ($subjects->isEmpty() && !$filterClass && !$filterSection) {
-            if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+            if ($staff && $staff->isTeacher()) {
                 $subjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                     ->whereNotNull('subject_name')
                     ->distinct()
@@ -468,7 +468,7 @@ class ExamController extends Controller
         $sections = collect();
         
         // Filter by teacher's assigned subjects and sections if teacher
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get sections from teacher's assigned subjects for this class
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
@@ -526,7 +526,7 @@ class ExamController extends Controller
         $subjectsQuery = Subject::query();
         
         // Filter by teacher's assigned subjects if teacher
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
         }
         

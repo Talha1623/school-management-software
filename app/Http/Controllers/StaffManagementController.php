@@ -230,7 +230,7 @@ class StaffManagementController extends Controller
     {
         // Get staff name before deletion for removing from sections and subjects
         $staffName = trim($staff->name ?? '');
-        $isTeacher = strtolower(trim($staff->designation ?? '')) === 'teacher';
+        $isTeacher = $staff->isTeacher();
 
         // Remove staff member from all sections where they are assigned (for ALL staff, not just teachers)
         if (!empty($staffName)) {
@@ -303,34 +303,49 @@ class StaffManagementController extends Controller
      */
     public function deleteAll(): RedirectResponse
     {
-        // Delete all associated files
-        $allStaff = Staff::all();
-        foreach ($allStaff as $staffMember) {
-            if ($staffMember->photo) {
-                Storage::disk('public')->delete($staffMember->photo);
+        try {
+            // Delete all associated files
+            $allStaff = Staff::all();
+            foreach ($allStaff as $staffMember) {
+                if ($staffMember->photo) {
+                    Storage::disk('public')->delete($staffMember->photo);
+                }
+                if ($staffMember->cv_resume) {
+                    Storage::disk('public')->delete($staffMember->cv_resume);
+                }
             }
-            if ($staffMember->cv_resume) {
-                Storage::disk('public')->delete($staffMember->cv_resume);
-            }
+
+            // Remove all staff from sections before deleting
+            DB::table('sections')
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
+                ->update(['teacher' => null]);
+
+            // Remove all teachers from subjects before deleting
+            DB::table('subjects')
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
+                ->update(['teacher' => null]);
+
+            // Delete all staff members using delete() instead of truncate()
+            // This properly handles foreign key constraints and cascade deletes
+            // Related records (leaves, salaries, loans, staff_attendances) will be 
+            // automatically deleted due to onDelete('cascade') in migrations
+            Staff::query()->delete();
+
+            return redirect()
+                ->route('staff.management')
+                ->with('success', 'All staff members deleted successfully! All staff have been removed from sections and subjects.');
+                
+        } catch (\Exception $e) {
+            \Log::error('Error deleting all staff: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()
+                ->route('staff.management')
+                ->with('error', 'Failed to delete all staff members. Error: ' . $e->getMessage());
         }
-
-        // Remove all staff from sections before deleting
-        DB::table('sections')
-            ->whereNotNull('teacher')
-            ->where('teacher', '!=', '')
-            ->update(['teacher' => null]);
-
-        // Remove all teachers from subjects before deleting
-        DB::table('subjects')
-            ->whereNotNull('teacher')
-            ->where('teacher', '!=', '')
-            ->update(['teacher' => null]);
-
-        Staff::truncate();
-
-        return redirect()
-            ->route('staff.management')
-            ->with('success', 'All staff members deleted successfully! All staff have been removed from sections and subjects.');
     }
 
     /**

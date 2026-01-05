@@ -25,7 +25,7 @@ class OnlineClassesController extends Controller
         // If logged-in user is a teacher (staff guard), restrict to their assigned classes
         $staff = Auth::guard('staff')->user();
         $assignedClasses = collect();
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
 
@@ -103,7 +103,7 @@ class OnlineClassesController extends Controller
         }
         
         // Build classes list for dropdown
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // For teachers, show only their assigned classes
             $classes = collect();
             foreach ($assignedClasses as $className) {

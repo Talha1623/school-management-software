@@ -423,10 +423,8 @@ class StudentController extends Controller
             abort(403, 'Unauthorized access');
         }
         
-        // Check if user is a teacher (case-insensitive check)
-        // IMPORTANT: Designation must be exactly "teacher" (case-insensitive) for filtering to work
-        $designation = strtolower(trim($staff->designation ?? ''));
-        $isTeacher = ($designation === 'teacher');
+        // Check if staff is a teacher (designation contains "teacher")
+        $isTeacher = $staff->isTeacher();
         
         // Ensure isTeacher is boolean
         $isTeacher = (bool) $isTeacher;
@@ -437,7 +435,7 @@ class StudentController extends Controller
             'staff_name' => $staff->name ?? null,
             'staff_email' => $staff->email ?? null,
             'designation_raw' => $staff->designation ?? null,
-            'designation_lower' => $designation,
+            'designation_lower' => strtolower(trim($staff->designation ?? '')),
             'isTeacher' => $isTeacher,
         ]);
         
@@ -746,7 +744,7 @@ class StudentController extends Controller
         }
         
         $sections = collect();
-        $isTeacher = strtolower(trim($staff->designation ?? '')) === 'teacher';
+        $isTeacher = $staff->isTeacher();
         
         // Filter by teacher's assigned subjects and sections if teacher
         if ($isTeacher) {

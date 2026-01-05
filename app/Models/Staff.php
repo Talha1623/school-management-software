@@ -69,6 +69,15 @@ class Staff extends Authenticatable
     }
 
     /**
+     * Check if staff is a teacher (designation contains "teacher")
+     */
+    public function isTeacher(): bool
+    {
+        $designation = strtolower(trim($this->designation ?? ''));
+        return strpos($designation, 'teacher') !== false;
+    }
+
+    /**
      * Get allowed routes based on designation
      */
     public function getAllowedRoutes(): array
@@ -82,7 +91,7 @@ class Staff extends Authenticatable
         ];
 
         // Add more routes based on designation if needed
-        if (strtolower($this->designation ?? '') === 'teacher') {
+        if ($this->isTeacher()) {
             return $defaultRoutes;
         }
 

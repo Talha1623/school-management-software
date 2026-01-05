@@ -20,7 +20,7 @@
             {{-- Temporary Debug Info - Remove after fixing --}}
             @php
                 $staff = Auth::guard('staff')->user();
-                $isTeacherDebug = $staff && strtolower(trim($staff->designation ?? '')) === 'teacher';
+                $isTeacherDebug = $staff && $staff->isTeacher();
             @endphp
             @if(config('app.debug'))
             <div class="alert alert-warning alert-dismissible fade show" role="alert">

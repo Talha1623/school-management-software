@@ -170,6 +170,27 @@ class ChatController extends Controller
             ->route('live-chat', ['teacher_id' => $teacher->id])
             ->with('success', 'Message sent successfully.');
     }
+
+    /**
+     * Mark all notifications as read for the current admin.
+     */
+    public function markAllAsRead(): RedirectResponse
+    {
+        $admin = Auth::guard('admin')->user();
+
+        if (!$admin) {
+            abort(403, 'Unauthorized');
+        }
+
+        // Mark all unread messages from teachers to this admin as read
+        Message::where('from_type', 'teacher')
+            ->where('to_type', 'admin')
+            ->where('to_id', $admin->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return redirect()->back()->with('success', 'All notifications marked as read.');
+    }
 }
 
 

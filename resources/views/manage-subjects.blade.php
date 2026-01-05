@@ -203,6 +203,7 @@
                                 <th>Subject Name</th>
                                 <th>Teacher</th>
                                 <th>Session</th>
+                                <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -228,10 +229,24 @@
                                         <td>
                                             <span class="badge bg-warning text-dark" style="font-size: 12px; padding: 4px 8px;">{{ $subject->session ?? 'N/A' }}</span>
                                         </td>
+                                        <td class="text-end">
+                                            <div class="d-inline-flex gap-1 align-items-center">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editSubject({{ $subject->id }}, '{{ addslashes($subject->campus) }}', '{{ addslashes($subject->subject_name) }}', '{{ addslashes($subject->class) }}', '{{ addslashes($subject->section) }}', '{{ addslashes($subject->teacher ?? '') }}', '{{ addslashes($subject->session ?? '') }}')">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this subject?')) { document.getElementById('delete-form-{{ $subject->id }}').submit(); }">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                                </button>
+                                                <form id="delete-form-{{ $subject->id }}" action="{{ route('manage-subjects.destroy', $subject) }}" method="POST" class="d-none">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                </form>
+                                            </div>
+                                        </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-5">
+                                        <td colspan="8" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No subjects found for the selected filters.</p>
                                         </td>
@@ -239,7 +254,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
+                                    <td colspan="8" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No subjects found for the selected filters.</p>
                                     </td>
@@ -623,6 +638,7 @@
             </div>
             <form id="subjectForm" method="POST" action="{{ route('manage-subjects.store') }}">
                 @csrf
+                <div id="methodField"></div>
                 <div class="modal-body p-3">
                     <div class="row g-2">
                         <div class="col-md-6">
@@ -673,7 +689,7 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="col-md-12">
+                        <div class="col-md-6">
                             <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Teacher</label>
                             <div class="input-group input-group-sm subject-input-group">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
@@ -683,6 +699,20 @@
                                     <option value="">Select Teacher</option>
                                     @foreach($teachers as $id => $teacherName)
                                         <option value="{{ $teacherName }}">{{ $teacherName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Session</label>
+                            <div class="input-group input-group-sm subject-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">calendar_today</span>
+                                </span>
+                                <select class="form-select subject-input" name="session" id="session" style="border: none; border-left: 1px solid #e0e7ff;">
+                                    <option value="">Select Session</option>
+                                    @foreach($allSessions as $session)
+                                        <option value="{{ $session }}">{{ $session }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -821,10 +851,16 @@ document.addEventListener('DOMContentLoaded', function() {
 // Reset form when opening modal for new subject
 function resetForm() {
     document.getElementById('subjectForm').reset();
+    document.getElementById('subjectForm').action = "{{ route('manage-subjects.store') }}";
+    document.getElementById('methodField').innerHTML = '';
     const modalLabel = document.getElementById('subjectModalLabel');
     modalLabel.innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 20px; color: white;">book</span>
         <span style="color: white;">Add New Subject</span>
+    `;
+    document.querySelector('.subject-submit-btn').innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+        Save Subject
     `;
     
     // Reset section dropdown
@@ -833,6 +869,64 @@ function resetForm() {
         modalSectionSelect.innerHTML = '<option value="">Select Class First</option>';
         modalSectionSelect.disabled = true;
     }
+}
+
+// Edit subject function
+function editSubject(id, campus, subjectName, className, section, teacher, session) {
+    document.getElementById('campus').value = campus;
+    document.getElementById('subject_name').value = subjectName;
+    document.getElementById('class').value = className;
+    document.getElementById('teacher').value = teacher || '';
+    document.getElementById('session').value = session || '';
+    
+    // Load sections for the class
+    const modalSectionSelect = document.getElementById('section');
+    if (className) {
+        fetch(`{{ route('manage-subjects.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            modalSectionSelect.innerHTML = '<option value="">Select Section</option>';
+            
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(sec => {
+                    const option = document.createElement('option');
+                    option.value = sec.name;
+                    option.textContent = sec.name;
+                    if (option.value === section) {
+                        option.selected = true;
+                    }
+                    modalSectionSelect.appendChild(option);
+                });
+                modalSectionSelect.disabled = false;
+            } else {
+                modalSectionSelect.innerHTML = '<option value="">No sections found</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching sections:', error);
+            modalSectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+        });
+    }
+    
+    document.getElementById('subjectForm').action = "{{ url('manage-subjects') }}/" + id;
+    document.getElementById('methodField').innerHTML = '@method("PUT")';
+    const modalLabel = document.getElementById('subjectModalLabel');
+    modalLabel.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+        <span style="color: white;">Edit Subject</span>
+    `;
+    document.querySelector('.subject-submit-btn').innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+        Update Subject
+    `;
+    
+    const modal = new bootstrap.Modal(document.getElementById('subjectModal'));
+    modal.show();
 }
 
 // Update entries per page

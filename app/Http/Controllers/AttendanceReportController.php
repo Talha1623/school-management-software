@@ -28,7 +28,7 @@ class AttendanceReportController extends Controller
 
         // Get logged-in staff/teacher
         $staff = Auth::guard('staff')->user();
-        $isTeacher = $staff && strtolower(trim($staff->designation ?? '')) === 'teacher';
+        $isTeacher = $staff && $staff->isTeacher();
 
         // Get campuses - filter by teacher's assigned subjects if teacher
         $campuses = collect();

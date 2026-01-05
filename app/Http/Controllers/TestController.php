@@ -25,7 +25,7 @@ class TestController extends Controller
         
         // Filter tests for teachers based on their assigned subjects
         $staff = Auth::guard('staff')->user();
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get teacher's assigned subjects
             $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereNotNull('subject_name')
@@ -124,7 +124,7 @@ class TestController extends Controller
         $classes = collect();
         $staff = Auth::guard('staff')->user();
         
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get classes from teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
@@ -157,11 +157,42 @@ class TestController extends Controller
         // Get sections (will be filtered dynamically based on class selection)
         $sections = collect();
 
-        // Get subjects
-        $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+        // Get subjects - filter by teacher's assigned subjects if teacher
+        $subjects = collect();
         
-        if ($subjects->isEmpty()) {
-            $subjects = collect(['Mathematics', 'English', 'Science', 'Urdu', 'Islamiat', 'Social Studies']);
+        if ($staff && $staff->isTeacher()) {
+            // Teacher: Only show subjects assigned to this teacher
+            $teacherName = strtolower(trim($staff->name ?? ''));
+            
+            if (!empty($teacherName)) {
+                // Get subjects assigned to this teacher
+                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                    ->whereNotNull('subject_name')
+                    ->get();
+                
+                // Get unique subject names (case-insensitive, keep original case)
+                $subjectsMap = [];
+                foreach ($assignedSubjects as $subject) {
+                    $subjectName = trim($subject->subject_name ?? '');
+                    if (!empty($subjectName)) {
+                        $key = strtolower($subjectName);
+                        if (!isset($subjectsMap[$key])) {
+                            $subjectsMap[$key] = $subjectName;
+                        }
+                    }
+                }
+                
+                if (!empty($subjectsMap)) {
+                    $subjects = collect(array_values($subjectsMap))->sort()->values();
+                }
+            }
+        } else {
+            // For non-teachers (admin, staff, etc.), get all subjects
+            $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            
+            if ($subjects->isEmpty()) {
+                $subjects = collect(['Mathematics', 'English', 'Science', 'Urdu', 'Islamiat', 'Social Studies']);
+            }
         }
 
         // Get test types

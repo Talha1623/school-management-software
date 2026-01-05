@@ -44,10 +44,10 @@ class ManageSubjectsController extends Controller
             }
         }
         
-        // Get classes from ClassModel
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
+        // Get classes from ClassModel (only non-deleted classes)
+        $classes = ClassModel::whereNotNull('class_name')->orderBy('class_name', 'asc')->get();
         
-        // If no classes found, get from sections
+        // If no classes found, get from sections (but verify against ClassModel)
         if ($classes->isEmpty()) {
             $classesFromSections = Section::whereNotNull('class')
                 ->distinct()
@@ -55,27 +55,68 @@ class ManageSubjectsController extends Controller
                 ->sort()
                 ->values();
             
+            // Verify classes exist in ClassModel (filter out deleted classes)
+            $existingClassNames = ClassModel::whereNotNull('class_name')->pluck('class_name')->map(function($name) {
+                return strtolower(trim($name));
+            })->toArray();
+            
             // Convert to collection of objects with class_name property
             $classes = collect();
             foreach ($classesFromSections as $className) {
-                $classes->push((object)['class_name' => $className]);
+                // Only include if class exists in ClassModel
+                if (in_array(strtolower(trim($className)), $existingClassNames)) {
+                    $classes->push((object)['class_name' => $className]);
+                }
             }
         }
         
-        // Get sections from Section model
+        // Get sections from Section model (only non-deleted sections)
         $sections = Section::whereNotNull('name')
+            ->whereNotNull('class')
             ->distinct()
             ->orderBy('name', 'asc')
             ->pluck('name')
             ->sort()
             ->values();
         
-        // Get teachers from Staff model
-        $teachers = Staff::whereNotNull('name')->orderBy('name')->pluck('name', 'id');
+        // Get only teachers from staff table
+        $teachers = Staff::whereRaw('LOWER(TRIM(designation)) LIKE ?', ['%teacher%'])
+            ->whereNotNull('name')
+            ->orderBy('name')
+            ->pluck('name', 'id');
+        
+        // Get sessions from sections
+        $allSessions = Section::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
+        
+        // If no sessions found, provide defaults
+        if ($allSessions->isEmpty()) {
+            $currentYear = date('Y');
+            $allSessions = collect([
+                $currentYear . '-' . ($currentYear + 1),
+                ($currentYear - 1) . '-' . $currentYear,
+                ($currentYear - 2) . '-' . ($currentYear - 1)
+            ]);
+        }
         
         // Only query if at least one filter is applied
         if ($request->filled('filter_campus') || $request->filled('filter_class') || $request->filled('filter_section')) {
             $query = Subject::query();
+            
+            // Filter out subjects with deleted classes
+            $existingClassNames = ClassModel::whereNotNull('class_name')->pluck('class_name')->map(function($name) {
+                return strtolower(trim($name));
+            })->toArray();
+            
+            if (!empty($existingClassNames)) {
+                $query->where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+            } else {
+                // If no classes exist, show no subjects
+                $query->whereRaw('1 = 0');
+            }
             
             // Apply filters
             if ($request->filled('filter_campus')) {
@@ -121,7 +162,7 @@ class ManageSubjectsController extends Controller
             );
         }
         
-        return view('manage-subjects', compact('subjects', 'campuses', 'classes', 'sections', 'teachers'));
+        return view('manage-subjects', compact('subjects', 'campuses', 'classes', 'sections', 'teachers', 'allSessions'));
     }
 
     /**
@@ -138,11 +179,59 @@ class ManageSubjectsController extends Controller
             'session' => ['nullable', 'string', 'max:255'],
         ]);
 
+        // Convert empty string to null for teacher field
+        if (isset($validated['teacher']) && trim($validated['teacher']) === '') {
+            $validated['teacher'] = null;
+        }
+
         Subject::create($validated);
 
         return redirect()
             ->route('manage-subjects')
             ->with('success', 'Subject created successfully!');
+    }
+
+    /**
+     * Update the specified subject.
+     */
+    public function update(Request $request, Subject $subject): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['required', 'string', 'max:255'],
+            'subject_name' => ['required', 'string', 'max:255'],
+            'class' => ['required', 'string', 'max:255'],
+            'section' => ['required', 'string', 'max:255'],
+            'teacher' => ['nullable', 'string', 'max:255'],
+            'session' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        // Convert empty string to null for teacher field
+        if (isset($validated['teacher']) && trim($validated['teacher']) === '') {
+            $validated['teacher'] = null;
+        }
+
+        // Convert empty string to null for session field
+        if (isset($validated['session']) && trim($validated['session']) === '') {
+            $validated['session'] = null;
+        }
+
+        $subject->update($validated);
+
+        return redirect()
+            ->route('manage-subjects')
+            ->with('success', 'Subject updated successfully!');
+    }
+
+    /**
+     * Remove the specified subject.
+     */
+    public function destroy(Subject $subject): RedirectResponse
+    {
+        $subject->delete();
+
+        return redirect()
+            ->route('manage-subjects')
+            ->with('success', 'Subject deleted successfully!');
     }
 
     /**
@@ -156,8 +245,19 @@ class ManageSubjectsController extends Controller
             return response()->json(['sections' => []]);
         }
 
-        // Get sections for the selected class
+        // Verify class exists in ClassModel (not deleted)
+        $classExists = ClassModel::whereNotNull('class_name')
+            ->whereRaw('LOWER(TRIM(class_name)) = ?', [strtolower(trim($className))])
+            ->exists();
+        
+        if (!$classExists) {
+            return response()->json(['sections' => []]);
+        }
+
+        // Get sections for the selected class (only non-deleted sections)
         $sections = Section::where('class', $className)
+            ->whereNotNull('name')
+            ->whereNotNull('class')
             ->orderBy('name', 'asc')
             ->get(['id', 'name'])
             ->map(function($section) {
@@ -176,6 +276,22 @@ class ManageSubjectsController extends Controller
     public function export(Request $request, string $format)
     {
         $query = Subject::query();
+        
+        // Filter out subjects with deleted classes
+        $existingClassNames = ClassModel::whereNotNull('class_name')->pluck('class_name')->map(function($name) {
+            return strtolower(trim($name));
+        })->toArray();
+        
+        if (!empty($existingClassNames)) {
+            $query->where(function($q) use ($existingClassNames) {
+                foreach ($existingClassNames as $className) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                }
+            });
+        } else {
+            // If no classes exist, show no subjects
+            $query->whereRaw('1 = 0');
+        }
         
         // Apply filters
         if ($request->filled('filter_campus')) {

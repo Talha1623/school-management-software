@@ -27,7 +27,7 @@ class TeacherController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access dashboard.',
@@ -174,7 +174,7 @@ class TeacherController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -328,7 +328,7 @@ class TeacherController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -509,7 +509,7 @@ class TeacherController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -701,7 +701,7 @@ class TeacherController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',

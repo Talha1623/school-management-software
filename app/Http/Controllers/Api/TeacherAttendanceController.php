@@ -220,7 +220,7 @@ class TeacherAttendanceController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access attendance.',
@@ -505,7 +505,7 @@ class TeacherAttendanceController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access attendance.',
@@ -601,7 +601,7 @@ class TeacherAttendanceController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access attendance reports.',
@@ -774,7 +774,7 @@ class TeacherAttendanceController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access attendance reports.',
@@ -880,7 +880,7 @@ class TeacherAttendanceController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access attendance reports.',
@@ -1137,7 +1137,7 @@ class TeacherAttendanceController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',
@@ -1313,7 +1313,7 @@ class TeacherAttendanceController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access this endpoint.',

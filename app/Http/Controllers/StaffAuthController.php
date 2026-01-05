@@ -95,7 +95,7 @@ class StaffAuthController extends Controller
         $assignedSubjects = collect();
         $assignedClasses = collect();
         
-        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff->isTeacher()) {
             // Get teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
@@ -125,7 +125,7 @@ class StaffAuthController extends Controller
         }
         
         // If teacher, only show students from assigned classes
-        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff->isTeacher()) {
             if ($assignedClasses->isNotEmpty()) {
                 $studentsQuery->where(function($q) use ($assignedClasses) {
                     foreach ($assignedClasses as $class) {
@@ -188,7 +188,7 @@ class StaffAuthController extends Controller
         }
         
         // Filter by assigned classes if teacher
-        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff->isTeacher()) {
             if ($assignedClasses->isNotEmpty()) {
                 $latestAdmissionsQuery->where(function($q) use ($assignedClasses) {
                     foreach ($assignedClasses as $class) {
@@ -231,7 +231,7 @@ class StaffAuthController extends Controller
         // Step 1: Get teacher's assigned classes (if teacher)
         $assignedClasses = collect();
         
-        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff->isTeacher()) {
             // Get teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
@@ -261,7 +261,7 @@ class StaffAuthController extends Controller
         }
         
         // If teacher, only show students from assigned classes
-        if (strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff->isTeacher()) {
             if ($assignedClasses->isNotEmpty()) {
                 $studentsQuery->where(function($q) use ($assignedClasses) {
                     foreach ($assignedClasses as $class) {

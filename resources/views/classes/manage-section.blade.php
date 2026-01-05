@@ -353,7 +353,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">person</span>
                                 </span>
-                                <select class="form-control section-input" name="teacher" id="teacher" style="border: none; border-left: 1px solid #e0e7ff;">
+                                <select class="form-select section-input" name="teacher" id="teacher" style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Teacher</option>
                                     @foreach($teachers as $id => $teacherName)
                                         <option value="{{ $teacherName }}">{{ $teacherName }}</option>

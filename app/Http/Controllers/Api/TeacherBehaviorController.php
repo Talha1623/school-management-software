@@ -27,7 +27,7 @@ class TeacherBehaviorController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access behavior recording.',
@@ -102,7 +102,7 @@ class TeacherBehaviorController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access behavior recording.',
@@ -163,7 +163,7 @@ class TeacherBehaviorController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access behavior recording.',
@@ -316,7 +316,7 @@ class TeacherBehaviorController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can save behavior records.',
@@ -495,7 +495,7 @@ class TeacherBehaviorController extends Controller
         try {
             $teacher = $request->user();
 
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access behavior records.',
@@ -641,7 +641,7 @@ class TeacherBehaviorController extends Controller
             $teacher = $request->user();
             
             // Validate that user is a teacher
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can mark self-attendance.',
@@ -838,7 +838,7 @@ class TeacherBehaviorController extends Controller
             $teacher = $request->user();
             
             // Validate that user is a teacher
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can check self-attendance.',
@@ -904,7 +904,7 @@ class TeacherBehaviorController extends Controller
             $teacher = $request->user();
             
             // Validate that user is a teacher
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can check-in.',
@@ -1037,7 +1037,7 @@ class TeacherBehaviorController extends Controller
             $teacher = $request->user();
             
             // Validate that user is a teacher
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can check-out.',
@@ -1153,7 +1153,7 @@ class TeacherBehaviorController extends Controller
             $teacher = $request->user();
             
             // Validate that user is a teacher
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can view self-attendance history.',
@@ -1269,7 +1269,7 @@ class TeacherBehaviorController extends Controller
         try {
             $teacher = $request->user();
             
-            if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+            if (!$teacher || !$teacher->isTeacher()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only teachers can access attendance report.',

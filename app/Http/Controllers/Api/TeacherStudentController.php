@@ -31,7 +31,7 @@ class TeacherStudentController extends Controller
             $sectionName = $request->query('section') ?? $request->input('section');
             
             // Filter by teacher's assigned classes if teacher
-            if ($teacher && strtolower(trim($teacher->designation ?? '')) === 'teacher') {
+            if ($teacher && $teacher->isTeacher()) {
                 // Get teacher's assigned subjects
                 $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
                     ->get();
@@ -88,7 +88,7 @@ class TeacherStudentController extends Controller
             
             // Filter by Campus (case-insensitive) - from URL or body (only if not already filtered by teacher)
             $campus = $request->query('campus') ?? $request->input('campus');
-            if ($campus && (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher')) {
+            if ($campus && (!$teacher || !$teacher->isTeacher())) {
                 $campus = trim($campus);
                 $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
             }
@@ -190,7 +190,7 @@ class TeacherStudentController extends Controller
             
             // Get Campuses - filter by teacher's campus if teacher
             $campuses = collect();
-            if ($teacher && strtolower(trim($teacher->designation ?? '')) === 'teacher' && $teacher->campus) {
+            if ($teacher && $teacher->isTeacher() && $teacher->campus) {
                 $campuses = collect([$teacher->campus]);
             } else {
                 $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
@@ -205,7 +205,7 @@ class TeacherStudentController extends Controller
             
             // Get Classes - filter by teacher's assigned classes if teacher
             $classes = collect();
-            if ($teacher && strtolower(trim($teacher->designation ?? '')) === 'teacher') {
+            if ($teacher && $teacher->isTeacher()) {
                 // Get classes from teacher's assigned subjects
                 $teacherName = strtolower(trim($teacher->name ?? ''));
                 $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
@@ -271,7 +271,7 @@ class TeacherStudentController extends Controller
             // Get Sections (filtered by class if provided) - filter by teacher's assigned subjects if teacher
             $sections = collect();
             if ($request->filled('class')) {
-                if ($teacher && strtolower(trim($teacher->designation ?? '')) === 'teacher') {
+                if ($teacher && $teacher->isTeacher()) {
                     // Get sections from teacher's assigned subjects for this class
                     $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
                         ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))])

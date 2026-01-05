@@ -20,7 +20,7 @@ class TeacherChatController extends Controller
     {
         $teacher = $request->user();
 
-        if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+        if (!$teacher || !$teacher->isTeacher()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Access denied. Only teachers can access this chat.',
@@ -92,7 +92,7 @@ class TeacherChatController extends Controller
     {
         $teacher = $request->user();
 
-        if (!$teacher || strtolower(trim($teacher->designation ?? '')) !== 'teacher') {
+        if (!$teacher || !$teacher->isTeacher()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Access denied. Only teachers can send chat messages.',

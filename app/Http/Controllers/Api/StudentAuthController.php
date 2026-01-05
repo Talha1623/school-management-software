@@ -7,6 +7,8 @@ use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Carbon\Carbon;
 
@@ -34,7 +36,18 @@ class StudentAuthController extends Controller
             $password = trim($credentials['password']);
 
             // Find student by student_code (case-insensitive, trimmed comparison)
+            // Try case-insensitive match first
             $student = Student::whereRaw('LOWER(TRIM(student_code)) = LOWER(?)', [$studentCode])->first();
+            
+            // If not found, try without TRIM (in case database doesn't support it)
+            if (!$student) {
+                $student = Student::whereRaw('LOWER(student_code) = LOWER(?)', [$studentCode])->first();
+            }
+            
+            // If still not found, try exact match (in case of special characters or exact case match)
+            if (!$student) {
+                $student = Student::where('student_code', $studentCode)->first();
+            }
 
             // Check if student exists
             if (!$student) {
@@ -96,25 +109,90 @@ class StudentAuthController extends Controller
                 ], 200);
             }
 
+            // Refresh student model to get latest data from database
+            $student->refresh();
+            
             // Check if student already has a stored token
+            // This must be checked BEFORE creating new token to ensure same token every time
+            // Check both model attribute and direct DB query for reliability
+            $storedToken = null;
+            
+            // First try model attribute
             if (!empty($student->api_token)) {
-                // Return existing stored token
+                $storedToken = $student->api_token;
+            } else {
+                // If model doesn't have it, check database directly
+                $storedToken = DB::table('students')
+                    ->where('id', $student->id)
+                    ->value('api_token');
+            }
+            
+            // If token exists, return it immediately - SAME TOKEN EVERY TIME
+            if (!empty($storedToken) && trim($storedToken) !== '') {
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
-                    'token' => $student->api_token,
+                    'token' => trim($storedToken),
                 ], 200);
             }
 
             // Delete all existing Sanctum tokens for this student
             $student->tokens()->delete();
 
-            // Create new token without expiration (never expires)
-            $token = $student->createToken('student-api-token', ['*'], null)->plainTextToken;
+            // Create new token (without expiration - never expires)
+            try {
+                $token = $student->createToken('student-api-token', ['*'])->plainTextToken;
+            } catch (\Exception $tokenException) {
+                \Log::error('Token creation failed for student: ' . $tokenException->getMessage(), [
+                    'student_code' => $studentCode,
+                    'student_id' => $student->id,
+                    'trace' => $tokenException->getTraceAsString()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create authentication token. Please try again.',
+                    'token' => null,
+                ], 200);
+            }
 
             // Store the token in students table for future logins
-            $student->api_token = $token;
-            $student->save();
+            // This ensures the same token is returned on every login
+            try {
+                // Save using DB::table() for reliability
+                DB::table('students')
+                    ->where('id', $student->id)
+                    ->update(['api_token' => $token]);
+                
+                // Refresh model to sync with database
+                $student->refresh();
+                
+                // Verify token was saved
+                $savedToken = DB::table('students')
+                    ->where('id', $student->id)
+                    ->value('api_token');
+                
+                if (empty($savedToken) || trim($savedToken) !== $token) {
+                    \Log::error('CRITICAL: Token was not saved properly', [
+                        'student_id' => $student->id,
+                        'student_code' => $studentCode
+                    ]);
+                }
+            } catch (\Exception $e) {
+                // If column doesn't exist, log warning but continue
+                if (strpos($e->getMessage(), 'Unknown column') !== false || strpos($e->getMessage(), 'Column not found') !== false) {
+                    \Log::warning('api_token column does not exist. Please run: php artisan migrate', [
+                        'student_id' => $student->id,
+                        'error' => $e->getMessage()
+                    ]);
+                } else {
+                    \Log::error('Failed to save api_token: ' . $e->getMessage(), [
+                        'student_id' => $student->id,
+                        'student_code' => $studentCode
+                    ]);
+                }
+                // Continue - token is still valid for this session
+            }
 
             // Return token with success message
             return response()->json([
@@ -126,19 +204,26 @@ class StudentAuthController extends Controller
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Validation failed',
+                'message' => 'Validation failed: ' . implode(', ', $e->errors()['email'] ?? $e->errors()['password'] ?? ['Invalid input']),
                 'token' => null,
             ], 200);
         } catch (\Exception $e) {
-            // Log the error for debugging (optional - remove in production if needed)
+            // Log the error for debugging
             \Log::error('Student login error: ' . $e->getMessage(), [
                 'student_code' => $request->input('email'),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ]);
             
+            // Return more specific error message in development, generic in production
+            $errorMessage = config('app.debug') 
+                ? 'An error occurred during login: ' . $e->getMessage()
+                : 'An error occurred during login. Please try again later.';
+            
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred during login',
+                'message' => $errorMessage,
                 'token' => null,
             ], 200);
         }

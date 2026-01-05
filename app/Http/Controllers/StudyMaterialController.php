@@ -42,7 +42,7 @@ class StudyMaterialController extends Controller
         $staff = Auth::guard('staff')->user();
         $classes = collect();
         
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get teacher's assigned subjects
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->get();
@@ -210,7 +210,7 @@ class StudyMaterialController extends Controller
         $sections = collect();
         
         // Filter by teacher's assigned subjects and sections if teacher
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             // Get sections from teacher's assigned subjects for this class
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
@@ -268,7 +268,7 @@ class StudyMaterialController extends Controller
         $subjectsQuery = Subject::query();
         
         // Filter by teacher's assigned subjects if teacher
-        if ($staff && strtolower(trim($staff->designation ?? '')) === 'teacher') {
+        if ($staff && $staff->isTeacher()) {
             $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
         }
         
