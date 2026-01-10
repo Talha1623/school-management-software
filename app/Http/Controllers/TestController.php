@@ -158,17 +158,36 @@ class TestController extends Controller
         $sections = collect();
 
         // Get subjects - filter by teacher's assigned subjects if teacher
+        // Also filter out subjects with deleted classes
         $subjects = collect();
+        
+        // Get active (non-deleted) class names
+        $existingClassNames = ClassModel::whereNotNull('class_name')->pluck('class_name')->map(function($name) {
+            return strtolower(trim($name));
+        })->toArray();
         
         if ($staff && $staff->isTeacher()) {
             // Teacher: Only show subjects assigned to this teacher
             $teacherName = strtolower(trim($staff->name ?? ''));
             
             if (!empty($teacherName)) {
-                // Get subjects assigned to this teacher
-                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                    ->whereNotNull('subject_name')
-                    ->get();
+                // Get subjects assigned to this teacher, filtered by active classes
+                $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                    ->whereNotNull('subject_name');
+                
+                // Filter out subjects with deleted classes
+                if (!empty($existingClassNames)) {
+                    $assignedSubjectsQuery->where(function($q) use ($existingClassNames) {
+                        foreach ($existingClassNames as $className) {
+                            $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                        }
+                    });
+                } else {
+                    // If no classes exist, show no subjects
+                    $assignedSubjectsQuery->whereRaw('1 = 0');
+                }
+                
+                $assignedSubjects = $assignedSubjectsQuery->get();
                 
                 // Get unique subject names (case-insensitive, keep original case)
                 $subjectsMap = [];
@@ -187,8 +206,22 @@ class TestController extends Controller
                 }
             }
         } else {
-            // For non-teachers (admin, staff, etc.), get all subjects
-            $subjects = Subject::whereNotNull('subject_name')->distinct()->pluck('subject_name')->sort()->values();
+            // For non-teachers (admin, staff, etc.), get all subjects filtered by active classes
+            $subjectsQuery = Subject::whereNotNull('subject_name');
+            
+            // Filter out subjects with deleted classes
+            if (!empty($existingClassNames)) {
+                $subjectsQuery->where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+            } else {
+                // If no classes exist, show no subjects
+                $subjectsQuery->whereRaw('1 = 0');
+            }
+            
+            $subjects = $subjectsQuery->distinct()->pluck('subject_name')->sort()->values();
             
             if ($subjects->isEmpty()) {
                 $subjects = collect(['Mathematics', 'English', 'Science', 'Urdu', 'Islamiat', 'Social Studies']);
@@ -317,6 +350,67 @@ class TestController extends Controller
         }
         
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Get subjects for a class (AJAX) - only active subjects (non-deleted classes).
+     */
+    public function getSubjectsByClass(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        $section = $request->get('section');
+        $campus = $request->get('campus');
+        
+        if (!$class) {
+            return response()->json(['subjects' => []]);
+        }
+        
+        // Get active (non-deleted) class names
+        $existingClassNames = ClassModel::whereNotNull('class_name')->pluck('class_name')->map(function($name) {
+            return strtolower(trim($name));
+        })->toArray();
+        
+        // Build query for subjects
+        $subjectsQuery = Subject::whereNotNull('subject_name');
+        
+        // Filter by class (case-insensitive)
+        $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        
+        // Filter out subjects with deleted classes
+        if (!empty($existingClassNames)) {
+            $subjectsQuery->where(function($q) use ($existingClassNames) {
+                foreach ($existingClassNames as $className) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                }
+            });
+        } else {
+            // If no classes exist, return empty
+            return response()->json(['subjects' => []]);
+        }
+        
+        // Filter by section if provided
+        if ($section) {
+            $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+        }
+        
+        // Filter by campus if provided
+        if ($campus) {
+            $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        // Filter by teacher if teacher
+        $staff = Auth::guard('staff')->user();
+        if ($staff && $staff->isTeacher()) {
+            $teacherName = strtolower(trim($staff->name ?? ''));
+            if (!empty($teacherName)) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
+            }
+        }
+        
+        // Get unique subject names
+        $subjects = $subjectsQuery->distinct()->pluck('subject_name')->sort()->values();
+        
+        return response()->json(['subjects' => $subjects]);
     }
 
     /**

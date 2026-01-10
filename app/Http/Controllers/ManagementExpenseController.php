@@ -102,8 +102,13 @@ class ManagementExpenseController extends Controller
 
         ManagementExpense::create($validated);
 
+        // Redirect based on which route was used (accountant or expense-management)
+        $redirectRoute = request()->route()->getName() === 'accountant.add-manage-expense.store' 
+            ? 'accountant.add-manage-expense' 
+            : 'expense-management.add';
+
         return redirect()
-            ->route('expense-management.add')
+            ->route($redirectRoute)
             ->with('success', 'Management expense created successfully!');
     }
 
@@ -144,8 +149,13 @@ class ManagementExpenseController extends Controller
 
         $managementExpense->update($validated);
 
+        // Redirect based on which route was used (accountant or expense-management)
+        $redirectRoute = request()->route()->getName() === 'accountant.add-manage-expense.update' 
+            ? 'accountant.add-manage-expense' 
+            : 'expense-management.add';
+
         return redirect()
-            ->route('expense-management.add')
+            ->route($redirectRoute)
             ->with('success', 'Management expense updated successfully!');
     }
 
@@ -161,8 +171,13 @@ class ManagementExpenseController extends Controller
         
         $managementExpense->delete();
 
+        // Redirect based on which route was used (accountant or expense-management)
+        $redirectRoute = request()->route()->getName() === 'accountant.add-manage-expense.destroy' 
+            ? 'accountant.add-manage-expense' 
+            : 'expense-management.add';
+
         return redirect()
-            ->route('expense-management.add')
+            ->route($redirectRoute)
             ->with('success', 'Management expense deleted successfully!');
     }
 
@@ -198,7 +213,11 @@ class ManagementExpenseController extends Controller
             case 'pdf':
                 return $this->exportPDF($expenses);
             default:
-                return redirect()->route('expense-management.add')
+                // Redirect based on which route was used (accountant or expense-management)
+                $redirectRoute = request()->route()->getName() === 'accountant.add-manage-expense.export' 
+                    ? 'accountant.add-manage-expense' 
+                    : 'expense-management.add';
+                return redirect()->route($redirectRoute)
                     ->with('error', 'Invalid export format!');
         }
     }

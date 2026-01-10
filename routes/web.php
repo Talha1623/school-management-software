@@ -52,6 +52,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         
         // Accountant specific routes
         Route::get('/task-management', [App\Http\Controllers\AccountantController::class, 'taskManagement'])->name('task-management');
+        Route::patch('/task-management/{task}/status', [App\Http\Controllers\TaskManagementController::class, 'updateStatus'])->name('task-management.update-status');
         Route::get('/fee-payment', [App\Http\Controllers\AccountantController::class, 'feePayment'])->name('fee-payment');
         Route::get('/family-fee-calculator', [App\Http\Controllers\AccountantController::class, 'familyFeeCalculator'])->name('family-fee-calculator');
         Route::get('/generate-monthly-fee', [App\Http\Controllers\AccountantController::class, 'generateMonthlyFee'])->name('generate-monthly-fee');
@@ -66,10 +67,42 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::get('/deleted-fees', [App\Http\Controllers\AccountantController::class, 'deletedFees'])->name('deleted-fees');
         Route::get('/print-fee-vouchers', [App\Http\Controllers\AccountantController::class, 'printFeeVouchers'])->name('print-fee-vouchers');
         Route::get('/print-balance-sheet', [App\Http\Controllers\AccountantController::class, 'printBalanceSheet'])->name('print-balance-sheet');
+        // Expense Management routes for accountant
+        Route::get('/add-manage-expense', [App\Http\Controllers\AccountantController::class, 'addManageExpense'])->name('add-manage-expense');
+        Route::post('/add-manage-expense', [App\Http\Controllers\ManagementExpenseController::class, 'store'])->name('add-manage-expense.store');
+        Route::put('/add-manage-expense/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'update'])->name('add-manage-expense.update');
+        Route::delete('/add-manage-expense/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'destroy'])->name('add-manage-expense.destroy');
+        Route::get('/add-manage-expense/export/{format}', [App\Http\Controllers\ManagementExpenseController::class, 'export'])->name('add-manage-expense.export');
+        
+        Route::get('/expense-categories', [App\Http\Controllers\AccountantController::class, 'expenseCategories'])->name('expense-categories');
+        Route::post('/expense-categories', [App\Http\Controllers\ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
+        Route::put('/expense-categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'update'])->name('expense-categories.update');
+        Route::delete('/expense-categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'destroy'])->name('expense-categories.destroy');
+        Route::get('/expense-categories/export/{format}', [App\Http\Controllers\ExpenseCategoryController::class, 'export'])->name('expense-categories.export');
+        
         Route::get('/expense-management', [App\Http\Controllers\AccountantController::class, 'expenseManagement'])->name('expense-management');
         Route::get('/reporting-area', [App\Http\Controllers\AccountantController::class, 'reportingArea'])->name('reporting-area');
         Route::get('/academic-calendar', [App\Http\Controllers\AccountantController::class, 'academicCalendar'])->name('academic-calendar');
         Route::get('/stock-inventory', [App\Http\Controllers\AccountantController::class, 'stockInventory'])->name('stock-inventory');
+        
+        // Stock & Inventory routes for accountant
+        Route::get('/point-of-sale', [App\Http\Controllers\AccountantController::class, 'pointOfSale'])->name('point-of-sale');
+        Route::post('/point-of-sale/search-product', [App\Http\Controllers\PointOfSaleController::class, 'searchProduct'])->name('point-of-sale.search-product');
+        Route::post('/point-of-sale/store-sale', [App\Http\Controllers\PointOfSaleController::class, 'storeSale'])->name('point-of-sale.store-sale');
+        
+        Route::get('/manage-categories', [App\Http\Controllers\AccountantController::class, 'manageCategories'])->name('manage-categories');
+        Route::post('/manage-categories', [App\Http\Controllers\StockCategoryController::class, 'store'])->name('manage-categories.store');
+        Route::put('/manage-categories/{stockCategory}', [App\Http\Controllers\StockCategoryController::class, 'update'])->name('manage-categories.update');
+        Route::delete('/manage-categories/{stockCategory}', [App\Http\Controllers\StockCategoryController::class, 'destroy'])->name('manage-categories.destroy');
+        Route::get('/manage-categories/export/{format}', [App\Http\Controllers\StockCategoryController::class, 'export'])->name('manage-categories.export');
+        
+        Route::get('/product-and-stock', [App\Http\Controllers\AccountantController::class, 'productAndStock'])->name('product-and-stock');
+        Route::post('/product-and-stock', [App\Http\Controllers\ProductController::class, 'store'])->name('product-and-stock.store');
+        Route::put('/product-and-stock/{product}', [App\Http\Controllers\ProductController::class, 'update'])->name('product-and-stock.update');
+        Route::delete('/product-and-stock/{product}', [App\Http\Controllers\ProductController::class, 'destroy'])->name('product-and-stock.destroy');
+        Route::get('/product-and-stock/export/{format}', [App\Http\Controllers\ProductController::class, 'export'])->name('product-and-stock.export');
+        
+        Route::get('/manage-all-sales', [App\Http\Controllers\AccountantController::class, 'manageAllSales'])->name('manage-all-sales');
     });
 });
 
@@ -102,6 +135,7 @@ Route::get('/admission/admit-student', [App\Http\Controllers\AdmissionController
 Route::post('/admission/admit-student', [App\Http\Controllers\AdmissionController::class, 'store'])->name('admission.admit-student.store');
 Route::get('/admission/get-sections', [App\Http\Controllers\AdmissionController::class, 'getSections'])->name('admission.get-sections');
 Route::get('/admission/get-parent-by-id-card', [App\Http\Controllers\AdmissionController::class, 'getParentByIdCard'])->name('admission.get-parent-by-id-card');
+Route::get('/admission/get-route-fare', [App\Http\Controllers\AdmissionController::class, 'getRouteFare'])->name('admission.get-route-fare');
 
 Route::get('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkCreate'])->name('admission.admit-bulk-student');
 Route::post('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkStore'])->name('admission.admit-bulk-student.store');
@@ -123,9 +157,8 @@ Route::put('/admission/inquiry/{inquiry}', [App\Http\Controllers\AdmissionInquir
 Route::delete('/admission/inquiry/{inquiry}', [App\Http\Controllers\AdmissionInquiryController::class, 'destroy'])->name('admission.inquiry.destroy');
 Route::get('/admission/inquiry/export/{format}', [App\Http\Controllers\AdmissionInquiryController::class, 'export'])->name('admission.inquiry.export');
 
-Route::get('/admission/inquiry/send-sms', function () {
-    return view('admission.inquiry.send-sms');
-})->name('admission.inquiry.send-sms');
+Route::get('/admission/inquiry/send-sms', [App\Http\Controllers\AdmissionInquiryController::class, 'sendSms'])->name('admission.inquiry.send-sms');
+Route::post('/admission/inquiry/send-sms', [App\Http\Controllers\AdmissionInquiryController::class, 'storeSms'])->name('admission.inquiry.send-sms.store');
 
 // Student Management Routes
 Route::get('/student/information', [App\Http\Controllers\StudentController::class, 'index'])->name('student.information');
@@ -147,6 +180,14 @@ Route::post('/student/transfer', [App\Http\Controllers\StudentTransferController
 Route::get('/student/transfer/get-students', [App\Http\Controllers\StudentTransferController::class, 'getStudents'])->name('student.transfer.get-students');
 Route::get('/student/transfer/search-student', [App\Http\Controllers\StudentTransferController::class, 'searchStudent'])->name('student.transfer.search-student');
 
+// Admission routes
+Route::get('/admission/get-route-fare', [App\Http\Controllers\AdmissionController::class, 'getRouteFare'])->name('admission.get-route-fare');
+
+// Student Info Report Route (must be before /student/{student} route)
+Route::get('/student/info-report', function () {
+    return view('student.info-report');
+})->name('student.info-report');
+
 // Student Edit Route (must be before /student/{student} route)
 Route::get('/student/{student}/edit', [App\Http\Controllers\StudentController::class, 'edit'])->name('student.edit');
 Route::put('/student/{student}', [App\Http\Controllers\StudentController::class, 'update'])->name('student.update');
@@ -156,10 +197,6 @@ Route::delete('/student/{student}', [App\Http\Controllers\StudentController::cla
 
 // Student View Route (must be last to avoid conflicts)
 Route::get('/student/{student}', [App\Http\Controllers\StudentController::class, 'show'])->name('student.view');
-
-Route::get('/student/info-report', function () {
-    return view('student.info-report');
-})->name('student.info-report');
 
 Route::get('/dashboard/crm', [DashboardController::class, 'crm'])->name('dashboard.crm');
 
@@ -564,6 +601,16 @@ Route::post('/fee-payment/full-payment', function (\Illuminate\Http\Request $req
     $currentYear = date('Y');
     $paymentTitle = "Monthly Fee - {$currentMonth} {$currentYear}";
     
+    // Get accountant/admin name from authenticated user (support both guards)
+    $accountantName = null;
+    if (\Illuminate\Support\Facades\Auth::guard('accountant')->check()) {
+        $accountantName = \Illuminate\Support\Facades\Auth::guard('accountant')->user()->name ?? null;
+    } elseif (\Illuminate\Support\Facades\Auth::guard('admin')->check()) {
+        $accountantName = \Illuminate\Support\Facades\Auth::guard('admin')->user()->name ?? null;
+    } elseif (auth()->check()) {
+        $accountantName = auth()->user()->name ?? null;
+    }
+    
     // Create payment record
     $payment = \App\Models\StudentPayment::create([
         'campus' => $student->campus,
@@ -575,7 +622,7 @@ Route::post('/fee-payment/full-payment', function (\Illuminate\Http\Request $req
         'payment_date' => date('Y-m-d'),
         'sms_notification' => 'Yes',
         'late_fee' => 0,
-        'accountant' => auth()->check() ? (auth()->user()->name ?? null) : null,
+        'accountant' => $accountantName,
     ]);
     
     return response()->json([
@@ -647,6 +694,7 @@ Route::post('/attendance/student/store', [App\Http\Controllers\StudentAttendance
 
 Route::get('/attendance/staff', [App\Http\Controllers\StaffAttendanceController::class, 'index'])->name('attendance.staff')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 Route::post('/attendance/staff/store', [App\Http\Controllers\StaffAttendanceController::class, 'store'])->name('attendance.staff.store')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::get('/staff/attendance/overview', [App\Http\Controllers\StaffAttendanceController::class, 'overview'])->name('staff.attendance.overview');
 
 Route::get('/attendance/barcode', function () {
     return view('attendance.barcode');
@@ -920,9 +968,11 @@ Route::get('/reports/balance-sheet', [App\Http\Controllers\BalanceSheetControlle
 Route::get('/reports/admission-data', [App\Http\Controllers\AdmissionDataReportController::class, 'index'])->name('reports.admission-data');
 
 // Stock & Inventory Routes
-Route::get('/stock/point-of-sale', function () {
-    return view('stock.point-of-sale');
-})->name('stock.point-of-sale');
+Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(function () {
+    Route::get('/stock/point-of-sale', [App\Http\Controllers\PointOfSaleController::class, 'index'])->name('stock.point-of-sale');
+    Route::post('/stock/point-of-sale/search-product', [App\Http\Controllers\PointOfSaleController::class, 'searchProduct'])->name('stock.point-of-sale.search-product');
+    Route::post('/stock/point-of-sale/store-sale', [App\Http\Controllers\PointOfSaleController::class, 'storeSale'])->name('stock.point-of-sale.store-sale');
+});
 
 Route::get('/stock/manage-categories', [App\Http\Controllers\StockCategoryController::class, 'index'])->name('stock.manage-categories');
 Route::post('/stock/manage-categories', [App\Http\Controllers\StockCategoryController::class, 'store'])->name('stock.manage-categories.store');
@@ -959,9 +1009,9 @@ Route::get('/student-behavior/categories/export/{format}', [App\Http\Controllers
 
 Route::get('/student-behavior/progress-tracking', [App\Http\Controllers\ProgressTrackingController::class, 'index'])->name('student-behavior.progress-tracking');
 
-Route::get('/student-behavior/reporting-analysis', function () {
-    return view('student-behavior.reporting-analysis');
-})->name('student-behavior.reporting-analysis');
+Route::get('/student-behavior/reporting-analysis', [App\Http\Controllers\ReportingAnalysisController::class, 'index'])->name('student-behavior.reporting-analysis');
+Route::get('/student-behavior/reporting-analysis/get-sections', [App\Http\Controllers\ReportingAnalysisController::class, 'getSectionsByClass'])->name('student-behavior.reporting-analysis.get-sections');
+Route::get('/student-behavior/reporting-analysis/report', [App\Http\Controllers\ReportingAnalysisController::class, 'report'])->name('student-behavior.reporting-analysis.report');
 
 // Question Paper Routes
 Route::get('/question-paper/manage-book', function () {
@@ -979,6 +1029,7 @@ Route::get('/question-paper/generate', function () {
 // Test Management Routes
 Route::get('/test/list', [App\Http\Controllers\TestController::class, 'index'])->name('test.list');
 Route::get('/test/list/get-sections', [App\Http\Controllers\TestController::class, 'getSections'])->name('test.list.get-sections');
+Route::get('/test/list/get-subjects', [App\Http\Controllers\TestController::class, 'getSubjectsByClass'])->name('test.list.get-subjects');
 Route::post('/test/list', [App\Http\Controllers\TestController::class, 'store'])->name('test.list.store');
 Route::put('/test/list/{test}', [App\Http\Controllers\TestController::class, 'update'])->name('test.list.update');
 Route::post('/test/list/{test}/toggle-result-status', [App\Http\Controllers\TestController::class, 'toggleResultStatus'])->name('test.list.toggle-result-status');
@@ -992,10 +1043,14 @@ Route::get('/test/marks-entry/get-tests', [App\Http\Controllers\MarksEntryContro
 Route::get('/test/marks-entry/get-subjects', [App\Http\Controllers\MarksEntryController::class, 'getSubjects'])->name('test.marks-entry.get-subjects');
 
 Route::get('/test/schedule', [App\Http\Controllers\TestScheduleController::class, 'index'])->name('test.schedule');
+Route::get('/test/schedule/get-sections', [App\Http\Controllers\TestScheduleController::class, 'getSectionsByClass'])->name('test.schedule.get-sections');
+Route::get('/test/schedule/get-filtered-tests', [App\Http\Controllers\TestScheduleController::class, 'getFilteredTests'])->name('test.schedule.get-filtered-tests');
 
 // Test Reports - Assign Grades
 Route::get('/test/assign-grades/particular', [App\Http\Controllers\AssignGradesController::class, 'particular'])->name('test.assign-grades.particular');
 Route::get('/test/assign-grades/get-sections-by-class', [App\Http\Controllers\AssignGradesController::class, 'getSectionsByClass'])->name('test.assign-grades.get-sections-by-class');
+Route::get('/test/assign-grades/get-subjects', [App\Http\Controllers\AssignGradesController::class, 'getSubjectsByClass'])->name('test.assign-grades.get-subjects');
+Route::get('/test/assign-grades/get-campuses', [App\Http\Controllers\AssignGradesController::class, 'getCampuses'])->name('test.assign-grades.get-campuses');
 
 Route::get('/test/assign-grades/combined', [App\Http\Controllers\AssignGradesController::class, 'combined'])->name('test.assign-grades.combined');
 Route::post('/test/assign-grades/combined', [App\Http\Controllers\AssignGradesController::class, 'storeCombined'])->name('test.assign-grades.combined.store');
@@ -1016,13 +1071,24 @@ Route::get('/test/teacher-remarks/combined/get-class-sections', [App\Http\Contro
 
 // Test Reports - Tabulation Sheet
 Route::get('/test/tabulation-sheet/practical', [App\Http\Controllers\TabulationSheetController::class, 'practical'])->name('test.tabulation-sheet.practical');
+Route::get('/test/tabulation-sheet/practical/get-sections', [App\Http\Controllers\TabulationSheetController::class, 'getSectionsByClass'])->name('test.tabulation-sheet.practical.get-sections');
+Route::get('/test/tabulation-sheet/practical/get-subjects', [App\Http\Controllers\TabulationSheetController::class, 'getSubjectsByClass'])->name('test.tabulation-sheet.practical.get-subjects');
 
 Route::get('/test/tabulation-sheet/combine', [App\Http\Controllers\TabulationSheetController::class, 'combine'])->name('test.tabulation-sheet.combine');
+Route::get('/test/tabulation-sheet/combine/get-sections', [App\Http\Controllers\TabulationSheetController::class, 'getSectionsByClass'])->name('test.tabulation-sheet.combine.get-sections');
+Route::get('/test/tabulation-sheet/combine/get-grades', [App\Http\Controllers\TabulationSheetController::class, 'getGrades'])->name('test.tabulation-sheet.combine.get-grades');
 
 // Test Reports - Position Holder
 Route::get('/test/position-holder/practical', [App\Http\Controllers\PositionHolderController::class, 'practical'])->name('test.position-holder.practical');
+Route::get('/test/position-holder/practical/get-sections', [App\Http\Controllers\PositionHolderController::class, 'getSectionsByClass'])->name('test.position-holder.practical.get-sections');
+Route::get('/test/position-holder/practical/get-subjects', [App\Http\Controllers\PositionHolderController::class, 'getSubjectsByClass'])->name('test.position-holder.practical.get-subjects');
+Route::get('/test/position-holder/practical/get-tests', [App\Http\Controllers\PositionHolderController::class, 'getTestsByFilters'])->name('test.position-holder.practical.get-tests');
+Route::get('/test/position-holder/practical/get-campuses', [App\Http\Controllers\PositionHolderController::class, 'getCampuses'])->name('test.position-holder.practical.get-campuses');
+Route::get('/test/position-holder/practical/get-grades', [App\Http\Controllers\PositionHolderController::class, 'getGrades'])->name('test.position-holder.practical.get-grades');
 
 Route::get('/test/position-holder/combine', [App\Http\Controllers\PositionHolderController::class, 'combine'])->name('test.position-holder.combine');
+Route::get('/test/position-holder/combine/get-sections', [App\Http\Controllers\PositionHolderController::class, 'getSectionsByClass'])->name('test.position-holder.combine.get-sections');
+Route::get('/test/position-holder/combine/get-grades', [App\Http\Controllers\PositionHolderController::class, 'getGrades'])->name('test.position-holder.combine.get-grades');
 
 // Test Reports - Send Marks to Parents
 Route::get('/test/send-marks/practical', [App\Http\Controllers\SendMarksController::class, 'practical'])->name('test.send-marks.practical');

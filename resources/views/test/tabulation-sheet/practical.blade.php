@@ -110,14 +110,9 @@
                                     <td>
                                         <select class="form-select form-select-sm grade-select" data-student-id="{{ $student->id }}" style="width: 100px; display: inline-block;">
                                             <option value="">Select Grade</option>
-                                            <option value="A+">A+</option>
-                                            <option value="A">A</option>
-                                            <option value="B+">B+</option>
-                                            <option value="B">B</option>
-                                            <option value="C+">C+</option>
-                                            <option value="C">C</option>
-                                            <option value="D">D</option>
-                                            <option value="F">F</option>
+                                            @foreach($grades as $grade)
+                                                <option value="{{ $grade }}">{{ $grade }}</option>
+                                            @endforeach
                                         </select>
                                     </td>
                                     <td>
@@ -211,7 +206,140 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-calculate grade based on marks
+    // Load sections when class changes
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+    const subjectSelect = document.getElementById('filter_subject');
+    
+    // Function to load sections dynamically
+    function loadSections(selectedClass) {
+        if (selectedClass) {
+            sectionSelect.disabled = false;
+            sectionSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.tabulation-sheet.practical.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+                .then(response => response.json())
+                .then(data => {
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                    data.sections.forEach(section => {
+                        const option = document.createElement('option');
+                        option.value = section;
+                        option.textContent = section;
+                        @if($filterSection)
+                        if (section === '{{ $filterSection }}') {
+                            option.selected = true;
+                        }
+                        @endif
+                        sectionSelect.appendChild(option);
+                    });
+                    
+                    // Load subjects after sections are loaded
+                    loadSubjects();
+                })
+                .catch(error => {
+                    console.error('Error loading sections:', error);
+                    sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                    loadSubjects();
+                });
+        } else {
+            sectionSelect.disabled = true;
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            loadSubjects();
+        }
+    }
+    
+    // Function to load subjects dynamically
+    function loadSubjects() {
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
+        
+        if (!classValue) {
+            // If no class selected, clear subjects
+            if (subjectSelect) {
+                subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+            }
+            return;
+        }
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (classValue) params.append('class', classValue);
+        if (section) params.append('section', section);
+        
+        // Show loading state
+        if (subjectSelect) {
+            const currentValue = subjectSelect.value;
+            subjectSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.tabulation-sheet.practical.get-subjects') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                    if (data.subjects && data.subjects.length > 0) {
+                        data.subjects.forEach(function(subject) {
+                            const option = document.createElement('option');
+                            option.value = subject;
+                            option.textContent = subject;
+                            // Restore selected value if it still exists
+                            if (subject === currentValue) {
+                                option.selected = true;
+                            }
+                            subjectSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading subjects:', error);
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                });
+        }
+    }
+    
+    // Load sections when class changes
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            loadSections(this.value);
+        });
+    }
+    
+    // Load subjects when section changes
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            loadSubjects();
+        });
+    }
+    
+    // Load sections on page load if class is already selected
+    @if($filterClass)
+    loadSections('{{ $filterClass }}');
+    @endif
+    
+    // Function to update grade dropdowns dynamically
+    function updateGradeDropdowns() {
+        fetch(`{{ route('test.tabulation-sheet.practical.get-grades') }}`)
+            .then(response => response.json())
+            .then(data => {
+                const gradeSelects = document.querySelectorAll('.grade-select');
+                gradeSelects.forEach(function(select) {
+                    const currentValue = select.value;
+                    const optionsHtml = '<option value="">Select Grade</option>' + 
+                        data.grades.map(grade => `<option value="${grade}">${grade}</option>`).join('');
+                    select.innerHTML = optionsHtml;
+                    // Restore selected value if it still exists
+                    if (currentValue && data.grades.includes(currentValue)) {
+                        select.value = currentValue;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error loading grades:', error);
+            });
+    }
+    
+    // Update grade dropdowns on page load
+    updateGradeDropdowns();
+    
+    // Auto-calculate grade based on marks using dynamic grades
     document.querySelectorAll('.marks-input').forEach(function(input) {
         input.addEventListener('input', function() {
             const marks = parseFloat(this.value);
@@ -219,17 +347,33 @@ document.addEventListener('DOMContentLoaded', function() {
             const gradeSelect = document.querySelector('.grade-select[data-student-id="' + studentId + '"]');
             
             if (!isNaN(marks) && gradeSelect) {
-                let grade = '';
-                if (marks >= 90) grade = 'A+';
-                else if (marks >= 80) grade = 'A';
-                else if (marks >= 70) grade = 'B+';
-                else if (marks >= 60) grade = 'B';
-                else if (marks >= 50) grade = 'C+';
-                else if (marks >= 40) grade = 'C';
-                else if (marks >= 33) grade = 'D';
-                else grade = 'F';
-                
-                gradeSelect.value = grade;
+                // Fetch grades dynamically to determine which grade to assign
+                fetch(`{{ route('test.tabulation-sheet.practical.get-grades') }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Find the appropriate grade based on percentage ranges
+                        let grade = '';
+                        if (marks >= 90) grade = 'A+';
+                        else if (marks >= 80) grade = 'A';
+                        else if (marks >= 70) grade = 'B+';
+                        else if (marks >= 60) grade = 'B';
+                        else if (marks >= 50) grade = 'C+';
+                        else if (marks >= 40) grade = 'C';
+                        else if (marks >= 33) grade = 'D';
+                        else grade = 'F';
+                        
+                        // Check if the calculated grade exists in the dynamic grades list
+                        if (data.grades.includes(grade)) {
+                            gradeSelect.value = grade;
+                        } else {
+                            // Find the closest grade
+                            const sortedGrades = data.grades.sort();
+                            gradeSelect.value = sortedGrades[0] || '';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching grades:', error);
+                    });
             }
         });
     });

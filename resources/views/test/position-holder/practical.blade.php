@@ -18,7 +18,7 @@
                         <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
-                            @foreach($campuses as $campus)
+                            @foreach($campusesList as $campus)
                                 <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
                             @endforeach
                         </select>
@@ -38,11 +38,13 @@
                     <!-- Section -->
                     <div class="col-md-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;" {{ !$filterClass ? 'disabled' : '' }}>
                             <option value="">All Sections</option>
-                            @foreach($sections as $sectionName)
-                                <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
-                            @endforeach
+                            @if($filterClass)
+                                @foreach($sections as $sectionName)
+                                    <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
+                                @endforeach
+                            @endif
                         </select>
                     </div>
 
@@ -149,14 +151,9 @@
                                     <td>
                                         <select class="form-select form-select-sm grade-select" data-student-id="{{ $student->id }}" style="width: 100px; display: inline-block;">
                                             <option value="">Select Grade</option>
-                                            <option value="A+">A+</option>
-                                            <option value="A">A</option>
-                                            <option value="B+">B+</option>
-                                            <option value="B">B</option>
-                                            <option value="C+">C+</option>
-                                            <option value="C">C</option>
-                                            <option value="D">D</option>
-                                            <option value="F">F</option>
+                                            @foreach($grades as $grade)
+                                                <option value="{{ $grade }}">{{ $grade }}</option>
+                                            @endforeach
                                         </select>
                                     </td>
                                 </tr>
@@ -247,7 +244,206 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-calculate grade based on marks
+    // Get dropdown elements
+    const campusSelect = document.getElementById('filter_campus');
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+    const subjectSelect = document.getElementById('filter_subject');
+    const testSelect = document.getElementById('filter_test');
+    
+    // Function to load sections dynamically
+    function loadSections(selectedClass) {
+        if (selectedClass) {
+            sectionSelect.disabled = false;
+            sectionSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.position-holder.practical.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+                .then(response => response.json())
+                .then(data => {
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                    data.sections.forEach(section => {
+                        const option = document.createElement('option');
+                        option.value = section;
+                        option.textContent = section;
+                        @if($filterSection)
+                        if (section === '{{ $filterSection }}') {
+                            option.selected = true;
+                        }
+                        @endif
+                        sectionSelect.appendChild(option);
+                    });
+                    
+                    // Load subjects after sections are loaded
+                    loadSubjects();
+                })
+                .catch(error => {
+                    console.error('Error loading sections:', error);
+                    sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                    loadSubjects();
+                });
+        } else {
+            sectionSelect.disabled = true;
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            loadSubjects();
+        }
+    }
+    
+    // Function to load subjects dynamically
+    function loadSubjects() {
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
+        
+        if (!classValue) {
+            // If no class selected, clear subjects
+            if (subjectSelect) {
+                subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+            }
+            loadTests();
+            return;
+        }
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (campus) params.append('campus', campus);
+        if (classValue) params.append('class', classValue);
+        if (section) params.append('section', section);
+        
+        // Show loading state
+        if (subjectSelect) {
+            const currentValue = subjectSelect.value;
+            subjectSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.position-holder.practical.get-subjects') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                    if (data.subjects && data.subjects.length > 0) {
+                        data.subjects.forEach(function(subject) {
+                            const option = document.createElement('option');
+                            option.value = subject;
+                            option.textContent = subject;
+                            // Restore selected value if it still exists
+                            if (subject === currentValue) {
+                                option.selected = true;
+                            }
+                            subjectSelect.appendChild(option);
+                        });
+                    }
+                    loadTests();
+                })
+                .catch(error => {
+                    console.error('Error loading subjects:', error);
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                    loadTests();
+                });
+        } else {
+            loadTests();
+        }
+    }
+    
+    // Function to load tests dynamically
+    function loadTests() {
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
+        const subject = subjectSelect ? subjectSelect.value : '';
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (campus) params.append('campus', campus);
+        if (classValue) params.append('class', classValue);
+        if (section) params.append('section', section);
+        if (subject) params.append('subject', subject);
+        
+        // Show loading state
+        if (testSelect) {
+            const currentValue = testSelect.value;
+            testSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.position-holder.practical.get-tests') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    testSelect.innerHTML = '<option value="">All Tests</option>';
+                    if (data.tests && data.tests.length > 0) {
+                        data.tests.forEach(function(test) {
+                            const option = document.createElement('option');
+                            option.value = test;
+                            option.textContent = test;
+                            // Restore selected value if it still exists
+                            if (test === currentValue) {
+                                option.selected = true;
+                            }
+                            testSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading tests:', error);
+                    testSelect.innerHTML = '<option value="">All Tests</option>';
+                });
+        }
+    }
+    
+    // Load sections when class changes
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            loadSections(this.value);
+        });
+    }
+    
+    // Load subjects when section changes
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            loadSubjects();
+        });
+    }
+    
+    // Load subjects when campus changes
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadSubjects();
+        });
+    }
+    
+    // Load tests when subject changes
+    if (subjectSelect) {
+        subjectSelect.addEventListener('change', function() {
+            loadTests();
+        });
+    }
+    
+    // Load sections on page load if class is already selected
+    @if($filterClass)
+    loadSections('{{ $filterClass }}');
+    @endif
+    
+    // Function to update grade dropdowns dynamically
+    function updateGradeDropdowns() {
+        fetch(`{{ route('test.position-holder.practical.get-grades') }}`)
+            .then(response => response.json())
+            .then(data => {
+                const gradeSelects = document.querySelectorAll('.grade-select');
+                gradeSelects.forEach(function(select) {
+                    const currentValue = select.value;
+                    const optionsHtml = '<option value="">Select Grade</option>' + 
+                        data.grades.map(grade => `<option value="${grade}">${grade}</option>`).join('');
+                    select.innerHTML = optionsHtml;
+                    // Restore selected value if it still exists
+                    if (currentValue && data.grades.includes(currentValue)) {
+                        select.value = currentValue;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error loading grades:', error);
+            });
+    }
+    
+    // Update grade dropdowns on page load
+    updateGradeDropdowns();
+    
+    // Auto-calculate grade based on marks using dynamic grades
     document.querySelectorAll('.marks-input').forEach(function(input) {
         input.addEventListener('input', function() {
             const marks = parseFloat(this.value);
@@ -255,17 +451,33 @@ document.addEventListener('DOMContentLoaded', function() {
             const gradeSelect = document.querySelector('.grade-select[data-student-id="' + studentId + '"]');
             
             if (!isNaN(marks) && gradeSelect) {
-                let grade = '';
-                if (marks >= 90) grade = 'A+';
-                else if (marks >= 80) grade = 'A';
-                else if (marks >= 70) grade = 'B+';
-                else if (marks >= 60) grade = 'B';
-                else if (marks >= 50) grade = 'C+';
-                else if (marks >= 40) grade = 'C';
-                else if (marks >= 33) grade = 'D';
-                else grade = 'F';
-                
-                gradeSelect.value = grade;
+                // Fetch grades dynamically to determine which grade to assign
+                fetch(`{{ route('test.position-holder.practical.get-grades') }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Find the appropriate grade based on percentage ranges
+                        let grade = '';
+                        if (marks >= 90) grade = 'A+';
+                        else if (marks >= 80) grade = 'A';
+                        else if (marks >= 70) grade = 'B+';
+                        else if (marks >= 60) grade = 'B';
+                        else if (marks >= 50) grade = 'C+';
+                        else if (marks >= 40) grade = 'C';
+                        else if (marks >= 33) grade = 'D';
+                        else grade = 'F';
+                        
+                        // Check if the calculated grade exists in the dynamic grades list
+                        if (data.grades.includes(grade)) {
+                            gradeSelect.value = grade;
+                        } else {
+                            // Find the closest grade
+                            const sortedGrades = data.grades.sort();
+                            gradeSelect.value = sortedGrades[0] || '';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching grades:', error);
+                    });
             }
         });
     });

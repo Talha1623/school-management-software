@@ -232,7 +232,59 @@
                             
                             <div class="mb-2">
                                 <label for="transport_route" class="form-label mb-0 fs-13 fw-medium">Transport Route</label>
-                                <input type="text" class="form-control form-control-sm" id="transport_route" name="transport_route" value="{{ old('transport_route', $student->transport_route) }}" style="height: 32px; font-size: 13px;">
+                                <select class="form-control form-control-sm" id="transport_route" name="transport_route" style="height: 32px; font-size: 13px;" onchange="loadTransportFare(this.value)">
+                                    <option value="">Select Transport Route</option>
+                                    @foreach($transportRoutes as $route)
+                                        <option value="{{ $route }}" {{ old('transport_route', $student->transport_route) == $route ? 'selected' : '' }}>{{ $route }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            
+                            <!-- Transport Route Fare Field (hidden by default) -->
+                            <div class="mb-2" id="transport_fare_container" style="display: none;">
+                                <label for="transport_fare" class="form-label mb-0 fs-13 fw-medium">Transport Fare</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="transport_fare" name="transport_fare" placeholder="Transport fare amount" readonly style="height: 32px; font-size: 13px; background-color: #f8f9fa;" value="{{ old('transport_fare', $student->transport_fare) }}">
+                            </div>
+                            
+                            <div class="mb-2">
+                                <label for="generate_admission_fee" class="form-label mb-0 fs-13 fw-medium">Generate Admission Fee</label>
+                                <select class="form-control form-control-sm" id="generate_admission_fee" name="generate_admission_fee" style="height: 32px; font-size: 13px;" onchange="toggleAdmissionFeeAmount()">
+                                    <option value="">Select</option>
+                                    <option value="1" {{ old('generate_admission_fee', $student->generate_admission_fee ?? '') == '1' ? 'selected' : '' }}>Yes</option>
+                                    <option value="0" {{ old('generate_admission_fee', $student->generate_admission_fee ?? '') == '0' ? 'selected' : '' }}>No</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Admission Fee Amount Field (hidden by default) -->
+                            <div class="mb-2" id="admission_fee_amount_container" style="display: none;">
+                                <label for="admission_fee_amount" class="form-label mb-0 fs-13 fw-medium">Amount</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="admission_fee_amount" name="admission_fee_amount" placeholder="admission fee amount" style="height: 32px; font-size: 13px;" value="{{ old('admission_fee_amount', $student->admission_fee_amount) }}">
+                            </div>
+                            
+                            <div class="mb-2">
+                                <label for="generate_other_fee" class="form-label mb-0 fs-13 fw-medium">Generate Other Fee</label>
+                                <select class="form-control form-control-sm" id="generate_other_fee" name="generate_other_fee" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeFields()">
+                                    <option value="">Select</option>
+                                    <option value="1" {{ old('generate_other_fee', $student->generate_other_fee ?? '') == '1' ? 'selected' : '' }}>Yes</option>
+                                    <option value="0" {{ old('generate_other_fee', $student->generate_other_fee ?? '') == '0' ? 'selected' : '' }}>No</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Fee Type / Fee Head Dropdown (hidden by default) -->
+                            <div class="mb-2" id="fee_type_container" style="display: none;">
+                                <label for="fee_type" class="form-label mb-0 fs-13 fw-medium">Fee Type / Fee Head</label>
+                                <select class="form-control form-control-sm" id="fee_type" name="fee_type" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeAmount()">
+                                    <option value="">Select Fee Type</option>
+                                    @foreach($feeTypes as $feeType)
+                                        <option value="{{ $feeType }}" {{ old('fee_type', $student->fee_type) == $feeType ? 'selected' : '' }}>{{ $feeType }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            
+                            <!-- Other Fee Amount Field (hidden by default) -->
+                            <div class="mb-2" id="other_fee_amount_container" style="display: none;">
+                                <label for="other_fee_amount" class="form-label mb-0 fs-13 fw-medium">Amount</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="other_fee_amount" name="other_fee_amount" placeholder="Enter amount" style="height: 32px; font-size: 13px;" value="{{ old('other_fee_amount', $student->other_fee_amount) }}">
                             </div>
                             
                             <div class="mb-2">
@@ -250,8 +302,8 @@
                         Cancel
                     </a>
                     <button type="submit" class="btn btn-primary btn-sm" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
-                        Update Student
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: white;">save</span>
+                        <span style="color: white;">Update Student</span>
                     </button>
                 </div>
             </form>
@@ -260,8 +312,174 @@
 </div>
 
 <script>
+// Load transport route fare when route is selected
+function loadTransportFare(routeName) {
+    const transportFareContainer = document.getElementById('transport_fare_container');
+    const transportFareInput = document.getElementById('transport_fare');
+    
+    if (!routeName) {
+        // Hide transport fare field if no route selected
+        if (transportFareContainer) {
+            transportFareContainer.style.display = 'none';
+        }
+        if (transportFareInput) {
+            transportFareInput.value = '';
+        }
+        return;
+    }
+    
+    // Show transport fare field
+    if (transportFareContainer) {
+        transportFareContainer.style.display = 'block';
+    }
+    
+    // Fetch route fare via AJAX
+    fetch(`{{ route('admission.get-route-fare') }}?route=${encodeURIComponent(routeName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (transportFareInput) {
+                if (data.fare && data.fare > 0) {
+                    // Set fare amount in transport fare field (don't add to monthly fee)
+                    transportFareInput.value = parseFloat(data.fare).toFixed(2);
+                } else {
+                    transportFareInput.value = '';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading transport fare:', error);
+            if (transportFareInput) {
+                transportFareInput.value = '';
+            }
+        });
+}
+
+// Toggle admission fee amount field based on "Generate Admission Fee" selection
+function toggleAdmissionFeeAmount() {
+    const generateAdmissionFee = document.getElementById('generate_admission_fee');
+    const admissionFeeAmountContainer = document.getElementById('admission_fee_amount_container');
+    const admissionFeeAmountInput = document.getElementById('admission_fee_amount');
+    
+    if (generateAdmissionFee && admissionFeeAmountContainer) {
+        if (generateAdmissionFee.value === '1') {
+            admissionFeeAmountContainer.style.display = 'block';
+            if (admissionFeeAmountInput) {
+                admissionFeeAmountInput.required = true;
+            }
+        } else {
+            admissionFeeAmountContainer.style.display = 'none';
+            if (admissionFeeAmountInput) {
+                admissionFeeAmountInput.required = false;
+                admissionFeeAmountInput.value = '';
+            }
+        }
+    }
+}
+
+// Toggle other fee fields (Fee Type and Amount) based on "Generate Other Fee" selection
+function toggleOtherFeeFields() {
+    const generateOtherFee = document.getElementById('generate_other_fee');
+    const feeTypeContainer = document.getElementById('fee_type_container');
+    const feeTypeInput = document.getElementById('fee_type');
+    const otherFeeAmountContainer = document.getElementById('other_fee_amount_container');
+    const otherFeeAmountInput = document.getElementById('other_fee_amount');
+    
+    if (generateOtherFee && feeTypeContainer) {
+        if (generateOtherFee.value === '1') {
+            feeTypeContainer.style.display = 'block';
+            if (feeTypeInput) {
+                feeTypeInput.required = true;
+            }
+            // Check if fee type is already selected, then show amount field
+            if (feeTypeInput && feeTypeInput.value) {
+                toggleOtherFeeAmount();
+            }
+        } else {
+            feeTypeContainer.style.display = 'none';
+            otherFeeAmountContainer.style.display = 'none';
+            if (feeTypeInput) {
+                feeTypeInput.required = false;
+                feeTypeInput.value = '';
+            }
+            if (otherFeeAmountInput) {
+                otherFeeAmountInput.required = false;
+                otherFeeAmountInput.value = '';
+            }
+        }
+    }
+}
+
+// Toggle other fee amount field based on "Fee Type" selection
+function toggleOtherFeeAmount() {
+    const feeTypeInput = document.getElementById('fee_type');
+    const otherFeeAmountContainer = document.getElementById('other_fee_amount_container');
+    const otherFeeAmountInput = document.getElementById('other_fee_amount');
+    
+    if (feeTypeInput && otherFeeAmountContainer) {
+        if (feeTypeInput.value) {
+            otherFeeAmountContainer.style.display = 'block';
+            if (otherFeeAmountInput) {
+                otherFeeAmountInput.required = true;
+            }
+        } else {
+            otherFeeAmountContainer.style.display = 'none';
+            if (otherFeeAmountInput) {
+                otherFeeAmountInput.required = false;
+                otherFeeAmountInput.value = '';
+            }
+        }
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleAdmissionFeeAmount();
+    toggleOtherFeeFields();
+    
+    // Load transport fare if route is already selected
+    const transportRoute = document.getElementById('transport_route');
+    const transportFareContainer = document.getElementById('transport_fare_container');
+    const transportFareInput = document.getElementById('transport_fare');
+    
+    if (transportRoute && transportRoute.value) {
+        // If route is selected, show fare field
+        if (transportFareContainer) {
+            transportFareContainer.style.display = 'block';
+        }
+        // If fare value already exists, keep it; otherwise fetch from route
+        if (transportFareInput && !transportFareInput.value) {
+            loadTransportFare(transportRoute.value);
+        }
+    } else {
+        // Hide transport fare field if no route selected
+        if (transportFareContainer) {
+            transportFareContainer.style.display = 'none';
+        }
+    }
+    
+    // Show fee type and amount fields if they have values
+    const feeTypeInput = document.getElementById('fee_type');
+    const otherFeeAmountInput = document.getElementById('other_fee_amount');
+    if (feeTypeInput && feeTypeInput.value) {
+        const feeTypeContainer = document.getElementById('fee_type_container');
+        if (feeTypeContainer) {
+            feeTypeContainer.style.display = 'block';
+        }
+        toggleOtherFeeAmount();
+    }
+    if (otherFeeAmountInput && otherFeeAmountInput.value) {
+        const otherFeeAmountContainer = document.getElementById('other_fee_amount_container');
+        if (otherFeeAmountContainer) {
+            otherFeeAmountContainer.style.display = 'block';
+        }
+    }
+});
+
 function loadSections(className) {
     const sectionSelect = document.getElementById('section');
+    const currentSection = '{{ old('section', $student->section) }}';
+    
+    // Clear existing options but keep current section value
     sectionSelect.innerHTML = '<option value="">Select Section</option>';
     
     if (className) {
@@ -273,13 +491,33 @@ function loadSections(className) {
                         const option = document.createElement('option');
                         option.value = section;
                         option.textContent = section;
+                        // Mark as selected if it matches current section (case-insensitive)
+                        if (currentSection && section.toLowerCase().trim() === currentSection.toLowerCase().trim()) {
+                            option.selected = true;
+                        }
                         sectionSelect.appendChild(option);
                     });
+                }
+                // Don't add default sections - only show sections that actually exist for this class
+                
+                // If current section still not set, try to set it
+                if (currentSection && !sectionSelect.value) {
+                    // Try exact match first
+                    const options = Array.from(sectionSelect.options);
+                    for (let opt of options) {
+                        if (opt.value.toLowerCase().trim() === currentSection.toLowerCase().trim()) {
+                            opt.selected = true;
+                            break;
+                        }
+                    }
                 }
             })
             .catch(error => {
                 console.error('Error loading sections:', error);
             });
+    } else {
+        // If no class selected, clear sections
+        sectionSelect.innerHTML = '<option value="">Select Section</option>';
     }
 }
 
@@ -288,13 +526,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedClass = document.getElementById('class').value;
     if (selectedClass) {
         loadSections(selectedClass);
-        // Set the selected section after loading
-        setTimeout(() => {
-            const currentSection = '{{ old('section', $student->section) }}';
-            if (currentSection) {
-                document.getElementById('section').value = currentSection;
-            }
-        }, 500);
     }
 });
 </script>

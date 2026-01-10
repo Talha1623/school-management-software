@@ -171,7 +171,7 @@
                             name="email" 
                             class="form-control @error('email') is-invalid @enderror" 
                             placeholder="Enter your email"
-                            value="{{ old('email') }}"
+                            value="{{ $email ?? old('email') }}"
                             required
                             autofocus
                         >

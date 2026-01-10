@@ -2,378 +2,463 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Print Student Cards</title>
-    @php
-        use Illuminate\Support\Facades\Storage;
-    @endphp
+    <title></title>
+
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        *{
+            box-sizing:border-box;
+            font-family: 'Segoe UI', sans-serif;
         }
 
-        body {
-            background: #e5e5e5;
-            padding: 20px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        body{
+            background:#f2f2f2;
+            padding:20px;
         }
 
-        .print-container {
-            max-width: 100%;
-            margin: 0 auto;
-        }
-
-        .cards-grid {
-            display: grid;
+        /* GRID */
+        .cards-grid{
+            display:grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
+            gap:15px;
         }
 
-        @media print {
-            body {
-                background: white;
-                padding: 0;
-            }
-            
-            .cards-grid {
-                grid-template-columns: repeat(4, 1fr);
-                gap: 15px;
-                page-break-inside: avoid;
-            }
-
-            .student-card {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-
-            @page {
-                size: A4 landscape;
-                margin: 10mm;
-            }
+        /* CARD */
+        .student-card{
+            background:{{ $designSettings['gradient_color1'] ?? '#FFFFFF' }};
+            border-radius:{{ ($designSettings['border_style'] ?? 'rounded') == 'rounded' ? '12px' : (($designSettings['border_style'] ?? 'rounded') == 'square' ? '0px' : '12px') }};
+            border:{{ ($designSettings['border_style'] ?? 'rounded') == 'none' ? 'none' : '2px solid ' . ($designSettings['accent_color'] ?? '#003471') }};
+            height:220px;
+            padding:12px;
+            position:relative;
+            overflow:hidden;
         }
 
-        /* Student Card Styling */
-        .student-card {
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            border-radius: 14px;
-            padding: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-            position: relative;
-            width: 100%;
-            min-height: 500px;
-            display: flex;
-            flex-direction: column;
-            border: 2px solid #e9ecef;
-            overflow: hidden;
+        /* HEADER */
+        .card-header{
+            display:flex;
+            align-items:center;
+            gap:8px;
+            border-bottom:2px solid {{ $designSettings['accent_color'] ?? '#003471' }};
+            padding-bottom:6px;
         }
 
-        .student-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #003471 0%, #004a9f 50%, #003471 100%);
+        .school-logo{
+            width:40px;
+            height:40px;
+            border-radius:50%;
+            background:#fff;
+            border:2px solid {{ $designSettings['accent_color'] ?? '#003471' }};
+            padding:3px;
         }
 
-        .card-header {
-            margin-bottom: 12px;
+        .school-logo img{
+            width:100%;
+            height:100%;
+            object-fit:contain;
         }
 
-        .header-content {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
+        .school-name{
+            font-size:13px;
+            font-weight:700;
+            color:{{ $designSettings['accent_color'] ?? '#003471' }};
+            line-height:1.2;
         }
 
-        .school-logo {
-            flex-shrink: 0;
+        /* BODY */
+        .card-body{
+            display:flex;
+            gap:10px;
+            margin-top:10px;
         }
 
-        .logo-img {
-            width: 50px;
-            height: 50px;
-            object-fit: contain;
-            border-radius: 8px;
+        /* PHOTO */
+        .photo-box{
+            text-align:center;
+        }
+
+        .photo-box img{
+            width:70px;
+            height:70px;
+            border-radius:50%;
+            border:2px solid {{ $designSettings['accent_color'] ?? '#003471' }};
+            object-fit:cover;
+        }
+
+        .student-name{
+            font-size:11px;
+            font-weight:700;
+            margin-top:4px;
+            color:{{ $designSettings['student_name_color'] ?? '#000000' }};
+        }
+
+        /* DETAILS */
+        .details{
+            flex:1;
+            font-size:10px;
+        }
+
+        .detail{
+            margin-bottom:4px;
+            color:{{ $designSettings['details_text_color'] ?? '#000000' }};
+        }
+
+        .detail span{
+            font-weight:700;
+            color:{{ $designSettings['accent_color'] ?? '#003471' }};
+        }
+
+        /* QR */
+        .qr{
+            text-align:center;
+            margin-top:6px;
+        }
+
+        .qr img{
+            width:55px;
+            height:55px;
+        }
+
+        /* FOOTER */
+        .footer{
+            position:absolute;
+            bottom:0;
+            left:0;
+            right:0;
+            background:{{ $designSettings['accent_color'] ?? '#003471' }};
+            color:{{ $designSettings['footer_text_color'] ?? '#FFFFFF' }};
+            font-size:8px;
+            text-align:center;
+            padding:4px;
+        }
+
+        /* DESIGN PANEL */
+        .design-panel {
             background: white;
-            padding: 5px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .school-info {
-            flex: 1;
-        }
-
-        .school-name {
-            font-size: 16px;
-            font-weight: 700;
-            color: #003471;
-            margin-bottom: 3px;
-            line-height: 1.3;
-            letter-spacing: 0.3px;
-        }
-
-        .campus-name {
-            font-size: 12px;
-            color: #555;
-            margin-bottom: 2px;
-            line-height: 1.3;
-            font-weight: 500;
-        }
-
-        .contact-info {
-            font-size: 10px;
-            color: #777;
-            line-height: 1.3;
-        }
-
-        .card-title {
-            background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            text-align: center;
-            font-weight: 700;
-            font-size: 14px;
-            margin-bottom: 18px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            box-shadow: 0 2px 6px rgba(0, 52, 113, 0.3);
-        }
-
-        .student-photo-section {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        .student-photo {
-            width: 120px;
-            height: 120px;
-            border-radius: 10px;
-            object-fit: cover;
-            border: 3px solid #003471;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-            background: #f8f9fa;
-        }
-
-        .photo-placeholder {
-            width: 120px;
-            height: 120px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border: 3px solid #003471;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .photo-placeholder-icon {
-            font-size: 50px;
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .card-details {
-            position: relative;
-            margin-bottom: 15px;
-            flex: 1;
-            padding-right: 10px;
-        }
-
-        .card-details::before {
-            content: '';
-            position: absolute;
-            top: -10px;
-            right: -10px;
-            width: 100px;
-            height: 100px;
-            background: radial-gradient(circle, rgba(0, 52, 113, 0.05) 0%, transparent 70%);
-            border-radius: 50%;
-            z-index: 0;
-        }
-
-        .detail-item {
-            margin-bottom: 10px;
-            position: relative;
-            z-index: 1;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.6);
-            border-radius: 6px;
-            border-left: 3px solid #003471;
-        }
-
-        .detail-label {
-            font-size: 10px;
-            color: #666;
-            display: block;
-            margin-bottom: 4px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .detail-value {
-            font-size: 13px;
-            color: #003471;
-            font-weight: 700;
-            display: block;
-            line-height: 1.4;
-        }
-
-        .card-qr {
-            text-align: center;
-            margin: 18px 0;
-            background: white;
+            border: 2px solid #003471;
+            border-radius: 12px;
             padding: 15px;
-            border-radius: 10px;
-            border: 2px solid #e9ecef;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .design-panel-content {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 10px;
+            align-items: flex-start;
+        }
+        
+        .design-panel-section {
+            grid-column: span 1;
         }
 
-        .qr-code-img {
-            width: 130px;
-            height: 130px;
+        .design-panel h3 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #003471;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #003471;
+            padding-bottom: 8px;
+        }
+
+        .color-group {
+            margin-bottom: 8px;
+        }
+
+        .color-group label {
             display: block;
-            margin: 0 auto;
+            font-size: 10px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 3px;
         }
 
-        .card-footer {
-            font-size: 9px;
-            color: #666;
-            text-align: center;
-            margin-top: auto;
-            padding-top: 15px;
-            border-top: 2px solid #e9ecef;
-            line-height: 1.5;
-            font-weight: 500;
+        .color-group input[type="color"] {
+            width: 40px;
+            height: 28px;
+            border: 2px solid #003471;
+            border-radius: 4px;
+            cursor: pointer;
+            vertical-align: middle;
         }
 
-        @media (max-width: 1400px) {
-            .cards-grid {
-                grid-template-columns: repeat(3, 1fr);
+        .color-group input[type="text"] {
+            width: calc(100% - 50px);
+            height: 28px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 10px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
+        .design-options {
+            margin-top: 0;
+        }
+
+        .design-options > div {
+            margin-bottom: 8px;
+        }
+
+        .design-options label {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 600;
+            color: #333;
+            margin-right: 6px;
+            min-width: 90px;
+        }
+
+        .design-options select {
+            width: calc(100% - 100px);
+            height: 28px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 10px;
+        }
+
+        .apply-btn {
+            background: #003471;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .apply-btn:hover {
+            background: #004a9a;
+        }
+
+        .color-row {
+            display: none;
+        }
+
+        .color-row .color-group {
+            margin-bottom: 8px;
+        }
+
+        /* PRINT */
+        @media print{
+            .design-panel {
+                display: none !important;
             }
-        }
-
-        @media (max-width: 1000px) {
-            .cards-grid {
-                grid-template-columns: repeat(2, 1fr);
+            body{
+                background:white;
             }
-        }
-
-        @media (max-width: 600px) {
-            .cards-grid {
-                grid-template-columns: 1fr;
+            .cards-grid{
+                grid-template-columns: repeat(4,1fr);
+                gap:8px;
+            }
+            @page{
+                size:A4 {{ ($designSettings['orientation'] ?? 'portrait') == 'landscape' ? 'landscape' : 'portrait' }};
+                margin:10mm;
             }
         }
     </style>
 </head>
+
 <body>
-    <div class="print-container">
-        @if($students->isEmpty())
-            <div style="text-align: center; padding: 50px; color: #666;">
-                <h3>No students found matching the selected filters.</h3>
-                <p>Please adjust your filter criteria and try again.</p>
+
+<!-- Card Design Customization Panel -->
+<div class="design-panel">
+    <h3>Card Design Customization</h3>
+    <div class="design-panel-content">
+        <div class="design-panel-section">
+            <div class="color-group">
+                <label>Accent Color:</label>
+                <input type="color" id="accentColor" value="{{ $designSettings['accent_color'] ?? '#003471' }}">
+                <input type="text" id="accentColorText" value="{{ $designSettings['accent_color'] ?? '#003471' }}">
             </div>
-        @else
-        <div class="cards-grid">
-            @foreach($students as $student)
-            <div class="student-card">
-                <!-- Header -->
-                <div class="card-header">
-                    <div class="header-content">
-                        <div class="school-logo">
-                            <img src="{{ asset('assets/images/logo-icon.png') }}" alt="School Logo" class="logo-img" onerror="this.style.display='none'">
-                        </div>
-                        <div class="school-info">
-                            <h6 class="school-name">{{ config('app.name', 'ICMS Management System') }}</h6>
-                            <p class="campus-name">{{ $student->campus ?? 'All Campuses' }}</p>
-                            @if(config('app.contact'))
-                            <p class="contact-info">Contact: {{ config('app.contact') }}</p>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Title Bar -->
-                <div class="card-title">
-                    Student ID Card
-                </div>
-                
-                <!-- Student Photo -->
-                <div class="student-photo-section">
-                    @if($student->photo)
-                        <img src="{{ Storage::url($student->photo) }}" alt="Student Photo" class="student-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
-                        <div class="photo-placeholder" style="display: none;">
-                            <span class="photo-placeholder-icon">👤</span>
-                        </div>
-                    @else
-                        <div class="photo-placeholder">
-                            <span class="photo-placeholder-icon">👤</span>
-                        </div>
-                    @endif
-                </div>
-                
-                <!-- Details -->
-                <div class="card-details">
-                    <div class="detail-item">
-                        <span class="detail-label">Student Name:</span>
-                        <span class="detail-value">{{ $student->student_name }}</span>
-                    </div>
-                    @if($student->student_code)
-                    <div class="detail-item">
-                        <span class="detail-label">Student Code:</span>
-                        <span class="detail-value">{{ $student->student_code }}</span>
-                    </div>
-                    @endif
-                    @if($student->gr_number)
-                    <div class="detail-item">
-                        <span class="detail-label">GR Number:</span>
-                        <span class="detail-value">{{ $student->gr_number }}</span>
-                    </div>
-                    @endif
-                    <div class="detail-item">
-                        <span class="detail-label">Class:</span>
-                        <span class="detail-value">{{ $student->class ?? 'N/A' }}</span>
-                    </div>
-                    @if($student->section)
-                    <div class="detail-item">
-                        <span class="detail-label">Section:</span>
-                        <span class="detail-value">{{ $student->section }}</span>
-                    </div>
-                    @endif
-                    <div class="detail-item">
-                        <span class="detail-label">Campus:</span>
-                        <span class="detail-value">{{ $student->campus ?? 'N/A' }}</span>
-                    </div>
-                </div>
-                
-                <!-- QR Code -->
-                <div class="card-qr">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ urlencode('StudentID:' . $student->id . ':' . $student->student_code . ':' . $student->student_name) }}" alt="QR Code" class="qr-code-img">
-                </div>
-                
-                <!-- Footer -->
-                <div class="card-footer">
-                    This is an official student ID card. Please carry it at all times while on campus.
-                </div>
-            </div>
-            @endforeach
         </div>
-        @endif
+        
+        <div class="design-panel-section">
+            <div class="color-group">
+                <label>Secondary Color:</label>
+                <input type="color" id="secondaryColor" value="{{ $designSettings['secondary_color'] ?? '#F08080' }}">
+                <input type="text" id="secondaryColorText" value="{{ $designSettings['secondary_color'] ?? '#F08080' }}">
+            </div>
+        </div>
+        
+        <div class="design-panel-section">
+            <div class="color-group">
+                <label>Gradient Color 1:</label>
+                <input type="color" id="gradientColor1" value="{{ $designSettings['gradient_color1'] ?? '#FFFFFF' }}">
+                <input type="text" id="gradientColor1Text" value="{{ $designSettings['gradient_color1'] ?? '#FFFFFF' }}">
+            </div>
+        </div>
+        
+        <div class="design-panel-section">
+            <div class="color-group">
+                <label>Gradient Color 2:</label>
+                <input type="color" id="gradientColor2" value="{{ $designSettings['gradient_color2'] ?? '#F8F9FA' }}">
+                <input type="text" id="gradientColor2Text" value="{{ $designSettings['gradient_color2'] ?? '#F8F9FA' }}">
+            </div>
+        </div>
+        
+        <div class="design-panel-section">
+            <div class="color-group">
+                <label>Student Name Color:</label>
+                <input type="color" id="studentNameColor" value="{{ $designSettings['student_name_color'] ?? '#000000' }}">
+                <input type="text" id="studentNameColorText" value="{{ $designSettings['student_name_color'] ?? '#000000' }}">
+            </div>
+        </div>
+        
+        <div class="design-panel-section">
+            <div class="color-group">
+                <label>Details Text Color:</label>
+                <input type="color" id="detailsTextColor" value="{{ $designSettings['details_text_color'] ?? '#000000' }}">
+                <input type="text" id="detailsTextColorText" value="{{ $designSettings['details_text_color'] ?? '#000000' }}">
+            </div>
+        </div>
+        
+        <div class="design-panel-section">
+            <div class="color-group">
+                <label>Footer Text Color:</label>
+                <input type="color" id="footerTextColor" value="{{ $designSettings['footer_text_color'] ?? '#FFFFFF' }}">
+                <input type="text" id="footerTextColorText" value="{{ $designSettings['footer_text_color'] ?? '#FFFFFF' }}">
+            </div>
+        </div>
+        
+        <div class="design-panel-section">
+            <div class="design-options">
+                <div>
+                    <label>Orientation:</label>
+                    <select id="orientation">
+                        <option value="landscape" {{ ($designSettings['orientation'] ?? 'portrait') == 'landscape' ? 'selected' : '' }}>Landscape</option>
+                        <option value="portrait" {{ ($designSettings['orientation'] ?? 'portrait') == 'portrait' ? 'selected' : '' }}>Portrait</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Show Monogram:</label>
+                    <select id="showMonogram">
+                        <option value="yes" {{ ($designSettings['show_monogram'] ?? 'yes') == 'yes' ? 'selected' : '' }}>Yes</option>
+                        <option value="no" {{ ($designSettings['show_monogram'] ?? 'yes') == 'no' ? 'selected' : '' }}>No</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Card Style:</label>
+                    <select id="cardStyle">
+                        <option value="modern" {{ ($designSettings['card_style'] ?? 'modern') == 'modern' ? 'selected' : '' }}>Modern</option>
+                        <option value="classic" {{ ($designSettings['card_style'] ?? 'modern') == 'classic' ? 'selected' : '' }}>Classic</option>
+                        <option value="minimal" {{ ($designSettings['card_style'] ?? 'modern') == 'minimal' ? 'selected' : '' }}>Minimal</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Border Style:</label>
+                    <select id="borderStyle">
+                        <option value="rounded" {{ ($designSettings['border_style'] ?? 'rounded') == 'rounded' ? 'selected' : '' }}>Rounded</option>
+                        <option value="square" {{ ($designSettings['border_style'] ?? 'rounded') == 'square' ? 'selected' : '' }}>Square</option>
+                        <option value="none" {{ ($designSettings['border_style'] ?? 'rounded') == 'none' ? 'selected' : '' }}>None</option>
+                    </select>
+                </div>
+            </div>
+            <button class="apply-btn" onclick="applyDesignSettings()">Apply Design</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Sync color picker with text input
+    document.querySelectorAll('input[type="color"]').forEach(colorInput => {
+        const textInput = document.getElementById(colorInput.id + 'Text');
+        if (textInput) {
+            colorInput.addEventListener('input', function() {
+                textInput.value = this.value;
+            });
+            textInput.addEventListener('input', function() {
+                if (/^#[0-9A-F]{6}$/i.test(this.value)) {
+                    colorInput.value = this.value;
+                }
+            });
+        }
+    });
+
+    function applyDesignSettings() {
+        const params = new URLSearchParams(window.location.search);
+        
+        // Get all color values
+        params.set('accent_color', document.getElementById('accentColor').value);
+        params.set('secondary_color', document.getElementById('secondaryColor').value);
+        params.set('gradient_color1', document.getElementById('gradientColor1').value);
+        params.set('gradient_color2', document.getElementById('gradientColor2').value);
+        params.set('student_name_color', document.getElementById('studentNameColor').value);
+        params.set('details_text_color', document.getElementById('detailsTextColor').value);
+        params.set('footer_text_color', document.getElementById('footerTextColor').value);
+        
+        // Get design options
+        params.set('orientation', document.getElementById('orientation').value);
+        params.set('show_monogram', document.getElementById('showMonogram').value);
+        params.set('card_style', document.getElementById('cardStyle').value);
+        params.set('border_style', document.getElementById('borderStyle').value);
+        
+        // Reload page with new parameters
+        window.location.search = params.toString();
+    }
+</script>
+
+<div class="cards-grid">
+
+@foreach($students as $student)
+<div class="student-card">
+
+    <!-- HEADER -->
+    <div class="card-header">
+        <div class="school-logo">
+            <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="School Logo" onerror="this.src='{{ asset('assets/images/logo-icon.png') }}'">
+        </div>
+        <div class="school-name">
+            {{ config('app.name','School Name') }}<br>
+            Student ID Card
+        </div>
     </div>
 
-    <script>
-        // Auto print when page loads (only if students exist)
-        window.onload = function() {
-            @if(!$students->isEmpty())
-            window.print();
+    <!-- BODY -->
+    <div class="card-body">
+
+        <!-- PHOTO -->
+        <div class="photo-box">
+            @if($student->photo)
+                <img src="{{ Storage::url($student->photo) }}" alt="Student Photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="photo-placeholder" style="display: none; width: 70px; height: 70px; border-radius: 50%; background: linear-gradient(135deg, {{ $designSettings['accent_color'] ?? '#003471' }} 0%, {{ $designSettings['secondary_color'] ?? '#F08080' }} 100%); border: 2px solid {{ $designSettings['accent_color'] ?? '#003471' }}; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                    <span style="font-size: 35px; color: rgba(255, 255, 255, 0.8);">👤</span>
+                </div>
+            @else
+                <div class="photo-placeholder" style="width: 70px; height: 70px; border-radius: 50%; background: linear-gradient(135deg, {{ $designSettings['accent_color'] ?? '#003471' }} 0%, {{ $designSettings['secondary_color'] ?? '#F08080' }} 100%); border: 2px solid {{ $designSettings['accent_color'] ?? '#003471' }}; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                    <span style="font-size: 35px; color: rgba(255, 255, 255, 0.8);">👤</span>
+                </div>
             @endif
-        };
-    </script>
+            <div class="student-name">{{ $student->student_name }}</div>
+        </div>
+
+        <!-- DETAILS -->
+        <div class="details">
+            <div class="detail"><span>ID:</span> {{ $student->student_code }}</div>
+            <div class="detail"><span>Class:</span> {{ $student->class }}</div>
+            <div class="detail"><span>Section:</span> {{ $student->section }}</div>
+            <div class="detail"><span>Campus:</span> {{ $student->campus }}</div>
+
+            <div class="qr">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=60x60&data={{ $student->student_code }}">
+            </div>
+        </div>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        Official Student ID Card • Valid for Academic Use
+    </div>
+
+</div>
+@endforeach
+
+</div>
+
 </body>
 </html>
-

@@ -1,16 +1,16 @@
-@extends('layouts.app')
+@extends('layouts.accountant')
 
-@section('title', 'Assign Grades - For Combined Result')
+@section('title', 'Expense Categories - Accountant')
 
 @section('content')
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="mb-0 fs-16 fw-semibold">Assign Grades - For Combined Result</h4>
-                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 test-add-btn" data-bs-toggle="modal" data-bs-target="#gradeModal" onclick="resetForm()">
+                <h4 class="mb-0 fs-16 fw-semibold">Expense Categories</h4>
+                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 category-add-btn" data-bs-toggle="modal" data-bs-target="#categoryModal" onclick="resetForm()">
                     <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Grade</span>
+                    <span>Add New Category</span>
                 </button>
             </div>
 
@@ -47,11 +47,11 @@
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <!-- Export Buttons -->
                     <div class="d-flex gap-2">
-                        <a href="{{ route('test.assign-grades.combined.export', ['format' => 'excel']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                        <a href="{{ route('accountant.expense-categories.export', ['format' => 'excel']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
                             <span>Excel</span>
                         </a>
-                        <a href="{{ route('test.assign-grades.combined.export', ['format' => 'pdf']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                        <a href="{{ route('accountant.expense-categories.export', ['format' => 'pdf']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
                             <span>PDF</span>
                         </a>
@@ -68,7 +68,7 @@
                             <span class="input-group-text bg-light border-end-0" style="background-color: #f0f4ff !important; border-color: #e0e7ff; padding: 4px 8px;">
                                 <span class="material-symbols-outlined" style="font-size: 14px; color: #003471;">search</span>
                             </span>
-                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search grades..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 13px;">
+                            <input type="text" id="searchInput" class="form-control border-start-0 border-end-0" placeholder="Search categories..." value="{{ request('search') }}" onkeypress="handleSearchKeyPress(event)" oninput="handleSearchInput(event)" style="padding: 4px 8px; font-size: 13px;">
                             @if(request('search'))
                                 <button class="btn btn-outline-secondary border-start-0 border-end-0" type="button" onclick="clearSearch()" title="Clear search" style="padding: 4px 8px;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
@@ -85,8 +85,8 @@
             <!-- Table Header -->
             <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                 <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">grade</span>
-                    <span>Combined Result Grades</span>
+                    <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
+                    <span>Categories List</span>
                 </h5>
             </div>
 
@@ -95,10 +95,10 @@
                 <div class="search-results-info">
                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">search</span>
                     <strong>Search Results:</strong> Showing results for "<strong>{{ request('search') }}</strong>"
-                    @if(isset($grades))
-                        ({{ $grades->total() }} {{ $grades->total() == 1 ? 'result' : 'results' }} found)
+                    @if(isset($categories))
+                        ({{ $categories->total() }} {{ Str::plural('result', $categories->total()) }} found)
                     @endif
-                    <a href="{{ route('test.assign-grades.combined') }}" class="text-decoration-none ms-2" style="color: #003471;">
+                    <a href="{{ route('accountant.expense-categories') }}" class="text-decoration-none ms-2" style="color: #003471;">
                         <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span>
                         Clear
                     </a>
@@ -107,41 +107,35 @@
 
             <div class="default-table-area" style="margin-top: 0;">
                 <div class="table-responsive">
-                    <table class="table">
+                    <table class="table table-sm table-hover">
                         <thead>
                             <tr>
                                 <th>#</th>
+                                <th>Category Name</th>
                                 <th>Campus</th>
-                                <th>Name</th>
-                                <th>From %</th>
-                                <th>To %</th>
-                                <th>Session</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @if(isset($grades) && $grades->count() > 0)
-                                @forelse($grades as $grade)
+                            @if(isset($categories) && $categories->count() > 0)
+                                @forelse($categories as $category)
                                     <tr>
-                                        <td>{{ $loop->iteration + (($grades->currentPage() - 1) * $grades->perPage()) }}</td>
+                                        <td>{{ $loop->iteration + (($categories->currentPage() - 1) * $categories->perPage()) }}</td>
                                         <td>
-                                            <span class="badge bg-info text-white">{{ $grade->campus }}</span>
+                                            <strong class="text-primary">{{ $category->category_name }}</strong>
                                         </td>
                                         <td>
-                                            <strong class="text-primary">{{ $grade->name }}</strong>
+                                            <span class="badge bg-info text-white">{{ $category->campus }}</span>
                                         </td>
-                                        <td>{{ number_format($grade->from_percentage, 2) }}%</td>
-                                        <td>{{ number_format($grade->to_percentage, 2) }}%</td>
-                                        <td>{{ $grade->session }}</td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editGrade({{ $grade->id }}, '{{ addslashes($grade->campus) }}', '{{ addslashes($grade->name) }}', '{{ $grade->from_percentage }}', '{{ $grade->to_percentage }}', '{{ addslashes($grade->session) }}')">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editCategory({{ $category->id }}, '{{ addslashes($category->category_name) }}', '{{ addslashes($category->campus) }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this grade?')) { document.getElementById('delete-form-{{ $grade->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this category?')) { document.getElementById('delete-form-{{ $category->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
-                                                <form id="delete-form-{{ $grade->id }}" action="{{ route('test.assign-grades.combined.destroy', $grade->id) }}" method="POST" class="d-none">
+                                                <form id="delete-form-{{ $category->id }}" action="{{ route('accountant.expense-categories.destroy', $category->id) }}" method="POST" class="d-none">
                                                     @csrf
                                                     @method('DELETE')
                                                 </form>
@@ -150,17 +144,17 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-5">
+                                        <td colspan="4" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
-                                            <p class="mt-2 mb-0">No grades found.</p>
+                                            <p class="mt-2 mb-0">No categories found.</p>
                                         </td>
                                     </tr>
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
+                                    <td colspan="4" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
-                                        <p class="mt-2 mb-0">No grades found.</p>
+                                        <p class="mt-2 mb-0">No categories found.</p>
                                     </td>
                                 </tr>
                             @endif
@@ -169,91 +163,67 @@
                 </div>
             </div>
 
-            @if(isset($grades) && $grades->hasPages())
+            @if(isset($categories) && $categories->hasPages())
                 <div class="mt-3">
-                    {{ $grades->links() }}
+                    {{ $categories->links() }}
                 </div>
             @endif
         </div>
     </div>
 </div>
 
-<!-- Grade Modal -->
-<div class="modal fade" id="gradeModal" tabindex="-1" aria-labelledby="gradeModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+<!-- Category Modal -->
+<div class="modal fade" id="categoryModal" tabindex="-1" aria-labelledby="categoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-14 fw-semibold mb-0 d-flex align-items-center gap-2" id="gradeModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">grade</span>
-                    <span>Add New Grade</span>
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="categoryModalLabel">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">category</span>
+                    <span>Add New Category</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
-            <form id="gradeForm" method="POST" action="{{ route('test.assign-grades.combined.store') }}">
+            <form id="categoryForm" method="POST" action="{{ route('accountant.expense-categories.store') }}">
                 @csrf
                 <div id="methodField"></div>
-                <div class="modal-body p-2">
+                <div class="modal-body p-3">
                     <div class="row g-2">
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus <span class="text-danger">*</span></label>
-                            <div class="input-group input-group-sm test-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; padding: 4px 8px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px;">location_on</span>
+                        <div class="col-md-12">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Category Name <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm category-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">category</span>
                                 </span>
-                                <select class="form-control test-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 32px; font-size: 12px;">
-                                    <option value="">Select Campus</option>
-                                    @foreach($campusesList as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Name <span class="text-danger">*</span></label>
-                            <div class="input-group input-group-sm test-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; padding: 4px 8px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px;">badge</span>
-                                </span>
-                                <input type="text" class="form-control test-input" name="name" id="name" placeholder="Enter grade name (e.g., A+, A, B+)" required style="height: 32px; font-size: 12px;">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">From % <span class="text-danger">*</span></label>
-                            <div class="input-group input-group-sm test-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; padding: 4px 8px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px;">trending_up</span>
-                                </span>
-                                <input type="number" class="form-control test-input" name="from_percentage" id="from_percentage" placeholder="From percentage" min="0" max="100" step="0.01" required style="height: 32px; font-size: 12px;">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">To % <span class="text-danger">*</span></label>
-                            <div class="input-group input-group-sm test-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; padding: 4px 8px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px;">trending_down</span>
-                                </span>
-                                <input type="number" class="form-control test-input" name="to_percentage" id="to_percentage" placeholder="To percentage" min="0" max="100" step="0.01" required style="height: 32px; font-size: 12px;">
+                                <input type="text" class="form-control category-input" name="category_name" id="category_name" placeholder="Enter category name" required>
                             </div>
                         </div>
                         <div class="col-md-12">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Session <span class="text-danger">*</span></label>
-                            <div class="input-group input-group-sm test-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; padding: 4px 8px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px;">event</span>
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm category-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <select class="form-control test-input" name="session" id="session" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 32px; font-size: 12px;">
-                                    <option value="">Select Session</option>
-                                    @foreach($sessions as $session)
-                                        <option value="{{ $session }}">{{ $session }}</option>
-                                    @endforeach
+                                <select class="form-control category-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Campus</option>
+                                    @if(isset($campuses) && $campuses->count() > 0)
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                        @endforeach
+                                    @endif
                                 </select>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer p-2 border-top">
-                    <button type="button" class="btn btn-sm btn-secondary rounded-8" data-bs-dismiss="modal" style="height: 32px; font-size: 12px; padding: 4px 12px;">Cancel</button>
-                    <button type="submit" class="btn btn-sm rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; height: 32px; font-size: 12px; padding: 4px 12px;">Save Grade</button>
+                <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                    <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none; transition: all 0.3s ease;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 category-submit-btn">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+                        Save Category
+                    </button>
                 </div>
             </form>
         </div>
@@ -261,7 +231,79 @@
 </div>
 
 <style>
-    .test-add-btn {
+    /* Category Form Styling */
+    #categoryModal .category-input-group {
+        height: 36px;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        border: 1px solid #dee2e6;
+    }
+    
+    #categoryModal .category-input-group:focus-within {
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+        border-color: #003471;
+    }
+    
+    #categoryModal .category-input {
+        height: 36px;
+        font-size: 13px;
+        padding: 0.5rem 0.75rem;
+        border: none;
+        border-left: 1px solid #e0e7ff;
+        border-radius: 0 8px 8px 0;
+        transition: all 0.3s ease;
+    }
+    
+    #categoryModal .category-input:focus {
+        border-left-color: #003471;
+        box-shadow: none;
+        outline: none;
+    }
+    
+    #categoryModal .input-group-text {
+        height: 36px;
+        padding: 0 0.75rem;
+        display: flex;
+        align-items: center;
+        border: none;
+        border-right: 1px solid #e0e7ff;
+        border-radius: 8px 0 0 8px;
+        transition: all 0.3s ease;
+    }
+    
+    #categoryModal .category-input-group:focus-within .input-group-text {
+        background-color: #003471 !important;
+        color: white !important;
+        border-right-color: #003471;
+    }
+    
+    #categoryModal .form-label {
+        margin-bottom: 0.4rem;
+        line-height: 1.3;
+    }
+    
+    #categoryModal .category-submit-btn {
+        background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0, 52, 113, 0.25);
+    }
+    
+    #categoryModal .category-submit-btn:hover {
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 52, 113, 0.35);
+    }
+    
+    #categoryModal .category-submit-btn:active {
+        transform: translateY(0);
+    }
+    
+    /* Add New Button Styling */
+    .category-add-btn {
         background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
         color: white;
         border: none;
@@ -270,13 +312,22 @@
         box-shadow: 0 2px 6px rgba(0, 52, 113, 0.2);
     }
     
-    .test-add-btn:hover {
+    .category-add-btn:hover {
         background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
         transform: translateY(-1px);
         box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
         color: white;
     }
     
+    .category-add-btn:active {
+        transform: translateY(0);
+    }
+    
+    .rounded-8 {
+        border-radius: 8px;
+    }
+    
+    /* Export Buttons Styling */
     .export-btn {
         border: none;
         font-weight: 500;
@@ -325,6 +376,11 @@
         box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
     }
     
+    .export-btn:active {
+        transform: translateY(0);
+    }
+    
+    /* Search Input Group Styling */
     .search-input-group {
         border-radius: 8px;
         overflow: hidden;
@@ -342,6 +398,19 @@
         border: none;
         font-size: 13px;
         height: 32px;
+        line-height: 1.4;
+    }
+    
+    .search-input-group .form-control:focus {
+        box-shadow: none;
+        border: none;
+    }
+    
+    .search-input-group .input-group-text {
+        height: 32px;
+        padding: 4px 8px;
+        display: flex;
+        align-items: center;
     }
     
     .search-btn {
@@ -363,6 +432,12 @@
         box-shadow: 0 2px 6px rgba(0, 52, 113, 0.3);
     }
     
+    .search-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    
+    /* Search Results Info */
     .search-results-info {
         padding: 8px 12px;
         background-color: #e7f3ff;
@@ -372,28 +447,35 @@
         font-size: 13px;
     }
     
+    /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
         border-spacing: 0;
         border-collapse: collapse;
         border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .default-table-area table thead {
+        border-bottom: 1px solid #dee2e6;
+        background-color: #f8f9fa;
     }
     
     .default-table-area table thead th {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         font-weight: 600;
         vertical-align: middle;
         line-height: 1.3;
-        height: 32px;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
     
     .default-table-area table tbody td {
-        padding: 5px 10px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 13px;
         vertical-align: middle;
         line-height: 1.4;
         border: 1px solid #dee2e6;
@@ -407,96 +489,78 @@
         font-size: 11px;
         padding: 3px 6px;
         font-weight: 500;
-    }
-
-    .test-input-group {
-        border-radius: 8px;
-        overflow: hidden;
-        border: 1px solid #e0e7ff;
-    }
-
-    .test-input {
-        border: none;
-        padding: 4px 8px;
-        font-size: 12px;
-        height: 32px;
-    }
-
-    .test-input:focus {
-        outline: none;
-        box-shadow: none;
+        border-radius: 4px;
     }
     
-    .modal-body {
-        padding: 12px !important;
+    .default-table-area .btn-sm {
+        font-size: 11px;
+        padding: 3px 6px;
+        min-height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
     }
     
-    .form-label {
-        margin-bottom: 4px !important;
-        font-size: 12px !important;
+    .default-table-area .btn-sm .material-symbols-outlined {
+        font-size: 14px !important;
+        vertical-align: middle;
+        color: white !important;
+        line-height: 1;
+        display: inline-block;
+    }
+    
+    .default-table-area .btn-primary .material-symbols-outlined,
+    .default-table-area .btn-danger .material-symbols-outlined {
+        color: white !important;
+    }
+    
+    .default-table-area table tbody td strong {
+        font-size: 13px;
+        font-weight: 600;
+    }
+    
+    #categoryModal select.category-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23003471' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        padding-right: 2.5rem;
     }
 </style>
 
 <script>
-// Load campuses dynamically
-function loadCampuses() {
-    const campusSelect = document.getElementById('campus');
-    if (!campusSelect) return;
-    
-    const currentValue = campusSelect.value;
-    campusSelect.innerHTML = '<option value="">Loading...</option>';
-    
-    fetch(`{{ route('test.assign-grades.get-campuses') }}`)
-        .then(response => response.json())
-        .then(data => {
-            campusSelect.innerHTML = '<option value="">Select Campus</option>';
-            if (data.campuses && data.campuses.length > 0) {
-                data.campuses.forEach(function(campus) {
-                    const option = document.createElement('option');
-                    option.value = campus;
-                    option.textContent = campus;
-                    // Restore selected value if it still exists
-                    if (campus === currentValue) {
-                        option.selected = true;
-                    }
-                    campusSelect.appendChild(option);
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error loading campuses:', error);
-            campusSelect.innerHTML = '<option value="">Select Campus</option>';
-        });
-}
-
-// Reset form when opening modal for new grade
+// Reset form when opening modal for new category
 function resetForm() {
-    document.getElementById('gradeForm').reset();
-    document.getElementById('gradeForm').action = "{{ route('test.assign-grades.combined.store') }}";
+    document.getElementById('categoryForm').reset();
+    document.getElementById('categoryForm').action = "{{ route('accountant.expense-categories.store') }}";
     document.getElementById('methodField').innerHTML = '';
-    document.getElementById('gradeModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">grade</span>
-        <span>Add New Grade</span>
+    document.getElementById('categoryModalLabel').innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 20px;">category</span>
+        <span>Add New Category</span>
     `;
-    // Reload campuses when opening modal
-    loadCampuses();
+    document.querySelector('.category-submit-btn').innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+        Save Category
+    `;
 }
 
-// Edit grade function
-function editGrade(id, campus, name, fromPercentage, toPercentage, session) {
+// Edit category function
+function editCategory(id, categoryName, campus) {
+    document.getElementById('category_name').value = categoryName;
     document.getElementById('campus').value = campus;
-    document.getElementById('name').value = name;
-    document.getElementById('from_percentage').value = fromPercentage;
-    document.getElementById('to_percentage').value = toPercentage;
-    document.getElementById('session').value = session;
-    document.getElementById('gradeForm').action = "{{ url('test/assign-grades/combined') }}/" + id;
+    document.getElementById('categoryForm').action = "{{ url('accountant/expense-categories') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
-    document.getElementById('gradeModalLabel').innerHTML = `
+    document.getElementById('categoryModalLabel').innerHTML = `
         <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-        <span>Edit Grade</span>
+        <span>Edit Category</span>
+    `;
+    document.querySelector('.category-submit-btn').innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+        Update Category
     `;
     
-    const modal = new bootstrap.Modal(document.getElementById('gradeModal'));
+    const modal = new bootstrap.Modal(document.getElementById('categoryModal'));
     modal.show();
 }
 
@@ -560,21 +624,10 @@ function printTable() {
     const originalContents = document.body.innerHTML;
     
     document.body.innerHTML = `
-        <html>
-            <head>
-                <title>Combined Result Grades - Print</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                    th { background-color: #f2f2f2; }
-                </style>
-            </head>
-            <body>
-                <h2>Combined Result Grades</h2>
-                ${printContents}
-            </body>
-        </html>
+        <div style="padding: 20px;">
+            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Expense Categories List</h3>
+            ${printContents}
+        </div>
     `;
     
     window.print();

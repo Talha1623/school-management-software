@@ -319,6 +319,8 @@ class TeacherController extends Controller
      * Get Exam List
      * 
      * Returns all exams that have been announced/created by super admin
+     * NOTE: This API returns EXAMS only (from Exam model), NOT Tests (Test model)
+     * Exams and Tests are separate entities in the system
      * 
      * @param Request $request
      * @return JsonResponse
@@ -336,6 +338,9 @@ class TeacherController extends Controller
                 ], 403);
             }
 
+            // IMPORTANT: Using Exam model, NOT Test model
+            // Exams are created by super admin in Exam List page
+            // Tests are separate and created in Test Management
             $query = Exam::query();
 
             // Filter by campus (if teacher has campus assigned)
@@ -499,7 +504,20 @@ class TeacherController extends Controller
      * Get Students List for Exam Management
      * 
      * Returns students list based on class and section selection
-     * Used specifically for exam management
+     * Used specifically for EXAM management (not test management)
+     * 
+     * NOTE: This API is for EXAMS created by super admin in "Exam List" page
+     * For tests, use the test management API endpoints
+     * 
+     * Query Parameters:
+     * - class (required): Class name (e.g., "ten", "nine")
+     * - section (optional): Section name (e.g., "a", "b", "t")
+     * - exam_name (optional): Exam name to load existing marks (e.g., "Mid Term Exam")
+     * - subject (optional): Subject name to load existing marks (e.g., "English")
+     * - search (optional): Search by student name or code
+     * 
+     * Example: GET /api/teacher/exam/students?class=ten&section=t
+     * Example: GET /api/teacher/exam/students?class=ten&section=t&exam_name=Mid Term Exam&subject=English
      * 
      * @param Request $request
      * @return JsonResponse
@@ -517,10 +535,10 @@ class TeacherController extends Controller
                 ], 403);
             }
 
-            // Get class and section from request (required)
+            // Get class and section from request (required for exam marks entry)
             $className = $request->input('class') ?? $request->query('class');
             $sectionName = $request->input('section') ?? $request->query('section');
-            $examName = $request->input('exam_name') ?? $request->query('exam_name');
+            $examName = $request->input('exam_name') ?? $request->query('exam_name'); // Exam name from Exam List
             $subjectName = $request->input('subject') ?? $request->query('subject');
 
             // Validate required parameters
@@ -599,10 +617,13 @@ class TeacherController extends Controller
                 ->orderBy('student_name', 'asc')
                 ->get();
 
-            // If exam_name and subject are provided, load existing marks
+            // If exam_name and subject are provided, load existing exam marks
+            // NOTE: Exam marks are stored in StudentMark table with exam_name in test_name field
+            // This is different from test marks which use test names
             $marksData = [];
             if ($examName && $subjectName && $students->count() > 0) {
-                $marks = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($examName))])
+                // Load existing exam marks for this exam, subject, class, and section
+                $marks = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($examName))]) // exam_name stored in test_name field
                     ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
                     ->when($sectionName, function($q) use ($sectionName) {
@@ -622,7 +643,7 @@ class TeacherController extends Controller
                 })->keyBy('student_id')->toArray();
             }
 
-            // Format students data
+            // Format students data with exam marks if available
             $studentsData = $students->map(function($student) use ($marksData) {
                 $studentData = [
                     'id' => $student->id,
@@ -636,7 +657,7 @@ class TeacherController extends Controller
                     'photo' => $student->photo ? asset('storage/' . $student->photo) : null,
                 ];
 
-                // Add marks if available
+                // Add existing exam marks if available (when exam_name and subject are provided)
                 if (isset($marksData[$student->id])) {
                     $studentData['marks_obtained'] = $marksData[$student->id]['marks_obtained'] ?? null;
                     $studentData['total_marks'] = $marksData[$student->id]['total_marks'] ?? null;
@@ -691,7 +712,25 @@ class TeacherController extends Controller
      * Save Exam Marks
      * 
      * Saves exam marks (obtained, total, passing) for students
-     * Similar to web version exam marks entry
+     * NOTE: This API saves EXAM marks, which are separate from TEST marks
+     * - Exam marks: Created by super admin in "Exam List" page (e.g., "Mid Term Exam", "Final Exam")
+     * - Test marks: Created by teachers in "Test Management" (e.g., "Unit Test 1", "Quiz 1")
+     * Both are stored in StudentMark table, differentiated by test_name field
+     * 
+     * Request Format:
+     * {
+     *   "exam_name": "Mid Term Exam",
+     *   "class": "ten",
+     *   "section": "a",
+     *   "subject": "English",
+     *   "marks": {
+     *     "8": {
+     *       "obtained": 85,
+     *       "total": 100,
+     *       "passing": 33
+     *     }
+     *   }
+     * }
      * 
      * @param Request $request
      * @return JsonResponse
@@ -710,6 +749,8 @@ class TeacherController extends Controller
             }
 
             // Validate request
+            // NOTE: exam_name is the exam name from Exam List (e.g., "Mid Term Exam")
+            // This is different from test_name used in Test Management
             $validated = $request->validate([
                 'exam_name' => ['required', 'string', 'max:255'],
                 'class' => ['required', 'string', 'max:255'],
@@ -813,9 +854,11 @@ class TeacherController extends Controller
 
                 // Only save if at least one mark field has a value
                 if (isset($markData['obtained']) || isset($markData['total']) || isset($markData['passing'])) {
-                    // Check if record exists
+                    // Check if exam marks record exists for this student
+                    // NOTE: test_name field stores exam_name for exams (e.g., "Mid Term Exam")
+                    // This is different from test marks which use test names (e.g., "Unit Test 1")
                     $existingMark = StudentMark::where('student_id', $studentId)
-                        ->where('test_name', $validated['exam_name'])
+                        ->where('test_name', $validated['exam_name']) // exam_name stored in test_name field
                         ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
                         ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($validated['subject']))])
                         ->when(isset($validated['section']) && !empty($validated['section']), function($q) use ($validated) {
@@ -825,10 +868,13 @@ class TeacherController extends Controller
 
                     $isUpdate = $existingMark !== null;
 
+                    // Save exam marks in StudentMark table
+                    // IMPORTANT: exam_name is stored in test_name field
+                    // Exam marks and test marks are differentiated by the value in test_name field
                     StudentMark::updateOrCreate(
                         [
                             'student_id' => $studentId,
-                            'test_name' => $validated['exam_name'],
+                            'test_name' => $validated['exam_name'], // Exam name stored here (e.g., "Mid Term Exam")
                             'campus' => $campus,
                             'class' => $className,
                             'section' => $validated['section'] ?? null,

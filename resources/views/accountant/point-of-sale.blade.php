@@ -1,6 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.accountant')
 
-@section('title', 'Point of Sale')
+@section('title', 'Point of Sale - Accountant')
 
 @section('content')
 <div class="row">
@@ -203,8 +203,8 @@ function scanProduct() {
     scanBtn.disabled = true;
     scanBtn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width: 12px; height: 12px;"></span> Scanning...';
     
-    // Search product
-    fetch('{{ route("stock.point-of-sale.search-product") }}', {
+    // Search product - using accountant route
+    fetch('{{ route("accountant.point-of-sale.search-product") }}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -374,8 +374,8 @@ function completeOrder() {
         completeOrderBtn.disabled = true;
         completeOrderBtn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width: 12px; height: 12px;"></span> Processing...';
         
-        // Send order to server
-        fetch('{{ route("stock.point-of-sale.store-sale") }}', {
+        // Send order to server - using accountant route
+        fetch('{{ route("accountant.point-of-sale.store-sale") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

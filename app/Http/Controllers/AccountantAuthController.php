@@ -19,14 +19,17 @@ class AccountantAuthController extends Controller
     /**
      * Show the accountant login form.
      */
-    public function showLoginForm(): View|RedirectResponse
+    public function showLoginForm(Request $request): View|RedirectResponse
     {
         // If already logged in, redirect to dashboard
         if (Auth::guard('accountant')->check()) {
             return redirect()->route('accountant.dashboard');
         }
         
-        return view('accountant.login');
+        // Get email from query parameter if provided
+        $email = $request->query('email', old('email'));
+        
+        return view('accountant.login', compact('email'));
     }
 
     /**

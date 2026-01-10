@@ -276,7 +276,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
-            <form id="accountantForm" method="POST" action="{{ route('accountants.store') }}">
+            <form id="accountantForm" method="POST" action="{{ route('accountants.store') }}" onsubmit="handleFormSubmit(event)">
                 @csrf
                 <div id="methodField"></div>
                 <div class="modal-body p-3">
@@ -699,6 +699,13 @@
         border-right: 1px solid #dee2e6;
     }
     
+    /* Options column width */
+    .accountant-table thead th:last-child,
+    .accountant-table tbody td:last-child {
+        min-width: 150px;
+        width: auto;
+    }
+    
     .accountant-table tbody td {
         padding: 12px 15px;
         font-size: 14px;
@@ -714,6 +721,7 @@
     
     .accountant-table tbody td:last-child {
         border-right: 1px solid #dee2e6;
+        position: relative;
     }
     
     .accountant-table tbody tr:last-child td {
@@ -788,10 +796,53 @@
         display: none;
     }
     
+    /* Fix dropdown overflow in table - no scroll */
+    .default-table-area .table-responsive {
+        overflow-x: auto;
+        overflow-y: hidden !important;
+        position: relative;
+    }
+    
+    /* Ensure dropdown stays within table bounds */
+    .accountant-table tbody td:last-child {
+        position: relative;
+        overflow: visible !important;
+    }
+    
+    .accountant-table .dropdown {
+        position: relative;
+    }
+    
+    /* Prevent table from clipping dropdown */
+    .accountant-table {
+        overflow: visible !important;
+    }
+    
+    .default-table-area {
+        overflow: visible !important;
+    }
+    
     .dropdown-menu {
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         border: 1px solid #e9ecef;
+        position: absolute !important;
+        z-index: 1050 !important;
+        min-width: 150px;
+        right: 0;
+        left: auto;
+        top: auto !important;
+        bottom: 100% !important;
+        margin-top: 0;
+        margin-bottom: 2px;
+        transform: none !important;
+    }
+    
+    /* Ensure dropdown menu always opens upward */
+    .accountant-table .dropdown.show .dropdown-menu {
+        top: auto !important;
+        bottom: 100% !important;
+        transform: none !important;
     }
     
     .dropdown-item {
@@ -903,6 +954,202 @@ function resetForm() {
     document.getElementById('passwordRequired').style.display = 'inline';
     document.getElementById('passwordHint').style.display = 'none';
     document.getElementById('accountantForm').action = '{{ route('accountants.store') }}';
+    // Clear any validation errors
+    document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+    document.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
+}
+
+function handleFormSubmit(event) {
+    event.preventDefault();
+    
+    const form = document.getElementById('accountantForm');
+    const formData = new FormData(form);
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalButtonText = submitButton.innerHTML;
+    
+    // Disable submit button
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+    
+    // Determine if it's create or update
+    const isUpdate = form.action.includes('/accountants/') && form.action.split('/accountants/')[1] && !form.action.split('/accountants/')[1].includes('store');
+    const url = form.action;
+    
+    // Add method override for PUT
+    if (isUpdate) {
+        formData.append('_method', 'PUT');
+    }
+    
+    fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            
+            if (!isUpdate) {
+                // Add new row to table
+                addAccountantToTable(data.accountant);
+                // Update summary cards
+                updateSummaryCards();
+                // Reset form and close modal
+                resetForm();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('accountantModal'));
+                if (modal) {
+                    modal.hide();
+                }
+            } else {
+                // For update, reload the page to show updated data
+                window.location.reload();
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        
+        // Handle validation errors
+        if (error.errors) {
+            // Clear previous errors
+            document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            document.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
+            
+            // Show new errors
+            Object.keys(error.errors).forEach(field => {
+                const input = document.getElementById(field) || document.querySelector(`[name="${field}"]`);
+                if (input) {
+                    input.classList.add('is-invalid');
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'invalid-feedback';
+                    errorDiv.textContent = error.errors[field][0];
+                    input.parentElement.appendChild(errorDiv);
+                }
+            });
+            showToast('Please fix the validation errors', 'error');
+        } else {
+            showToast(error.message || 'An error occurred while saving the accountant', 'error');
+        }
+    })
+    .finally(() => {
+        // Re-enable submit button
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalButtonText;
+    });
+}
+
+function addAccountantToTable(accountant) {
+    const tbody = document.querySelector('.accountant-table tbody');
+    if (!tbody) return;
+    
+    // Get current row count
+    const currentRows = tbody.querySelectorAll('tr').length;
+    const rowNumber = currentRows + 1;
+    
+    // Create new row
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+        <td>${rowNumber}</td>
+        <td>${accountant.id}</td>
+        <td>
+            <div class="accountant-photo-placeholder">
+                <span class="material-symbols-outlined">person</span>
+            </div>
+        </td>
+        <td>
+            <strong class="text-dark">${accountant.name}</strong>
+        </td>
+        <td>
+            <span class="text-muted">${accountant.email}</span>
+        </td>
+        <td>
+            ${accountant.campus ? `<span class="badge bg-primary text-white" style="font-size: 12px; padding: 4px 8px;">${accountant.campus}</span>` : '<span class="text-muted">N/A</span>'}
+        </td>
+        <td class="text-center">
+            <label class="toggle-switch-wrapper">
+                <input class="toggle-switch-input app-login-switch" type="checkbox" id="appLoginSwitch${accountant.id}" ${accountant.app_login_enabled ? 'checked' : ''} onchange="toggleAppLogin(${accountant.id})">
+                <span class="toggle-switch-slider"></span>
+            </label>
+        </td>
+        <td class="text-center">
+            <label class="toggle-switch-wrapper">
+                <input class="toggle-switch-input web-login-switch" type="checkbox" id="webLoginSwitch${accountant.id}" ${accountant.web_login_enabled ? 'checked' : ''} onchange="toggleWebLogin(${accountant.id})">
+                <span class="toggle-switch-slider"></span>
+            </label>
+        </td>
+        <td>
+            <div class="d-inline-flex gap-1 align-items-center">
+                <button type="button" class="btn btn-sm option-btn key-btn px-2 py-1" onclick="editAccountant(${accountant.id})" title="Edit">
+                    <span class="material-symbols-outlined" style="font-size: 14px;">key</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-info px-2 py-1" onclick="viewAccountant(${accountant.id})" title="View Details">
+                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                </button>
+                <div class="dropdown">
+                    <button class="btn btn-sm option-btn dropdown-btn dropdown-toggle px-2 py-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More Options">
+                        <span class="material-symbols-outlined" style="font-size: 14px;">arrow_drop_down</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="#" onclick="editAccountant(${accountant.id}); return false;">
+                                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">edit</span>
+                                Edit
+                            </a>
+                        </li>
+                        <li>
+                            <form action="{{ url('/accountants') }}/${accountant.id}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this accountant?');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="dropdown-item text-danger">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">delete</span>
+                                    Delete
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </td>
+    `;
+    
+    // Add animation
+    newRow.style.opacity = '0';
+    newRow.style.transform = 'translateY(-10px)';
+    tbody.insertBefore(newRow, tbody.firstChild);
+    
+    // Animate in
+    setTimeout(() => {
+        newRow.style.transition = 'all 0.3s ease';
+        newRow.style.opacity = '1';
+        newRow.style.transform = 'translateY(0)';
+    }, 10);
+}
+
+function updateSummaryCards() {
+    // Increment total accountants count
+    const totalCards = document.querySelectorAll('.row.mb-3 .col-md-4 .card-body h3');
+    if (totalCards.length > 0) {
+        const totalCard = totalCards[0];
+        const currentTotal = parseInt(totalCard.textContent.trim()) || 0;
+        totalCard.textContent = currentTotal + 1;
+        
+        // Also increment active accountants if app_login_enabled or web_login_enabled
+        if (totalCards.length > 1) {
+            const activeCard = totalCards[1];
+            const currentActive = parseInt(activeCard.textContent.trim()) || 0;
+            activeCard.textContent = currentActive + 1;
+        }
+    }
 }
 
 function editAccountant(id) {
@@ -989,6 +1236,12 @@ function toggleWebLogin(id) {
             checkbox.checked = data.web_login_enabled;
             // Show success toast
             showToast(data.message, 'success');
+            
+            // If web login is enabled, open accountant login page in new tab
+            if (data.web_login_enabled && data.email) {
+                const loginUrl = `{{ url('/accountant/login') }}?email=${encodeURIComponent(data.email)}`;
+                window.open(loginUrl, '_blank');
+            }
         } else {
             checkbox.checked = originalState;
             alert('Error updating web login status');
@@ -1188,5 +1441,42 @@ function printTable() {
         printWindow.print();
     };
 }
+
+// Force dropdown menu to always open upward (top mein)
+document.addEventListener('DOMContentLoaded', function() {
+    // Get all dropdown toggles in the accountant table
+    const dropdownToggles = document.querySelectorAll('.accountant-table .dropdown-toggle');
+    
+    dropdownToggles.forEach(function(toggle) {
+        toggle.addEventListener('show.bs.dropdown', function(e) {
+            const dropdownMenu = this.nextElementSibling;
+            if (dropdownMenu && dropdownMenu.classList.contains('dropdown-menu')) {
+                // Force dropdown to open upward (top mein)
+                dropdownMenu.style.top = 'auto';
+                dropdownMenu.style.bottom = '100%';
+                dropdownMenu.style.transform = 'none';
+                dropdownMenu.style.marginTop = '0';
+                dropdownMenu.style.marginBottom = '2px';
+            }
+        });
+        
+        // Also handle when dropdown is shown
+        toggle.addEventListener('shown.bs.dropdown', function(e) {
+            const dropdownMenu = this.nextElementSibling;
+            if (dropdownMenu && dropdownMenu.classList.contains('dropdown-menu')) {
+                // Ensure it stays upward (top mein)
+                dropdownMenu.style.top = 'auto';
+                dropdownMenu.style.bottom = '100%';
+                dropdownMenu.style.transform = 'none';
+            }
+        });
+    });
+    
+    // Prevent scroll on dropdown open
+    const tableResponsive = document.querySelector('.default-table-area .table-responsive');
+    if (tableResponsive) {
+        tableResponsive.style.overflowY = 'hidden';
+    }
+});
 </script>
 @endsection

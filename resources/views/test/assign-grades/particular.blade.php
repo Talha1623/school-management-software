@@ -274,14 +274,19 @@ document.addEventListener('DOMContentLoaded', function() {
                             @endif
                             sectionSelect.appendChild(option);
                         });
+                        
+                        // Load subjects after sections are loaded
+                        loadSubjects();
                     })
                     .catch(error => {
                         console.error('Error loading sections:', error);
                         sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                        loadSubjects();
                     });
             } else {
                 sectionSelect.disabled = true;
                 sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                loadSubjects();
             }
         }
 
@@ -294,6 +299,85 @@ document.addEventListener('DOMContentLoaded', function() {
         loadSections('{{ $filterClass }}');
         @endif
     }
+    
+    // Function to load subjects dynamically
+    const campusSelect = document.getElementById('filter_campus');
+    const subjectSelect = document.getElementById('filter_subject');
+    
+    function loadSubjects() {
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
+        
+        if (!classValue) {
+            // If no class selected, clear subjects
+            if (subjectSelect) {
+                subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+            }
+            return;
+        }
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (campus) params.append('campus', campus);
+        if (classValue) params.append('class', classValue);
+        if (section) params.append('section', section);
+        
+        // Show loading state
+        if (subjectSelect) {
+            const currentValue = subjectSelect.value;
+            subjectSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.assign-grades.get-subjects') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                    if (data.subjects && data.subjects.length > 0) {
+                        data.subjects.forEach(function(subject) {
+                            const option = document.createElement('option');
+                            option.value = subject;
+                            option.textContent = subject;
+                            // Restore selected value if it still exists
+                            if (subject === currentValue) {
+                                option.selected = true;
+                            }
+                            subjectSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading subjects:', error);
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                });
+        }
+    }
+    
+    // Load subjects when class changes
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            // Wait a bit for sections to load first
+            setTimeout(loadSubjects, 500);
+        });
+    }
+    
+    // Load subjects when section changes
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            loadSubjects();
+        });
+    }
+    
+    // Load subjects when campus changes
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadSubjects();
+        });
+    }
+    
+    // Load subjects on page load if filters are already selected
+    @if($filterClass)
+    setTimeout(loadSubjects, 1000);
+    @endif
 
     // Auto-calculate grade based on marks
     document.querySelectorAll('.marks-input').forEach(function(input) {

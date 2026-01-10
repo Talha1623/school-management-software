@@ -44,8 +44,11 @@ class TimetableController extends Controller
             }
         }
         
-        // Get classes from ClassModel
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
+        // Get classes from ClassModel (only existing classes, not deleted ones)
+        $classes = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->orderBy('class_name', 'asc')
+            ->get();
         
         // If no classes found, provide empty collection
         if ($classes->isEmpty()) {
@@ -60,8 +63,23 @@ class TimetableController extends Controller
             ->sort()
             ->values();
         
-        // Get subjects from Subject model
+        // Get subjects from Subject model (only active/non-deleted subjects)
+        // Filter out subjects with deleted classes to ensure only valid subjects are shown
+        $existingClassNames = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->pluck('class_name')
+            ->map(function($name) {
+                return strtolower(trim($name));
+            })->toArray();
+        
         $subjects = Subject::whereNotNull('subject_name')
+            ->when(!empty($existingClassNames), function($query) use ($existingClassNames) {
+                return $query->where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+            })
             ->distinct()
             ->orderBy('subject_name', 'asc')
             ->pluck('subject_name')
@@ -111,22 +129,96 @@ class TimetableController extends Controller
             }
         }
         
-        // Get classes from ClassModel
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
+        // Get classes from ClassModel (only existing classes, not deleted ones)
+        $classes = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->orderBy('class_name', 'asc')
+            ->get();
         
-        // If no classes found, get from timetables
-        if ($classes->isEmpty()) {
-            $classesFromTimetables = Timetable::whereNotNull('class')
-                ->distinct()
-                ->pluck('class')
-                ->sort()
-                ->values();
-            
-            // Convert to collection of objects with class_name property
-            $classes = collect();
-            foreach ($classesFromTimetables as $className) {
-                $classes->push((object)['class_name' => $className]);
+        // Get existing class names for filtering timetables
+        $existingClassNames = $classes->pluck('class_name')->map(function($name) {
+            return strtolower(trim($name));
+        })->unique()->values()->toArray();
+        
+        // Get existing subject names from Subject table (only active/non-deleted subjects)
+        $existingSubjectNames = Subject::whereNotNull('subject_name')
+            ->when(!empty($existingClassNames), function($query) use ($existingClassNames) {
+                return $query->where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+            })
+            ->distinct()
+            ->pluck('subject_name')
+            ->map(function($name) {
+                return strtolower(trim($name));
+            })
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // Filter timetables to only show those with existing classes and existing subjects
+        if (!empty($existingClassNames)) {
+            // Only query if at least one filter is applied
+            if ($request->filled('filter_campus') || $request->filled('filter_class') || $request->filled('filter_section')) {
+                $query = Timetable::query();
+                
+                // Filter by existing classes only
+                $query->where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+                
+                // Filter out timetables with deleted subjects (subjects that no longer exist in Subject table)
+                if (!empty($existingSubjectNames)) {
+                    $query->where(function($q) use ($existingSubjectNames) {
+                        foreach ($existingSubjectNames as $subjectName) {
+                            $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))]);
+                        }
+                    });
+                } else {
+                    // If no subjects exist, show no timetables
+                    $query->whereRaw('1 = 0');
+                }
+                
+                // Apply other filters
+                if ($request->filled('filter_campus')) {
+                    $query->where('campus', $request->filter_campus);
+                }
+                
+                if ($request->filled('filter_class')) {
+                    $query->where('class', $request->filter_class);
+                }
+                
+                if ($request->filled('filter_section')) {
+                    $query->where('section', $request->filter_section);
+                }
+                
+                $perPage = $request->get('per_page', 10);
+                $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
+                
+                $timetables = $query->orderBy('day')->orderBy('starting_time')->paginate($perPage)->withQueryString();
+            } else {
+                // Return empty paginator when no filters are applied
+                $timetables = new \Illuminate\Pagination\LengthAwarePaginator(
+                    collect(),
+                    0,
+                    10,
+                    1,
+                    ['path' => $request->url(), 'query' => $request->query()]
+                );
             }
+        } else {
+            // If no existing classes, return empty paginator
+            $timetables = new \Illuminate\Pagination\LengthAwarePaginator(
+                collect(),
+                0,
+                10,
+                1,
+                ['path' => $request->url(), 'query' => $request->query()]
+            );
         }
         
         // Get sections from Section model based on selected class
@@ -140,76 +232,44 @@ class TimetableController extends Controller
                 ->sort()
                 ->values();
         } else {
-            // If no class selected, get all sections
-            $sections = Section::whereNotNull('name')
+            // If no class selected, get all sections from existing classes only
+            if (!empty($existingClassNames)) {
+                $sections = Section::where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($className))]);
+                    }
+                })
+                ->whereNotNull('name')
                 ->distinct()
                 ->orderBy('name', 'asc')
                 ->pluck('name')
                 ->sort()
                 ->values();
-            
-            // If no sections found, get from timetables
-            if ($sections->isEmpty()) {
-                $sectionsFromTimetables = Timetable::whereNotNull('section')
-                    ->distinct()
-                    ->pluck('section')
-                    ->sort()
-                    ->values();
-                
-                $sections = $sectionsFromTimetables;
             }
         }
         
-        // Only query if at least one filter is applied
-        if ($request->filled('filter_campus') || $request->filled('filter_class') || $request->filled('filter_section')) {
-            $query = Timetable::query();
-            
-            // Apply filters
-            if ($request->filled('filter_campus')) {
-                $query->where('campus', $request->filter_campus);
-            }
-            
-            if ($request->filled('filter_class')) {
-                $query->where('class', $request->filter_class);
-            }
-            
-            if ($request->filled('filter_section')) {
-                $query->where('section', $request->filter_section);
-            }
-            
-            $perPage = $request->get('per_page', 10);
-            $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
-            
-            $timetables = $query->orderBy('day')->orderBy('starting_time')->paginate($perPage)->withQueryString();
-        } else {
-            // Return empty paginator when no filters are applied
-            $timetables = new \Illuminate\Pagination\LengthAwarePaginator(
-                collect(),
-                0,
-                10,
-                1,
-                ['path' => $request->url(), 'query' => $request->query()]
-            );
-        }
+        // Get subjects from Subject model (only active/non-deleted subjects)
+        // Filter out subjects with deleted classes to ensure only valid subjects are shown
+        $existingClassNames = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->pluck('class_name')
+            ->map(function($name) {
+                return strtolower(trim($name));
+            })->toArray();
         
-        // Get subjects from Subject model
         $subjects = Subject::whereNotNull('subject_name')
+            ->when(!empty($existingClassNames), function($query) use ($existingClassNames) {
+                return $query->where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+            })
             ->distinct()
             ->orderBy('subject_name', 'asc')
             ->pluck('subject_name')
             ->sort()
             ->values();
-        
-        // If no subjects found, get from timetables
-        if ($subjects->isEmpty()) {
-            $subjectsFromTimetables = Timetable::whereNotNull('subject')
-                ->distinct()
-                ->pluck('subject')
-                ->sort()
-                ->values();
-            
-            $subjects = $subjectsFromTimetables;
-        }
         
         // Days of the week
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -270,8 +330,11 @@ class TimetableController extends Controller
             }
         }
         
-        // Get classes from ClassModel
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
+        // Get classes from ClassModel (only existing classes, not deleted ones)
+        $classes = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->orderBy('class_name', 'asc')
+            ->get();
         
         // If no classes found, provide empty collection
         if ($classes->isEmpty()) {
@@ -287,8 +350,23 @@ class TimetableController extends Controller
             ->sort()
             ->values();
         
-        // Get subjects from Subject model
+        // Get subjects from Subject model (only active/non-deleted subjects)
+        // Filter out subjects with deleted classes to ensure only valid subjects are shown
+        $existingClassNames = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->pluck('class_name')
+            ->map(function($name) {
+                return strtolower(trim($name));
+            })->toArray();
+        
         $subjects = Subject::whereNotNull('subject_name')
+            ->when(!empty($existingClassNames), function($query) use ($existingClassNames) {
+                return $query->where(function($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+            })
             ->distinct()
             ->orderBy('subject_name', 'asc')
             ->pluck('subject_name')

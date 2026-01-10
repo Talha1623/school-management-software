@@ -77,8 +77,13 @@ class ExpenseCategoryController extends Controller
 
         ExpenseCategory::create($validated);
 
+        // Redirect based on which route was used (accountant or expense-management)
+        $redirectRoute = request()->route()->getName() === 'accountant.expense-categories.store' 
+            ? 'accountant.expense-categories' 
+            : 'expense-management.categories';
+
         return redirect()
-            ->route('expense-management.categories')
+            ->route($redirectRoute)
             ->with('success', 'Expense category created successfully!');
     }
 
@@ -94,8 +99,13 @@ class ExpenseCategoryController extends Controller
 
         $expenseCategory->update($validated);
 
+        // Redirect based on which route was used (accountant or expense-management)
+        $redirectRoute = request()->route()->getName() === 'accountant.expense-categories.update' 
+            ? 'accountant.expense-categories' 
+            : 'expense-management.categories';
+
         return redirect()
-            ->route('expense-management.categories')
+            ->route($redirectRoute)
             ->with('success', 'Expense category updated successfully!');
     }
 
@@ -106,8 +116,13 @@ class ExpenseCategoryController extends Controller
     {
         $expenseCategory->delete();
 
+        // Redirect based on which route was used (accountant or expense-management)
+        $redirectRoute = request()->route()->getName() === 'accountant.expense-categories.destroy' 
+            ? 'accountant.expense-categories' 
+            : 'expense-management.categories';
+
         return redirect()
-            ->route('expense-management.categories')
+            ->route($redirectRoute)
             ->with('success', 'Expense category deleted successfully!');
     }
 
@@ -140,7 +155,11 @@ class ExpenseCategoryController extends Controller
             case 'pdf':
                 return $this->exportPDF($categories);
             default:
-                return redirect()->route('expense-management.categories')
+                // Redirect based on which route was used (accountant or expense-management)
+                $redirectRoute = request()->route()->getName() === 'accountant.expense-categories.export' 
+                    ? 'accountant.expense-categories' 
+                    : 'expense-management.categories';
+                return redirect()->route($redirectRoute)
                     ->with('error', 'Invalid export format!');
         }
     }

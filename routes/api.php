@@ -130,6 +130,7 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         
         // Quiz Routes
         Route::match(['GET', 'POST'], '/quizzes', [App\Http\Controllers\Api\ParentQuizController::class, 'index'])->name('quizzes.index');
+        Route::get('/quizzes/all', [App\Http\Controllers\Api\ParentQuizController::class, 'allQuizzes'])->name('quizzes.all');
         Route::get('/quizzes/{id}', [App\Http\Controllers\Api\ParentQuizController::class, 'show'])->name('quizzes.show');
     });
 });

@@ -6,7 +6,9 @@ use App\Models\ParentAccount;
 use App\Models\Student;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class ParentAccountController extends Controller
@@ -229,14 +231,60 @@ class ParentAccountController extends Controller
 
     /**
      * Delete all parent accounts.
+     * 
+     * Note: Before truncating, we need to handle foreign key constraints.
+     * The students table has a foreign key reference to parent_accounts.
+     * We'll temporarily disable foreign key checks, truncate, then re-enable them.
      */
     public function deleteAll(Request $request): RedirectResponse
     {
-        ParentAccount::truncate();
+        try {
+            // Start database transaction
+            DB::beginTransaction();
 
-        return redirect()
-            ->route('parent.manage-access')
-            ->with('success', 'All parent accounts deleted successfully!');
+            // First, set parent_account_id to null in students table
+            // This removes the foreign key constraint issue
+            Student::whereNotNull('parent_account_id')->update(['parent_account_id' => null]);
+
+            // Also handle parent_complaints table if it has foreign key
+            DB::table('parent_complaints')
+                ->whereNotNull('parent_account_id')
+                ->update(['parent_account_id' => null]);
+
+            // Temporarily disable foreign key checks to allow truncate
+            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+
+            // Now truncate parent_accounts table (safe after disabling foreign key checks)
+            ParentAccount::truncate();
+
+            // Re-enable foreign key checks
+            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
+            // Commit transaction
+            DB::commit();
+
+            return redirect()
+                ->route('parent.manage-access')
+                ->with('success', 'All parent accounts deleted successfully!');
+        } catch (\Exception $e) {
+            // Rollback transaction on error
+            DB::rollBack();
+
+            // Make sure to re-enable foreign key checks even on error
+            try {
+                DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            } catch (\Exception $fkError) {
+                // Ignore if this fails
+            }
+
+            Log::error('Delete All Parent Accounts Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return redirect()
+                ->route('parent.manage-access')
+                ->with('error', 'Failed to delete all parent accounts: ' . $e->getMessage());
+        }
     }
 
     /**

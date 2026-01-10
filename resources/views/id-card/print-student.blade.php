@@ -241,17 +241,18 @@ document.getElementById('studentCardForm').addEventListener('submit', function(e
     const formData = new FormData(this);
     const params = new URLSearchParams();
     
-    // Add form values to params
+    // Add form values to params (only filter values)
     for (const [key, value] of formData.entries()) {
-        if (value) {
+        if (value && key !== '_token') { // Skip CSRF token
             params.append(key, value);
         }
     }
     
-    // Open print view in new tab
+    // Open print view in new tab with filter parameters
     const printUrl = `{{ route('id-card.print-student.print') }}?${params.toString()}`;
     window.open(printUrl, '_blank');
 });
+
 </script>
 @endsection
 

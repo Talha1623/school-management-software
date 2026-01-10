@@ -50,13 +50,14 @@ class SaleRecordController extends Controller
             $methods = collect(['Cash', 'Bank Transfer', 'Cheque', 'Online Payment', 'Card']);
         }
 
-        // Query sale records
+        // Query sale records - show all by default, filter if provided
         $query = SaleRecord::with('product');
 
         if ($filterMonth) {
             $query->whereMonth('sale_date', $filterMonth);
         }
         if ($filterDate) {
+            // Ensure date format is correct (YYYY-MM-DD)
             $query->whereDate('sale_date', $filterDate);
         }
         if ($filterYear) {
@@ -66,7 +67,16 @@ class SaleRecordController extends Controller
             $query->where('method', $filterMethod);
         }
 
-        $saleRecords = $query->orderBy('sale_date', 'desc')->get();
+        // Get all records (filtered or all)
+        $saleRecords = $query->orderBy('sale_date', 'desc')->orderBy('created_at', 'desc')->get();
+        
+        // Calculate totals
+        $totalSales = $saleRecords->sum('total_amount');
+        $totalQuantity = $saleRecords->sum('quantity');
+        
+        // Debug info (for troubleshooting)
+        $totalRecordsInDB = SaleRecord::count();
+        $todayRecords = SaleRecord::whereDate('sale_date', now()->toDateString())->count();
 
         return view('stock.manage-sale-records', compact(
             'months',
@@ -76,7 +86,11 @@ class SaleRecordController extends Controller
             'filterMonth',
             'filterDate',
             'filterYear',
-            'filterMethod'
+            'filterMethod',
+            'totalSales',
+            'totalQuantity',
+            'totalRecordsInDB',
+            'todayRecords'
         ));
     }
 }

@@ -146,11 +146,23 @@
             </li>
             
             {{-- Expense Management --}}
-            <li class="menu-item {{ request()->routeIs('accountant.expense-management*') ? 'active' : '' }}">
-                <a href="{{ route('accountant.expense-management') }}" class="menu-link {{ request()->routeIs('accountant.expense-management*') ? 'active' : '' }}">
+            <li class="menu-item {{ request()->routeIs('accountant.expense-management*') || request()->routeIs('accountant.add-manage-expense*') || request()->routeIs('accountant.expense-categories*') ? 'open' : '' }}">
+                <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accountant.expense-management*') || request()->routeIs('accountant.add-manage-expense*') || request()->routeIs('accountant.expense-categories*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">shopping_cart</span>
                     <span class="title">Expense Management</span>
                 </a>
+                <ul class="menu-sub">
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.add-manage-expense') }}" class="menu-link {{ request()->routeIs('accountant.add-manage-expense*') ? 'active' : '' }}">
+                            Add / Manage Expense
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.expense-categories') }}" class="menu-link {{ request()->routeIs('accountant.expense-categories*') ? 'active' : '' }}">
+                            Expense Categories
+                        </a>
+                    </li>
+                </ul>
             </li>
             
             {{-- Reporting Area --}}
@@ -170,11 +182,33 @@
             </li>
             
             {{-- Stock & Inventory --}}
-            <li class="menu-item {{ request()->routeIs('accountant.stock-inventory*') ? 'active' : '' }}">
-                <a href="{{ route('accountant.stock-inventory') }}" class="menu-link {{ request()->routeIs('accountant.stock-inventory*') ? 'active' : '' }}">
+            <li class="menu-item {{ request()->routeIs('accountant.stock-inventory*') || request()->routeIs('accountant.point-of-sale*') || request()->routeIs('accountant.manage-categories*') || request()->routeIs('accountant.product-and-stock*') || request()->routeIs('accountant.manage-all-sales*') ? 'open' : '' }}">
+                <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accountant.stock-inventory*') || request()->routeIs('accountant.point-of-sale*') || request()->routeIs('accountant.manage-categories*') || request()->routeIs('accountant.product-and-stock*') || request()->routeIs('accountant.manage-all-sales*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">inventory</span>
                     <span class="title">Stock & Inventory</span>
                 </a>
+                <ul class="menu-sub">
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.point-of-sale') }}" class="menu-link {{ request()->routeIs('accountant.point-of-sale*') ? 'active' : '' }}">
+                            Point of Sale
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.manage-categories') }}" class="menu-link {{ request()->routeIs('accountant.manage-categories*') ? 'active' : '' }}">
+                            Manage Categories
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.product-and-stock') }}" class="menu-link {{ request()->routeIs('accountant.product-and-stock*') ? 'active' : '' }}">
+                            Product and Stock
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.manage-all-sales') }}" class="menu-link {{ request()->routeIs('accountant.manage-all-sales*') ? 'active' : '' }}">
+                            Manage All Sales
+                        </a>
+                    </li>
+                </ul>
             </li>
         </ul>
     </aside>

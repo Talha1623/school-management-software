@@ -885,7 +885,9 @@ function printTable() {
 document.addEventListener('DOMContentLoaded', function() {
     const classSelect = document.getElementById('for_class');
     const sectionSelect = document.getElementById('section');
-
+    const subjectSelect = document.getElementById('subject');
+    const campusSelect = document.getElementById('campus');
+    
     if (classSelect && sectionSelect) {
         function loadSections(selectedClass) {
             if (selectedClass) {
@@ -911,9 +913,70 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        function loadSubjects(selectedClass) {
+            if (!subjectSelect || !selectedClass) {
+                return;
+            }
+            
+            const selectedSection = sectionSelect ? sectionSelect.value : '';
+            const selectedCampus = campusSelect ? campusSelect.value : '';
+            
+            subjectSelect.innerHTML = '<option value="">Loading...</option>';
+            subjectSelect.disabled = true;
+            
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (selectedSection) {
+                params.append('section', selectedSection);
+            }
+            if (selectedCampus) {
+                params.append('campus', selectedCampus);
+            }
+            
+            fetch(`{{ route('test.list.get-subjects') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+                    if (data.subjects && data.subjects.length > 0) {
+                        data.subjects.forEach(subject => {
+                            const option = document.createElement('option');
+                            option.value = subject;
+                            option.textContent = subject;
+                            subjectSelect.appendChild(option);
+                        });
+                    }
+                    subjectSelect.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error loading subjects:', error);
+                    subjectSelect.innerHTML = '<option value="">Error loading subjects</option>';
+                    subjectSelect.disabled = false;
+                });
+        }
+
         classSelect.addEventListener('change', function() {
             loadSections(this.value);
+            loadSubjects(this.value);
         });
+        
+        // Also load subjects when section or campus changes
+        if (sectionSelect) {
+            sectionSelect.addEventListener('change', function() {
+                const selectedClass = classSelect ? classSelect.value : '';
+                if (selectedClass) {
+                    loadSubjects(selectedClass);
+                }
+            });
+        }
+        
+        if (campusSelect) {
+            campusSelect.addEventListener('change', function() {
+                const selectedClass = classSelect ? classSelect.value : '';
+                if (selectedClass) {
+                    loadSubjects(selectedClass);
+                }
+            });
+        }
     }
 });
 

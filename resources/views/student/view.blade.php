@@ -341,6 +341,43 @@ use Illuminate\Support\Facades\Storage;
                                         <div class="info-value">{{ $student->transport_route ?? 'N/A' }}</div>
                                     </div>
                                 </div>
+                                @if($student->transport_fare)
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">payments</span>
+                                            Transport Fare
+                                        </div>
+                                        <div class="info-value">{{ number_format($student->transport_fare, 2) }}</div>
+                                    </div>
+                                </div>
+                                @endif
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">receipt_long</span>
+                                            Generate Admission Fee
+                                        </div>
+                                        <div class="info-value">
+                                            @if($student->generate_admission_fee == '1')
+                                                <span class="badge bg-success badge-custom">Yes</span>
+                                            @else
+                                                <span class="badge bg-secondary badge-custom">No</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                @if($student->admission_fee_amount)
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">attach_money</span>
+                                            Admission Fee Amount
+                                        </div>
+                                        <div class="info-value">{{ number_format($student->admission_fee_amount, 2) }}</div>
+                                    </div>
+                                </div>
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -493,7 +530,7 @@ use Illuminate\Support\Facades\Storage;
                                             Generate Other Fee
                                         </div>
                                         <div class="info-value">
-                                            @if($student->generate_other_fee)
+                                            @if($student->generate_other_fee == '1')
                                                 <span class="badge bg-success badge-custom">Yes</span>
                                             @else
                                                 <span class="badge bg-secondary badge-custom">No</span>
@@ -501,6 +538,28 @@ use Illuminate\Support\Facades\Storage;
                                         </div>
                                     </div>
                                 </div>
+                                @if($student->fee_type)
+                                <div class="col-md-4">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">category</span>
+                                            Fee Type / Fee Head
+                                        </div>
+                                        <div class="info-value">{{ $student->fee_type }}</div>
+                                    </div>
+                                </div>
+                                @endif
+                                @if($student->other_fee_amount)
+                                <div class="col-md-4">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">attach_money</span>
+                                            Other Fee Amount
+                                        </div>
+                                        <div class="info-value">{{ number_format($student->other_fee_amount, 2) }}</div>
+                                    </div>
+                                </div>
+                                @endif
                                 @if($student->reference_remarks)
                                 <div class="col-md-12">
                                     <div class="info-item">

@@ -79,8 +79,13 @@ class StockCategoryController extends Controller
 
         StockCategory::create($validated);
 
+        // Redirect based on which route was used (accountant or stock)
+        $redirectRoute = request()->route()->getName() === 'accountant.manage-categories.store' 
+            ? 'accountant.manage-categories' 
+            : 'stock.manage-categories';
+
         return redirect()
-            ->route('stock.manage-categories')
+            ->route($redirectRoute)
             ->with('success', 'Stock category created successfully!');
     }
 
@@ -97,8 +102,13 @@ class StockCategoryController extends Controller
 
         $stockCategory->update($validated);
 
+        // Redirect based on which route was used (accountant or stock)
+        $redirectRoute = request()->route()->getName() === 'accountant.manage-categories.update' 
+            ? 'accountant.manage-categories' 
+            : 'stock.manage-categories';
+
         return redirect()
-            ->route('stock.manage-categories')
+            ->route($redirectRoute)
             ->with('success', 'Stock category updated successfully!');
     }
 
@@ -109,8 +119,13 @@ class StockCategoryController extends Controller
     {
         $stockCategory->delete();
 
+        // Redirect based on which route was used (accountant or stock)
+        $redirectRoute = request()->route()->getName() === 'accountant.manage-categories.destroy' 
+            ? 'accountant.manage-categories' 
+            : 'stock.manage-categories';
+
         return redirect()
-            ->route('stock.manage-categories')
+            ->route($redirectRoute)
             ->with('success', 'Stock category deleted successfully!');
     }
 
@@ -144,7 +159,11 @@ class StockCategoryController extends Controller
             case 'pdf':
                 return $this->exportPDF($categories);
             default:
-                return redirect()->route('stock.manage-categories')
+                // Redirect based on which route was used (accountant or stock)
+                $redirectRoute = request()->route()->getName() === 'accountant.manage-categories.export' 
+                    ? 'accountant.manage-categories' 
+                    : 'stock.manage-categories';
+                return redirect()->route($redirectRoute)
                     ->with('error', 'Invalid export format!');
         }
     }

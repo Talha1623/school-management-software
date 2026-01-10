@@ -7,6 +7,8 @@ use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
+use App\Models\Transport;
+use App\Models\FeeType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -301,27 +303,46 @@ class StudentController extends Controller
             }
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
-        }
+        // Get classes from ClassModel (only existing classes, not deleted ones)
+        $classes = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->distinct()
+            ->pluck('class_name')
+            ->sort()
+            ->values();
+        
+        // Get existing class names for filtering sections
+        $existingClassNames = $classes->map(function($name) {
+            return strtolower(trim($name));
+        })->unique()->values()->toArray();
 
-        // Get sections for the student's class
+        // Get sections for the student's class (only from existing classes)
         $sections = collect();
         if ($student->class) {
-            $sections = Section::where('class', $student->class)
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
-                ->sort()
-                ->values();
-            if ($sections->isEmpty()) {
-                $sections = collect(['A', 'B', 'C', 'D', 'E']);
+            // Verify student's class exists in ClassModel
+            $studentClassNormalized = strtolower(trim($student->class));
+            $classExists = in_array($studentClassNormalized, $existingClassNames);
+            
+            if ($classExists) {
+                // Use case-insensitive matching for class
+                $sections = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$studentClassNormalized])
+                    ->whereNotNull('name')
+                    ->where('name', '!=', '')
+                    ->distinct()
+                    ->pluck('name')
+                    ->sort()
+                    ->values();
             }
+            // Don't return default sections - only return actual sections from database
         }
 
-        return view('student.edit', compact('student', 'campuses', 'classes', 'sections'));
+        // Get transport routes
+        $transportRoutes = Transport::orderBy('route_name', 'asc')->pluck('route_name')->unique()->values();
+
+        // Get fee types
+        $feeTypes = FeeType::orderBy('fee_name', 'asc')->pluck('fee_name')->unique()->values();
+
+        return view('student.edit', compact('student', 'campuses', 'classes', 'sections', 'transportRoutes', 'feeTypes'));
     }
 
     /**
@@ -348,6 +369,12 @@ class StudentController extends Controller
             'monthly_fee' => ['nullable', 'numeric', 'min:0'],
             'discounted_student' => ['nullable', 'boolean'],
             'transport_route' => ['nullable', 'string', 'max:255'],
+            'transport_fare' => ['nullable', 'numeric', 'min:0'],
+            'generate_admission_fee' => ['nullable', 'string', 'max:255'],
+            'admission_fee_amount' => ['nullable', 'numeric', 'min:0'],
+            'generate_other_fee' => ['nullable', 'string', 'max:255'],
+            'fee_type' => ['nullable', 'string', 'max:255'],
+            'other_fee_amount' => ['nullable', 'numeric', 'min:0'],
             'student_code' => ['nullable', 'string', 'max:255'],
             'gr_number' => ['nullable', 'string', 'max:255'],
             'campus' => ['nullable', 'string', 'max:255'],

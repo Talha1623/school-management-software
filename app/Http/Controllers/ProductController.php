@@ -87,8 +87,13 @@ class ProductController extends Controller
 
         Product::create($validated);
 
+        // Redirect based on which route was used (accountant or stock)
+        $redirectRoute = request()->route()->getName() === 'accountant.product-and-stock.store' 
+            ? 'accountant.product-and-stock' 
+            : 'stock.products';
+
         return redirect()
-            ->route('stock.products')
+            ->route($redirectRoute)
             ->with('success', 'Product created successfully!');
     }
 
@@ -109,8 +114,13 @@ class ProductController extends Controller
 
         $product->update($validated);
 
+        // Redirect based on which route was used (accountant or stock)
+        $redirectRoute = request()->route()->getName() === 'accountant.product-and-stock.update' 
+            ? 'accountant.product-and-stock' 
+            : 'stock.products';
+
         return redirect()
-            ->route('stock.products')
+            ->route($redirectRoute)
             ->with('success', 'Product updated successfully!');
     }
 
@@ -121,8 +131,13 @@ class ProductController extends Controller
     {
         $product->delete();
 
+        // Redirect based on which route was used (accountant or stock)
+        $redirectRoute = request()->route()->getName() === 'accountant.product-and-stock.destroy' 
+            ? 'accountant.product-and-stock' 
+            : 'stock.products';
+
         return redirect()
-            ->route('stock.products')
+            ->route($redirectRoute)
             ->with('success', 'Product deleted successfully!');
     }
 
@@ -157,7 +172,11 @@ class ProductController extends Controller
             case 'pdf':
                 return $this->exportPDF($products);
             default:
-                return redirect()->route('stock.products')
+                // Redirect based on which route was used (accountant or stock)
+                $redirectRoute = request()->route()->getName() === 'accountant.product-and-stock.export' 
+                    ? 'accountant.product-and-stock' 
+                    : 'stock.products';
+                return redirect()->route($redirectRoute)
                     ->with('error', 'Invalid export format!');
         }
     }

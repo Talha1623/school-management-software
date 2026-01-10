@@ -8,6 +8,7 @@ use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class StaffAttendanceController extends Controller
 {
@@ -170,6 +171,137 @@ class StaffAttendanceController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Display staff attendance overview page with all teachers
+     */
+    public function overview(Request $request): View
+    {
+        $year = $request->get('year', date('Y'));
+        
+        // Get all active staff (dynamic - includes newly added, excludes deleted)
+        // Only show staff with Active status or no status set (for backward compatibility)
+        $allStaff = Staff::where(function($query) {
+                $query->where('status', 'Active')
+                      ->orWhereNull('status')
+                      ->orWhere('status', '');
+            })
+            ->orderBy('name', 'asc')
+            ->get();
+        
+        // Month names
+        $monthNames = [
+            '01' => 'January',
+            '02' => 'February',
+            '03' => 'March',
+            '04' => 'April',
+            '05' => 'May',
+            '06' => 'June',
+            '07' => 'July',
+            '08' => 'August',
+            '09' => 'September',
+            '10' => 'October',
+            '11' => 'November',
+            '12' => 'December',
+        ];
+        
+        // Prepare data for each staff member
+        $staffReports = [];
+        
+        foreach ($allStaff as $staff) {
+            // Get all attendance records for this staff for the selected year
+            $attendances = StaffAttendance::where('staff_id', $staff->id)
+                ->whereYear('attendance_date', $year)
+                ->get();
+            
+            // Key by date string
+            $attendancesByDate = [];
+            foreach ($attendances as $attendance) {
+                $dateKey = $attendance->attendance_date->format('Y-m-d');
+                $attendancesByDate[$dateKey] = $attendance;
+            }
+            
+            // Prepare daily attendance data for each month
+            $dailyAttendance = [];
+            $monthlySummary = [];
+            
+            foreach ($monthNames as $monthNum => $monthName) {
+                // Get days in month
+                $daysInMonth = cal_days_in_month(CAL_GREGORIAN, (int)$monthNum, (int)$year);
+                
+                // Daily attendance for this month
+                $monthDailyData = [];
+                for ($day = 1; $day <= $daysInMonth; $day++) {
+                    $date = sprintf('%s-%02d-%02d', $year, $monthNum, $day);
+                    $attendance = $attendancesByDate[$date] ?? null;
+                    
+                    if ($attendance) {
+                        $status = $attendance->status;
+                        // Map status to display format
+                        if ($status == 'Present') {
+                            $monthDailyData[$day] = 'P';
+                        } elseif ($status == 'Absent') {
+                            $monthDailyData[$day] = 'A';
+                        } elseif ($status == 'Leave') {
+                            $monthDailyData[$day] = 'L';
+                        } elseif ($status == 'Holiday') {
+                            $monthDailyData[$day] = 'H';
+                        } elseif ($status == 'Sunday') {
+                            $monthDailyData[$day] = 'S';
+                        } else {
+                            $monthDailyData[$day] = '--';
+                        }
+                    } else {
+                        $monthDailyData[$day] = '--';
+                    }
+                }
+                
+                $dailyAttendance[$monthNum] = [
+                    'month_name' => $monthName,
+                    'days' => $monthDailyData,
+                ];
+                
+                // Monthly summary
+                $monthAttendances = collect();
+                foreach ($attendancesByDate as $dateKey => $attendance) {
+                    $attDate = Carbon::parse($dateKey);
+                    if ($attDate->year == (int)$year && $attDate->month == (int)$monthNum) {
+                        $monthAttendances->push($attendance);
+                    }
+                }
+                
+                $monthlySummary[] = [
+                    'month' => $monthNum,
+                    'month_name' => $monthName,
+                    'present' => $monthAttendances->where('status', 'Present')->count(),
+                    'absent' => $monthAttendances->where('status', 'Absent')->count(),
+                    'leave' => $monthAttendances->where('status', 'Leave')->count(),
+                    'holiday' => $monthAttendances->where('status', 'Holiday')->count(),
+                    'sunday' => $monthAttendances->where('status', 'Sunday')->count(),
+                ];
+            }
+            
+            $staffReports[] = [
+                'staff' => $staff,
+                'daily_attendance' => $dailyAttendance,
+                'monthly_summary' => $monthlySummary,
+            ];
+        }
+        
+        // Year options
+        $currentYear = date('Y');
+        $years = collect();
+        for ($i = 0; $i < 6; $i++) {
+            $years->push($currentYear - $i);
+        }
+        
+        return view('attendance.staff-overview', compact(
+            'staffReports',
+            'year',
+            'years',
+            'monthNames'
+        ));
     }
 }
 

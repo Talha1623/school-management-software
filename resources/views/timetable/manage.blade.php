@@ -171,13 +171,13 @@
                                         <td>
                                             <div class="d-flex gap-1">
                                                 <a href="{{ route('timetable.edit', $timetable) }}" class="btn btn-sm btn-primary" title="Edit">
-                                                    <span class="material-symbols-outlined" style="font-size: 16px;">edit</span>
+                                                    <span class="material-symbols-outlined" style="font-size: 16px; color: white;">edit</span>
                                                 </a>
                                                 <form action="{{ route('timetable.destroy', $timetable) }}" method="POST" class="d-inline" onsubmit="return confirmDelete(event)">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" class="btn btn-sm btn-danger" title="Delete">
-                                                        <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+                                                        <span class="material-symbols-outlined" style="font-size: 16px; color: white;">delete</span>
                                                     </button>
                                                 </form>
                                             </div>

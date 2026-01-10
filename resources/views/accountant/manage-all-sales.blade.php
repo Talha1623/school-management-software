@@ -1,17 +1,17 @@
-@extends('layouts.app')
+@extends('layouts.accountant')
 
-@section('title', 'Manage Sale Records')
+@section('title', 'Manage All Sales - Accountant')
 
 @section('content')
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="mb-0 fs-16 fw-semibold">Manage Sale Records</h4>
+                <h4 class="mb-0 fs-16 fw-semibold">Manage All Sales</h4>
             </div>
 
             <!-- Filter Form -->
-            <form action="{{ route('stock.manage-sale-records') }}" method="GET" id="filterForm">
+            <form action="{{ route('accountant.manage-all-sales') }}" method="GET" id="filterForm">
                 <div class="p-3 rounded-8 mb-3" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                     <div class="row g-2 align-items-end">
                         <!-- Month -->
@@ -63,7 +63,7 @@
                         
                         <!-- Clear Button -->
                         <div class="col-md-2 col-sm-6">
-                            <a href="{{ route('stock.manage-sale-records') }}" class="btn btn-sm py-1 px-3 rounded-8 clear-btn w-100 d-inline-flex align-items-center justify-content-center gap-1">
+                            <a href="{{ route('accountant.manage-all-sales') }}" class="btn btn-sm py-1 px-3 rounded-8 clear-btn w-100 d-inline-flex align-items-center justify-content-center gap-1">
                                 <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
                                 <span style="font-size: 12px; white-space: nowrap;">Clear</span>
                             </a>
@@ -288,35 +288,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
-    // Also handle when month/year is changed, clear date if needed
-    if (monthSelect) {
-        monthSelect.addEventListener('change', function() {
-            // Optional: Clear date if month is changed manually
-            // Uncomment if you want this behavior
-            // if (dateInput && dateInput.value) {
-            //     const date = new Date(dateInput.value);
-            //     const selectedMonth = String(date.getMonth() + 1).padStart(2, '0');
-            //     if (selectedMonth !== this.value) {
-            //         dateInput.value = '';
-            //     }
-            // }
-        });
-    }
-    
-    if (yearSelect) {
-        yearSelect.addEventListener('change', function() {
-            // Optional: Clear date if year is changed manually
-            // Uncomment if you want this behavior
-            // if (dateInput && dateInput.value) {
-            //     const date = new Date(dateInput.value);
-            //     const selectedYear = date.getFullYear();
-            //     if (selectedYear != this.value) {
-            //         dateInput.value = '';
-            //     }
-            // }
-        });
-    }
 });
 </script>
 @endsection
+

@@ -263,12 +263,21 @@
                                 <label for="transport_route" class="form-label mb-0 fs-13 fw-medium">Transport Route</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">directions_bus</span></span>
-                                    <select class="form-select border-start-0 py-1" id="transport_route" name="transport_route" style="height: 32px; font-size: 13px;">
+                                    <select class="form-select border-start-0 py-1" id="transport_route" name="transport_route" style="height: 32px; font-size: 13px;" onchange="loadTransportFare(this.value)">
                                         <option value="">Select Transport Route</option>
                                         @foreach($transportRoutes as $route)
                                             <option value="{{ $route }}" {{ old('transport_route') == $route ? 'selected' : '' }}>{{ $route }}</option>
                                         @endforeach
                                     </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Transport Route Fare Field (hidden by default) -->
+                            <div class="mb-2" id="transport_fare_container" style="display: none;">
+                                <label for="transport_fare" class="form-label mb-0 fs-13 fw-medium">Transport Fare</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">payments</span></span>
+                                    <input type="number" step="0.01" class="form-control border-start-0 py-1" id="transport_fare" name="transport_fare" placeholder="Transport fare amount" readonly style="height: 32px; font-size: 13px; background-color: #f8f9fa;" value="{{ old('transport_fare') }}">
                                 </div>
                             </div>
                             
@@ -290,7 +299,7 @@
                                 <label for="generate_admission_fee" class="form-label mb-0 fs-13 fw-medium">Generate Admission Fee</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">payments</span></span>
-                                    <select class="form-select border-start-0 py-1" id="generate_admission_fee" name="generate_admission_fee" style="height: 32px; font-size: 13px;">
+                                    <select class="form-select border-start-0 py-1" id="generate_admission_fee" name="generate_admission_fee" style="height: 32px; font-size: 13px;" onchange="toggleAdmissionFeeAmount()">
                                         <option value="">Select</option>
                                         <option value="1" {{ old('generate_admission_fee') == '1' ? 'selected' : '' }}>Yes</option>
                                         <option value="0" {{ old('generate_admission_fee') == '0' ? 'selected' : '' }}>No</option>
@@ -298,15 +307,47 @@
                                 </div>
                             </div>
                             
+                            <!-- Admission Fee Amount Field (hidden by default) -->
+                            <div class="mb-2" id="admission_fee_amount_container" style="display: none;">
+                                <label for="admission_fee_amount" class="form-label mb-0 fs-13 fw-medium">Amount</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">attach_money</span></span>
+                                    <input type="number" step="0.01" class="form-control border-start-0 py-1" id="admission_fee_amount" name="admission_fee_amount" placeholder="admission fee amount" style="height: 32px; font-size: 13px;" value="{{ old('admission_fee_amount') }}">
+                                </div>
+                            </div>
+                            
                             <div class="mb-2">
                                 <label for="generate_other_fee" class="form-label mb-0 fs-13 fw-medium">Generate Other Fee</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">receipt</span></span>
-                                    <select class="form-select border-start-0 py-1" id="generate_other_fee" name="generate_other_fee" style="height: 32px; font-size: 13px;">
+                                    <select class="form-select border-start-0 py-1" id="generate_other_fee" name="generate_other_fee" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeFields()">
                                         <option value="">Select</option>
                                         <option value="1" {{ old('generate_other_fee') == '1' ? 'selected' : '' }}>Yes</option>
                                         <option value="0" {{ old('generate_other_fee') == '0' ? 'selected' : '' }}>No</option>
                                     </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Fee Type / Fee Head Dropdown (hidden by default) -->
+                            <div class="mb-2" id="fee_type_container" style="display: none;">
+                                <label for="fee_type" class="form-label mb-0 fs-13 fw-medium">Fee Type / Fee Head</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">category</span></span>
+                                    <select class="form-select border-start-0 py-1" id="fee_type" name="fee_type" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeAmount()">
+                                        <option value="">Select Fee Type</option>
+                                        @foreach($feeTypes as $feeType)
+                                            <option value="{{ $feeType }}" {{ old('fee_type') == $feeType ? 'selected' : '' }}>{{ $feeType }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Other Fee Amount Field (hidden by default) -->
+                            <div class="mb-2" id="other_fee_amount_container" style="display: none;">
+                                <label for="other_fee_amount" class="form-label mb-0 fs-13 fw-medium">Amount</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">attach_money</span></span>
+                                    <input type="number" step="0.01" class="form-control border-start-0 py-1" id="other_fee_amount" name="other_fee_amount" placeholder="Enter amount" style="height: 32px; font-size: 13px;" value="{{ old('other_fee_amount') }}">
                                 </div>
                             </div>
                         </div>
@@ -660,11 +701,296 @@ document.getElementById('class').addEventListener('change', function() {
     }
 });
 
-// Handle form submission
+// Toast notification function
+function showToast(message, type = 'success') {
+    // Create toast container if it doesn't exist
+    let toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toastContainer';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '9999';
+        document.body.appendChild(toastContainer);
+    }
+    
+    const toastId = 'toast-' + Date.now();
+    const icon = type === 'success' ? 'check_circle' : 'error';
+    const headerClass = type === 'success' ? 'success-toast-header' : 'error-toast-header';
+    const toastClass = type === 'success' ? 'success-toast' : 'error-toast';
+    const title = type === 'success' ? 'Success' : 'Error';
+    
+    const toastHTML = `
+        <div id="${toastId}" class="toast show ${toastClass}" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="5000">
+            <div class="toast-header ${headerClass}">
+                <span class="material-symbols-outlined me-2" style="font-size: 20px; color: white;">${icon}</span>
+                <strong class="me-auto text-white">${title}</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                ${message}
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    
+    const toastElement = document.getElementById(toastId);
+    if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+        const toast = new bootstrap.Toast(toastElement);
+        toast.show();
+        
+        // Remove toast element after it's hidden
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    } else {
+        // Fallback if Bootstrap is not available
+        setTimeout(() => {
+            toastElement.remove();
+        }, 5000);
+    }
+}
+
+// Handle form submission via AJAX
 document.getElementById('admission-form').addEventListener('submit', function(e) {
+    e.preventDefault(); // Prevent default form submission
+    
     // Ensure captured photo is included if available
     if (capturedPhotoBase64 && !document.getElementById('photo').files.length) {
         document.getElementById('captured_photo_input').value = capturedPhotoBase64;
+    }
+    
+    // Get form data
+    const formData = new FormData(this);
+    const submitButton = this.querySelector('button[type="submit"]');
+    const originalButtonText = submitButton.innerHTML;
+    
+    // Disable submit button and show loading state
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+    
+    // Hide previous error messages
+    const errorAlert = document.querySelector('.alert-danger');
+    if (errorAlert) {
+        errorAlert.remove();
+    }
+    
+    // Submit form via AJAX
+    fetch(this.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || document.querySelector('input[name="_token"]')?.value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Re-enable submit button
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalButtonText;
+        
+        if (data.success) {
+            // Show success toast
+            showToast(data.message, 'success');
+            
+            // Reset form after 1 second
+            setTimeout(() => {
+                document.getElementById('admission-form').reset();
+                // Clear captured photo
+                capturedPhotoBase64 = null;
+                document.getElementById('captured_photo_input').value = '';
+                // Reset photo preview if exists
+                const photoPreview = document.getElementById('photo-preview');
+                if (photoPreview) {
+                    photoPreview.src = '';
+                    photoPreview.style.display = 'none';
+                }
+                // Reset video capture if exists
+                const video = document.getElementById('video');
+                if (video && stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    video.srcObject = null;
+                    stream = null;
+                }
+            }, 1000);
+        } else {
+            // Show error toast
+            showToast(data.message || 'An error occurred. Please try again.', 'error');
+        }
+    })
+    .catch(error => {
+        // Re-enable submit button
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalButtonText;
+        
+        // Handle validation errors
+        if (error.response) {
+            error.response.json().then(data => {
+                if (data.errors) {
+                    // Display validation errors
+                    let errorMessages = '<ul class="mb-0">';
+                    Object.keys(data.errors).forEach(key => {
+                        data.errors[key].forEach(msg => {
+                            errorMessages += `<li>${msg}</li>`;
+                        });
+                    });
+                    errorMessages += '</ul>';
+                    
+                    // Show error alert
+                    const errorAlert = document.createElement('div');
+                    errorAlert.className = 'alert alert-danger alert-dismissible fade show';
+                    errorAlert.setAttribute('role', 'alert');
+                    errorAlert.innerHTML = errorMessages + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+                    
+                    const form = document.getElementById('admission-form');
+                    form.insertBefore(errorAlert, form.firstChild);
+                } else {
+                    showToast(data.message || 'An error occurred. Please try again.', 'error');
+                }
+            }).catch(() => {
+                showToast('An error occurred. Please try again.', 'error');
+            });
+        } else {
+            showToast('An error occurred. Please try again.', 'error');
+        }
+    });
+});
+
+// Load transport route fare when route is selected
+function loadTransportFare(routeName) {
+    const transportFareContainer = document.getElementById('transport_fare_container');
+    const transportFareInput = document.getElementById('transport_fare');
+    
+    if (!routeName) {
+        // Hide transport fare field if no route selected
+        if (transportFareContainer) {
+            transportFareContainer.style.display = 'none';
+        }
+        if (transportFareInput) {
+            transportFareInput.value = '';
+        }
+        return;
+    }
+    
+    // Show transport fare field
+    if (transportFareContainer) {
+        transportFareContainer.style.display = 'block';
+    }
+    
+    // Fetch route fare via AJAX
+    fetch(`{{ route('admission.get-route-fare') }}?route=${encodeURIComponent(routeName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (transportFareInput) {
+                if (data.fare && data.fare > 0) {
+                    // Set fare amount in transport fare field (don't add to monthly fee)
+                    transportFareInput.value = parseFloat(data.fare).toFixed(2);
+                } else {
+                    transportFareInput.value = '';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading transport fare:', error);
+            if (transportFareInput) {
+                transportFareInput.value = '';
+            }
+        });
+}
+
+// Toggle admission fee amount field based on "Generate Admission Fee" selection
+function toggleAdmissionFeeAmount() {
+    const generateAdmissionFee = document.getElementById('generate_admission_fee');
+    const admissionFeeAmountContainer = document.getElementById('admission_fee_amount_container');
+    const admissionFeeAmountInput = document.getElementById('admission_fee_amount');
+    
+    if (generateAdmissionFee && admissionFeeAmountContainer) {
+        if (generateAdmissionFee.value === '1') {
+            admissionFeeAmountContainer.style.display = 'block';
+            if (admissionFeeAmountInput) {
+                admissionFeeAmountInput.required = true;
+            }
+        } else {
+            admissionFeeAmountContainer.style.display = 'none';
+            if (admissionFeeAmountInput) {
+                admissionFeeAmountInput.required = false;
+                admissionFeeAmountInput.value = '';
+            }
+        }
+    }
+}
+
+// Toggle other fee fields (Fee Type and Amount) based on "Generate Other Fee" selection
+function toggleOtherFeeFields() {
+    const generateOtherFee = document.getElementById('generate_other_fee');
+    const feeTypeContainer = document.getElementById('fee_type_container');
+    const feeTypeInput = document.getElementById('fee_type');
+    const otherFeeAmountContainer = document.getElementById('other_fee_amount_container');
+    const otherFeeAmountInput = document.getElementById('other_fee_amount');
+    
+    if (generateOtherFee && feeTypeContainer) {
+        if (generateOtherFee.value === '1') {
+            feeTypeContainer.style.display = 'block';
+            if (feeTypeInput) {
+                feeTypeInput.required = true;
+            }
+            // Check if fee type is already selected, then show amount field
+            if (feeTypeInput && feeTypeInput.value) {
+                toggleOtherFeeAmount();
+            }
+        } else {
+            feeTypeContainer.style.display = 'none';
+            otherFeeAmountContainer.style.display = 'none';
+            if (feeTypeInput) {
+                feeTypeInput.required = false;
+                feeTypeInput.value = '';
+            }
+            if (otherFeeAmountInput) {
+                otherFeeAmountInput.required = false;
+                otherFeeAmountInput.value = '';
+            }
+        }
+    }
+}
+
+// Toggle other fee amount field based on "Fee Type" selection
+function toggleOtherFeeAmount() {
+    const feeTypeInput = document.getElementById('fee_type');
+    const otherFeeAmountContainer = document.getElementById('other_fee_amount_container');
+    const otherFeeAmountInput = document.getElementById('other_fee_amount');
+    
+    if (feeTypeInput && otherFeeAmountContainer) {
+        if (feeTypeInput.value) {
+            otherFeeAmountContainer.style.display = 'block';
+            if (otherFeeAmountInput) {
+                otherFeeAmountInput.required = true;
+            }
+        } else {
+            otherFeeAmountContainer.style.display = 'none';
+            if (otherFeeAmountInput) {
+                otherFeeAmountInput.required = false;
+                otherFeeAmountInput.value = '';
+            }
+        }
+    }
+}
+
+// Initialize admission fee amount field visibility on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleAdmissionFeeAmount();
+    toggleOtherFeeFields();
+    
+    // Load transport fare if route is already selected (for form validation errors)
+    const transportRoute = document.getElementById('transport_route');
+    if (transportRoute && transportRoute.value) {
+        loadTransportFare(transportRoute.value);
+    } else {
+        // Hide transport fare field if no route selected
+        const transportFareContainer = document.getElementById('transport_fare_container');
+        if (transportFareContainer) {
+            transportFareContainer.style.display = 'none';
+        }
     }
 });
 </script>
@@ -780,6 +1106,61 @@ button[type="submit"]:hover .material-symbols-outlined {
     }
     50% {
         opacity: 0.7;
+    }
+}
+
+/* Toast Notification Styling */
+.success-toast,
+.error-toast {
+    min-width: 300px;
+    max-width: 400px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: slideInDown 0.3s ease-out;
+}
+
+.success-toast {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+}
+
+.error-toast {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+}
+
+.success-toast-header {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.error-toast-header {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.success-toast .btn-close,
+.error-toast .btn-close {
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
+}
+
+.success-toast .btn-close:hover,
+.error-toast .btn-close:hover {
+    opacity: 1;
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
     }
 }
 </style>

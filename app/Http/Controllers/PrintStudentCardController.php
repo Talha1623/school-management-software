@@ -202,7 +202,23 @@ class PrintStudentCardController extends Controller
         // Get filtered students
         $students = $this->getFilteredStudents($request);
         
-        return view('id-card.print-student-card-print', compact('students'));
+        // Get design settings from request
+        $designSettings = [
+            'accent_color' => $request->get('accent_color', '#5C5C5C'),
+            'secondary_color' => $request->get('secondary_color', '#F08080'),
+            'gradient_color1' => $request->get('gradient_color1', '#FFFFFF'),
+            'gradient_color2' => $request->get('gradient_color2', '#FFFFFF'),
+            'student_name_color' => $request->get('student_name_color', '#000000'),
+            'student_label_color' => $request->get('student_label_color', '#000000'),
+            'details_text_color' => $request->get('details_text_color', '#000000'),
+            'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
+            'orientation' => $request->get('orientation', 'portrait'),
+            'show_monogram' => $request->get('show_monogram', 'yes'),
+            'card_style' => $request->get('card_style', 'modern'),
+            'border_style' => $request->get('border_style', 'rounded'),
+        ];
+        
+        return view('id-card.print-student-card-print', compact('students', 'designSettings'));
     }
 }
 

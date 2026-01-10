@@ -184,6 +184,14 @@ class ManageSubjectsController extends Controller
             $validated['teacher'] = null;
         }
 
+        // Before creating new subject, permanently delete any existing deleted subjects
+        // with the same campus, class, section, and subject_name to prevent restoration
+        Subject::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
+            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))])
+            ->whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($validated['subject_name']))])
+            ->delete();
+
         Subject::create($validated);
 
         return redirect()

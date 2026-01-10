@@ -840,6 +840,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Filter form class change handler
+    if (filterClassSelect) {
+        // Load sections on page load if class is already selected
+        @if(request('filter_class'))
+            loadFilterSections('{{ request('filter_class') }}');
+        @endif
+        
+        filterClassSelect.addEventListener('change', function() {
+            loadFilterSections(this.value);
+        });
+    }
+    
     // Modal form class change handler
     if (modalClassSelect) {
         modalClassSelect.addEventListener('change', function() {

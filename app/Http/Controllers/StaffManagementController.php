@@ -88,6 +88,16 @@ class StaffManagementController extends Controller
      */
     public function getNextEmployeeId()
     {
+        // Check if user is super admin
+        if (!Auth::guard('admin')->check()) {
+            return response()->json(['error' => 'Access denied. Please login.'], 403);
+        }
+
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isSuperAdmin()) {
+            return response()->json(['error' => 'Access denied. Super Admin access required.'], 403);
+        }
+
         return response()->json(['emp_id' => $this->generateEmployeeId()]);
     }
 
@@ -96,6 +106,20 @@ class StaffManagementController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // Check if user is super admin
+        if (!Auth::guard('admin')->check()) {
+            return redirect()
+                ->route('staff.management')
+                ->with('error', 'Access denied. Please login.');
+        }
+
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isSuperAdmin()) {
+            return redirect()
+                ->route('staff.management')
+                ->with('error', 'Access denied. Super Admin access required to add new staff.');
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'father_husband_name' => ['nullable', 'string', 'max:255'],

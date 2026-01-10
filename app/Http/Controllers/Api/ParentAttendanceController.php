@@ -126,6 +126,17 @@ class ParentAttendanceController extends Controller
                 $totalPresent = $monthlyAttendances->where('status', 'Present')->count();
                 $totalAbsent = $monthlyAttendances->where('status', 'Absent')->count();
                 $totalLeave = $monthlyAttendances->where('status', 'Leave')->count();
+                
+                // Calculate total late (check if status is "Late" or remarks contain "late")
+                $totalLate = $monthlyAttendances->filter(function($att) {
+                    return strtolower($att->status) === 'late' 
+                        || (isset($att->remarks) && stripos($att->remarks, 'late') !== false);
+                })->count();
+                
+                // Calculate total hours (for now 0, can be enhanced if time tracking is added)
+                // Assuming 6 hours per day for present days (can be configured)
+                $hoursPerDay = 6; // Default school hours per day
+                $totalHours = $totalPresent * $hoursPerDay;
 
                 // Get attendance for the specific date
                 $attendance = StudentAttendance::where('student_id', $studentId)
@@ -189,6 +200,8 @@ class ParentAttendanceController extends Controller
                             'total_present' => $totalPresent,
                             'total_absent' => $totalAbsent,
                             'total_leave' => $totalLeave,
+                            'total_late' => $totalLate,
+                            'total_hours' => $totalHours,
                         ],
                         'students' => $studentsData,
                         'attendance_by_date' => $allDatesInMonth,

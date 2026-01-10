@@ -8,10 +8,14 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Transport;
 use App\Models\ParentAccount;
+use App\Models\FeeType;
+use App\Models\CustomFee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Maatwebsite\Excel\Facades\Excel;
@@ -51,7 +55,30 @@ class AdmissionController extends Controller
         // Get transport routes
         $transportRoutes = Transport::orderBy('route_name', 'asc')->pluck('route_name')->unique()->values();
 
-        return view('admission.admit-student', compact('campuses', 'classes', 'sections', 'nextStudentCode', 'transportRoutes'));
+        // Get fee types
+        $feeTypes = FeeType::orderBy('fee_name', 'asc')->pluck('fee_name')->unique()->values();
+
+        return view('admission.admit-student', compact('campuses', 'classes', 'sections', 'nextStudentCode', 'transportRoutes', 'feeTypes'));
+    }
+
+    /**
+     * Get transport route fare (AJAX)
+     */
+    public function getRouteFare(Request $request)
+    {
+        $routeName = $request->get('route');
+        
+        if (!$routeName) {
+            return response()->json(['fare' => 0]);
+        }
+        
+        $transport = Transport::where('route_name', $routeName)->first();
+        
+        if ($transport) {
+            return response()->json(['fare' => $transport->route_fare]);
+        }
+        
+        return response()->json(['fare' => 0]);
     }
 
     /**
@@ -163,17 +190,43 @@ class AdmissionController extends Controller
             return response()->json(['sections' => []]);
         }
         
-        $sections = Section::where('class', $class)
+        // First verify that the class exists in ClassModel (not deleted)
+        $classExists = ClassModel::whereRaw('LOWER(TRIM(COALESCE(class_name, ""))) = ?', [strtolower(trim($class))])
+            ->exists();
+        
+        if (!$classExists) {
+            // Class doesn't exist (was deleted), return empty sections
+            return response()->json(['sections' => []]);
+        }
+        
+        // Use case-insensitive matching for class (same as other parts of the system)
+        $sections = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class))])
             ->whereNotNull('name')
+            ->where('name', '!=', '')
             ->distinct()
             ->pluck('name')
             ->sort()
             ->values();
         
+        // If no sections found in Section model, try to get from students table
         if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D', 'E']);
+            $hasSection = \Schema::hasColumn('students', 'section');
+            if ($hasSection) {
+                try {
+                    $sections = \App\Models\Student::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class))])
+                        ->whereNotNull('section')
+                        ->where('section', '!=', '')
+                        ->distinct()
+                        ->pluck('section')
+                        ->sort()
+                        ->values();
+                } catch (\Exception $e) {
+                    $sections = collect();
+                }
+            }
         }
         
+        // Only return empty if truly no sections found (don't return default sections)
         return response()->json(['sections' => $sections]);
     }
 
@@ -226,7 +279,7 @@ class AdmissionController extends Controller
     /**
      * Store a newly admitted student in storage.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): JsonResponse|RedirectResponse
     {
         // Check if creating parent account
         $createParentAccount = $request->input('create_parent_account') == '1';
@@ -254,6 +307,10 @@ class AdmissionController extends Controller
             'admission_notification' => ['nullable', 'string', 'max:255'],
             'create_parent_account' => ['nullable', 'boolean'],
             'generate_other_fee' => ['nullable', 'string', 'max:255'],
+            'generate_admission_fee' => ['nullable', 'string', 'max:255'],
+            'admission_fee_amount' => ['nullable', 'numeric', 'min:0'],
+            'fee_type' => ['nullable', 'string', 'max:255'],
+            'other_fee_amount' => ['nullable', 'numeric', 'min:0'],
             'student_code' => ['nullable', 'string', 'max:255'],
             'gr_number' => ['nullable', 'string', 'max:255'],
             'campus' => ['nullable', 'string', 'max:255'],
@@ -277,7 +334,19 @@ class AdmissionController extends Controller
             $rules['father_email'] = ['required', 'email', 'max:255', 'unique:parent_accounts,email'];
         }
 
-        $validated = $request->validate($rules);
+        try {
+            $validated = $request->validate($rules);
+        } catch (ValidationException $e) {
+            // Return JSON response for AJAX requests with validation errors
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        }
 
         $photoPath = $this->handlePhotoUpload($request);
 
@@ -298,7 +367,15 @@ class AdmissionController extends Controller
                     $updateData['name'] = $validated['father_name'];
                 }
                 if (!empty($validated['father_email']) && $existingParentAccount->email !== $validated['father_email']) {
-                    $updateData['email'] = $validated['father_email'];
+                    // Check if email already exists for another parent account
+                    $emailExists = ParentAccount::where('email', $validated['father_email'])
+                        ->where('id', '!=', $existingParentAccount->id)
+                        ->exists();
+                    
+                    if (!$emailExists) {
+                        $updateData['email'] = $validated['father_email'];
+                    }
+                    // If email exists for another account, skip updating email (silently ignore)
                 }
                 if (!empty($validated['father_phone']) && $existingParentAccount->phone !== $validated['father_phone']) {
                     $updateData['phone'] = $validated['father_phone'];
@@ -348,7 +425,21 @@ class AdmissionController extends Controller
             $studentData['password'] = $validated['b_form_number']; // Will be hashed automatically by Student model's setPasswordAttribute
         }
 
-        Student::create($studentData);
+        $student = Student::create($studentData);
+
+        // Save custom fee if "Generate Other Fee" is "Yes" and fee type and amount are provided
+        if ($request->input('generate_other_fee') == '1' && 
+            !empty($validated['fee_type']) && 
+            !empty($validated['other_fee_amount'])) {
+            
+            CustomFee::create([
+                'campus' => $validated['campus'] ?? null,
+                'class' => $validated['class'] ?? null,
+                'section' => $validated['section'] ?? null,
+                'fee_type' => $validated['fee_type'],
+                'amount' => $validated['other_fee_amount'],
+            ]);
+        }
 
         $successMessage = 'Student admitted successfully!';
         if ($existingParentAccount) {
@@ -356,6 +447,14 @@ class AdmissionController extends Controller
             $successMessage .= " Student has been linked to existing parent account ({$existingParentAccount->name}). This parent now has {$studentsCount} child/children.";
         } elseif ($createParentAccount && $parentAccountId) {
             $successMessage .= ' Parent account has been created and linked to the student.';
+        }
+
+        // Return JSON response for AJAX requests
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $successMessage
+            ]);
         }
 
         return redirect()

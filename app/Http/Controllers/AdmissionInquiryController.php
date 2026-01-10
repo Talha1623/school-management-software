@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\AdmissionInquiry;
+use App\Models\Campus;
+use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -220,6 +223,44 @@ class AdmissionInquiryController extends Controller
         // You can integrate a PDF library like dompdf or snappy later
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Display the Send SMS to Inquiry page.
+     */
+    public function sendSms(Request $request): View
+    {
+        // Get campuses for dropdown - First from Campus model, then fallback
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
+        }
+
+        return view('admission.inquiry.send-sms', compact('campuses'));
+    }
+
+    /**
+     * Store and send SMS to inquiries.
+     */
+    public function storeSms(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['nullable', 'string', 'max:255'],
+            'sms_message' => ['required', 'string', 'max:1000'],
+            'date' => ['required', 'date'],
+        ]);
+
+        // TODO: Implement SMS sending logic here
+        // For now, just return success message
+        
+        return redirect()
+            ->route('admission.inquiry.send-sms')
+            ->with('success', 'SMS sent successfully to inquiries!');
     }
 }
 

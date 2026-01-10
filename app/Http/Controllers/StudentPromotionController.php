@@ -208,38 +208,39 @@ class StudentPromotionController extends Controller
             return response()->json(['sections' => []]);
         }
         
-        // First try to get sections from Section model
+            // First try to get sections from Section model (only assigned sections)
         try {
             $sections = Section::where('class', $class)
                 ->whereNotNull('name')
+                ->where('name', '!=', '')
                 ->distinct()
                 ->pluck('name')
                 ->sort()
                 ->values();
         } catch (\Exception $e) {
-            // Fallback to students table
+            // Fallback to students table (only if sections exist in students)
             $hasSection = Schema::hasColumn('students', 'section');
             if ($hasSection) {
                 try {
                     $sections = Student::where('class', $class)
                         ->whereNotNull('section')
+                        ->where('section', '!=', '')
                         ->distinct()
                         ->pluck('section')
                         ->sort()
                         ->values();
                 } catch (\Exception $e2) {
-                    $sections = collect(['A', 'B', 'C', 'D', 'E']);
+                    $sections = collect([]);
                 }
             } else {
-                $sections = collect(['A', 'B', 'C', 'D', 'E']);
+                $sections = collect([]);
             }
         }
         
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D', 'E']);
-        }
-        
+        // Return only assigned sections, don't add default sections
+        // If no sections are assigned, return empty array
         return response()->json(['sections' => $sections]);
     }
 }
+
 

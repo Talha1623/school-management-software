@@ -497,7 +497,7 @@ use Illuminate\Support\Facades\Auth;
                                     <option value="">Select Salary Type</option>
                                     <option value="full time">Full Time</option>
                                     <option value="per hour">Per Hour</option>
-                                    <option value="lecture">Lecture</option>
+                                    <option value="lecture">Per Lecture</option>
                                 </select>
                             </div>
                         </div>

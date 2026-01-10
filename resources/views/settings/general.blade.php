@@ -344,6 +344,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const savedLogo = localStorage.getItem('schoolLogo');
     const savedName = localStorage.getItem('systemName');
     
+    // Load saved logo and system name from localStorage
+    const savedLogo = localStorage.getItem('schoolLogo');
+    const savedName = localStorage.getItem('systemName');
+    
     if (savedLogo) {
         document.getElementById('logoPreview').src = savedLogo;
         const sidebarLogo = document.querySelector('.sidebar-area .logo img');

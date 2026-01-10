@@ -69,10 +69,17 @@ class TaskManagementController extends Controller
             'description' => ['nullable', 'string'],
             'type' => ['nullable', 'string', 'max:255'],
             'assign_to' => ['nullable', 'string', 'max:255'],
+            'assign_by' => ['nullable', 'string', 'max:255'],
         ]);
 
         // Set default status to Pending for new tasks
         $validated['status'] = 'Pending';
+        
+        // Set assign_by to current admin if not provided
+        if (empty($validated['assign_by']) && Auth::check()) {
+            $admin = Auth::user();
+            $validated['assign_by'] = $admin->name ?? 'Admin';
+        }
 
         Task::create($validated);
 

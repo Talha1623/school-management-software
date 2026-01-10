@@ -224,8 +224,8 @@
                 <li class="menu-title small text-uppercase">
                     <span class="menu-title-text">MAIN</span>
                 </li>
-                   <li class="menu-item {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || (request()->routeIs('student*') && !request()->routeIs('student-behavior*')) || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') || request()->routeIs('change-password*') || request()->routeIs('live-chat') ? 'open' : '' }}">
-                       <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || (request()->routeIs('student*') && !request()->routeIs('student-behavior*')) || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') || request()->routeIs('change-password*') || request()->routeIs('live-chat') ? 'active' : '' }}">
+                   <li class="menu-item {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || (request()->routeIs('student*') && !request()->routeIs('student-behavior*')) || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') || request()->routeIs('change-password*') || request()->routeIs('live-chat') || request()->routeIs('task-management*') || request()->routeIs('manage-subjects*') || request()->routeIs('online-classes*') || request()->routeIs('fee-payment*') || request()->routeIs('expense-management*') || request()->routeIs('salary-loan*') ? 'open' : '' }}">
+                       <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('dashboard*') || request()->routeIs('admission*') || (request()->routeIs('student*') && !request()->routeIs('student-behavior*')) || request()->routeIs('parent*') || request()->routeIs('staff*') || request()->routeIs('id-card*') || request()->routeIs('accountants') || request()->routeIs('classes*') || request()->routeIs('attendance*') || request()->routeIs('timetable*') || request()->routeIs('academic-calendar*') || request()->routeIs('accounting*') || request()->routeIs('reports*') || request()->routeIs('stock*') || request()->routeIs('inventory*') || request()->routeIs('student-behavior*') || request()->routeIs('test*') || request()->routeIs('exam*') || request()->routeIs('quiz*') || request()->routeIs('certification*') || request()->routeIs('homework-diary*') || request()->routeIs('study-material*') || request()->routeIs('leave-management*') || request()->routeIs('sms*') || request()->routeIs('notification*') || request()->routeIs('whatsapp*') || request()->routeIs('robobuddy*') || request()->routeIs('email-alerts*') || request()->routeIs('school.noticeboard') || request()->routeIs('manage.campuses') || request()->routeIs('admin.roles-management') || request()->routeIs('transport*') || request()->routeIs('website-management*') || request()->routeIs('account-settings') || request()->routeIs('connections') || request()->routeIs('privacy-policy') || request()->routeIs('terms-conditions') || request()->routeIs('thermal-printer*') || request()->routeIs('change-password*') || request()->routeIs('live-chat') || request()->routeIs('task-management*') || request()->routeIs('manage-subjects*') || request()->routeIs('online-classes*') || request()->routeIs('fee-payment*') || request()->routeIs('expense-management*') || request()->routeIs('salary-loan*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">dashboard</span>
                     <span class="title">Dashboard</span>
                 </a>
@@ -623,7 +623,7 @@
                         </ul>
                     </li>
                     <li class="menu-item">
-                        <a href="{{ route('online-classes') }}" class="menu-link {{ request()->routeIs('online-classes') ? 'active' : '' }}">
+                        <a href="{{ route('online-classes') }}" class="menu-link {{ request()->routeIs('online-classes*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">video_call</span>
                             <span class="title">Online Classes</span>
                         </a>
@@ -1236,11 +1236,11 @@
                                     Add & Manage Diaries
                                 </a>
                             </li>
-                            <li class="menu-item">
+                            {{-- <li class="menu-item">
                                 <a href="{{ route('homework-diary.send-sms') }}" class="menu-link {{ request()->routeIs('homework-diary.send-sms') ? 'active' : '' }}">
                                     Send Diary via SMS
                                 </a>
-                            </li>
+                            </li> --}}
                         </ul>
                     </li>
                     <li class="menu-item">
@@ -1535,6 +1535,69 @@ function handleSidebarLogout() {
     // If no form found, try to redirect
     console.log('No logout form found');
 }
+
+// Keep Dashboard dropdown open when Task Management is active
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if we're on Task Management page
+    const isTaskManagement = window.location.pathname.includes('/task-management');
+    
+    if (isTaskManagement) {
+        // Find Dashboard menu item (the one with menu-toggle that contains Task Management)
+        const dashboardMenuItems = document.querySelectorAll('.menu-item');
+        let dashboardMenuItem = null;
+        
+        // Find the Dashboard menu item that contains Task Management
+        dashboardMenuItems.forEach(function(item) {
+            const toggle = item.querySelector('a.menu-toggle');
+            if (toggle && toggle.textContent.includes('Dashboard')) {
+                const menuSub = item.querySelector('.menu-sub');
+                if (menuSub) {
+                    const taskLink = menuSub.querySelector('a[href*="task-management"]');
+                    if (taskLink) {
+                        dashboardMenuItem = item;
+                    }
+                }
+            }
+        });
+        
+        if (dashboardMenuItem) {
+            // Ensure Dashboard dropdown is open
+            if (!dashboardMenuItem.classList.contains('open')) {
+                dashboardMenuItem.classList.add('open');
+            }
+            
+            // Also try using the menu API if available
+            setTimeout(function() {
+                const dashboardToggle = dashboardMenuItem.querySelector('a.menu-toggle');
+                if (dashboardToggle && window.Helpers && window.Helpers.mainMenu) {
+                    try {
+                        window.Helpers.mainMenu.open(dashboardToggle, false);
+                    } catch(e) {
+                        console.log('Menu API not available, using class toggle');
+                    }
+                }
+            }, 100);
+        }
+    }
+    
+    // Prevent Dashboard dropdown from closing when Task Management link is clicked
+    const taskManagementLinks = document.querySelectorAll('a[href*="task-management"]');
+    taskManagementLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            // Find parent Dashboard menu item
+            let parent = link.closest('.menu-item');
+            while (parent) {
+                const toggle = parent.querySelector('a.menu-toggle');
+                if (toggle && toggle.textContent.includes('Dashboard')) {
+                    // Keep it open
+                    parent.classList.add('open');
+                    break;
+                }
+                parent = parent.parentElement?.closest('.menu-item');
+            }
+        });
+    });
+});
 </script>
 
 <style>
