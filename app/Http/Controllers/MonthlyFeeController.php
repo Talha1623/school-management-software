@@ -103,9 +103,14 @@ class MonthlyFeeController extends Controller
         // Check if students are selected
         $selectedStudentIds = $request->input('selected_students', []);
         
+        // Determine redirect route based on which route was used (accountant or accounting)
+        $redirectRoute = request()->route()->getName() === 'accountant.generate-monthly-fee.store' 
+            ? 'accountant.generate-monthly-fee' 
+            : 'accounting.generate-monthly-fee';
+        
         if (empty($selectedStudentIds)) {
             return redirect()
-                ->route('accounting.generate-monthly-fee')
+                ->route($redirectRoute)
                 ->with('error', 'Please select at least one student to generate fees.');
         }
 
@@ -149,6 +154,14 @@ class MonthlyFeeController extends Controller
                 continue;
             }
             
+            // Get accountant name based on guard
+            $accountantName = 'System';
+            if (auth()->guard('accountant')->check()) {
+                $accountantName = auth()->guard('accountant')->user()->name ?? 'System';
+            } elseif (auth()->guard('admin')->check()) {
+                $accountantName = auth()->guard('admin')->user()->name ?? 'System';
+            }
+            
             // Create fee record for this student
             StudentPayment::create([
                 'campus' => $student->campus ?? $validated['campus'],
@@ -160,7 +173,7 @@ class MonthlyFeeController extends Controller
                 'payment_date' => $dueDate->format('Y-m-d'), // Due date (will be updated when payment is made)
                 'sms_notification' => 'Yes',
                 'late_fee' => 0, // Will be calculated when actual payment is made
-                'accountant' => auth()->user()->name ?? 'System',
+                'accountant' => $accountantName,
             ]);
             
             $generatedCount++;
@@ -176,7 +189,7 @@ class MonthlyFeeController extends Controller
             }
             
             return redirect()
-                ->route('accounting.generate-monthly-fee')
+                ->route($redirectRoute)
                 ->with('error', $message);
         }
 
@@ -187,7 +200,7 @@ class MonthlyFeeController extends Controller
         }
 
         return redirect()
-            ->route('accounting.generate-monthly-fee')
+            ->route($redirectRoute)
             ->with('success', $message);
     }
 

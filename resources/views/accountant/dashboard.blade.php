@@ -169,20 +169,34 @@
 
 @push('scripts')
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+// Ensure ApexCharts is loaded before initializing charts
+function initializeCharts() {
+    // Get data from PHP (with fallback to empty arrays)
+    var monthlyIncomeData = @json($monthlyIncomeData ?? []);
+    var monthlyExpenseData = @json($monthlyExpenseData ?? []);
+    var monthLabels = @json($monthLabels ?? []);
+
+    // Ensure data is arrays
+    if (!Array.isArray(monthlyIncomeData)) monthlyIncomeData = [];
+    if (!Array.isArray(monthlyExpenseData)) monthlyExpenseData = [];
+    if (!Array.isArray(monthLabels)) monthLabels = [];
+
     // Monthly Income Report Chart (Area Chart)
     const monthlyIncomeChart = document.getElementById('monthly-income-chart');
-    if (monthlyIncomeChart) {
+    if (monthlyIncomeChart && typeof ApexCharts !== 'undefined') {
         var monthlyOptions = {
             series: [{
                 name: 'Monthly Income',
-                data: @json($monthlyIncomeData)
+                data: monthlyIncomeData
             }],
             chart: {
                 type: 'area',
                 height: 300,
                 toolbar: {
                     show: false
+                },
+                zoom: {
+                    enabled: false
                 }
             },
             colors: ['#03A9F4'],
@@ -200,7 +214,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             xaxis: {
-                categories: @json($monthLabels),
+                categories: monthLabels,
                 labels: {
                     style: {
                         fontSize: '12px',
@@ -226,8 +240,20 @@ document.addEventListener('DOMContentLoaded', function() {
             tooltip: {
                 y: {
                     formatter: function(val) {
-                        return val.toFixed(2);
+                        return 'Rs. ' + val.toFixed(2);
                     }
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            noData: {
+                text: 'No data available',
+                align: 'center',
+                verticalAlign: 'middle',
+                style: {
+                    color: '#666',
+                    fontSize: '14px'
                 }
             }
         };
@@ -237,16 +263,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Income Vs Expenses Chart (Line Chart)
     const incomeExpenseChart = document.getElementById('income-expense-chart');
-    if (incomeExpenseChart) {
+    if (incomeExpenseChart && typeof ApexCharts !== 'undefined') {
         var incomeExpenseOptions = {
             series: [
                 {
                     name: 'Income',
-                    data: @json($monthlyIncomeData)
+                    data: monthlyIncomeData
                 },
                 {
                     name: 'Expenses',
-                    data: @json($monthlyExpenseData)
+                    data: monthlyExpenseData
                 }
             ],
             chart: {
@@ -254,6 +280,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 height: 250,
                 toolbar: {
                     show: false
+                },
+                zoom: {
+                    enabled: false
                 }
             },
             colors: ['#28a745', '#dc3545'],
@@ -265,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 size: 4
             },
             xaxis: {
-                categories: @json($monthLabels),
+                categories: monthLabels,
                 labels: {
                     style: {
                         fontSize: '12px',
@@ -296,13 +325,49 @@ document.addEventListener('DOMContentLoaded', function() {
             tooltip: {
                 y: {
                     formatter: function(val) {
-                        return val.toFixed(2);
+                        return 'Rs. ' + val.toFixed(2);
                     }
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            noData: {
+                text: 'No data available',
+                align: 'center',
+                verticalAlign: 'middle',
+                style: {
+                    color: '#666',
+                    fontSize: '14px'
                 }
             }
         };
         var incomeExpenseChartInstance = new ApexCharts(incomeExpenseChart, incomeExpenseOptions);
         incomeExpenseChartInstance.render();
+    }
+}
+
+// Wait for DOM and ApexCharts to be ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if ApexCharts is already loaded
+    if (typeof ApexCharts !== 'undefined') {
+        initializeCharts();
+    } else {
+        // Wait a bit for ApexCharts to load
+        var checkApexCharts = setInterval(function() {
+            if (typeof ApexCharts !== 'undefined') {
+                clearInterval(checkApexCharts);
+                initializeCharts();
+            }
+        }, 100);
+        
+        // Timeout after 5 seconds
+        setTimeout(function() {
+            clearInterval(checkApexCharts);
+            if (typeof ApexCharts === 'undefined') {
+                console.error('ApexCharts library not loaded');
+            }
+        }, 5000);
     }
 });
 </script>

@@ -114,12 +114,12 @@
             </li>
             
             {{-- SMS to Fee Defaulters --}}
-            <li class="menu-item {{ request()->routeIs('accountant.sms-fee-defaulters*') ? 'active' : '' }}">
+            {{-- <li class="menu-item {{ request()->routeIs('accountant.sms-fee-defaulters*') ? 'active' : '' }}">
                 <a href="{{ route('accountant.sms-fee-defaulters') }}" class="menu-link {{ request()->routeIs('accountant.sms-fee-defaulters*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">sms</span>
                     <span class="title">SMS to Fee Defaulters</span>
                 </a>
-            </li>
+            </li> --}}
             
             {{-- Deleted Fees --}}
             <li class="menu-item {{ request()->routeIs('accountant.deleted-fees*') ? 'active' : '' }}">
@@ -130,11 +130,23 @@
             </li>
             
             {{-- Print Fee Vouchers --}}
-            <li class="menu-item {{ request()->routeIs('accountant.print-fee-vouchers*') ? 'active' : '' }}">
-                <a href="{{ route('accountant.print-fee-vouchers') }}" class="menu-link {{ request()->routeIs('accountant.print-fee-vouchers*') ? 'active' : '' }}">
+            <li class="menu-item {{ request()->routeIs('accountant.fee-voucher.student*') || request()->routeIs('accountant.fee-voucher.family*') ? 'open' : '' }}">
+                <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accountant.fee-voucher.student*') || request()->routeIs('accountant.fee-voucher.family*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">print</span>
                     <span class="title">Print Fee Vouchers</span>
                 </a>
+                <ul class="menu-sub">
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.fee-voucher.student') }}" class="menu-link {{ request()->routeIs('accountant.fee-voucher.student*') ? 'active' : '' }}">
+                            Student Vouchers
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.fee-voucher.family') }}" class="menu-link {{ request()->routeIs('accountant.fee-voucher.family*') ? 'active' : '' }}">
+                            Family Vouchers
+                        </a>
+                    </li>
+                </ul>
             </li>
             
             {{-- Print Balance Sheet --}}
@@ -166,11 +178,33 @@
             </li>
             
             {{-- Reporting Area --}}
-            <li class="menu-item {{ request()->routeIs('accountant.reporting-area*') ? 'active' : '' }}">
-                <a href="{{ route('accountant.reporting-area') }}" class="menu-link {{ request()->routeIs('accountant.reporting-area*') ? 'active' : '' }}">
+            <li class="menu-item {{ request()->routeIs('accountant.fee-defaulters*') || request()->routeIs('accountant.accounts-summary*') || request()->routeIs('accountant.detailed-income*') || request()->routeIs('accountant.detailed-expense*') ? 'open' : '' }}">
+                <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accountant.fee-defaulters*') || request()->routeIs('accountant.accounts-summary*') || request()->routeIs('accountant.detailed-income*') || request()->routeIs('accountant.detailed-expense*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">assessment</span>
                     <span class="title">Reporting Area</span>
                 </a>
+                <ul class="menu-sub">
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.fee-defaulters') }}" class="menu-link {{ request()->routeIs('accountant.fee-defaulters*') ? 'active' : '' }}">
+                            Fee Defaulters Reports
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.accounts-summary') }}" class="menu-link {{ request()->routeIs('accountant.accounts-summary*') ? 'active' : '' }}">
+                            Accounts Summary Reports
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.detailed-income') }}" class="menu-link {{ request()->routeIs('accountant.detailed-income*') ? 'active' : '' }}">
+                            Detailed Income Report
+                        </a>
+                    </li>
+                    <li class="menu-item">
+                        <a href="{{ route('accountant.detailed-expense') }}" class="menu-link {{ request()->routeIs('accountant.detailed-expense*') ? 'active' : '' }}">
+                            Detailed Expense Report
+                        </a>
+                    </li>
+                </ul>
             </li>
             
             {{-- Academic / Holiday Calendar --}}

@@ -101,7 +101,9 @@ class AccountantAuthController extends Controller
         $campusFilter = $accountant->campus ? ['campus' => $accountant->campus] : [];
         
         // Income Today (Student Payments + Custom Payments + Sales)
+        // Exclude "Generated" method payments as those are just fee records, not actual payments
         $incomeToday = StudentPayment::whereDate('payment_date', $today)
+            ->where('method', '!=', 'Generated') // Only actual payments, not generated fees
             ->when($accountant->campus, function($q) use ($accountant) {
                 return $q->where('campus', $accountant->campus);
             })
@@ -130,7 +132,9 @@ class AccountantAuthController extends Controller
         $balanceToday = $incomeToday - $expenseToday;
         
         // Income This Month
+        // Exclude "Generated" method payments as those are just fee records, not actual payments
         $incomeThisMonth = StudentPayment::whereBetween('payment_date', [$startOfMonth, $endOfMonth])
+            ->where('method', '!=', 'Generated') // Only actual payments, not generated fees
             ->when($accountant->campus, function($q) use ($accountant) {
                 return $q->where('campus', $accountant->campus);
             })
@@ -168,6 +172,7 @@ class AccountantAuthController extends Controller
             $monthEnd = Carbon::now()->subMonths($i)->endOfMonth();
             
             $monthIncome = StudentPayment::whereBetween('payment_date', [$monthStart, $monthEnd])
+                ->where('method', '!=', 'Generated') // Only actual payments, not generated fees
                 ->when($accountant->campus, function($q) use ($accountant) {
                     return $q->where('campus', $accountant->campus);
                 })

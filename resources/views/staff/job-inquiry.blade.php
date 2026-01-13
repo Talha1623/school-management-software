@@ -32,6 +32,63 @@ use Illuminate\Support\Facades\Storage;
                 </div>
             @endif
 
+            <!-- Job Inquiry Statistics Cards -->
+            <div class="row g-2 mb-4">
+                <!-- Total Inquiries Card -->
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm" style="background: #9c27b0; border-radius: 8px; overflow: hidden;">
+                        <div class="card-body p-3 position-relative">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h2 class="text-white mb-0 fw-bold" style="font-size: 24px; line-height: 1.2;">{{ number_format($totalInquiries ?? 0) }}</h2>
+                                    <p class="text-white mb-0 mt-1" style="font-size: 11px; font-weight: 500;">Total Inquiries</p>
+                                </div>
+                                <span class="material-symbols-outlined text-white" style="font-size: 40px; opacity: 0.3;">description</span>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-white" style="opacity: 0.8; font-size: 10px;">Job Inquiry/CV Bank</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full Time Card -->
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm" style="background: #00bcd4; border-radius: 8px; overflow: hidden;">
+                        <div class="card-body p-3 position-relative">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h2 class="text-white mb-0 fw-bold" style="font-size: 24px; line-height: 1.2;">{{ number_format($fullTimeInquiries ?? 0) }}</h2>
+                                    <p class="text-white mb-0 mt-1" style="font-size: 11px; font-weight: 500;">Full Time</p>
+                                </div>
+                                <span class="material-symbols-outlined text-white" style="font-size: 40px; opacity: 0.3;">work</span>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-white" style="opacity: 0.8; font-size: 10px;">Job Inquiry/CV Bank</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Part Time Card -->
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm" style="background: #ff5722; border-radius: 8px; overflow: hidden;">
+                        <div class="card-body p-3 position-relative">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h2 class="text-white mb-0 fw-bold" style="font-size: 24px; line-height: 1.2;">{{ number_format($partTimeInquiries ?? 0) }}</h2>
+                                    <p class="text-white mb-0 mt-1" style="font-size: 11px; font-weight: 500;">Part Time</p>
+                                </div>
+                                <span class="material-symbols-outlined text-white" style="font-size: 40px; opacity: 0.3;">schedule</span>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-white" style="opacity: 0.8; font-size: 10px;">Job Inquiry/CV Bank</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Table Toolbar -->
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                 <!-- Left Side -->
@@ -384,7 +441,12 @@ use Illuminate\Support\Facades\Storage;
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">payments</span>
                                 </span>
-                                <input type="text" class="form-control inquiry-input" name="salary_type" id="salary_type" placeholder="Enter salary type" style="font-size: 12px;">
+                                <select class="form-control inquiry-input" name="salary_type" id="salary_type" style="font-size: 12px;">
+                                    <option value="">Select Salary Type</option>
+                                    <option value="Full Time">Full Time</option>
+                                    <option value="Part Time">Part Time</option>
+                                    <option value="Per Lecture">Per Lecture</option>
+                                </select>
                             </div>
                         </div>
 

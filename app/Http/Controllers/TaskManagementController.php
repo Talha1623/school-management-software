@@ -21,6 +21,16 @@ class TaskManagementController extends Controller
     {
         $query = Task::query();
         
+        // Check if staff is logged in and is a teacher
+        $loggedInStaff = Auth::guard('staff')->user();
+        $isTeacher = $loggedInStaff && $loggedInStaff->isTeacher();
+        $teacherName = $isTeacher ? trim($loggedInStaff->name ?? '') : null;
+        
+        // If teacher, filter tasks by assign_to field matching teacher's name
+        if ($isTeacher && $teacherName) {
+            $query->whereRaw('LOWER(TRIM(assign_to)) = ?', [strtolower($teacherName)]);
+        }
+        
         // Search functionality
         if ($request->filled('search')) {
             $search = trim($request->search);
@@ -40,11 +50,20 @@ class TaskManagementController extends Controller
         
         $tasks = $query->latest()->paginate($perPage)->withQueryString();
         
-        // Summary statistics
-        $totalTasks = Task::count();
-        $pendingTasks = Task::where('status', 'Pending')->count();
-        $activeTasks = Task::whereIn('status', ['Accepted', 'Pending'])->count();
-        $completedTasks = Task::where('status', 'Completed')->count();
+        // Summary statistics - filter by teacher if teacher is logged in
+        if ($isTeacher && $teacherName) {
+            $statsQuery = Task::whereRaw('LOWER(TRIM(assign_to)) = ?', [strtolower($teacherName)]);
+            $totalTasks = $statsQuery->count();
+            $pendingTasks = (clone $statsQuery)->where('status', 'Pending')->count();
+            $activeTasks = (clone $statsQuery)->whereIn('status', ['Accepted', 'Pending'])->count();
+            $completedTasks = (clone $statsQuery)->where('status', 'Completed')->count();
+        } else {
+            // For non-teachers (admin, accountant, etc.), show all tasks
+            $totalTasks = Task::count();
+            $pendingTasks = Task::where('status', 'Pending')->count();
+            $activeTasks = Task::whereIn('status', ['Accepted', 'Pending'])->count();
+            $completedTasks = Task::where('status', 'Completed')->count();
+        }
         
         // Get all admins, accountants, and all staff members for dropdown
         $admins = AdminRole::orderBy('name')->get(['id', 'name']);
@@ -54,9 +73,12 @@ class TaskManagementController extends Controller
         // Check if accountant is logged in
         $isAccountant = Auth::guard('accountant')->check();
         
+        // Check if staff is logged in and is a teacher
+        $isStaffTeacher = $loggedInStaff && $loggedInStaff->isTeacher();
+        
         $view = $isAccountant ? 'accountant.task-management' : 'task-management';
         
-        return view($view, compact('tasks', 'totalTasks', 'pendingTasks', 'activeTasks', 'completedTasks', 'admins', 'accountants', 'staff'));
+        return view($view, compact('tasks', 'totalTasks', 'pendingTasks', 'activeTasks', 'completedTasks', 'admins', 'accountants', 'staff', 'isStaffTeacher'));
     }
 
     /**

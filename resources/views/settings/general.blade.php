@@ -230,9 +230,9 @@
 
                 <div class="d-flex justify-content-end gap-2 mt-4">
                     <button type="button" class="btn btn-outline-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">save</span>
-                        Save Settings
+                    <button type="submit" class="btn btn-primary" style="background: #003471; border-color: #003471; color: white;">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">save</span>
+                        <span style="color: white;">Save Settings</span>
                     </button>
                 </div>
             </form>
@@ -360,4 +360,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
+<style>
+/* Make all form fields have the same height as Currency select */
+.card .form-control,
+.card .form-select {
+    font-size: 13px !important;
+    padding: 6px 12px !important;
+    height: auto !important;
+    line-height: 1.5 !important;
+    min-height: 38px !important;
+}
+
+.card textarea.form-control {
+    font-size: 13px !important;
+    padding: 6px 12px !important;
+    line-height: 1.5 !important;
+    min-height: 60px !important;
+    resize: vertical;
+}
+
+.card .form-control-color {
+    width: 50px !important;
+    height: 38px !important;
+    padding: 2px !important;
+}
+
+.card input[type="file"].form-control {
+    padding: 6px 12px !important;
+    height: 38px !important;
+    line-height: 1.5 !important;
+}
+</style>
 @endsection

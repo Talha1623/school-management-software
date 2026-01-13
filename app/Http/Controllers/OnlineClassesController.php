@@ -76,29 +76,69 @@ class OnlineClassesController extends Controller
         
         $onlineClasses = $query->orderBy('start_date', 'desc')->paginate($perPage)->withQueryString();
         
-        // Get campuses from Campus model
-        $campuses = Campus::orderBy('campus_name', 'asc')->get();
-        
-        // If no campuses found, get from classes or online classes
-        if ($campuses->isEmpty()) {
-            $campusesFromClasses = ClassModel::whereNotNull('campus')
+        // Get campuses for dropdown - filter by teacher's assigned campuses if teacher
+        if ($staff && $staff->isTeacher()) {
+            $teacherName = strtolower(trim($staff->name ?? ''));
+            // Get campuses from teacher's assigned subjects
+            $teacherCampuses = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereNotNull('campus')
                 ->distinct()
                 ->pluck('campus')
+                ->merge(
+                    Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                        ->whereNotNull('campus')
+                        ->distinct()
+                        ->pluck('campus')
+                )
+                ->map(fn($c) => trim($c))
+                ->filter(fn($c) => !empty($c))
+                ->unique()
                 ->sort()
                 ->values();
             
-            $campusesFromOnlineClasses = OnlineClass::whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
+            // Filter Campus model results to only show assigned campuses
+            if ($teacherCampuses->isNotEmpty()) {
+                $campuses = Campus::orderBy('campus_name', 'asc')
+                    ->get()
+                    ->filter(function($campus) use ($teacherCampuses) {
+                        return $teacherCampuses->contains(strtolower(trim($campus->campus_name ?? '')));
+                    });
+                
+                // If no campuses found in Campus model, create objects from teacher campuses
+                if ($campuses->isEmpty()) {
+                    $campuses = $teacherCampuses->map(function($campus) {
+                        return (object)['campus_name' => $campus];
+                    });
+                }
+            } else {
+                // If teacher has no assigned campuses, show empty
+                $campuses = collect();
+            }
+        } else {
+            // For non-teachers (admin, staff, etc.), get all campuses
+            $campuses = Campus::orderBy('campus_name', 'asc')->get();
             
-            $allCampuses = $campusesFromClasses->merge($campusesFromOnlineClasses)->unique()->sort()->values();
-            
-            // Convert to collection of objects with campus_name property
-            $campuses = collect();
-            foreach ($allCampuses as $campusName) {
-                $campuses->push((object)['campus_name' => $campusName]);
+            // If no campuses found, get from classes or online classes
+            if ($campuses->isEmpty()) {
+                $campusesFromClasses = ClassModel::whereNotNull('campus')
+                    ->distinct()
+                    ->pluck('campus')
+                    ->sort()
+                    ->values();
+                
+                $campusesFromOnlineClasses = OnlineClass::whereNotNull('campus')
+                    ->distinct()
+                    ->pluck('campus')
+                    ->sort()
+                    ->values();
+                
+                $allCampuses = $campusesFromClasses->merge($campusesFromOnlineClasses)->unique()->sort()->values();
+                
+                // Convert to collection of objects with campus_name property
+                $campuses = collect();
+                foreach ($allCampuses as $campusName) {
+                    $campuses->push((object)['campus_name' => $campusName]);
+                }
             }
         }
         
@@ -213,32 +253,65 @@ class OnlineClassesController extends Controller
 
     /**
      * Get sections based on class (AJAX).
+     * Filter by teacher's assigned sections if teacher.
      */
     public function getSections(Request $request): JsonResponse
     {
         $class = $request->get('class');
         
-        $sectionsQuery = Section::query();
-        if ($class) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-        }
+        $staff = Auth::guard('staff')->user();
+        $sections = collect();
         
-        $sections = $sectionsQuery->whereNotNull('name')
-            ->distinct()
-            ->pluck('name')
-            ->sort()
-            ->values();
-        
-        // If no sections found, try fallback
-        if ($sections->isEmpty() && $class) {
-            $sectionsFromOnlineClasses = OnlineClass::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('section')
+        // Filter by teacher's assigned sections if teacher
+        if ($staff && $staff->isTeacher() && $class) {
+            $teacherName = strtolower(trim($staff->name ?? ''));
+            
+            // Get sections from teacher's assigned subjects for this class
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
+            
+            // Get sections from teacher's assigned sections for this class
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->get();
+            
+            // Merge sections from both sources
+            $sections = $assignedSubjects->pluck('section')
+                ->merge($assignedSections->pluck('name'))
+                ->map(function($section) {
+                    return trim($section);
+                })
+                ->filter(function($section) {
+                    return !empty($section);
+                })
+                ->unique()
+                ->sort()
+                ->values();
+        } else {
+            // For non-teachers, get all sections
+            $sectionsQuery = Section::query();
+            if ($class) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            }
+            
+            $sections = $sectionsQuery->whereNotNull('name')
                 ->distinct()
-                ->pluck('section')
+                ->pluck('name')
                 ->sort()
                 ->values();
             
-            $sections = $sectionsFromOnlineClasses;
+            // If no sections found, try fallback
+            if ($sections->isEmpty() && $class) {
+                $sectionsFromOnlineClasses = OnlineClass::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+                
+                $sections = $sectionsFromOnlineClasses;
+            }
         }
         
         return response()->json(['sections' => $sections]);

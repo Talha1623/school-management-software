@@ -55,17 +55,164 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::patch('/task-management/{task}/status', [App\Http\Controllers\TaskManagementController::class, 'updateStatus'])->name('task-management.update-status');
         Route::get('/fee-payment', [App\Http\Controllers\AccountantController::class, 'feePayment'])->name('fee-payment');
         Route::get('/family-fee-calculator', [App\Http\Controllers\AccountantController::class, 'familyFeeCalculator'])->name('family-fee-calculator');
+        
+        // Family Fee Calculator - Search by Father ID Card
+        Route::get('/family-fee-calculator/search-by-id-card', function (\Illuminate\Http\Request $request) {
+            $fatherIdCard = $request->get('father_id_card');
+            
+            if (!$fatherIdCard) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Father ID Card is required'
+                ], 400);
+            }
+            
+            // Clean the input CNIC
+            $cleanedIdCard = trim($fatherIdCard);
+            $lowerIdCard = strtolower($cleanedIdCard);
+            $normalizedIdCard = str_replace(['-', ' ', '_'], '', $lowerIdCard);
+            
+            // Find parent account by ID card number (case-insensitive, trimmed)
+            $parentAccount = \App\Models\ParentAccount::where(function($query) use ($lowerIdCard, $normalizedIdCard) {
+                $query->whereRaw('LOWER(TRIM(id_card_number)) = ?', [$lowerIdCard])
+                      ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", "")) = ?', [$normalizedIdCard]);
+            })->first();
+            
+            // Get ALL students by father_id_card - use comprehensive query that handles all cases
+            $studentsByFatherIdCard = \App\Models\Student::where(function($query) use ($cleanedIdCard) {
+                // Try all possible matching strategies
+                $query->where('father_id_card', $cleanedIdCard)  // Exact match
+                      ->orWhere('father_id_card', 'LIKE', $cleanedIdCard)  // LIKE exact
+                      ->orWhere('father_id_card', 'LIKE', '%' . $cleanedIdCard . '%')  // LIKE partial
+                      ->orWhereRaw('LOWER(father_id_card) = LOWER(?)', [$cleanedIdCard])  // Case-insensitive
+                      ->orWhereRaw('TRIM(father_id_card) = ?', [$cleanedIdCard])  // Trimmed
+                      ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [$cleanedIdCard])  // Case-insensitive trimmed
+                      ->orWhereRaw('CAST(father_id_card AS CHAR) = ?', [$cleanedIdCard]);  // Cast to string (handles numeric types)
+            })
+            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+            ->get();
+            
+            // If still no results, try one more time with DB::raw for absolute certainty
+            if ($studentsByFatherIdCard->isEmpty()) {
+                $studentsByFatherIdCard = \App\Models\Student::whereRaw('father_id_card = ? OR father_id_card LIKE ? OR LOWER(father_id_card) = LOWER(?)', 
+                    [$cleanedIdCard, '%' . $cleanedIdCard . '%', $cleanedIdCard])
+                    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+                    ->get();
+            }
+            
+            // If parent account exists, also get students connected via parent_account_id
+            $studentsByParentAccount = collect();
+            if ($parentAccount) {
+                $studentsByParentAccount = \App\Models\Student::where('parent_account_id', $parentAccount->id)
+                    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee')
+                    ->get();
+            }
+            
+            // Merge both collections and remove duplicates by student id, then sort by name
+            $students = $studentsByParentAccount->merge($studentsByFatherIdCard)->unique('id')->sortBy('student_name')->values();
+            
+            // Debug: Check how many students found from each source
+            \Log::info('Fee Calculator Search', [
+                'father_id_card' => $fatherIdCard,
+                'cleaned_id_card' => $cleanedIdCard,
+                'students_by_father_id_card' => $studentsByFatherIdCard->count(),
+                'students_by_parent_account' => $studentsByParentAccount->count(),
+                'total_students' => $students->count()
+            ]);
+            
+            // If no students found at all, return not found with detailed debug info
+            if ($students->isEmpty()) {
+                // Try one more direct query to see if ANY students exist with this ID
+                $testQuery = \App\Models\Student::where('father_id_card', 'LIKE', '%' . $cleanedIdCard . '%')->count();
+                
+                return response()->json([
+                    'success' => true,
+                    'found' => false,
+                    'message' => 'No children found with this Father ID Card Number',
+                    'debug' => [
+                        'searched_id_card' => $cleanedIdCard,
+                        'original_input' => $fatherIdCard,
+                        'students_by_father_id_card_count' => $studentsByFatherIdCard->count(),
+                        'students_by_parent_account_count' => $studentsByParentAccount->count(),
+                        'parent_account_found' => $parentAccount ? true : false,
+                        'test_like_query_count' => $testQuery,
+                        'all_queries_tried' => 7
+                    ]
+                ]);
+            }
+            
+            // Prepare father information (use parent account if available, otherwise use first student's father info)
+            $fatherInfo = [];
+            if ($parentAccount) {
+                $fatherInfo = [
+                    'id' => $parentAccount->id,
+                    'name' => $parentAccount->name,
+                    'id_card_number' => $parentAccount->id_card_number,
+                    'phone' => $parentAccount->phone,
+                    'email' => $parentAccount->email,
+                    'address' => $parentAccount->address,
+                ];
+            } else {
+                // If no parent account, try to get father info from first student
+                $firstStudent = $students->first();
+                $fatherInfo = [
+                    'id' => null,
+                    'name' => $firstStudent->father_name ?? 'N/A',
+                    'id_card_number' => $fatherIdCard,
+                    'phone' => $firstStudent->father_phone ?? 'N/A',
+                    'email' => $firstStudent->father_email ?? 'N/A',
+                    'address' => $firstStudent->home_address ?? 'N/A',
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'found' => true,
+                'father' => $fatherInfo,
+                'students' => $students->map(function ($student) {
+                    return [
+                        'id' => $student->id,
+                        'student_name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                        'campus' => $student->campus,
+                        'monthly_fee' => $student->monthly_fee,
+                    ];
+                })->values()->toArray()
+            ]);
+        })->name('family-fee-calculator.search-by-id-card');
         Route::get('/generate-monthly-fee', [App\Http\Controllers\AccountantController::class, 'generateMonthlyFee'])->name('generate-monthly-fee');
+        Route::post('/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'store'])->name('generate-monthly-fee.store');
+        Route::get('/get-sections-by-class', [App\Http\Controllers\MonthlyFeeController::class, 'getSectionsByClass'])->name('get-sections-by-class');
+        Route::get('/get-students-with-fee-status', [App\Http\Controllers\MonthlyFeeController::class, 'getStudentsWithFeeStatus'])->name('get-students-with-fee-status');
         Route::get('/generate-custom-fee', [App\Http\Controllers\AccountantController::class, 'generateCustomFee'])->name('generate-custom-fee');
+        Route::post('/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'store'])->name('generate-custom-fee.store');
+        Route::get('/custom-fee/get-sections-by-class', [App\Http\Controllers\CustomFeeController::class, 'getSectionsByClass'])->name('custom-fee.get-sections-by-class');
+        Route::get('/custom-fee/get-students', [App\Http\Controllers\CustomFeeController::class, 'getStudents'])->name('custom-fee.get-students');
         Route::get('/generate-transport-fee', [App\Http\Controllers\AccountantController::class, 'generateTransportFee'])->name('generate-transport-fee');
+        Route::post('/generate-transport-fee', [App\Http\Controllers\AccountantController::class, 'storeTransportFee'])->name('generate-transport-fee.store');
+        Route::get('/generate-transport-fee/get-sections-by-class', [App\Http\Controllers\AccountantController::class, 'getTransportFeeSectionsByClass'])->name('transport-fee.get-sections-by-class');
         Route::get('/fee-type', [App\Http\Controllers\AccountantController::class, 'feeType'])->name('fee-type');
+        Route::post('/fee-type', [App\Http\Controllers\FeeTypeController::class, 'store'])->name('fee-type.store');
+        Route::get('/fee-type/export/{format}', [App\Http\Controllers\FeeTypeController::class, 'export'])->name('fee-type.export');
+        Route::get('/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'show'])->name('fee-type.show');
+        Route::put('/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'update'])->name('fee-type.update');
+        Route::delete('/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'destroy'])->name('fee-type.destroy');
         Route::get('/parents-credit-system', [App\Http\Controllers\AccountantController::class, 'parentsCreditSystem'])->name('parents-credit-system');
         Route::get('/direct-payment', [App\Http\Controllers\AccountantController::class, 'directPayment'])->name('direct-payment');
         Route::get('/direct-payment/student', [App\Http\Controllers\AccountantController::class, 'studentPayment'])->name('direct-payment.student');
+        Route::post('/direct-payment/student', [App\Http\Controllers\AccountantController::class, 'storeStudentPayment'])->name('direct-payment.student.store');
+        Route::get('/get-student-by-code', [App\Http\Controllers\AccountantController::class, 'getStudentByCode'])->name('get-student-by-code');
         Route::get('/direct-payment/custom', [App\Http\Controllers\AccountantController::class, 'customPayment'])->name('direct-payment.custom');
+        Route::post('/direct-payment/custom', [App\Http\Controllers\AccountantController::class, 'storeCustomPayment'])->name('direct-payment.custom.store');
         Route::get('/sms-fee-defaulters', [App\Http\Controllers\AccountantController::class, 'smsFeeDefaulters'])->name('sms-fee-defaulters');
         Route::get('/deleted-fees', [App\Http\Controllers\AccountantController::class, 'deletedFees'])->name('deleted-fees');
-        Route::get('/print-fee-vouchers', [App\Http\Controllers\AccountantController::class, 'printFeeVouchers'])->name('print-fee-vouchers');
+        Route::post('/deleted-fees/{deletedFee}/restore', [App\Http\Controllers\AccountantController::class, 'restoreDeletedFee'])->name('deleted-fees.restore');
+        Route::get('/fee-voucher/student', [App\Http\Controllers\AccountantController::class, 'studentVouchers'])->name('fee-voucher.student');
+        Route::get('/fee-voucher/get-sections-by-class', [App\Http\Controllers\StudentVoucherController::class, 'getSectionsByClass'])->name('fee-voucher.get-sections-by-class');
+        Route::get('/fee-voucher/print', [App\Http\Controllers\StudentVoucherController::class, 'print'])->name('fee-voucher.print');
+        Route::get('/fee-voucher/family', [App\Http\Controllers\AccountantController::class, 'familyVouchers'])->name('fee-voucher.family');
         Route::get('/print-balance-sheet', [App\Http\Controllers\AccountantController::class, 'printBalanceSheet'])->name('print-balance-sheet');
         // Expense Management routes for accountant
         Route::get('/add-manage-expense', [App\Http\Controllers\AccountantController::class, 'addManageExpense'])->name('add-manage-expense');
@@ -81,8 +228,20 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::get('/expense-categories/export/{format}', [App\Http\Controllers\ExpenseCategoryController::class, 'export'])->name('expense-categories.export');
         
         Route::get('/expense-management', [App\Http\Controllers\AccountantController::class, 'expenseManagement'])->name('expense-management');
-        Route::get('/reporting-area', [App\Http\Controllers\AccountantController::class, 'reportingArea'])->name('reporting-area');
+        
+        // Reporting Area routes for accountant
+        Route::get('/fee-defaulters', [App\Http\Controllers\AccountantController::class, 'feeDefaulters'])->name('fee-defaulters');
+        Route::post('/fee-defaulters/campus', [App\Http\Controllers\FeeDefaultReportController::class, 'storeCampus'])->name('fee-defaulters.campus.store');
+        Route::delete('/fee-defaulters/campus/{campus}', [App\Http\Controllers\FeeDefaultReportController::class, 'destroyCampus'])->name('fee-defaulters.campus.destroy');
+        Route::get('/accounts-summary', [App\Http\Controllers\AccountantController::class, 'accountsSummary'])->name('accounts-summary');
+        Route::post('/accounts-summary/campus', [App\Http\Controllers\AccountsSummaryController::class, 'storeCampus'])->name('accounts-summary.campus.store');
+        Route::delete('/accounts-summary/campus/{campus}', [App\Http\Controllers\AccountsSummaryController::class, 'destroyCampus'])->name('accounts-summary.campus.destroy');
+        Route::get('/detailed-income', [App\Http\Controllers\AccountantController::class, 'detailedIncome'])->name('detailed-income');
+        Route::get('/detailed-expense', [App\Http\Controllers\AccountantController::class, 'detailedExpense'])->name('detailed-expense');
+        
         Route::get('/academic-calendar', [App\Http\Controllers\AccountantController::class, 'academicCalendar'])->name('academic-calendar');
+        Route::post('/academic-calendar/campus', [App\Http\Controllers\AccountantController::class, 'storeAcademicCalendarCampus'])->name('academic-calendar.campus.store');
+        Route::delete('/academic-calendar/campus/{campus}', [App\Http\Controllers\AccountantController::class, 'destroyAcademicCalendarCampus'])->name('academic-calendar.campus.destroy');
         Route::get('/stock-inventory', [App\Http\Controllers\AccountantController::class, 'stockInventory'])->name('stock-inventory');
         
         // Stock & Inventory routes for accountant
@@ -715,6 +874,7 @@ Route::delete('/attendance/account/{attendance_account}', [App\Http\Controllers\
 Route::get('/attendance/account/export/{format}', [App\Http\Controllers\AttendanceAccountController::class, 'export'])->name('attendance.account.export');
 
 Route::get('/attendance/report', [App\Http\Controllers\AttendanceReportController::class, 'index'])->name('attendance.report');
+Route::get('/attendance/staff-report', [App\Http\Controllers\StaffAttendanceReportController::class, 'index'])->name('attendance.staff-report');
 
 // Online Classes Routes
 Route::get('/online-classes', [App\Http\Controllers\OnlineClassesController::class, 'index'])->name('online-classes');
@@ -941,6 +1101,8 @@ Route::get('/dashboard/finance', [DashboardController::class, 'finance'])->name(
 
 // Reporting Routes
 Route::get('/reports/fee-default', [App\Http\Controllers\FeeDefaultReportController::class, 'index'])->name('reports.fee-default');
+Route::post('/reports/fee-default/campus', [App\Http\Controllers\FeeDefaultReportController::class, 'storeCampus'])->name('reports.fee-default.campus.store');
+Route::delete('/reports/fee-default/campus/{campus}', [App\Http\Controllers\FeeDefaultReportController::class, 'destroyCampus'])->name('reports.fee-default.campus.destroy');
 
 Route::get('/reports/head-wise-dues', function () {
     return view('reports.head-wise-dues');
@@ -955,6 +1117,8 @@ Route::get('/reports/unpaid-invoices', [App\Http\Controllers\UnpaidInvoicesContr
 Route::get('/reports/fee-discount', [App\Http\Controllers\FeeDiscountController::class, 'index'])->name('reports.fee-discount');
 
 Route::get('/reports/accounts-summary', [App\Http\Controllers\AccountsSummaryController::class, 'index'])->name('reports.accounts-summary');
+Route::post('/reports/accounts-summary/campus', [App\Http\Controllers\AccountsSummaryController::class, 'storeCampus'])->name('reports.accounts-summary.campus.store');
+Route::delete('/reports/accounts-summary/campus/{campus}', [App\Http\Controllers\AccountsSummaryController::class, 'destroyCampus'])->name('reports.accounts-summary.campus.destroy');
 
 Route::get('/reports/detailed-income', [App\Http\Controllers\DetailedIncomeController::class, 'index'])->name('reports.detailed-income');
 
@@ -1320,13 +1484,20 @@ Route::get('/biometric/devices', function () {
 
 // Website Management Routes (Super Admin Only)
 Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(function () {
-    Route::get('/website-management/general-gallery', function () {
-        return view('website-management.general-gallery');
-    })->name('website-management.general-gallery');
+    Route::get('/website-management/general-gallery', [App\Http\Controllers\WebsiteManagementController::class, 'generalGallery'])->name('website-management.general-gallery');
+    Route::post('/website-management/general-gallery', [App\Http\Controllers\WebsiteManagementController::class, 'storeGeneralGallery'])->name('website-management.general-gallery.store');
+    Route::post('/website-management/gallery-images/upload', [App\Http\Controllers\WebsiteManagementController::class, 'uploadGalleryImage'])->name('website-management.gallery-images.upload');
+    Route::delete('/website-management/gallery-images/{galleryImage}', [App\Http\Controllers\WebsiteManagementController::class, 'deleteGalleryImage'])->name('website-management.gallery-images.delete');
+    Route::post('/website-management/slider-background/upload', [App\Http\Controllers\WebsiteManagementController::class, 'uploadSliderBackground'])->name('website-management.slider-background.upload');
+    Route::delete('/website-management/slider-background', [App\Http\Controllers\WebsiteManagementController::class, 'deleteSliderBackground'])->name('website-management.slider-background.delete');
+    Route::post('/website-management/principal-photo/upload', [App\Http\Controllers\WebsiteManagementController::class, 'uploadPrincipalPhoto'])->name('website-management.principal-photo.upload');
+    Route::delete('/website-management/principal-photo', [App\Http\Controllers\WebsiteManagementController::class, 'deletePrincipalPhoto'])->name('website-management.principal-photo.delete');
     
-    Route::get('/website-management/classes-show', function () {
-        return view('website-management.classes-show');
-    })->name('website-management.classes-show');
+    Route::get('/website-management/classes-show', [App\Http\Controllers\ClassToShowController::class, 'index'])->name('website-management.classes-show');
+    Route::post('/website-management/classes-show', [App\Http\Controllers\ClassToShowController::class, 'store'])->name('website-management.classes-show.store');
+    Route::get('/website-management/classes-show/{classToShow}', [App\Http\Controllers\ClassToShowController::class, 'show'])->name('website-management.classes-show.show');
+    Route::put('/website-management/classes-show/{classToShow}', [App\Http\Controllers\ClassToShowController::class, 'update'])->name('website-management.classes-show.update');
+    Route::delete('/website-management/classes-show/{classToShow}', [App\Http\Controllers\ClassToShowController::class, 'destroy'])->name('website-management.classes-show.destroy');
 });
 
 // Placeholder routes for profile, settings, logout

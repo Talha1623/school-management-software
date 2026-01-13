@@ -55,10 +55,12 @@
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Task Management</h4>
-                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 task-add-btn" data-bs-toggle="modal" data-bs-target="#taskModal" onclick="resetForm()">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Task</span>
-                </button>
+                @if(!isset($isStaffTeacher) || !$isStaffTeacher)
+                    <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 task-add-btn" data-bs-toggle="modal" data-bs-target="#taskModal" onclick="resetForm()">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+                        <span>Add New Task</span>
+                    </button>
+                @endif
             </div>
 
             @if(session('success'))
@@ -110,14 +112,16 @@
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
                             <span>Print</span>
                         </button>
-                        <form action="{{ route('task-management.delete-all') }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete ALL tasks? This action cannot be undone!');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-sm px-2 py-1 export-btn delete-all-btn">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">delete_sweep</span>
-                                <span>Delete All</span>
-                            </button>
-                        </form>
+                        @if(!isset($isStaffTeacher) || !$isStaffTeacher)
+                            <form action="{{ route('task-management.delete-all') }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete ALL tasks? This action cannot be undone!');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn btn-sm px-2 py-1 export-btn delete-all-btn">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">delete_sweep</span>
+                                    <span>Delete All</span>
+                                </button>
+                            </form>
+                        @endif
                     </div>
                     
                     <!-- Search -->
@@ -250,18 +254,22 @@
                                         <span class="text-muted">{{ $task->created_at ? $task->created_at->format('Y-m-d') : 'N/A' }}</span>
                                     </td>
                                     <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
-                                        <div class="d-inline-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editTask({{ $task->id }})" title="Edit">
-                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
-                                            </button>
-                                            <form action="{{ route('task-management.destroy', $task) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this task?');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                        @if(!isset($isStaffTeacher) || !$isStaffTeacher)
+                                            <div class="d-inline-flex gap-1">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editTask({{ $task->id }})" title="Edit">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                            </form>
-                                        </div>
+                                                <form action="{{ route('task-management.destroy', $task) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this task?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
+                                                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        @else
+                                            <span class="text-muted" style="font-size: 12px;">View Only</span>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty

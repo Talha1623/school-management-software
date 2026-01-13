@@ -138,9 +138,9 @@
 
                 <div class="d-flex justify-content-end gap-2 mt-4">
                     <button type="button" class="btn btn-outline-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">save</span>
-                        Save Settings
+                    <button type="submit" class="btn btn-primary" style="background: #003471; border-color: #003471; color: white;">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">save</span>
+                        <span style="color: white;">Save Settings</span>
                     </button>
                 </div>
             </form>

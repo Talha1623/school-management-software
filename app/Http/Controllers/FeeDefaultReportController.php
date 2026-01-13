@@ -7,8 +7,10 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\FeeType;
 use App\Models\StudentPayment;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
 
 class FeeDefaultReportController extends Controller
 {
@@ -24,13 +26,17 @@ class FeeDefaultReportController extends Controller
         $filterType = $request->get('filter_type');
         $filterStatus = $request->get('filter_status');
 
-        // Get campuses from classes or sections
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            // Fallback: get from other sources
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            $campuses = $allCampuses->map(function($campusName) {
+                return (object)['campus_name' => $campusName, 'id' => null];
+            });
         }
 
         // Get classes
@@ -45,7 +51,15 @@ class FeeDefaultReportController extends Controller
             $sections = collect(['A', 'B', 'C', 'D', 'E']);
         }
 
-        // Get fee types
+        // Type options for fee default reports
+        $typeOptions = collect([
+            'all_detailed' => 'All Detailed',
+            'admission_fee_only' => 'Admission Fee Only',
+            'transport_fee_only' => 'Transport Fee Only',
+            'card_fee_only' => 'Card Fee Only'
+        ]);
+
+        // Get fee types (for reference, but we'll use typeOptions for the Type filter)
         $feeTypes = FeeType::whereNotNull('fee_name')->distinct()->pluck('fee_name')->sort()->values();
         if ($feeTypes->isEmpty()) {
             $feeTypes = collect(['Monthly Fee', 'Transport Fee', 'Custom Fee', 'Advance Fee']);
@@ -79,6 +93,7 @@ class FeeDefaultReportController extends Controller
             'classes',
             'sections',
             'feeTypes',
+            'typeOptions',
             'statusOptions',
             'students',
             'filterCampus',
@@ -87,6 +102,37 @@ class FeeDefaultReportController extends Controller
             'filterType',
             'filterStatus'
         ));
+    }
+
+    /**
+     * Store a newly created campus (AJAX).
+     */
+    public function storeCampus(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'campus_name' => ['required', 'string', 'max:255', 'unique:campuses,campus_name'],
+        ]);
+
+        $campus = Campus::create($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Campus added successfully!',
+            'campus' => $campus
+        ]);
+    }
+
+    /**
+     * Remove the specified campus (AJAX).
+     */
+    public function destroyCampus(Campus $campus): JsonResponse
+    {
+        $campus->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Campus deleted successfully!'
+        ]);
     }
 }
 

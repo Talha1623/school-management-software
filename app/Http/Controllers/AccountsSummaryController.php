@@ -8,8 +8,10 @@ use App\Models\ManagementExpense;
 use App\Models\FeeType;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
 
 class AccountsSummaryController extends Controller
 {
@@ -20,28 +22,32 @@ class AccountsSummaryController extends Controller
     {
         // Get filter values
         $filterCampus = $request->get('filter_campus');
-        $filterType = $request->get('filter_type'); // Income or Expense
+        $filterType = $request->get('filter_type'); // day_by_day or month_by_month
         $filterMonth = $request->get('filter_month');
         $filterYear = $request->get('filter_year');
 
-        // Get campuses
-        $campusesFromPayments = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromCustom = CustomPayment::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromExpenses = ManagementExpense::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromPayments->merge($campusesFromCustom)->merge($campusesFromExpenses)->unique()->sort()->values();
-        
+        // Get campuses from Campus model
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         if ($campuses->isEmpty()) {
+            // Fallback: get from other sources
+            $campusesFromPayments = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromCustom = CustomPayment::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromExpenses = ManagementExpense::whereNotNull('campus')->distinct()->pluck('campus');
             $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
             $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            $allCampuses = $campusesFromPayments->merge($campusesFromCustom)->merge($campusesFromExpenses)
+                ->merge($campusesFromClasses)->merge($campusesFromSections)->unique()->sort()->values();
             
-            if ($campuses->isEmpty()) {
-                $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-            }
+            $campuses = $allCampuses->map(function($campusName) {
+                return (object)['campus_name' => $campusName, 'id' => null];
+            });
         }
 
-        // Type options (Income or Expense)
-        $typeOptions = collect(['Income', 'Expense']);
+        // Type options (day by day or month by month)
+        $typeOptions = collect([
+            'day_by_day' => 'Day by Day',
+            'month_by_month' => 'Month by Month'
+        ]);
 
         // Month options
         $months = collect([
@@ -68,101 +74,183 @@ class AccountsSummaryController extends Controller
 
         // Prepare summary records
         $summaryRecords = collect();
+        $groupByDay = ($filterType == 'day_by_day');
 
-        // Income Summary
-        if (!$filterType || $filterType == 'Income') {
-            // Student Payments (Income)
-            $studentPaymentsQuery = StudentPayment::query();
-            
-            if ($filterCampus) {
-                $studentPaymentsQuery->where('campus', $filterCampus);
+        // Income Summary - Student Payments
+        $studentPaymentsQuery = StudentPayment::query();
+        if ($filterCampus) {
+            $studentPaymentsQuery->where('campus', $filterCampus);
+        }
+        if ($filterMonth) {
+            $studentPaymentsQuery->whereMonth('payment_date', $filterMonth);
+        }
+        if ($filterYear) {
+            $studentPaymentsQuery->whereYear('payment_date', $filterYear);
+        }
+        $studentPayments = $studentPaymentsQuery->get();
+        
+        if ($groupByDay) {
+            // Group by day
+            $studentPaymentsByDay = $studentPayments->groupBy(function($payment) {
+                return \Carbon\Carbon::parse($payment->payment_date)->format('Y-m-d');
+            });
+            foreach ($studentPaymentsByDay as $date => $payments) {
+                $total = $payments->sum('payment_amount');
+                $discount = $payments->sum('discount');
+                if ($total > 0) {
+                    $summaryRecords->push([
+                        'type' => 'Income',
+                        'category' => 'Student Payments',
+                        'campus' => $filterCampus ?: 'All Campuses',
+                        'date' => \Carbon\Carbon::parse($date)->format('d M Y'),
+                        'month' => \Carbon\Carbon::parse($date)->format('F'),
+                        'year' => \Carbon\Carbon::parse($date)->format('Y'),
+                        'total_amount' => $total,
+                        'discount' => $discount,
+                        'net_amount' => $total - $discount,
+                        'count' => $payments->count(),
+                    ]);
+                }
             }
-            if ($filterMonth) {
-                $studentPaymentsQuery->whereMonth('payment_date', $filterMonth);
+        } else {
+            // Group by month
+            $studentPaymentsByMonth = $studentPayments->groupBy(function($payment) {
+                return \Carbon\Carbon::parse($payment->payment_date)->format('Y-m');
+            });
+            foreach ($studentPaymentsByMonth as $monthKey => $payments) {
+                $total = $payments->sum('payment_amount');
+                $discount = $payments->sum('discount');
+                if ($total > 0) {
+                    $date = \Carbon\Carbon::parse($monthKey . '-01');
+                    $summaryRecords->push([
+                        'type' => 'Income',
+                        'category' => 'Student Payments',
+                        'campus' => $filterCampus ?: 'All Campuses',
+                        'date' => null,
+                        'month' => $date->format('F'),
+                        'year' => $date->format('Y'),
+                        'total_amount' => $total,
+                        'discount' => $discount,
+                        'net_amount' => $total - $discount,
+                        'count' => $payments->count(),
+                    ]);
+                }
             }
-            if ($filterYear) {
-                $studentPaymentsQuery->whereYear('payment_date', $filterYear);
-            }
-            
-            $studentPayments = $studentPaymentsQuery->get();
-            $studentPaymentsTotal = $studentPayments->sum('payment_amount');
-            $studentPaymentsDiscount = $studentPayments->sum('discount');
-            
-            if ($studentPaymentsTotal > 0) {
-                $summaryRecords->push([
-                    'type' => 'Income',
-                    'category' => 'Student Payments',
-                    'campus' => $filterCampus ?: 'All Campuses',
-                    'month' => $filterMonth ? $months->get($filterMonth) : 'All Months',
-                    'year' => $filterYear ?: 'All Years',
-                    'total_amount' => $studentPaymentsTotal,
-                    'discount' => $studentPaymentsDiscount,
-                    'net_amount' => $studentPaymentsTotal - $studentPaymentsDiscount,
-                    'count' => $studentPayments->count(),
-                ]);
-            }
+        }
 
-            // Custom Payments (Income)
-            $customPaymentsQuery = CustomPayment::query();
-            
-            if ($filterCampus) {
-                $customPaymentsQuery->where('campus', $filterCampus);
+        // Income Summary - Custom Payments
+        $customPaymentsQuery = CustomPayment::query();
+        if ($filterCampus) {
+            $customPaymentsQuery->where('campus', $filterCampus);
+        }
+        if ($filterMonth) {
+            $customPaymentsQuery->whereMonth('payment_date', $filterMonth);
+        }
+        if ($filterYear) {
+            $customPaymentsQuery->whereYear('payment_date', $filterYear);
+        }
+        $customPayments = $customPaymentsQuery->get();
+        
+        if ($groupByDay) {
+            $customPaymentsByDay = $customPayments->groupBy(function($payment) {
+                return \Carbon\Carbon::parse($payment->payment_date)->format('Y-m-d');
+            });
+            foreach ($customPaymentsByDay as $date => $payments) {
+                $total = $payments->sum('payment_amount');
+                if ($total > 0) {
+                    $summaryRecords->push([
+                        'type' => 'Income',
+                        'category' => 'Custom Payments',
+                        'campus' => $filterCampus ?: 'All Campuses',
+                        'date' => \Carbon\Carbon::parse($date)->format('d M Y'),
+                        'month' => \Carbon\Carbon::parse($date)->format('F'),
+                        'year' => \Carbon\Carbon::parse($date)->format('Y'),
+                        'total_amount' => $total,
+                        'discount' => 0,
+                        'net_amount' => $total,
+                        'count' => $payments->count(),
+                    ]);
+                }
             }
-            if ($filterMonth) {
-                $customPaymentsQuery->whereMonth('payment_date', $filterMonth);
-            }
-            if ($filterYear) {
-                $customPaymentsQuery->whereYear('payment_date', $filterYear);
-            }
-            
-            $customPayments = $customPaymentsQuery->get();
-            $customPaymentsTotal = $customPayments->sum('payment_amount');
-            
-            if ($customPaymentsTotal > 0) {
-                $summaryRecords->push([
-                    'type' => 'Income',
-                    'category' => 'Custom Payments',
-                    'campus' => $filterCampus ?: 'All Campuses',
-                    'month' => $filterMonth ? $months->get($filterMonth) : 'All Months',
-                    'year' => $filterYear ?: 'All Years',
-                    'total_amount' => $customPaymentsTotal,
-                    'discount' => 0,
-                    'net_amount' => $customPaymentsTotal,
-                    'count' => $customPayments->count(),
-                ]);
+        } else {
+            $customPaymentsByMonth = $customPayments->groupBy(function($payment) {
+                return \Carbon\Carbon::parse($payment->payment_date)->format('Y-m');
+            });
+            foreach ($customPaymentsByMonth as $monthKey => $payments) {
+                $total = $payments->sum('payment_amount');
+                if ($total > 0) {
+                    $date = \Carbon\Carbon::parse($monthKey . '-01');
+                    $summaryRecords->push([
+                        'type' => 'Income',
+                        'category' => 'Custom Payments',
+                        'campus' => $filterCampus ?: 'All Campuses',
+                        'date' => null,
+                        'month' => $date->format('F'),
+                        'year' => $date->format('Y'),
+                        'total_amount' => $total,
+                        'discount' => 0,
+                        'net_amount' => $total,
+                        'count' => $payments->count(),
+                    ]);
+                }
             }
         }
 
         // Expense Summary
-        if (!$filterType || $filterType == 'Expense') {
-            // Management Expenses
-            $expensesQuery = ManagementExpense::query();
-            
-            if ($filterCampus) {
-                $expensesQuery->where('campus', $filterCampus);
+        $expensesQuery = ManagementExpense::query();
+        if ($filterCampus) {
+            $expensesQuery->where('campus', $filterCampus);
+        }
+        if ($filterMonth) {
+            $expensesQuery->whereMonth('date', $filterMonth);
+        }
+        if ($filterYear) {
+            $expensesQuery->whereYear('date', $filterYear);
+        }
+        $expenses = $expensesQuery->get();
+        
+        if ($groupByDay) {
+            $expensesByDay = $expenses->groupBy(function($expense) {
+                return \Carbon\Carbon::parse($expense->date)->format('Y-m-d');
+            });
+            foreach ($expensesByDay as $date => $expenseGroup) {
+                $total = $expenseGroup->sum('amount');
+                if ($total > 0) {
+                    $summaryRecords->push([
+                        'type' => 'Expense',
+                        'category' => 'Management Expenses',
+                        'campus' => $filterCampus ?: 'All Campuses',
+                        'date' => \Carbon\Carbon::parse($date)->format('d M Y'),
+                        'month' => \Carbon\Carbon::parse($date)->format('F'),
+                        'year' => \Carbon\Carbon::parse($date)->format('Y'),
+                        'total_amount' => $total,
+                        'discount' => 0,
+                        'net_amount' => $total,
+                        'count' => $expenseGroup->count(),
+                    ]);
+                }
             }
-            if ($filterMonth) {
-                $expensesQuery->whereMonth('date', $filterMonth);
-            }
-            if ($filterYear) {
-                $expensesQuery->whereYear('date', $filterYear);
-            }
-            
-            $expenses = $expensesQuery->get();
-            $expensesTotal = $expenses->sum('amount');
-            
-            if ($expensesTotal > 0) {
-                $summaryRecords->push([
-                    'type' => 'Expense',
-                    'category' => 'Management Expenses',
-                    'campus' => $filterCampus ?: 'All Campuses',
-                    'month' => $filterMonth ? $months->get($filterMonth) : 'All Months',
-                    'year' => $filterYear ?: 'All Years',
-                    'total_amount' => $expensesTotal,
-                    'discount' => 0,
-                    'net_amount' => $expensesTotal,
-                    'count' => $expenses->count(),
-                ]);
+        } else {
+            $expensesByMonth = $expenses->groupBy(function($expense) {
+                return \Carbon\Carbon::parse($expense->date)->format('Y-m');
+            });
+            foreach ($expensesByMonth as $monthKey => $expenseGroup) {
+                $total = $expenseGroup->sum('amount');
+                if ($total > 0) {
+                    $date = \Carbon\Carbon::parse($monthKey . '-01');
+                    $summaryRecords->push([
+                        'type' => 'Expense',
+                        'category' => 'Management Expenses',
+                        'campus' => $filterCampus ?: 'All Campuses',
+                        'date' => null,
+                        'month' => $date->format('F'),
+                        'year' => $date->format('Y'),
+                        'total_amount' => $total,
+                        'discount' => 0,
+                        'net_amount' => $total,
+                        'count' => $expenseGroup->count(),
+                    ]);
+                }
             }
         }
 
@@ -177,6 +265,37 @@ class AccountsSummaryController extends Controller
             'filterMonth',
             'filterYear'
         ));
+    }
+
+    /**
+     * Store a newly created campus (AJAX).
+     */
+    public function storeCampus(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'campus_name' => ['required', 'string', 'max:255', 'unique:campuses,campus_name'],
+        ]);
+
+        $campus = Campus::create($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Campus added successfully!',
+            'campus' => $campus
+        ]);
+    }
+
+    /**
+     * Remove the specified campus (AJAX).
+     */
+    public function destroyCampus(Campus $campus): JsonResponse
+    {
+        $campus->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Campus deleted successfully!'
+        ]);
     }
 }
 

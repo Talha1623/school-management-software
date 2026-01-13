@@ -27,19 +27,62 @@ class StudyMaterialController extends Controller
         $filterSection = $request->get('filter_section');
         $filterType = $request->get('filter_type');
 
-        // Get campuses for dropdown - First from Campus model, then fallback
-        $campuses = Campus::orderBy('campus_name', 'asc')->get();
-        if ($campuses->isEmpty()) {
-            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
-            $campuses = $allCampuses->map(function($campus) {
-                return (object)['campus_name' => $campus];
-            });
+        // Check if staff is logged in and is a teacher
+        $staff = Auth::guard('staff')->user();
+        $isTeacher = $staff && $staff->isTeacher();
+        $teacherName = $isTeacher ? strtolower(trim($staff->name ?? '')) : null;
+        
+        // Get campuses for dropdown - filter by teacher's assigned campuses if teacher
+        if ($isTeacher && $teacherName) {
+            // Get campuses from teacher's assigned subjects
+            $teacherCampuses = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->merge(
+                    Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                        ->whereNotNull('campus')
+                        ->distinct()
+                        ->pluck('campus')
+                )
+                ->map(fn($c) => trim($c))
+                ->filter(fn($c) => !empty($c))
+                ->unique()
+                ->sort()
+                ->values();
+            
+            // Filter Campus model results to only show assigned campuses
+            if ($teacherCampuses->isNotEmpty()) {
+                $campuses = Campus::orderBy('campus_name', 'asc')
+                    ->get()
+                    ->filter(function($campus) use ($teacherCampuses) {
+                        return $teacherCampuses->contains(strtolower(trim($campus->campus_name ?? '')));
+                    });
+                
+                // If no campuses found in Campus model, create objects from teacher campuses
+                if ($campuses->isEmpty()) {
+                    $campuses = $teacherCampuses->map(function($campus) {
+                        return (object)['campus_name' => $campus];
+                    });
+                }
+            } else {
+                // If teacher has no assigned campuses, show empty
+                $campuses = collect();
+            }
+        } else {
+            // For non-teachers (admin, staff, etc.), get all campuses
+            $campuses = Campus::orderBy('campus_name', 'asc')->get();
+            if ($campuses->isEmpty()) {
+                $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+                $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+                $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+                $campuses = $allCampuses->map(function($campus) {
+                    return (object)['campus_name' => $campus];
+                });
+            }
         }
 
         // Get classes - filter by teacher's assigned classes if teacher
-        $staff = Auth::guard('staff')->user();
         $classes = collect();
         
         if ($staff && $staff->isTeacher()) {

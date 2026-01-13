@@ -42,7 +42,12 @@ class JobInquiryController extends Controller
         // Get campuses for dropdown
         $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
-        return view('staff.job-inquiry', compact('inquiries', 'campuses'));
+        // Job Inquiry Statistics - Dynamic based on filtered query (search results)
+        $totalInquiries = (clone $query)->count();
+        $fullTimeInquiries = (clone $query)->whereRaw('LOWER(salary_type) LIKE ?', ['%full time%'])->count();
+        $partTimeInquiries = (clone $query)->whereRaw('LOWER(salary_type) LIKE ?', ['%part time%'])->count();
+        
+        return view('staff.job-inquiry', compact('inquiries', 'campuses', 'totalInquiries', 'fullTimeInquiries', 'partTimeInquiries'));
     }
 
     /**

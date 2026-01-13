@@ -77,8 +77,13 @@ class FeeTypeController extends Controller
 
         FeeType::create($validated);
 
+        // Redirect based on which route was used (accountant or accounting)
+        $redirectRoute = request()->route()->getName() === 'accountant.fee-type.store' 
+            ? 'accountant.fee-type' 
+            : 'accounting.fee-type';
+
         return redirect()
-            ->route('accounting.fee-type')
+            ->route($redirectRoute)
             ->with('success', 'Fee type created successfully!');
     }
 
@@ -102,8 +107,13 @@ class FeeTypeController extends Controller
 
         $feeType->update($validated);
 
+        // Redirect based on which route was used (accountant or accounting)
+        $redirectRoute = request()->route()->getName() === 'accountant.fee-type.update' 
+            ? 'accountant.fee-type' 
+            : 'accounting.fee-type';
+
         return redirect()
-            ->route('accounting.fee-type')
+            ->route($redirectRoute)
             ->with('success', 'Fee type updated successfully!');
     }
 
@@ -114,8 +124,13 @@ class FeeTypeController extends Controller
     {
         $feeType->delete();
 
+        // Redirect based on which route was used (accountant or accounting)
+        $redirectRoute = request()->route()->getName() === 'accountant.fee-type.destroy' 
+            ? 'accountant.fee-type' 
+            : 'accounting.fee-type';
+
         return redirect()
-            ->route('accounting.fee-type')
+            ->route($redirectRoute)
             ->with('success', 'Fee type deleted successfully!');
     }
 
@@ -140,6 +155,11 @@ class FeeTypeController extends Controller
         
         $feeTypes = $query->orderBy('fee_name')->get();
         
+        // Determine redirect route based on current route
+        $redirectRoute = request()->route()->getName() === 'accountant.fee-type.export' 
+            ? 'accountant.fee-type' 
+            : 'accounting.fee-type';
+        
         switch ($format) {
             case 'excel':
                 return $this->exportExcel($feeTypes);
@@ -148,7 +168,7 @@ class FeeTypeController extends Controller
             case 'pdf':
                 return $this->exportPDF($feeTypes);
             default:
-                return redirect()->route('accounting.fee-type')
+                return redirect()->route($redirectRoute)
                     ->with('error', 'Invalid export format!');
         }
     }

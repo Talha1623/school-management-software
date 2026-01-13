@@ -1,6 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.accountant')
 
-@section('title', 'Fee Default Reports')
+@section('title', 'Fee Defaulters Reports')
 
 @section('content')
 <div class="row">
@@ -16,7 +16,7 @@
             </div>
 
             <!-- Filter Form -->
-            <form action="{{ route('reports.fee-default') }}" method="GET" id="filterForm">
+            <form action="{{ route('accountant.fee-defaulters') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->
                     <div class="col-md-2">
@@ -380,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const errorDiv = document.getElementById('campus_name_error');
         errorDiv.textContent = '';
         
-        fetch('{{ route("reports.fee-default.campus.store") }}', {
+        fetch('{{ route("accountant.fee-defaulters.campus.store") }}', {
             method: 'POST',
             headers: {
                 'X-CSRF-TOKEN': '{{ csrf_token() }}',
@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
             deleteBtn.title = 'Delete Campus';
             deleteBtn.onclick = function() {
                 if (confirm('Are you sure you want to delete this campus?')) {
-                    fetch(`{{ route("reports.fee-default.campus.destroy", ":id") }}`.replace(':id', campusId), {
+                    fetch(`{{ route("accountant.fee-defaulters.campus.destroy", ":id") }}`.replace(':id', campusId), {
                         method: 'DELETE',
                         headers: {
                             'X-CSRF-TOKEN': '{{ csrf_token() }}',

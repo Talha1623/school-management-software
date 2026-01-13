@@ -8,6 +8,7 @@ use App\Models\StudentPayment;
 use App\Models\Student;
 use App\Models\ManagementExpense;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
@@ -443,17 +444,128 @@ class AccountantController extends Controller
     /**
      * Accountant Pages - Generate Monthly Fee
      */
+    /**
+     * Accountant Pages - Generate Monthly Fee
+     */
     public function generateMonthlyFee(): View
     {
-        return view('accountant.generate-monthly-fee');
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        // Get classes from ClassModel
+        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
+        
+        // If no classes found, provide empty collection
+        if ($classes->isEmpty()) {
+            $classes = collect();
+        }
+        
+        // Get sections from Section model
+        $sections = \App\Models\Section::whereNotNull('name')
+            ->distinct()
+            ->orderBy('name', 'asc')
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        // Months of the year
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        
+        // Generate years (current year - 2 to current year + 5)
+        $currentYear = date('Y');
+        $years = [];
+        for ($y = $currentYear - 2; $y <= $currentYear + 5; $y++) {
+            $years[] = $y;
+        }
+        
+        return view('accountant.generate-monthly-fee', compact('campuses', 'classes', 'sections', 'months', 'years', 'currentYear'));
     }
 
     /**
      * Accountant Pages - Generate Custom Fee
      */
+    /**
+     * Accountant Pages - Generate Custom Fee
+     */
     public function generateCustomFee(): View
     {
-        return view('accountant.generate-custom-fee');
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        // Get classes from ClassModel
+        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
+        
+        // If no classes found, provide empty collection
+        if ($classes->isEmpty()) {
+            $classes = collect();
+        }
+        
+        // Get sections from Section model
+        $sections = \App\Models\Section::whereNotNull('name')
+            ->distinct()
+            ->orderBy('name', 'asc')
+            ->pluck('name')
+            ->sort()
+            ->values();
+        
+        // Get fee types from FeeType model
+        $feeTypes = \App\Models\FeeType::whereNotNull('fee_name')
+            ->distinct()
+            ->orderBy('fee_name', 'asc')
+            ->pluck('fee_name')
+            ->sort()
+            ->values();
+        
+        return view('accountant.generate-custom-fee', compact('campuses', 'classes', 'sections', 'feeTypes'));
     }
 
     /**
@@ -461,15 +573,171 @@ class AccountantController extends Controller
      */
     public function generateTransportFee(): View
     {
-        return view('accountant.generate-transport-fee');
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        // Get classes from ClassModel
+        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
+        
+        // If no classes found, provide empty collection
+        if ($classes->isEmpty()) {
+            $classes = collect();
+        }
+        
+        // Months of the year
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        
+        // Generate years (current year - 2 to current year + 5)
+        $currentYear = date('Y');
+        $years = [];
+        for ($y = $currentYear - 2; $y <= $currentYear + 5; $y++) {
+            $years[] = $y;
+        }
+        
+        return view('accountant.generate-transport-fee', compact('campuses', 'classes', 'months', 'years', 'currentYear'));
     }
 
     /**
+     * Store the generated transport fee for accountant.
+     */
+    public function storeTransportFee(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['required', 'string', 'max:255'],
+            'class' => ['required', 'string', 'max:255'],
+            'section' => ['required', 'string', 'max:255'],
+            'fee_month' => ['required', 'string', 'max:255'],
+            'fee_year' => ['required', 'string', 'max:255'],
+        ]);
+
+        // Create the transport fee configuration
+        $transportFee = \App\Models\TransportFee::create($validated);
+
+        // Get students matching the criteria
+        $studentsQuery = \App\Models\Student::query();
+        
+        if ($validated['campus']) {
+            $studentsQuery->where('campus', $validated['campus']);
+        }
+        
+        if ($validated['class']) {
+            $studentsQuery->where('class', $validated['class']);
+        }
+        
+        if ($validated['section']) {
+            $studentsQuery->where('section', $validated['section']);
+        }
+        
+        $students = $studentsQuery->get();
+        $studentCount = $students->count();
+
+        return redirect()
+            ->route('accountant.generate-transport-fee')
+            ->with('success', "Transport fee generated successfully for {$studentCount} student(s)!");
+    }
+
+    /**
+     * Get sections by class name for accountant (AJAX).
+     */
+    public function getTransportFeeSectionsByClass(Request $request)
+    {
+        $className = $request->get('class');
+        
+        if (!$className) {
+            return response()->json(['sections' => []]);
+        }
+
+        // Get sections for the selected class
+        $sections = \App\Models\Section::where('class', $className)
+            ->orderBy('name', 'asc')
+            ->get(['id', 'name'])
+            ->map(function($section) {
+                return [
+                    'id' => $section->id,
+                    'name' => $section->name
+                ];
+            });
+
+        return response()->json(['sections' => $sections]);
+    }
+
+    /** 
      * Accountant Pages - Fee Type
      */
-    public function feeType(): View
+    public function feeType(Request $request): View
     {
-        return view('accountant.fee-type');
+        $query = \App\Models\FeeType::query();
+        
+        // Search functionality
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(fee_name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+        
+        $perPage = $request->get('per_page', 10);
+        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
+        
+        $feeTypes = $query->orderBy('fee_name')->paginate($perPage)->withQueryString();
+        
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        return view('accountant.fee-type', compact('feeTypes', 'campuses'));
     }
 
     /**
@@ -493,7 +761,105 @@ class AccountantController extends Controller
      */
     public function studentPayment(): View
     {
-        return view('accountant.student-payment');
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        // Payment methods
+        $methods = ['Cash', 'Bank Transfer', 'Cheque', 'Online Payment', 'Card', 'Mobile Banking'];
+        
+        return view('accountant.student-payment', compact('campuses', 'methods'));
+    }
+
+    /**
+     * Store student payment for accountant.
+     */
+    public function storeStudentPayment(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['nullable', 'string', 'max:255'],
+            'student_code' => ['required', 'string', 'max:255'],
+            'payment_title' => ['required', 'string', 'max:255'],
+            'payment_amount' => ['required', 'numeric', 'min:0'],
+            'discount' => ['nullable', 'numeric', 'min:0'],
+            'method' => ['required', 'string', 'max:255'],
+            'payment_date' => ['nullable', 'date'],
+        ]);
+
+        // Set payment date to today if not provided
+        if (!isset($validated['payment_date'])) {
+            $validated['payment_date'] = now()->toDateString();
+        }
+
+        // Add default values
+        $validated['sms_notification'] = 'Yes';
+        $validated['late_fee'] = 0;
+        
+        // Add accountant if available
+        if (auth()->check()) {
+            $validated['accountant'] = auth()->user()->name ?? null;
+        }
+
+        // Create payment record
+        \App\Models\StudentPayment::create($validated);
+
+        return redirect()
+            ->route('accountant.direct-payment.student')
+            ->with('success', 'Payment recorded successfully!');
+    }
+
+    /**
+     * Get student by student code (AJAX).
+     */
+    public function getStudentByCode(Request $request)
+    {
+        $studentCode = $request->get('student_code');
+        
+        if (!$studentCode) {
+            return response()->json(['success' => false, 'message' => 'Student code is required']);
+        }
+
+        $student = \App\Models\Student::where('student_code', $studentCode)->first();
+        
+        if (!$student) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Student not found with this code'
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'student' => [
+                'student_code' => $student->student_code,
+                'student_name' => $student->student_name,
+                'campus' => $student->campus,
+                'class' => $student->class,
+                'section' => $student->section,
+            ]
+        ]);
     }
 
     /**
@@ -501,7 +867,77 @@ class AccountantController extends Controller
      */
     public function customPayment(): View
     {
-        return view('accountant.custom-payment');
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        // Get accountants
+        $accountants = \App\Models\Accountant::orderBy('name', 'asc')->get();
+        if ($accountants->isEmpty()) {
+            $accountants = collect();
+        }
+        
+        // Payment methods
+        $methods = ['Cash', 'Bank Transfer', 'Cheque', 'Online Payment', 'Card', 'Mobile Banking'];
+        
+        return view('accountant.custom-payment', compact('campuses', 'accountants', 'methods'));
+    }
+
+    /**
+     * Store custom payment for accountant.
+     */
+    public function storeCustomPayment(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['nullable', 'string', 'max:255'],
+            'payment_title' => ['required', 'string', 'max:255'],
+            'payment_amount' => ['required', 'numeric', 'min:0'],
+            'accountant' => ['nullable', 'string', 'max:255'],
+            'method' => ['required', 'string', 'max:255'],
+            'payment_date' => ['nullable', 'date'],
+        ]);
+
+        // Set payment date to today if not provided
+        if (!isset($validated['payment_date'])) {
+            $validated['payment_date'] = now()->toDateString();
+        }
+
+        // Add default values
+        $validated['notify_admin'] = 'Yes';
+        
+        // If accountant not provided, use current logged in user
+        if (empty($validated['accountant']) && auth()->check()) {
+            $validated['accountant'] = auth()->user()->name ?? null;
+        }
+
+        // Create payment record
+        \App\Models\CustomPayment::create($validated);
+
+        return redirect()
+            ->route('accountant.direct-payment.custom')
+            ->with('success', 'Custom payment recorded successfully!');
     }
 
     /**
@@ -515,17 +951,136 @@ class AccountantController extends Controller
     /**
      * Accountant Pages - Deleted Fees
      */
-    public function deletedFees(): View
+    public function deletedFees(Request $request): View
     {
-        return view('accountant.deleted-fees');
+        // Get deleted fees
+        $query = \App\Models\DeletedFee::query();
+        
+        // Search functionality
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(student_code) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(student_name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(parent_name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(payment_title) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(deleted_by) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+        
+        $perPage = $request->get('per_page', 10);
+        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
+        
+        $deletedFees = $query->orderBy('deleted_at', 'desc')->paginate($perPage)->withQueryString();
+        
+        return view('accountant.deleted-fees', compact('deletedFees'));
     }
 
     /**
-     * Accountant Pages - Print Fee Vouchers
+     * Restore a deleted fee
      */
-    public function printFeeVouchers(): View
+    public function restoreDeletedFee(\App\Models\DeletedFee $deletedFee)
     {
-        return view('accountant.print-fee-vouchers');
+        try {
+            // Get original payment data
+            $originalData = $deletedFee->original_data ?? [];
+            
+            // If original_data exists, restore from it
+            if (!empty($originalData)) {
+                \App\Models\StudentPayment::create($originalData);
+            } else {
+                // Otherwise, create from deleted_fee fields
+                \App\Models\StudentPayment::create([
+                    'campus' => $deletedFee->campus,
+                    'student_code' => $deletedFee->student_code,
+                    'payment_title' => $deletedFee->payment_title,
+                    'payment_amount' => $deletedFee->payment_amount,
+                    'discount' => $deletedFee->discount ?? 0,
+                    'method' => $deletedFee->method ?? 'Cash',
+                    'payment_date' => $deletedFee->payment_date ?? now(),
+                    'sms_notification' => 'Yes',
+                    'accountant' => $deletedFee->deleted_by,
+                    'late_fee' => 0,
+                ]);
+            }
+            
+            // Delete from deleted_fees table
+            $deletedFee->delete();
+            
+            return redirect()
+                ->route('accountant.deleted-fees')
+                ->with('success', 'Fee restored successfully!');
+        } catch (\Exception $e) {
+            return redirect()
+                ->route('accountant.deleted-fees')
+                ->with('error', 'Failed to restore fee: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Accountant Pages - Student Vouchers
+     */
+    public function studentVouchers(Request $request): View
+    {
+        // Get classes
+        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
+        if ($classes->isEmpty()) {
+            $classes = collect();
+        }
+        
+        // Get sections (will be filtered by class via AJAX)
+        $sections = collect();
+        if ($request->filled('class')) {
+            $sections = \App\Models\Section::where('class', $request->class)
+                ->orderBy('name', 'asc')
+                ->get();
+        }
+        
+        $query = \App\Models\Student::query();
+        
+        // Apply filters
+        if ($request->filled('class')) {
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
+        }
+        
+        if ($request->filled('section')) {
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->section))]);
+        }
+        
+        $students = $query->orderBy('student_name')->paginate(20)->withQueryString();
+        
+        return view('accountant.fee-voucher.student', compact('students', 'classes', 'sections'));
+    }
+
+    /**
+     * Accountant Pages - Family Vouchers
+     */
+    public function familyVouchers(Request $request): View
+    {
+        // Group students by parent (using father_name or parent_id)
+        $query = \App\Models\Student::select(
+            \Illuminate\Support\Facades\DB::raw('COALESCE(father_name, "Unknown") as parent_name'),
+            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT student_name) as student_names'),
+            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT student_code) as student_codes'),
+            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT class) as classes'),
+            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT section) as sections'),
+            \Illuminate\Support\Facades\DB::raw('MAX(campus) as campus'),
+            \Illuminate\Support\Facades\DB::raw('COUNT(*) as student_count')
+        )
+        ->groupBy('father_name');
+        
+        // Apply filters
+        if ($request->filled('campus')) {
+            $query->where('campus', $request->campus);
+        }
+        
+        $families = $query->orderBy('parent_name')->paginate(20)->withQueryString();
+        
+        return view('accountant.fee-voucher.family', compact('families'));
     }
 
     /**
@@ -545,19 +1100,128 @@ class AccountantController extends Controller
     }
 
     /**
-     * Accountant Pages - Reporting Area
+     * Accountant Pages - Fee Defaulters Reports (uses same data/logic as super admin but with accountant layout)
      */
-    public function reportingArea(): View
+    public function feeDefaulters(Request $request): View
     {
-        return view('accountant.reporting-area');
+        // Use the same FeeDefaultReportController logic
+        $controller = new \App\Http\Controllers\FeeDefaultReportController();
+        $view = $controller->index($request);
+        
+        // Change the view to accountant version
+        $viewData = $view->getData();
+        return view('accountant.fee-defaulters', $viewData);
+    }
+
+    /**
+     * Accountant Pages - Accounts Summary Reports (uses same data/logic as super admin but with accountant layout)
+     */
+    public function accountsSummary(Request $request): View
+    {
+        // Use the same AccountsSummaryController logic
+        $controller = new \App\Http\Controllers\AccountsSummaryController();
+        $view = $controller->index($request);
+        
+        // Change the view to accountant version
+        $viewData = $view->getData();
+        return view('accountant.accounts-summary', $viewData);
+    }
+
+    /**
+     * Accountant Pages - Detailed Income Report (uses same data/logic as super admin but with accountant layout)
+     */
+    public function detailedIncome(Request $request): View
+    {
+        // Use the same DetailedIncomeController logic
+        $controller = new \App\Http\Controllers\DetailedIncomeController();
+        $view = $controller->index($request);
+        
+        // Change the view to accountant version
+        $viewData = $view->getData();
+        return view('accountant.detailed-income', $viewData);
+    }
+
+    /**
+     * Accountant Pages - Detailed Expense Report (uses same data/logic as super admin but with accountant layout)
+     */
+    public function detailedExpense(Request $request): View
+    {
+        // Use the same DetailedExpenseController logic
+        $controller = new \App\Http\Controllers\DetailedExpenseController();
+        $view = $controller->index($request);
+        
+        // Change the view to accountant version
+        $viewData = $view->getData();
+        return view('accountant.detailed-expense', $viewData);
     }
 
     /**
      * Accountant Pages - Academic Calendar
      */
-    public function academicCalendar(): View
+    public function academicCalendar(Request $request): View
     {
-        return view('accountant.academic-calendar');
+        $year = $request->get('year', date('Y'));
+        
+        // Get all events for the year
+        $events = \App\Models\Event::whereYear('event_date', $year)
+            ->orderBy('event_date')
+            ->get();
+        
+        // Group events by month
+        $eventsByMonth = [];
+        foreach ($events as $event) {
+            $month = $event->event_date->format('n'); // 1-12
+            if (!isset($eventsByMonth[$month])) {
+                $eventsByMonth[$month] = [];
+            }
+            $eventsByMonth[$month][] = $event;
+        }
+        
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            // Fallback: get from other sources
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            $campuses = $allCampuses->map(function($campusName) {
+                return (object)['campus_name' => $campusName, 'id' => null];
+            });
+        }
+        
+        return view('accountant.academic-calendar', compact('eventsByMonth', 'year', 'campuses'));
+    }
+
+    /**
+     * Store a newly created campus for Academic Calendar (AJAX).
+     */
+    public function storeAcademicCalendarCampus(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'campus_name' => ['required', 'string', 'max:255', 'unique:campuses,campus_name'],
+        ]);
+
+        $campus = \App\Models\Campus::create($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Campus added successfully!',
+            'campus' => $campus
+        ]);
+    }
+
+    /**
+     * Remove the specified campus for Academic Calendar (AJAX).
+     */
+    public function destroyAcademicCalendarCampus(\App\Models\Campus $campus): \Illuminate\Http\JsonResponse
+    {
+        $campus->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Campus deleted successfully!'
+        ]);
     }
 
     /**

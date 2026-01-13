@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class TeacherRemarksController extends Controller
 {
@@ -28,36 +29,93 @@ class TeacherRemarksController extends Controller
         $filterSubject = $request->get('filter_subject');
         $filterTest = $request->get('filter_test');
 
-        // Get campuses for dropdown
+        // Check if staff is logged in and is a teacher
+        $staff = Auth::guard('staff')->user();
+        $isTeacher = $staff && $staff->isTeacher();
+        $teacherName = $isTeacher ? trim($staff->name ?? '') : null;
+
+        // Get campuses for dropdown - only from Campus model (no fallback to avoid deleted items)
         $campuses = Campus::orderBy('campus_name', 'asc')->get();
-        if ($campuses->isEmpty()) {
-            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-            $campusesFromSubjects = Subject::whereNotNull('campus')->distinct()->pluck('campus');
-            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->merge($campusesFromSubjects)->unique()->sort();
-            $campuses = $allCampuses->map(function($campus) {
-                return (object)['campus_name' => $campus];
-            });
+        
+        // If teacher, filter campuses by their assigned subjects/sections
+        if ($isTeacher && $teacherName) {
+            $teacherCampuses = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->merge(
+                    Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                        ->whereNotNull('campus')
+                        ->distinct()
+                        ->pluck('campus')
+                )
+                ->unique()
+                ->sort()
+                ->values();
+            
+            // Filter campuses to only show those assigned to teacher
+            if ($teacherCampuses->isNotEmpty()) {
+                $campuses = $campuses->filter(function($campus) use ($teacherCampuses) {
+                    return $teacherCampuses->contains($campus->campus_name);
+                });
+            } else {
+                // If teacher has no assigned campuses, show empty
+                $campuses = collect();
+            }
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        // Get classes - only from ClassModel (no fallback to avoid deleted items)
+        $classesQuery = ClassModel::whereNotNull('class_name');
         
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        // If teacher, filter classes by their assigned subjects/sections
+        if ($isTeacher && $teacherName) {
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                ->whereNotNull('class')
+                ->distinct()
+                ->pluck('class')
+                ->map(fn($c) => trim($c))
+                ->filter(fn($c) => !empty($c));
+            
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                ->whereNotNull('class')
+                ->distinct()
+                ->pluck('class')
+                ->map(fn($c) => trim($c))
+                ->filter(fn($c) => !empty($c));
+            
+            $assignedClasses = $assignedSubjects->merge($assignedSections)->unique()->values();
+            
+            if ($assignedClasses->isNotEmpty()) {
+                $classesQuery->where(function($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class_name)) = ?', [strtolower(trim($className))]);
+                    }
+                });
+            } else {
+                // If teacher has no assigned classes, show empty
+                $classesQuery->whereRaw('1 = 0');
+            }
         }
+        
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
 
         // Get sections (will be filtered dynamically based on class selection)
         $sections = collect(); // Initialized as empty, will be filled via AJAX
         if ($filterClass) {
-            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
-                ->sort()
-                ->values();
-            if ($sections->isEmpty()) {
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->whereNotNull('name');
+            
+            // If teacher, filter by assigned sections
+            if ($isTeacher && $teacherName) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)]);
+            }
+            
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+            
+            // If no sections from Section table and teacher, try from Subject table
+            if ($sections->isEmpty() && $isTeacher && $teacherName) {
                 $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
                     ->whereNotNull('section')
                     ->distinct()
                     ->pluck('section')
@@ -72,6 +130,11 @@ class TeacherRemarksController extends Controller
         // Class is required for subjects
         if ($filterClass) {
             $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+            
+            // If teacher, filter by assigned subjects
+            if ($isTeacher && $teacherName) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)]);
+            }
             
             $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
             if ($campusName) {
@@ -95,6 +158,42 @@ class TeacherRemarksController extends Controller
 
         // Get tests (filtered by other criteria if provided) - Only show tests where result_status = 1 (declared)
         $testsQuery = Test::where('result_status', 1);
+        
+        // If teacher, filter tests by their assigned subjects
+        if ($isTeacher && $teacherName && $filterSubject) {
+            // Verify that the subject is assigned to this teacher
+            $assignedSubject = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                ->whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($filterSubject))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->first();
+            
+            // If subject is not assigned to teacher, show no tests
+            if (!$assignedSubject) {
+                $testsQuery->whereRaw('1 = 0');
+            }
+        } elseif ($isTeacher && $teacherName && !$filterSubject && $filterClass) {
+            // If no subject selected but class is selected, only show tests for subjects assigned to teacher
+            $assignedSubjectNames = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->whereNotNull('subject_name')
+                ->distinct()
+                ->pluck('subject_name')
+                ->map(fn($s) => strtolower(trim($s)))
+                ->filter(fn($s) => !empty($s))
+                ->values();
+            
+            if ($assignedSubjectNames->isNotEmpty()) {
+                $testsQuery->where(function($q) use ($assignedSubjectNames) {
+                    foreach ($assignedSubjectNames as $subjectName) {
+                        $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectName]);
+                    }
+                });
+            } else {
+                // If teacher has no assigned subjects for this class, show no tests
+                $testsQuery->whereRaw('1 = 0');
+            }
+        }
+        
         $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
         if ($campusName) {
             $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
@@ -185,16 +284,60 @@ class TeacherRemarksController extends Controller
             $filterSection = $parts[1] ?? null;
         }
 
-        // Get campuses for dropdown
-        $campuses = Campus::orderBy('campus_name', 'asc')->get();
-        if ($campuses->isEmpty()) {
-            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-            $campusesFromSubjects = Subject::whereNotNull('campus')->distinct()->pluck('campus');
-            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->merge($campusesFromSubjects)->unique()->sort();
-            $campuses = $allCampuses->map(function($campus) {
-                return (object)['campus_name' => $campus];
-            });
+        // Check if staff is logged in and is a teacher
+        $staff = Auth::guard('staff')->user();
+        $isTeacher = $staff && $staff->isTeacher();
+        $teacherName = $isTeacher ? strtolower(trim($staff->name ?? '')) : null;
+        
+        // Get campuses for dropdown - filter by teacher's assigned campuses if teacher
+        if ($isTeacher && $teacherName) {
+            // Get campuses from teacher's assigned subjects
+            $teacherCampuses = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->merge(
+                    Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                        ->whereNotNull('campus')
+                        ->distinct()
+                        ->pluck('campus')
+                )
+                ->map(fn($c) => trim($c))
+                ->filter(fn($c) => !empty($c))
+                ->unique()
+                ->sort()
+                ->values();
+            
+            // Filter Campus model results to only show assigned campuses
+            if ($teacherCampuses->isNotEmpty()) {
+                $campuses = Campus::orderBy('campus_name', 'asc')
+                    ->get()
+                    ->filter(function($campus) use ($teacherCampuses) {
+                        return $teacherCampuses->contains(strtolower(trim($campus->campus_name ?? '')));
+                    });
+                
+                // If no campuses found in Campus model, create objects from teacher campuses
+                if ($campuses->isEmpty()) {
+                    $campuses = $teacherCampuses->map(function($campus) {
+                        return (object)['campus_name' => $campus];
+                    });
+                }
+            } else {
+                // If teacher has no assigned campuses, show empty
+                $campuses = collect();
+            }
+        } else {
+            // For non-teachers (admin, staff, etc.), get all campuses
+            $campuses = Campus::orderBy('campus_name', 'asc')->get();
+            if ($campuses->isEmpty()) {
+                $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+                $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+                $campusesFromSubjects = Subject::whereNotNull('campus')->distinct()->pluck('campus');
+                $allCampuses = $campusesFromClasses->merge($campusesFromSections)->merge($campusesFromSubjects)->unique()->sort();
+                $campuses = $allCampuses->map(function($campus) {
+                    return (object)['campus_name' => $campus];
+                });
+            }
         }
 
         // Get sessions
@@ -204,20 +347,71 @@ class TeacherRemarksController extends Controller
             $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
         }
 
-        // Get Class/Section combinations
+        // Get Class/Section combinations - only from existing classes (not deleted) and filter by teacher if teacher
         $classSectionOptions = collect();
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
         
-        foreach ($classes as $className) {
-            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
-                ->sort()
+        // Get classes - only from ClassModel (not deleted) and filter by teacher if teacher
+        if ($isTeacher && $teacherName) {
+            // Get classes from teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereNotNull('class')
+                ->get();
+            
+            // Get classes from teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereNotNull('class')
+                ->get();
+            
+            // Merge classes from both sources and get unique class names
+            $allClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
+                ->unique()
                 ->values();
             
-            if ($sections->isEmpty()) {
-                // Try from Subject table
+            // Verify these classes exist in ClassModel (not deleted)
+            $existingClassNames = ClassModel::whereNotNull('class_name')
+                ->pluck('class_name')
+                ->map(fn($name) => strtolower(trim($name)))
+                ->toArray();
+            
+            // Filter to only include classes that exist in ClassModel
+            $classes = $allClasses->filter(function($className) use ($existingClassNames) {
+                return in_array(strtolower(trim($className)), $existingClassNames);
+            })->sort()->values();
+        } else {
+            // For non-teachers, get all classes from ClassModel (not deleted)
+            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        }
+        
+        // Build Class/Section combinations
+        foreach ($classes as $className) {
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
+                ->whereNotNull('name');
+            
+            // If teacher, filter by assigned sections
+            if ($isTeacher && $teacherName) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
+            }
+            
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+            
+            // If no sections from Section table and teacher, try from Subject table
+            if ($sections->isEmpty() && $isTeacher && $teacherName) {
+                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
+                    ->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+            } elseif ($sections->isEmpty() && !$isTeacher) {
+                // For non-teachers, try from Subject table if no sections in Section table
                 $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
                     ->whereNotNull('section')
                     ->distinct()
@@ -330,15 +524,25 @@ class TeacherRemarksController extends Controller
             return response()->json(['sections' => []]);
         }
         
-        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-            ->whereNotNull('name')
-            ->distinct()
-            ->pluck('name')
-            ->sort()
-            ->values();
+        // Check if staff is logged in and is a teacher
+        $staff = Auth::guard('staff')->user();
+        $isTeacher = $staff && $staff->isTeacher();
+        $teacherName = $isTeacher ? trim($staff->name ?? '') : null;
         
-        if ($sections->isEmpty()) {
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name');
+        
+        // If teacher, filter by assigned sections
+        if ($isTeacher && $teacherName) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)]);
+        }
+        
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+        
+        // If no sections from Section table and teacher, try from Subject table
+        if ($sections->isEmpty() && $isTeacher && $teacherName) {
             $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
                 ->whereNotNull('section')
                 ->distinct()
                 ->pluck('section')
@@ -363,10 +567,20 @@ class TeacherRemarksController extends Controller
             return response()->json(['subjects' => []]);
         }
         
+        // Check if staff is logged in and is a teacher
+        $staff = Auth::guard('staff')->user();
+        $isTeacher = $staff && $staff->isTeacher();
+        $teacherName = $isTeacher ? trim($staff->name ?? '') : null;
+        
         $subjectsQuery = Subject::query();
         
         // Always filter by class
         $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        
+        // If teacher, filter by assigned subjects
+        if ($isTeacher && $teacherName) {
+            $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)]);
+        }
         
         // If campus is provided, filter by campus
         if ($campus) {
@@ -402,7 +616,47 @@ class TeacherRemarksController extends Controller
             return response()->json(['tests' => []]);
         }
         
+        // Check if staff is logged in and is a teacher
+        $staff = Auth::guard('staff')->user();
+        $isTeacher = $staff && $staff->isTeacher();
+        $teacherName = $isTeacher ? trim($staff->name ?? '') : null;
+        
         $testsQuery = Test::where('result_status', 1); // Only declared results
+        
+        // If teacher, filter tests by their assigned subjects
+        if ($isTeacher && $teacherName && $subject) {
+            // Verify that the subject is assigned to this teacher
+            $assignedSubject = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                ->whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($subject))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->first();
+            
+            // If subject is not assigned to teacher, show no tests
+            if (!$assignedSubject) {
+                $testsQuery->whereRaw('1 = 0');
+            }
+        } elseif ($isTeacher && $teacherName && !$subject) {
+            // If no subject selected, only show tests for subjects assigned to teacher
+            $assignedSubjectNames = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('subject_name')
+                ->distinct()
+                ->pluck('subject_name')
+                ->map(fn($s) => strtolower(trim($s)))
+                ->filter(fn($s) => !empty($s))
+                ->values();
+            
+            if ($assignedSubjectNames->isNotEmpty()) {
+                $testsQuery->where(function($q) use ($assignedSubjectNames) {
+                    foreach ($assignedSubjectNames as $subjectName) {
+                        $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectName]);
+                    }
+                });
+            } else {
+                // If teacher has no assigned subjects for this class, show no tests
+                $testsQuery->whereRaw('1 = 0');
+            }
+        }
         
         // Always filter by class
         $testsQuery->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($class))]);
@@ -478,19 +732,74 @@ class TeacherRemarksController extends Controller
     {
         $campus = $request->get('campus');
         
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        // Check if staff is logged in and is a teacher
+        $staff = Auth::guard('staff')->user();
+        $isTeacher = $staff && $staff->isTeacher();
+        $teacherName = $isTeacher ? strtolower(trim($staff->name ?? '')) : null;
+        
+        // Get classes - only from ClassModel (not deleted) and filter by teacher if teacher
+        if ($isTeacher && $teacherName) {
+            // Get classes from teacher's assigned subjects
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereNotNull('class')
+                ->get();
+            
+            // Get classes from teacher's assigned sections
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereNotNull('class')
+                ->get();
+            
+            // Merge classes from both sources and get unique class names
+            $allClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
+                ->unique()
+                ->values();
+            
+            // Verify these classes exist in ClassModel (not deleted)
+            $existingClassNames = ClassModel::whereNotNull('class_name')
+                ->pluck('class_name')
+                ->map(fn($name) => strtolower(trim($name)))
+                ->toArray();
+            
+            // Filter to only include classes that exist in ClassModel
+            $classes = $allClasses->filter(function($className) use ($existingClassNames) {
+                return in_array(strtolower(trim($className)), $existingClassNames);
+            })->sort()->values();
+        } else {
+            // For non-teachers, get all classes from ClassModel (not deleted)
+            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        }
         
         $classSectionOptions = collect();
         
         foreach ($classes as $className) {
-            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
-                ->sort()
-                ->values();
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
+                ->whereNotNull('name');
             
-            if ($sections->isEmpty()) {
+            // If teacher, filter by assigned sections
+            if ($isTeacher && $teacherName) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
+            }
+            
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+            
+            // If no sections from Section table and teacher, try from Subject table
+            if ($sections->isEmpty() && $isTeacher && $teacherName) {
+                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
+                    ->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                    ->whereNotNull('section')
+                    ->distinct()
+                    ->pluck('section')
+                    ->sort()
+                    ->values();
+            } elseif ($sections->isEmpty() && !$isTeacher) {
+                // For non-teachers, try from Subject table if no sections in Section table
                 $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
                     ->whereNotNull('section')
                     ->distinct()

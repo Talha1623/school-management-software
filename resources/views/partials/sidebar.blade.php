@@ -1,7 +1,7 @@
 <!-- Start Sidebar Area -->
 <div class="sidebar-area" id="sidebar-area">
     <div class="logo position-relative d-flex align-items-center justify-content-between">
-        <a href="{{ route('dashboard') }}" class="d-block text-decoration-none position-relative">
+        <a href="{{ Auth::guard('staff')->check() ? route('staff.dashboard') : route('dashboard') }}" class="d-block text-decoration-none position-relative">
             <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
         </a> 
         <button class="sidebar-burger-menu-close bg-transparent py-3 border-0 opacity-0 z-n1 position-absolute top-50 end-0 translate-middle-y" id="sidebar-burger-menu-close">
@@ -204,6 +204,14 @@
                     </a>
                 </li>
                 
+                {{-- Staff Attendance Report --}}
+                <li class="menu-item {{ request()->routeIs('attendance.staff-report') ? 'active' : '' }}">
+                    <a href="{{ route('attendance.staff-report') }}" class="menu-link {{ request()->routeIs('attendance.staff-report') ? 'active' : '' }}">
+                        <span class="material-symbols-outlined menu-icon">groups</span>
+                        <span class="title">Staff Attendance Report</span>
+                    </a>
+                </li>
+                
                 {{-- Academic/Holiday Calendar --}}
                 <li class="menu-item {{ request()->routeIs('academic-calendar*') ? 'active' : '' }}">
                     <a href="{{ route('academic-calendar.view') }}" class="menu-link {{ request()->routeIs('academic-calendar*') ? 'active' : '' }}">
@@ -268,11 +276,11 @@
                                             Manage Inquiry
                                         </a>
                                     </li>
-                                    <li class="menu-item">
+                                    <!-- <li class="menu-item">
                                         <a href="{{ route('admission.inquiry.send-sms') }}" class="menu-link {{ request()->routeIs('admission.inquiry.send-sms') ? 'active' : '' }}">
                                             Send SMS to Inquiry
                                         </a>
-                                    </li>
+                                    </li> -->
                                 </ul>
                             </li>
                         </ul>
@@ -618,6 +626,11 @@
                             <li class="menu-item">
                                 <a href="{{ route('attendance.report') }}" class="menu-link {{ request()->routeIs('attendance.report') ? 'active' : '' }}">
                                     Attendance Report
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('attendance.staff-report') }}" class="menu-link {{ request()->routeIs('attendance.staff-report') ? 'active' : '' }}">
+                                    Staff Attendance Report
                                 </a>
                             </li>
                         </ul>
@@ -1255,7 +1268,7 @@
                             <span class="title">Leave Management</span>
                         </a>
                     </li>
-                    <li class="menu-item">
+                    <!-- <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('sms*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">sms</span>
                             <span class="title">SMS Management</span>
@@ -1282,7 +1295,7 @@
                                 </a>
                             </li>
                         </ul>
-                    </li>
+                    </li> -->
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('notification*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">notifications</span>
@@ -1311,7 +1324,7 @@
                             </li>
                         </ul>
                     </li>
-                    <li class="menu-item">
+                    <!-- <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('whatsapp*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">chat</span>
                             <span class="title">WhatsApp Notification</span>
@@ -1333,13 +1346,13 @@
                                 </a>
                             </li>
                         </ul>
-                    </li>
-                    <li class="menu-item">
+                    </li> -->
+                    <!-- <li class="menu-item">
                         <a href="{{ route('whatsapp.template') }}" class="menu-link {{ request()->routeIs('whatsapp.template') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">description</span>
                             <span class="title">Send/WhatsApp Template</span>
                         </a>
-                    </li>
+                    </li> -->
                     <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('email-alerts*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">mail</span>
@@ -1420,37 +1433,37 @@
                         </a>
                         <ul class="menu-sub">
                             <li class="menu-item">
-                                <a href="{{ route('settings.general') }}" class="menu-link {{ request()->routeIs('settings.general') ? 'active' : '' }}">
+                                <a href="{{ route('settings.general') }}" class="menu-link {{ request()->routeIs('settings.general') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     General Setting
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('settings.automation') }}" class="menu-link {{ request()->routeIs('settings.automation') ? 'active' : '' }}">
+                                <a href="{{ route('settings.automation') }}" class="menu-link {{ request()->routeIs('settings.automation') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     Automation Setting
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('settings.sms') }}" class="menu-link {{ request()->routeIs('settings.sms') ? 'active' : '' }}">
+                                <a href="{{ route('settings.sms') }}" class="menu-link {{ request()->routeIs('settings.sms') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     SMS Setting
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('settings.email') }}" class="menu-link {{ request()->routeIs('settings.email') ? 'active' : '' }}">
+                                <a href="{{ route('settings.email') }}" class="menu-link {{ request()->routeIs('settings.email') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     Email Setting
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('settings.payment') }}" class="menu-link {{ request()->routeIs('settings.payment') ? 'active' : '' }}">
+                                <a href="{{ route('settings.payment') }}" class="menu-link {{ request()->routeIs('settings.payment') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     Payment Setting
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('settings.exam') }}" class="menu-link {{ request()->routeIs('settings.exam') ? 'active' : '' }}">
+                                <a href="{{ route('settings.exam') }}" class="menu-link {{ request()->routeIs('settings.exam') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     Exam Setting
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('thermal-printer.setting') }}" class="menu-link {{ request()->routeIs('thermal-printer*') ? 'active' : '' }}">
+                                <a href="{{ route('thermal-printer.setting') }}" class="menu-link {{ request()->routeIs('thermal-printer*') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     Thermal Printer Setting
                                 </a>
                             </li>
@@ -1510,6 +1523,23 @@
 @endif
 
 <script>
+// Function to prevent sidebar from closing on mobile when clicking Settings links
+function preventSidebarClose(event) {
+    // On mobile/responsive view, keep sidebar open
+    if (window.innerWidth <= 1199) {
+        // Prevent default behavior that might close sidebar
+        event.stopPropagation();
+        
+        // Ensure sidebar stays open
+        setTimeout(function() {
+            const body = document.body;
+            if (body.getAttribute('sidebar-data-theme') === 'sidebar-hide') {
+                body.setAttribute('sidebar-data-theme', 'sidebar-show');
+            }
+        }, 50);
+    }
+}
+
 function handleSidebarLogout() {
     // Check for admin logout form first
     var adminForm = document.getElementById('admin-logout-form');
@@ -1537,6 +1567,7 @@ function handleSidebarLogout() {
 }
 
 // Keep Dashboard dropdown open when Task Management is active
+// Keep Settings dropdown open when General Settings or other settings pages are active
 document.addEventListener('DOMContentLoaded', function() {
     // Check if we're on Task Management page
     const isTaskManagement = window.location.pathname.includes('/task-management');
@@ -1580,6 +1611,42 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Check if we're on Settings page (General Settings, Automation, SMS, Email, Payment, Exam, Thermal Printer)
+    const isSettingsPage = window.location.pathname.includes('/settings/') || 
+                           window.location.pathname.includes('/thermal-printer');
+    
+    if (isSettingsPage) {
+        // Find Settings menu item
+        const settingsMenuItems = document.querySelectorAll('.menu-item');
+        let settingsMenuItem = null;
+        
+        settingsMenuItems.forEach(function(item) {
+            const toggle = item.querySelector('a.menu-toggle');
+            if (toggle && toggle.textContent.includes('Settings')) {
+                settingsMenuItem = item;
+            }
+        });
+        
+        if (settingsMenuItem) {
+            // Ensure Settings dropdown is open
+            if (!settingsMenuItem.classList.contains('open')) {
+                settingsMenuItem.classList.add('open');
+            }
+            
+            // Also try using the menu API if available
+            setTimeout(function() {
+                const settingsToggle = settingsMenuItem.querySelector('a.menu-toggle');
+                if (settingsToggle && window.Helpers && window.Helpers.mainMenu) {
+                    try {
+                        window.Helpers.mainMenu.open(settingsToggle, false);
+                    } catch(e) {
+                        console.log('Menu API not available, using class toggle');
+                    }
+                }
+            }, 100);
+        }
+    }
+    
     // Prevent Dashboard dropdown from closing when Task Management link is clicked
     const taskManagementLinks = document.querySelectorAll('a[href*="task-management"]');
     taskManagementLinks.forEach(function(link) {
@@ -1596,6 +1663,49 @@ document.addEventListener('DOMContentLoaded', function() {
                 parent = parent.parentElement?.closest('.menu-item');
             }
         });
+    });
+    
+    // Prevent Settings dropdown from closing when Settings submenu links are clicked
+    // Also prevent sidebar from closing on mobile when clicking Settings links
+    const settingsLinks = document.querySelectorAll('a[href*="/settings/"], a[href*="/thermal-printer"]');
+    settingsLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            // Find parent Settings menu item
+            let parent = link.closest('.menu-item');
+            while (parent) {
+                const toggle = parent.querySelector('a.menu-toggle');
+                if (toggle && toggle.textContent.includes('Settings')) {
+                    // Keep it open
+                    parent.classList.add('open');
+                    break;
+                }
+                parent = parent.parentElement?.closest('.menu-item');
+            }
+        }, true); // Use capture phase to run before other handlers
+    });
+    
+    // Prevent sidebar from closing on mobile when clicking Settings submenu links
+    // Find Settings menu item and its submenu links
+    const settingsMenuItems = document.querySelectorAll('.menu-item');
+    settingsMenuItems.forEach(function(menuItem) {
+        const toggle = menuItem.querySelector('a.menu-toggle');
+        if (toggle && toggle.textContent.includes('Settings')) {
+            const submenuLinks = menuItem.querySelectorAll('.menu-sub a');
+            submenuLinks.forEach(function(link) {
+                link.addEventListener('click', function(e) {
+                    // On mobile, prevent sidebar from closing
+                    if (window.innerWidth <= 1199) {
+                        // Keep sidebar open on mobile
+                        setTimeout(function() {
+                            const body = document.body;
+                            if (body.getAttribute('sidebar-data-theme') === 'sidebar-hide') {
+                                body.setAttribute('sidebar-data-theme', 'sidebar-show');
+                            }
+                        }, 100);
+                    }
+                }, true); // Use capture phase
+            });
+        }
     });
 });
 </script>
