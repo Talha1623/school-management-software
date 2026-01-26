@@ -10,6 +10,7 @@ use App\Models\Subject;
 use App\Models\Student;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -146,9 +147,41 @@ class ManageSectionController extends Controller
         $teachers = Staff::whereRaw('LOWER(TRIM(designation)) LIKE ?', ['%teacher%'])
             ->whereNotNull('name')
             ->orderBy('name')
-            ->pluck('name', 'id');
+            ->get(['name', 'campus']);
         
         return view('classes.manage-section', compact('sections', 'campuses', 'classes', 'allSessions', 'teachers'));
+    }
+
+    /**
+     * Get classes by campus (AJAX).
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+
+        if ($classes->isEmpty()) {
+            $classesFromSections = Section::whereNotNull('class');
+            if ($campus) {
+                $classesFromSections->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classesFromSections = $classesFromSections->distinct()->pluck('class')->sort()->values();
+
+            $classes = $classesFromSections;
+        }
+
+        $classes = $classes->map(function ($class) {
+            return trim((string) $class);
+        })->filter(function ($class) {
+            return $class !== '';
+        })->unique()->sort()->values();
+
+        return response()->json(['classes' => $classes]);
     }
 
     /**

@@ -170,7 +170,7 @@
                             
                             <div class="mb-2">
                                 <label for="class" class="form-label mb-0 fs-13 fw-medium">Class <span class="text-danger">*</span></label>
-                                <select class="form-select form-select-sm" id="class" name="class" required style="height: 32px; font-size: 13px;" onchange="loadSections(this.value)">
+                                <select class="form-select form-select-sm" id="class" name="class" required style="height: 32px; font-size: 13px;" onchange="loadSections(this.value, document.getElementById('campus')?.value || '')">
                                     <option value="">Select Class</option>
                                     @foreach($classes as $class)
                                         <option value="{{ $class }}" {{ old('class', $student->class) == $class ? 'selected' : '' }}>{{ $class }}</option>
@@ -316,6 +316,7 @@
 function loadTransportFare(routeName) {
     const transportFareContainer = document.getElementById('transport_fare_container');
     const transportFareInput = document.getElementById('transport_fare');
+    const campusValue = document.getElementById('campus')?.value;
     
     if (!routeName) {
         // Hide transport fare field if no route selected
@@ -334,7 +335,12 @@ function loadTransportFare(routeName) {
     }
     
     // Fetch route fare via AJAX
-    fetch(`{{ route('admission.get-route-fare') }}?route=${encodeURIComponent(routeName)}`)
+    const params = new URLSearchParams();
+    params.append('route', routeName);
+    if (campusValue) {
+        params.append('campus', campusValue);
+    }
+    fetch(`{{ route('admission.get-route-fare') }}?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             if (transportFareInput) {
@@ -351,6 +357,61 @@ function loadTransportFare(routeName) {
             if (transportFareInput) {
                 transportFareInput.value = '';
             }
+        });
+}
+
+function loadTransportRoutesByCampus(campusValue, selectedRoute = '') {
+    const transportRouteSelect = document.getElementById('transport_route');
+    const transportFareContainer = document.getElementById('transport_fare_container');
+    const transportFareInput = document.getElementById('transport_fare');
+    if (!transportRouteSelect) return;
+
+    if (!campusValue) {
+        transportRouteSelect.innerHTML = '<option value="">Select Campus First</option>';
+        transportRouteSelect.disabled = true;
+        if (transportFareContainer) {
+            transportFareContainer.style.display = 'none';
+        }
+        if (transportFareInput) {
+            transportFareInput.value = '';
+        }
+        return;
+    }
+
+    transportRouteSelect.innerHTML = '<option value="">Loading...</option>';
+    transportRouteSelect.disabled = true;
+
+    fetch(`{{ route('admission.get-transport-routes') }}?campus=${encodeURIComponent(campusValue)}`)
+        .then(response => response.json())
+        .then(data => {
+            const routes = Array.isArray(data.routes) ? data.routes : [];
+            transportRouteSelect.innerHTML = '<option value="">Select Transport Route</option>';
+            routes.forEach(route => {
+                const option = document.createElement('option');
+                option.value = route;
+                option.textContent = route;
+                if (selectedRoute && route.toLowerCase().trim() === selectedRoute.toLowerCase().trim()) {
+                    option.selected = true;
+                }
+                transportRouteSelect.appendChild(option);
+            });
+            transportRouteSelect.disabled = routes.length === 0;
+
+            if (selectedRoute && transportRouteSelect.value) {
+                loadTransportFare(transportRouteSelect.value);
+            } else {
+                if (transportFareContainer) {
+                    transportFareContainer.style.display = 'none';
+                }
+                if (transportFareInput) {
+                    transportFareInput.value = '';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading transport routes:', error);
+            transportRouteSelect.innerHTML = '<option value="">Error loading routes</option>';
+            transportRouteSelect.disabled = true;
         });
 }
 
@@ -475,15 +536,59 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-function loadSections(className) {
+function loadClassesByCampus(campusValue, selectedClass = '') {
+    const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
-    const currentSection = '{{ old('section', $student->section) }}';
+    if (!classSelect) return Promise.resolve();
+
+    classSelect.innerHTML = '<option value="">Loading classes...</option>';
+    classSelect.disabled = true;
+    if (sectionSelect) {
+        sectionSelect.innerHTML = '<option value="">Select Section</option>';
+    }
+
+    const params = new URLSearchParams();
+    if (campusValue) {
+        params.append('campus', campusValue);
+    }
+
+    return fetch(`{{ route('student.information.classes-by-campus') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            const classes = Array.isArray(data.classes) ? data.classes : [];
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                if (selectedClass && className.toLowerCase().trim() === selectedClass.toLowerCase().trim()) {
+                    option.selected = true;
+                }
+                classSelect.appendChild(option);
+            });
+            classSelect.disabled = classes.length === 0;
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            classSelect.disabled = true;
+        });
+}
+
+function loadSections(className, campusValue = '', selectedSectionOverride = '') {
+    const sectionSelect = document.getElementById('section');
+    const currentSection = selectedSectionOverride || '{{ old('section', $student->section) }}';
     
     // Clear existing options but keep current section value
     sectionSelect.innerHTML = '<option value="">Select Section</option>';
     
     if (className) {
-        fetch(`{{ route('admission.get-sections') }}?class=${encodeURIComponent(className)}`)
+        const params = new URLSearchParams();
+        params.append('class', className);
+        if (campusValue) {
+            params.append('campus', campusValue);
+        }
+        fetch(`{{ route('student.information.sections-by-class') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 if (data.sections && data.sections.length > 0) {
@@ -521,11 +626,32 @@ function loadSections(className) {
     }
 }
 
-// Load sections on page load if class is already selected
 document.addEventListener('DOMContentLoaded', function() {
-    const selectedClass = document.getElementById('class').value;
-    if (selectedClass) {
-        loadSections(selectedClass);
+    const campusSelect = document.getElementById('campus');
+    const classSelect = document.getElementById('class');
+    const selectedClass = '{{ old('class', $student->class) }}';
+    const selectedSection = '{{ old('section', $student->section) }}';
+    const selectedRoute = '{{ old('transport_route', $student->transport_route) }}';
+    const campusValue = campusSelect ? campusSelect.value : '';
+
+    loadClassesByCampus(campusValue, selectedClass).then(() => {
+        const classValue = classSelect ? classSelect.value : '';
+        if (classValue) {
+            loadSections(classValue, campusValue, selectedSection);
+        }
+    });
+    loadTransportRoutesByCampus(campusValue, selectedRoute);
+
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClassesByCampus(this.value).then(() => {
+                const classValue = classSelect ? classSelect.value : '';
+                if (classValue) {
+                    loadSections(classValue, this.value);
+                }
+            });
+            loadTransportRoutesByCampus(this.value);
+        });
     }
 });
 </script>

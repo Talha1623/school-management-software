@@ -93,7 +93,7 @@
                     <span>Management Expenses List</span>
                 </h5>
             </div>
-
+             
             <!-- Search Results Info -->
             @if(request('search'))
                 <div class="search-results-info">
@@ -110,7 +110,7 @@
             @endif
 
             <div class="default-table-area" style="margin-top: 0;">
-                <div class="table-responsive">
+                <div class="table-responsive expense-table-responsive">
                     <table class="table table-sm table-hover">
                         <thead>
                             <tr>
@@ -169,9 +169,15 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
+                                                <a href="{{ route('accountant.add-manage-expense.show', $expense->id) }}" class="btn btn-sm btn-info px-2 py-1" title="View">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                                                </a>
                                                 <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editExpense({{ $expense->id }}, '{{ addslashes($expense->campus) }}', '{{ addslashes($expense->category) }}', '{{ addslashes($expense->title) }}', '{{ addslashes($expense->description ?? '') }}', {{ $expense->amount }}, '{{ addslashes($expense->method) }}', '{{ $expense->invoice_receipt ? Storage::url($expense->invoice_receipt) : '' }}', '{{ $expense->date->format('Y-m-d') }}', {{ $expense->notify_admin ? 'true' : 'false' }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
+                                                <a href="{{ route('accountant.add-manage-expense.print', $expense->id) }}" target="_blank" class="btn btn-sm btn-dark px-2 py-1" title="Print">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">print</span>
+                                                </a>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this expense?')) { document.getElementById('delete-form-{{ $expense->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
@@ -238,7 +244,9 @@
                                     <option value="">Select Campus</option>
                                     @if(isset($campuses) && $campuses->count() > 0)
                                         @foreach($campuses as $campus)
-                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                            <option value="{{ $campus->campus_name ?? $campus }}" {{ ($defaultCampus ?? '') === ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                                {{ $campus->campus_name ?? $campus }}
+                                            </option>
                                         @endforeach
                                     @endif
                                 </select>
@@ -461,6 +469,12 @@
         transform: translateY(-1px);
         box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
         color: white;
+    }
+
+    .expense-table-responsive {
+        overflow-x: visible;
+        overflow-y: auto;
+        max-height: 520px;
     }
     
     .expense-add-btn:active {
@@ -723,6 +737,37 @@ function removeImage() {
     }
 }
 
+function restoreExpensePageState() {
+    const key = `accountant:add-manage-expense:${window.location.pathname}${window.location.search}`;
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return;
+    try {
+        const state = JSON.parse(raw);
+        if (typeof state.scrollTop === 'number') {
+            window.scrollTo(0, state.scrollTop);
+        }
+        const table = document.querySelector('.expense-table-responsive');
+        if (table && typeof state.tableScrollTop === 'number') {
+            table.scrollTop = state.tableScrollTop;
+        }
+    } catch (_) {
+        // ignore
+    }
+}
+
+function saveExpensePageState() {
+    const table = document.querySelector('.expense-table-responsive');
+    const key = `accountant:add-manage-expense:${window.location.pathname}${window.location.search}`;
+    const state = {
+        scrollTop: window.scrollY || 0,
+        tableScrollTop: table ? table.scrollTop : 0
+    };
+    sessionStorage.setItem(key, JSON.stringify(state));
+}
+
+window.addEventListener('beforeunload', saveExpensePageState);
+window.addEventListener('pageshow', restoreExpensePageState);
+
 // Edit expense function
 function editExpense(id, campus, category, title, description, amount, method, invoiceReceiptUrl, date, notifyAdmin) {
     document.getElementById('campus').value = campus;
@@ -872,6 +917,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 categorySelect.value = '';
             }
         });
+
+        if (campusSelect.value) {
+            campusSelect.dispatchEvent(new Event('change'));
+        }
     }
 });
 </script>

@@ -280,6 +280,14 @@
             }
         }
     </style>
+
+@if(request()->get('auto_print'))
+    <script>
+        window.addEventListener('load', function() {
+            window.print();
+        });
+    </script>
+@endif
 </head>
 <body>
     <div class="print-btn no-print">
@@ -288,8 +296,9 @@
 
     <div class="vouchers-container">
     @foreach($vouchers as $voucher)
+        @foreach($copyLabels as $copyLabel)
         <div class="voucher">
-            <div class="parent-copy">PARENT COPY</div>
+            <div class="parent-copy">{{ $copyLabel }}</div>
             
             <div class="header">
                 <div class="school-name">ROYAL GRAMMAR SCHOOL</div>
@@ -385,6 +394,11 @@
                 </tbody>
             </table>
 
+            <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; font-weight: 600;">
+                <span>Total Amount</span>
+                <span>{{ number_format($voucher['total'], 0) }}</span>
+            </div>
+
             <div class="dates">
                 <div>
                     <strong>Voucher Validity:</strong> {{ $voucher['voucher_validity']->format('d/m/Y') }}
@@ -438,6 +452,7 @@
                 <strong>NOTICE:</strong> * This is a computer generated fee voucher, No manual corrections will be acceptable.
             </div>
         </div>
+        @endforeach
     @endforeach
     </div>
 

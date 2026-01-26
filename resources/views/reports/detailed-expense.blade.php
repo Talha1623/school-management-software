@@ -30,17 +30,6 @@
                         <input type="date" class="form-control form-control-sm" id="filter_date" name="filter_date" value="{{ $filterDate }}" style="height: 32px;">
                     </div>
 
-                    <!-- Expense Category -->
-                    <div class="col-md-2">
-                        <label for="filter_category" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Expense Category</label>
-                        <select class="form-select form-select-sm" id="filter_category" name="filter_category" style="height: 32px;">
-                            <option value="">All Categories</option>
-                            @foreach($categories as $category)
-                                <option value="{{ $category }}" {{ $filterCategory == $category ? 'selected' : '' }}>{{ $category }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
                     <!-- Year -->
                     <div class="col-md-2">
                         <label for="filter_year" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Year</label>
@@ -74,7 +63,7 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_month', 'filter_date', 'filter_category', 'filter_year', 'filter_method']))
+            @if(request()->hasAny(['filter_month', 'filter_date', 'filter_year', 'filter_method']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
@@ -89,37 +78,44 @@
                             <thead>
                                 <tr>
                                     <th>#</th>
-                                    <th>Date</th>
-                                    <th>Campus</th>
-                                    <th>Category</th>
                                     <th>Title</th>
-                                    <th>Description</th>
+                                    <th>Categories</th>
+                                    <th>Accountant</th>
                                     <th>Amount</th>
+                                    <th>Date & Time</th>
+                                    <th>Description</th>
                                     <th>Method</th>
-                                    <th>Invoice/Receipt</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($expenseRecords as $index => $record)
                                 <tr>
                                     <td>{{ $index + 1 }}</td>
-                                    <td>{{ date('d M Y', strtotime($record['date'])) }}</td>
-                                    <td>{{ $record['campus'] }}</td>
+                                    <td>{{ $record['title'] }}</td>
                                     <td>
                                         <span class="badge bg-warning text-dark">{{ $record['category'] }}</span>
                                     </td>
-                                    <td>{{ $record['title'] }}</td>
-                                    <td>{{ $record['description'] ? (strlen($record['description']) > 50 ? substr($record['description'], 0, 50) . '...' : $record['description']) : 'N/A' }}</td>
+                                    <td>{{ $record['accountant'] ?? 'N/A' }}</td>
                                     <td class="fw-semibold text-danger">{{ number_format($record['amount'], 2) }}</td>
+                                    <td>{{ $record['date'] ? \Carbon\Carbon::parse($record['date'])->format('d M Y h:i A') : 'N/A' }}</td>
+                                    <td>{{ $record['description'] ? (strlen($record['description']) > 50 ? substr($record['description'], 0, 50) . '...' : $record['description']) : 'N/A' }}</td>
                                     <td>{{ $record['method'] }}</td>
                                     <td>
                                         @if($record['invoice_receipt'])
-                                            <a href="{{ asset('storage/' . $record['invoice_receipt']) }}" target="_blank" class="text-primary">
+                                            <a href="{{ asset('storage/' . $record['invoice_receipt']) }}" target="_blank" class="text-primary me-2">
                                                 <span class="material-symbols-outlined" style="font-size: 18px;">description</span>
                                             </a>
                                         @else
-                                            <span class="text-muted">N/A</span>
+                                            <span class="text-muted me-2">N/A</span>
                                         @endif
+                                        <form action="{{ route('expense-management.add.destroy', $record['id']) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this expense?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
+                                                <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+                                            </button>
+                                        </form>
                                     </td>
                                 </tr>
                                 @empty
@@ -136,13 +132,25 @@
                             @if($expenseRecords->count() > 0)
                             <tfoot>
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="6" class="text-end">Total Expense:</td>
+                                    <td colspan="3" class="text-end">Total Expense:</td>
                                     <td class="text-danger">{{ number_format($expenseRecords->sum('amount'), 2) }}</td>
-                                    <td colspan="2"></td>
+                                    <td colspan="5"></td>
                                 </tr>
                             </tfoot>
                             @endif
                         </table>
+                    </div>
+                </div>
+
+                <div class="mt-3 p-2 rounded-8" style="background: #f8f9fa; border: 1px solid #e9ecef; font-size: 13px;">
+                    <div><strong>Total Expense On Month {{ $monthLabel }}:</strong> {{ number_format($totalExpense, 2) }}</div>
+                    <div><strong>Total Income On Month {{ $monthLabel }}:</strong> {{ number_format($totalIncome, 2) }}</div>
+                    <div><strong>Profit/Loss On Month {{ $monthLabel }}:</strong>
+                        @if($profitLoss >= 0)
+                            <span class="text-success">+{{ number_format($profitLoss, 2) }}</span>
+                        @else
+                            <span class="text-danger">{{ number_format($profitLoss, 2) }}</span>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -207,4 +215,5 @@
     padding: 4px 8px;
 }
 </style>
+
 @endsection

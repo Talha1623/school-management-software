@@ -10,46 +10,56 @@
             
             <!-- Filter Form -->
             <form action="{{ route('student-behavior.reporting-analysis.report') }}" method="GET" target="_blank">
-                <div class="row g-3">
-                    <div class="col-md-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus *</label>
+                        <select id="filter_campus" name="campus" class="form-select form-select-sm" required style="height: 32px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 12px;">
+                            <option value="">Select Campus</option>
+                            @foreach($campuses as $campus)
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ ($filterCampus ?? '') == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class *</label>
-                        <select id="filter_class" name="class" class="form-select form-select-sm" required style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
+                        <select id="filter_class" name="class" class="form-select form-select-sm" required style="height: 32px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 12px;">
                             <option value="">Select Class</option>
                             @foreach($classes as $classItem)
                                 <option value="{{ $classItem }}">{{ $classItem }}</option>
                             @endforeach
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select id="filter_section" name="section" class="form-select form-select-sm" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
+                        <select id="filter_section" name="section" class="form-select form-select-sm" style="height: 32px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 12px;">
                             <option value="">Select Section (Optional)</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_report_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Report Type *</label>
-                        <select id="filter_report_type" name="report_type" class="form-select form-select-sm" required style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
+                        <select id="filter_report_type" name="report_type" class="form-select form-select-sm" required style="height: 32px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 12px;">
                             <option value="">Select Report Type</option>
                             @foreach($reportTypes as $key => $label)
                                 <option value="{{ $key }}">{{ $label }}</option>
                             @endforeach
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_year" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Year *</label>
-                        <select id="filter_year" name="year" class="form-select form-select-sm" required style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
+                        <select id="filter_year" name="year" class="form-select form-select-sm" required style="height: 32px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 12px;">
                             <option value="">Select Year</option>
                             @foreach($years as $yearItem)
                                 <option value="{{ $yearItem }}" {{ $yearItem == date('Y') ? 'selected' : '' }}>{{ $yearItem }}</option>
                             @endforeach
                         </select>
                     </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <button type="submit" class="btn btn-sm generate-report-btn" style="height: 36px; border-radius: 6px; padding: 0 20px;">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
+                        <button type="submit" class="btn btn-sm w-100 generate-report-btn" style="height: 32px; border-radius: 6px; padding: 0 10px;">
                             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                            <span style="font-size: 13px; vertical-align: middle; margin-left: 5px;">Generate & Print Report</span>
+                            <span style="font-size: 12px; vertical-align: middle; margin-left: 5px;">Generate & Print</span>
                         </button>
                     </div>
                 </div>
@@ -91,8 +101,59 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+
+    function resetSections() {
+        sectionSelect.innerHTML = '<option value="">Select Section (Optional)</option>';
+        sectionSelect.disabled = true;
+    }
+
+    function populateClasses(classes) {
+        classSelect.innerHTML = '<option value="">Select Class</option>';
+        if (classes && classes.length > 0) {
+            classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                classSelect.appendChild(option);
+            });
+            classSelect.disabled = false;
+        } else {
+            classSelect.innerHTML = '<option value="">No classes found</option>';
+            classSelect.disabled = false;
+        }
+    }
+
+    function loadClassesByCampus(selectedCampus) {
+        classSelect.disabled = true;
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        resetSections();
+
+        const params = new URLSearchParams();
+        if (selectedCampus) {
+            params.append('campus', selectedCampus);
+        }
+
+        fetch(`{{ route('student-behavior.reporting-analysis.get-classes') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateClasses(data.classes || []);
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+    }
+
+    // Load classes when campus changes
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClassesByCampus(this.value);
+        });
+    }
 
     // Load sections when class changes
     if (classSelect) {
@@ -102,16 +163,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function loadSections(selectedClass) {
+        const selectedCampus = campusSelect ? campusSelect.value : '';
         if (!selectedClass) {
-            sectionSelect.innerHTML = '<option value="">Select Section (Optional)</option>';
-            sectionSelect.disabled = true;
+            resetSections();
             return;
         }
         
         sectionSelect.innerHTML = '<option value="">Loading...</option>';
         sectionSelect.disabled = true;
         
-        fetch(`{{ route('student-behavior.reporting-analysis.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+        const params = new URLSearchParams();
+        params.append('class', selectedClass);
+        if (selectedCampus) {
+            params.append('campus', selectedCampus);
+        }
+        fetch(`{{ route('student-behavior.reporting-analysis.get-sections') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 sectionSelect.innerHTML = '<option value="">Select Section (Optional)</option>';
@@ -130,6 +196,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
                 sectionSelect.disabled = false;
             });
+    }
+
+    if (campusSelect) {
+        loadClassesByCampus(campusSelect.value);
     }
 });
 </script>

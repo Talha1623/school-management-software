@@ -239,7 +239,17 @@ function addToBasket(product) {
     // Check if product already exists in basket
     const existingItem = basket.find(item => item.id === product.id);
     
+    const availableStock = parseInt(product.stock ?? 0, 10);
+    if (availableStock <= 0) {
+        alert('Out of stock');
+        return;
+    }
+
     if (existingItem) {
+        if (existingItem.quantity + 1 > existingItem.stock) {
+            alert('Stock limit reached. Available: ' + existingItem.stock);
+            return;
+        }
         existingItem.quantity += 1;
     } else {
         basket.push({
@@ -247,7 +257,8 @@ function addToBasket(product) {
             name: product.name,
             product_code: product.product_code || '',
             price: parseFloat(product.price) || 0,
-            quantity: 1
+            quantity: 1,
+            stock: availableStock
         });
     }
     
@@ -264,6 +275,10 @@ function removeFromBasket(productId) {
 function updateQuantity(productId, change) {
     const item = basket.find(item => item.id === productId);
     if (item) {
+        if (change > 0 && item.quantity + change > item.stock) {
+            alert('Stock limit reached. Available: ' + item.stock);
+            return;
+        }
         item.quantity += change;
         if (item.quantity <= 0) {
             removeFromBasket(productId);

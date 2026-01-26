@@ -63,9 +63,17 @@ use Illuminate\Support\Facades\Auth;
                         <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
                         <span>Add New Staff</span>
                     </button>
-                    <a href="{{ route('reports.staff-salary-summarized') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
+                    <a href="{{ route('staff.attendance.overview') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-attendance-overview-btn">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">calendar_month</span>
+                        <span>Staff Attendance Overview</span>
+                    </a>
+                    <a href="{{ route('reports.staff-salary') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
                         <span class="material-symbols-outlined" style="font-size: 16px;">receipt_long</span>
                         <span>Staff Salary Report</span>
+                    </a>
+                    <a href="{{ route('reports.staff-salary-summarized') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">receipt_long</span>
+                        <span>Staff Salary Report (All Staff)</span>
                     </a>
                 </div>
             </div>
@@ -193,7 +201,7 @@ use Illuminate\Support\Facades\Auth;
                         </thead>
                         <tbody>
                             @forelse($staff as $member)
-                                <tr>
+                                <tr data-staff-id="{{ $member->id }}">
                                     <td style="padding: 12px 15px; font-size: 14px;">{{ $loop->iteration + (($staff->currentPage() - 1) * $staff->perPage()) }}</td>
                                     <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($member->photo)
@@ -273,13 +281,50 @@ use Illuminate\Support\Facades\Auth;
                                     @endif
                                     <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
                                         <div class="d-inline-flex gap-1">
-                                            <a href="{{ route('staff.management.show', $member) }}" class="btn btn-sm btn-info px-2 py-1" title="View">
+                                            <button type="button" class="btn btn-sm btn-info px-2 py-1" title="View" onclick="viewStaff({{ $member->id }})">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
-                                            </a>
+                                            </button>
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-warning px-2 py-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Reports">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">pie_chart</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('id-card.print-staff.print', ['staff_id' => $member->id]) }}" target="_blank">
+                                                            Print ID Card
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('certification.staff.generate', ['staff' => $member->id, 'type' => 'Experience Certificate']) }}" target="_blank">
+                                                            Experience Certificate
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('certification.staff.generate', ['staff' => $member->id, 'type' => 'Appreciation Certificate']) }}" target="_blank">
+                                                            Appreciation Certificate
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('reports.staff-salary', ['staff_id' => $member->id]) }}" target="_blank">
+                                                            Salary Report
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('attendance.staff-report', ['staff_id' => $member->id]) }}" target="_blank">
+                                                            Attendance Report
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('attendance.staff-report', ['staff_id' => $member->id, 'report_type' => 'performance']) }}" target="_blank">
+                                                            Teacher Performance Report
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                             <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editStaff({{ $member->id }})" title="Edit">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </button>
-                                            <form action="{{ route('staff.management.destroy', $member) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this staff member?');">
+                                            <form action="{{ route('staff.management.destroy', $member) }}" method="POST" class="d-inline staff-delete-form" data-staff-id="{{ $member->id }}">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
@@ -531,7 +576,7 @@ use Illuminate\Support\Facades\Auth;
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">lock</span>
                                 </span>
-                                <input type="password" class="form-control staff-input" name="password" id="password" placeholder="Enter password" required>
+                                <input type="text" class="form-control staff-input" name="password" id="password" value="staff" placeholder="Enter password" required>
                             </div>
                             <small class="text-muted" id="passwordHint" style="font-size: 10px; display: none;">Leave blank to keep current password when editing</small>
                         </div>
@@ -583,6 +628,24 @@ use Illuminate\Support\Facades\Auth;
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Staff View Modal -->
+<div class="modal fade" id="staffViewModal" tabindex="-1" aria-labelledby="staffViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="staffViewModalLabel" style="font-size: 14px; color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: white;">visibility</span>
+                    <span style="color: white;">Staff Details</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="d-flex flex-column gap-2" id="staffViewContent"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -693,6 +756,25 @@ use Illuminate\Support\Facades\Auth;
         background: linear-gradient(135deg, #20c997 0%, #28a745 100%);
         transform: translateY(-1px);
         box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+
+
+    .staff-attendance-overview-btn {
+        background: linear-gradient(135deg, #17a2b8 0%, #0dcaf0 100%);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 6px rgba(23, 162, 184, 0.2);
+        text-decoration: none;
+    }
+
+    .staff-attendance-overview-btn:hover {
+        background: linear-gradient(135deg, #0dcaf0 0%, #17a2b8 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(23, 162, 184, 0.3);
         color: white;
         text-decoration: none;
     }
@@ -887,6 +969,7 @@ function resetForm() {
     const modalLabel = document.getElementById('staffModalLabel');
     modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">person_add</span><span style="color: white;">Add New Staff</span>';
     document.getElementById('password').required = true;
+    document.getElementById('password').value = 'staff';
     document.getElementById('passwordRequired').style.display = 'inline';
     document.getElementById('passwordHint').style.display = 'none';
     document.getElementById('photo').value = '';
@@ -973,6 +1056,48 @@ function editStaff(id) {
         });
 }
 
+function viewStaff(id) {
+    fetch(`{{ url('/staff/management') }}/${id}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(response => response.json())
+        .then(data => {
+            const content = document.getElementById('staffViewContent');
+            content.innerHTML = `
+                <div><strong>Name:</strong> ${escapeHtml(data.name)}</div>
+                <div><strong>Emp. ID:</strong> ${escapeHtml(data.emp_id || 'N/A')}</div>
+                <div><strong>Campus:</strong> ${escapeHtml(data.campus || 'N/A')}</div>
+                <div><strong>Designation:</strong> ${escapeHtml(data.designation || 'N/A')}</div>
+                <div><strong>Email:</strong> ${escapeHtml(data.email || 'N/A')}</div>
+                <div><strong>Phone:</strong> ${escapeHtml(data.phone || 'N/A')}</div>
+                <div><strong>WhatsApp:</strong> ${escapeHtml(data.whatsapp || 'N/A')}</div>
+                <div><strong>CNIC:</strong> ${escapeHtml(data.cnic || 'N/A')}</div>
+                <div><strong>Gender:</strong> ${escapeHtml(data.gender || 'N/A')}</div>
+            `;
+            new bootstrap.Modal(document.getElementById('staffViewModal')).show();
+        })
+        .catch(() => alert('Error loading staff data'));
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    };
+    return String(text || '').replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
 function performSearch() {
     const searchInput = document.getElementById('searchInput');
     const searchValue = searchInput.value.trim();
@@ -1025,108 +1150,296 @@ function printTable() {
     window.location.reload();
 }
 
-// Status toggle functionality
+function attachStatusSwitch(switchElement) {
+    if (!switchElement) return;
+    switchElement.addEventListener('change', function() {
+        const staffId = this.getAttribute('data-staff-id');
+        const isChecked = this.checked;
+        const switchRef = this;
+        this.disabled = true;
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (!csrfToken) {
+            switchRef.checked = !isChecked;
+            switchRef.disabled = false;
+            alert('CSRF token not found. Please refresh the page.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('_token', csrfToken.getAttribute('content'));
+
+        fetch(`/staff/management/${staffId}/toggle-status`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken.getAttribute('content'),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            body: formData,
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    try {
+                        const err = JSON.parse(text);
+                        throw new Error(err.message || 'Network response was not ok');
+                    } catch (e) {
+                        throw new Error('Network response was not ok: ' + response.status);
+                    }
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                switchRef.checked = data.status === 'Active';
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.style.marginBottom = '15px';
+                alertDiv.innerHTML = `
+                    <strong>Success!</strong> ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                const cardElement = document.querySelector('.card.bg-white');
+                if (cardElement) {
+                    const firstChild = cardElement.firstElementChild;
+                    if (firstChild && firstChild.classList.contains('alert')) {
+                        firstChild.remove();
+                    }
+                    cardElement.insertBefore(alertDiv, cardElement.firstChild);
+                }
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.remove();
+                    }
+                }, 4000);
+            } else {
+                switchRef.checked = !isChecked;
+                alert(data.message || 'Failed to update status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            switchRef.checked = !isChecked;
+            alert('An error occurred while updating status: ' + (error.message || 'Please try again.'));
+        })
+        .finally(() => {
+            switchRef.disabled = false;
+        });
+    });
+}
+
+function removeEmptyStaffRowIfExists(tbody) {
+    const emptyRow = tbody.querySelector('tr td[colspan]');
+    if (emptyRow) {
+        emptyRow.closest('tr').remove();
+    }
+}
+
+function buildStaffRow(staff, photoUrl, isSuperAdmin) {
+    const deleteUrl = '{{ route('staff.management.destroy', ':id') }}'.replace(':id', staff.id);
+    const idCardUrl = "{{ route('id-card.print-staff.print', ['staff_id' => ':id']) }}".replace(':id', staff.id);
+    const experienceUrl = "{{ route('certification.staff.generate', ['staff' => ':id', 'type' => 'Experience Certificate']) }}".replace(':id', staff.id);
+    const appreciationUrl = "{{ route('certification.staff.generate', ['staff' => ':id', 'type' => 'Appreciation Certificate']) }}".replace(':id', staff.id);
+    const salaryUrl = "{{ route('reports.staff-salary', ['staff_id' => ':id']) }}".replace(':id', staff.id);
+    const attendanceUrl = "{{ route('attendance.staff-report', ['staff_id' => ':id']) }}".replace(':id', staff.id);
+    const performanceUrl = "{{ route('attendance.staff-report', ['staff_id' => ':id', 'report_type' => 'performance']) }}".replace(':id', staff.id);
+    const statusColumn = isSuperAdmin ? `
+        <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
+            <div class="form-check form-switch d-inline-block">
+                <input class="form-check-input status-switch" type="checkbox"
+                       data-staff-id="${staff.id}"
+                       id="statusSwitch${staff.id}"
+                       checked
+                       style="cursor: pointer; width: 3rem; height: 1.5rem;">
+            </div>
+        </td>
+    ` : '';
+
+    const photoHtml = photoUrl
+        ? `<img src="${photoUrl}" alt="Staff" class="rounded-circle" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #e9ecef;">`
+        : `<div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 45px; height: 45px; border: 2px solid #e9ecef;">
+                <span class="material-symbols-outlined text-muted" style="font-size: 22px;">person</span>
+           </div>`;
+
+    const genderBadge = staff.gender
+        ? `<span class="badge ${staff.gender === 'Male' ? 'bg-primary' : (staff.gender === 'Female' ? 'bg-danger' : 'bg-secondary')} text-white" style="font-size: 11px;">${escapeHtml(staff.gender)}</span>`
+        : `<span class="text-muted">N/A</span>`;
+
+    return `
+        <tr data-staff-id="${staff.id}">
+            <td style="padding: 12px 15px; font-size: 14px;">NEW</td>
+            <td style="padding: 12px 15px; font-size: 14px;">${photoHtml}</td>
+            <td style="padding: 12px 15px; font-size: 14px;">
+                <strong class="text-primary">${escapeHtml(staff.name)}</strong>
+                ${staff.father_husband_name ? `<br><small class="text-muted" style="font-size: 12px;">${escapeHtml(staff.father_husband_name)}</small>` : ''}
+            </td>
+            <td style="padding: 12px 15px; font-size: 14px;">
+                ${staff.emp_id ? `<span class="badge bg-info text-white" style="font-size: 11px;">${escapeHtml(staff.emp_id)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 12px 15px; font-size: 14px;">
+                ${staff.designation ? `<span class="badge bg-secondary text-white" style="font-size: 11px;">${escapeHtml(staff.designation)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 12px 15px; font-size: 14px;">
+                ${staff.campus ? `<span class="text-muted">${escapeHtml(staff.campus)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 12px 15px; font-size: 14px;">
+                ${staff.email ? `<span class="text-muted"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span> ${escapeHtml(staff.email)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 12px 15px; font-size: 14px;">
+                ${staff.phone ? `<span class="badge bg-light text-dark" style="font-size: 11px;"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">phone</span> ${escapeHtml(staff.phone)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 12px 15px; font-size: 14px;">${genderBadge}</td>
+            ${statusColumn}
+            <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
+                <div class="d-inline-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-info px-2 py-1" title="View" onclick="viewStaff(${staff.id})">
+                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
+                    </button>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-warning px-2 py-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Reports">
+                            <span class="material-symbols-outlined" style="font-size: 14px; color: white;">pie_chart</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item" href="${idCardUrl}" target="_blank">Print ID Card</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="${experienceUrl}" target="_blank">Experience Certificate</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="${appreciationUrl}" target="_blank">Appreciation Certificate</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="${salaryUrl}" target="_blank">Salary Report</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="${attendanceUrl}" target="_blank">Attendance Report</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="${performanceUrl}" target="_blank">Teacher Performance Report</a>
+                            </li>
+                        </ul>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editStaff(${staff.id})" title="Edit">
+                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                    </button>
+                    <form action="${deleteUrl}" method="POST" class="d-inline staff-delete-form" data-staff-id="${staff.id}">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
+                            <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                        </button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const statusSwitches = document.querySelectorAll('.status-switch');
-    
-    statusSwitches.forEach(function(switchElement) {
-        switchElement.addEventListener('change', function() {
-            const staffId = this.getAttribute('data-staff-id');
-            const isChecked = this.checked;
-            const switchRef = this; // Store reference
-            
-            // Disable switch during request
-            this.disabled = true;
-            
-            // Get CSRF token
-            const csrfToken = document.querySelector('meta[name="csrf-token"]');
-            if (!csrfToken) {
-                switchRef.checked = !isChecked;
-                switchRef.disabled = false;
-                alert('CSRF token not found. Please refresh the page.');
+    statusSwitches.forEach(attachStatusSwitch);
+
+    const staffForm = document.getElementById('staffForm');
+    const tbody = document.querySelector('.default-table-area tbody');
+    const isSuperAdmin = {{ Auth::guard('admin')->check() && Auth::guard('admin')->user()->isSuperAdmin() ? 'true' : 'false' }};
+
+    if (staffForm) {
+        staffForm.addEventListener('submit', async function (event) {
+            const methodField = document.getElementById('methodField');
+            if (methodField && methodField.innerHTML.includes('PUT')) {
                 return;
             }
-            
-            // Create form data for POST request
-            const formData = new FormData();
-            formData.append('_token', csrfToken.getAttribute('content'));
-            
-            // Send AJAX request
-            fetch(`/staff/management/${staffId}/toggle-status`, {
+            event.preventDefault();
+
+            const formData = new FormData(staffForm);
+            const response = await fetch(staffForm.action, {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': csrfToken.getAttribute('content'),
+                    'X-CSRF-TOKEN': getCsrfToken(),
                     'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
                 },
                 body: formData,
-                credentials: 'same-origin'
-            })
-            .then(response => {
-                // Check if response is ok
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        try {
-                            const err = JSON.parse(text);
-                            throw new Error(err.message || 'Network response was not ok');
-                        } catch (e) {
-                            throw new Error('Network response was not ok: ' + response.status);
-                        }
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    // Update switch state based on returned status
-                    if (data.status === 'Active') {
-                        switchRef.checked = true;
-                    } else {
-                        switchRef.checked = false;
-                    }
-                    
-                    // Show success message
-                    const alertDiv = document.createElement('div');
-                    alertDiv.className = 'alert alert-success alert-dismissible fade show';
-                    alertDiv.style.marginBottom = '15px';
-                    alertDiv.innerHTML = `
-                        <strong>Success!</strong> ${data.message}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    `;
-                    
-                    // Insert alert at the top of the card
-                    const cardElement = document.querySelector('.card.bg-white');
-                    if (cardElement) {
-                        const firstChild = cardElement.firstElementChild;
-                        if (firstChild && firstChild.classList.contains('alert')) {
-                            firstChild.remove(); // Remove existing alert if any
-                        }
-                        cardElement.insertBefore(alertDiv, cardElement.firstChild);
-                    }
-                    
-                    // Auto-dismiss after 4 seconds
-                    setTimeout(() => {
-                        if (alertDiv.parentNode) {
-                            alertDiv.remove();
-                        }
-                    }, 4000);
-                } else {
-                    // Revert switch if failed
-                    switchRef.checked = !isChecked;
-                    alert(data.message || 'Failed to update status');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                // Revert switch on error
-                switchRef.checked = !isChecked;
-                alert('An error occurred while updating status: ' + (error.message || 'Please try again.'));
-            })
-            .finally(() => {
-                // Re-enable switch
-                switchRef.disabled = false;
+                credentials: 'same-origin',
             });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                if (data && data.errors) {
+                    const firstError = Object.values(data.errors)[0];
+                    alert(Array.isArray(firstError) ? firstError[0] : firstError);
+                } else {
+                    alert('Unable to add staff. Please check the form.');
+                }
+                return;
+            }
+
+            const data = await response.json();
+            if (data && data.staff) {
+                removeEmptyStaffRowIfExists(tbody);
+                tbody.insertAdjacentHTML('afterbegin', buildStaffRow(data.staff, data.photo_url, isSuperAdmin));
+                const newSwitch = tbody.querySelector(`tr[data-staff-id="${data.staff.id}"] .status-switch`);
+                if (newSwitch) {
+                    attachStatusSwitch(newSwitch);
+                }
+            }
+
+            const modalEl = document.getElementById('staffModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            staffForm.reset();
+            document.getElementById('password').value = 'staff';
         });
+    }
+
+    document.addEventListener('submit', async function (event) {
+        const form = event.target;
+        if (!form.classList.contains('staff-delete-form')) return;
+        event.preventDefault();
+
+        if (!confirm('Are you sure you want to delete this staff member?')) {
+            return;
+        }
+
+        const response = await fetch(form.action, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+            credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            alert(errorText || 'Unable to delete staff. Please try again.');
+            return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        const staffId = data && data.id ? data.id : form.dataset.staffId;
+        const row = tbody.querySelector(`tr[data-staff-id="${staffId}"]`);
+        if (row) {
+            row.remove();
+        }
+
+        if (tbody.querySelectorAll('tr').length === 0) {
+            tbody.insertAdjacentHTML('beforeend', `
+                <tr>
+                    <td colspan="${isSuperAdmin ? 11 : 10}" class="text-center text-muted py-5">
+                        <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
+                        <p class="mt-2 mb-0">No staff members found.</p>
+                    </td>
+                </tr>
+            `);
+        }
     });
 });
 </script>

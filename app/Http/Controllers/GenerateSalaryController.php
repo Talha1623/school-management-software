@@ -8,6 +8,9 @@ use App\Models\Section;
 use App\Models\Staff;
 use App\Models\Salary;
 use App\Models\Loan;
+use App\Models\StaffAttendance;
+use App\Models\SalarySetting;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -50,10 +53,33 @@ class GenerateSalaryController extends Controller
         $currentYear = date('Y');
 
         // Get generated salaries from session (if any)
-        $generatedSalaries = session('generated_salaries', collect());
+        $generatedSalaries = collect(session('generated_salaries', []));
         $generatedCampus = session('generated_campus');
         $generatedMonth = session('generated_month');
         $generatedYear = session('generated_year');
+
+        if ($generatedSalaries->isNotEmpty()) {
+            $salaryIds = $generatedSalaries->pluck('id')->filter();
+            if ($salaryIds->isNotEmpty()) {
+                $generatedSalaries = Salary::with('staff')->whereIn('id', $salaryIds)->get();
+                foreach ($generatedSalaries as $salary) {
+                    if (!$salary->staff) {
+                        continue;
+                    }
+                    $monthNumber = $this->getMonthNumber($salary->salary_month);
+                    $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, (int) $salary->year, $monthNumber);
+                    $basicRate = (float) ($salary->staff->salary ?? 0);
+                    $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, 0, (int) $salary->year, (int) $monthNumber);
+
+                    if ($salary->basic != $basicRate) {
+                        $salary->update(['basic' => $basicRate]);
+                    }
+                    if ($salary->status === 'Pending' && $salary->salary_generated != $salaryGenerated) {
+                        $salary->update(['salary_generated' => $salaryGenerated]);
+                    }
+                }
+            }
+        }
 
         return view('salary-loan.generate-salary', compact('campuses', 'currentMonth', 'currentYear', 'generatedSalaries', 'generatedCampus', 'generatedMonth', 'generatedYear'));
     }
@@ -156,11 +182,33 @@ class GenerateSalaryController extends Controller
                     ->orderBy('created_at', 'desc')
                     ->get();
                 
-                // Update loan repayment for all salaries based on current approved loans
+                // Update loan repayment and attendance-based fields
                 foreach ($generatedSalaries as $salary) {
                     $loanRepayment = $this->calculateLoanRepayment($salary->staff_id);
+                    $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, $year, $month);
+                    $presentCount = $attendanceSummary['present'];
+                    $absentCount = $attendanceSummary['absent'];
+                    $lateCount = $attendanceSummary['late'];
+                    $basicRate = (float) ($salary->staff->salary ?? 0);
+                    $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
+
+                    $updates = [];
                     if ($salary->loan_repayment != $loanRepayment) {
-                        $salary->update(['loan_repayment' => $loanRepayment]);
+                        $updates['loan_repayment'] = $loanRepayment;
+                    }
+                    if ($salary->present != $presentCount || $salary->absent != $absentCount || $salary->late != $lateCount) {
+                        $updates['present'] = $presentCount;
+                        $updates['absent'] = $absentCount;
+                        $updates['late'] = $lateCount;
+                    }
+                    if ($salary->basic != $basicRate) {
+                        $updates['basic'] = $basicRate;
+                    }
+                    if ($salary->status === 'Pending' && $salary->salary_generated != $salaryGenerated) {
+                        $updates['salary_generated'] = $salaryGenerated;
+                    }
+                    if (!empty($updates)) {
+                        $salary->update($updates);
                     }
                 }
                 
@@ -212,16 +260,24 @@ class GenerateSalaryController extends Controller
                 // Calculate loan repayment from approved loans
                 $loanRepayment = $this->calculateLoanRepayment($staff->id);
 
+                // Calculate attendance counts for selected month/year
+                $attendanceSummary = $this->calculateAttendanceSummary($staff->id, $year, $month);
+                $presentCount = $attendanceSummary['present'];
+                $absentCount = $attendanceSummary['absent'];
+                $lateCount = $attendanceSummary['late'];
+                $basicRate = (float) ($staff->salary ?? 0);
+                $salaryGenerated = $this->calculateSalaryGenerated($staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
+
                 // Create salary record
                 Salary::create([
                     'staff_id' => $staff->id,
                     'salary_month' => $monthName,
                     'year' => (string)$year,
-                    'present' => 0,
-                    'absent' => 0,
-                    'late' => 0,
-                    'basic' => $staff->salary ?? 0,
-                    'salary_generated' => $staff->salary ?? 0,
+                    'present' => $presentCount,
+                    'absent' => $absentCount,
+                    'late' => $lateCount,
+                    'basic' => $basicRate,
+                    'salary_generated' => $salaryGenerated,
                     'amount_paid' => 0,
                     'loan_repayment' => $loanRepayment,
                     'status' => 'Pending',
@@ -245,8 +301,27 @@ class GenerateSalaryController extends Controller
             // Update loan repayment for all salaries based on current approved loans
             foreach ($generatedSalaries as $salary) {
                 $loanRepayment = $this->calculateLoanRepayment($salary->staff_id);
+                $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, $year, $month);
+                $presentCount = $attendanceSummary['present'];
+                $absentCount = $attendanceSummary['absent'];
+                $lateCount = $attendanceSummary['late'];
+                $basicRate = (float) ($salary->staff->salary ?? 0);
+                $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
                 if ($salary->loan_repayment != $loanRepayment) {
                     $salary->update(['loan_repayment' => $loanRepayment]);
+                }
+                if ($salary->present != $presentCount || $salary->absent != $absentCount || $salary->late != $lateCount) {
+                    $salary->update([
+                        'present' => $presentCount,
+                        'absent' => $absentCount,
+                        'late' => $lateCount,
+                    ]);
+                }
+                if ($salary->basic != $basicRate) {
+                    $salary->update(['basic' => $basicRate]);
+                }
+                if ($salary->status === 'Pending' && $salary->salary_generated != $salaryGenerated) {
+                    $salary->update(['salary_generated' => $salaryGenerated]);
                 }
             }
 
@@ -293,10 +368,13 @@ class GenerateSalaryController extends Controller
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
         ]);
 
-        // Calculate new salary generated (basic + bonus - deduction)
+        // Calculate new salary generated (base + bonus - deduction)
         $bonusAmount = $validated['bonus_amount'] ?? 0;
         $deductionAmount = $validated['deduction_amount'] ?? 0;
-        $newSalaryGenerated = $salary->basic + $bonusAmount - $deductionAmount;
+        $monthNumber = $this->getMonthNumber($salary->salary_month);
+        $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, (int) $salary->year, $monthNumber);
+        $baseSalaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, 0, (int) $salary->year, (int) $monthNumber);
+        $newSalaryGenerated = $baseSalaryGenerated + $bonusAmount - $deductionAmount;
 
         // Determine status based on fully_paid or amount_paid
         $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
@@ -307,12 +385,12 @@ class GenerateSalaryController extends Controller
         if ($fullyPaid || $amountPaid >= $newSalaryGenerated) {
             $status = 'Paid';
         } elseif ($amountPaid > 0) {
-            $status = 'Partial';
+            $status = 'Issued';
         }
         
         // If amount_paid is greater than 0, status should not be Pending
         if ($amountPaid > 0 && $status == 'Pending') {
-            $status = 'Partial';
+            $status = 'Issued';
         }
 
         // Calculate loan repayment from approved loans (if not manually set)
@@ -375,6 +453,124 @@ class GenerateSalaryController extends Controller
         }
         
         return round($totalLoanRepayment, 2);
+    }
+
+    private function calculateAttendanceSummary(int $staffId, int $year, string $month): array
+    {
+        $records = StaffAttendance::where('staff_id', $staffId)
+            ->whereYear('attendance_date', $year)
+            ->whereMonth('attendance_date', $month)
+            ->get();
+
+        $settings = SalarySetting::getSettings();
+        $lateArrivalTime = $settings->late_arrival_time ?? '09:00:00';
+
+        $present = 0;
+        $absent = 0;
+        $leave = 0;
+        $late = 0;
+        $totalLectures = 0;
+        $totalMinutes = 0;
+
+        foreach ($records as $record) {
+            if ($record->status === 'Present') {
+                $present++;
+            } elseif ($record->status === 'Absent') {
+                $absent++;
+            } elseif ($record->status === 'Leave') {
+                $leave++;
+            }
+
+            $lateFlag = false;
+            if (!empty($record->start_time)) {
+                try {
+                    $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                    $startTime = Carbon::parse($date . ' ' . $record->start_time);
+                    $standardTime = Carbon::parse($date . ' ' . $lateArrivalTime);
+                    if ($startTime->greaterThan($standardTime)) {
+                        $lateFlag = true;
+                    }
+                } catch (\Exception $e) {
+                    // Skip invalid times
+                }
+            }
+
+            if (!$lateFlag && !empty($record->remarks) && stripos($record->remarks, 'Late Arrival') !== false) {
+                $lateFlag = true;
+            }
+
+            if ($lateFlag) {
+                $late++;
+            }
+
+            $totalLectures += (int) ($record->conducted_lectures ?? 0);
+
+            if (!empty($record->start_time) && !empty($record->end_time)) {
+                try {
+                    $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                    $startTime = Carbon::parse($date . ' ' . $record->start_time);
+                    $endTime = Carbon::parse($date . ' ' . $record->end_time);
+                    if ($endTime->greaterThan($startTime)) {
+                        $totalMinutes += $startTime->diffInMinutes($endTime);
+                    }
+                } catch (\Exception $e) {
+                    // Skip invalid times
+                }
+            }
+        }
+
+        return [
+            'present' => $present,
+            'absent' => $absent,
+            'late' => $late,
+            'leave' => $leave,
+            'total_lectures' => $totalLectures,
+            'total_minutes' => $totalMinutes,
+        ];
+    }
+
+    private function calculateSalaryGenerated(Staff $staff, array $attendanceSummary, float $deductionPerLateArrival = 0, ?int $year = null, ?int $month = null): float
+    {
+        $rate = (float) ($staff->salary ?? 0);
+        $salaryType = strtolower(trim($staff->salary_type ?? ''));
+
+        if ($salaryType === 'per hour') {
+            $totalMinutes = $attendanceSummary['total_minutes'];
+            if ($totalMinutes <= 0 && $attendanceSummary['present'] > 0) {
+                // Fallback: treat each present day as 1 hour if no time data
+                $totalMinutes = $attendanceSummary['present'] * 60;
+            }
+            $hours = $totalMinutes / 60;
+            return round($hours * $rate, 2);
+        }
+
+        if ($salaryType === 'lecture') {
+            return round($attendanceSummary['total_lectures'] * $rate, 2);
+        }
+
+        $settings = SalarySetting::getSettings();
+        $freeAbsents = (int) ($settings->free_absents ?? 0);
+        $leaveDeduction = strtolower(trim($settings->leave_deduction ?? 'no')) === 'yes';
+        $absentCount = (int) ($attendanceSummary['absent'] ?? 0);
+        $leaveCount = (int) ($attendanceSummary['leave'] ?? 0);
+        $lateCount = (int) ($attendanceSummary['late'] ?? 0);
+
+        $deductibleAbsents = $absentCount + ($leaveDeduction ? $leaveCount : 0);
+        $deductibleAbsents = max(0, $deductibleAbsents - $freeAbsents);
+
+        $daysInMonth = 30;
+        if (!empty($year) && !empty($month)) {
+            try {
+                $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
+            } catch (\Exception $e) {
+                $daysInMonth = 30;
+            }
+        }
+        $dailyRate = $daysInMonth > 0 ? ($rate / $daysInMonth) : 0;
+        $lateDeduction = max(0, $deductionPerLateArrival) * $lateCount;
+        $absentDeduction = $dailyRate * $deductibleAbsents;
+
+        return round(max(0, $rate - $absentDeduction - $lateDeduction), 2);
     }
 
     /**

@@ -72,13 +72,6 @@
                             </button>
                         </div>
                     </li>
-                    <li class="header-right-item calendar-item">
-                        <div class="dropdown notifications">
-                            <a href="{{ route('calendar') }}" class="btn btn-secondary border-0 p-0 position-relative">
-                                <span class="material-symbols-outlined" style="font-size: 19px;">calendar_today</span>
-                            </a>
-                        </div>
-                    </li>
                     <li class="header-right-item messages-item">
                         <div class="dropdown notifications noti messages">
                             <button class="btn btn-secondary border-0 p-0 position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">

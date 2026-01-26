@@ -255,6 +255,11 @@
                                         </td>
                                         <td class="text-end">
                                             <strong class="text-primary">{{ number_format($salary->basic ?? 0, 2) }}</strong>
+                                            <div>
+                                                <span class="badge bg-light text-dark" style="font-size: 10px;">
+                                                    {{ $salary->staff->salary_type ?? 'full time' }}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td class="text-end">
                                             <strong class="text-success">{{ number_format($salary->salary_generated ?? 0, 2) }}</strong>
@@ -266,16 +271,16 @@
                                             <strong class="text-warning">{{ number_format($salary->loan_repayment ?? 0, 2) }}</strong>
                                         </td>
                                         <td>
-                                            @if($salary->status == 'Pending')
-                                                <span class="badge bg-warning text-dark" style="font-size: 11px;">Pending</span>
-                                            @elseif($salary->status == 'Paid')
-                                                <span class="badge bg-success text-white" style="font-size: 11px;">Paid</span>
-                                            @else
-                                                <span class="badge bg-info text-white" style="font-size: 11px;">Partial</span>
-                                            @endif
+                                        @if($salary->status == 'Pending')
+                                            <span class="badge bg-warning text-dark" style="font-size: 11px;">Pending</span>
+                                        @elseif($salary->status == 'Paid')
+                                            <span class="badge bg-success text-white" style="font-size: 11px;">Paid</span>
+                                        @else
+                                            <span class="badge bg-info text-white" style="font-size: 11px;">Issued</span>
+                                        @endif
                                         </td>
                                         <td class="text-center">
-                                            @if($salary->status == 'Paid')
+                                        @if($salary->status != 'Pending')
                                                 <button type="button" class="btn btn-sm btn-success px-2 py-1" onclick="printSalarySlip({{ $salary->id }})" title="Print Slip" style="color: white; font-size: 11px;">
                                                     Print Slip
                                                 </button>

@@ -10,6 +10,8 @@ use App\Models\Transport;
 use App\Models\ParentAccount;
 use App\Models\FeeType;
 use App\Models\CustomFee;
+use App\Models\StudentPayment;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -28,29 +30,29 @@ class AdmissionController extends Controller
     public function create(): View
     {
         // Get campuses from campuses table
-        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
-        if ($campuses->isEmpty()) {
-            // Fallback to other sources if campuses table is empty
-            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-            
-            if ($campuses->isEmpty()) {
-                $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-            }
-        }
+        $campuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->values();
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        // Get classes (filter by selected campus if provided)
+        $classes = collect();
+        $selectedCampus = old('campus');
+        if ($selectedCampus) {
+            $classes = ClassModel::whereNotNull('class_name')
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($selectedCampus))])
+                ->distinct()
+                ->pluck('class_name')
+                ->sort()
+                ->values();
         }
 
         // Get sections (will be loaded via AJAX based on class)
         $sections = collect();
 
-        // Generate next student code
-        $nextStudentCode = $this->generateNextStudentCode();
+        // Generate next student code (only if campus is selected)
+        $nextStudentCode = $selectedCampus
+            ? $this->generateNextStudentCode($selectedCampus)
+            : null;
 
         // Get transport routes
         $transportRoutes = Transport::orderBy('route_name', 'asc')->pluck('route_name')->unique()->values();
@@ -67,12 +69,17 @@ class AdmissionController extends Controller
     public function getRouteFare(Request $request)
     {
         $routeName = $request->get('route');
+        $campus = $request->get('campus');
         
         if (!$routeName) {
             return response()->json(['fare' => 0]);
         }
         
-        $transport = Transport::where('route_name', $routeName)->first();
+        $transportQuery = Transport::where('route_name', $routeName);
+        if ($campus) {
+            $transportQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $transport = $transportQuery->first();
         
         if ($transport) {
             return response()->json(['fare' => $transport->route_fare]);
@@ -82,38 +89,93 @@ class AdmissionController extends Controller
     }
 
     /**
-     * Generate next student code in format ST0001-1, ST0001-2, etc.
+     * Get transport routes by campus (AJAX)
      */
-    private function generateNextStudentCode(array $usedCodes = []): string
+    public function getTransportRoutesByCampus(Request $request): JsonResponse
     {
-        // Get all students with pattern ST0001-X
-        $students = Student::where('student_code', 'like', 'ST0001-%')
+        $campus = $request->get('campus');
+
+        $query = Transport::query();
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        $routes = $query->orderBy('route_name', 'asc')
+            ->pluck('route_name')
+            ->unique()
+            ->values();
+
+        return response()->json(['routes' => $routes]);
+    }
+
+    /**
+     * Generate next student code per campus (e.g., ST1-001, ST2-001)
+     */
+    private function generateNextStudentCode(?string $campus, array $usedCodes = []): string
+    {
+        $prefix = $this->resolveCampusCodePrefix($campus);
+
+        // Get all students with pattern PREFIX-XXX
+        $students = Student::where('student_code', 'like', $prefix . '-%')
             ->whereNotNull('student_code')
             ->pluck('student_code')
             ->toArray();
 
-        // Merge with used codes from current bulk operation
+        // Merge with used codes from current bulk operation (same prefix only)
+        $usedCodes = array_filter($usedCodes, function ($code) use ($prefix) {
+            return stripos($code, $prefix . '-') === 0;
+        });
         $allCodes = array_merge($students, $usedCodes);
 
         if (empty($allCodes)) {
-            // If no student code found, start with ST0001-1
-            return 'ST0001-1';
+            // If no student code found, start with PREFIX-001
+            return $prefix . '-001';
         }
 
         // Extract numbers and find the maximum
         $maxNumber = 0;
         foreach ($allCodes as $code) {
-            $parts = explode('-', $code);
-            if (count($parts) == 2 && $parts[0] == 'ST0001') {
-                $number = (int) $parts[1];
-                if ($number > $maxNumber) {
-                    $maxNumber = $number;
-                }
+            if (preg_match('/^' . preg_quote($prefix, '/') . '-(\d+)$/i', $code, $matches)) {
+                $number = (int) $matches[1];
+                $maxNumber = max($maxNumber, $number);
             }
         }
 
         // Return next number
-        return 'ST0001-' . ($maxNumber + 1);
+        return $prefix . '-' . str_pad($maxNumber + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    private function resolveCampusCodePrefix(?string $campus): string
+    {
+        $campus = trim((string) $campus);
+        if ($campus !== '') {
+            $campusRecord = Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($campus)])->first();
+            if ($campusRecord && !empty($campusRecord->code_prefix)) {
+                return strtoupper(trim($campusRecord->code_prefix));
+            }
+
+            // Fallback: if campus name contains digits, use ST + digits
+            if (preg_match('/(\d+)/', $campus, $matches)) {
+                return 'ST' . $matches[1];
+            }
+        }
+
+        return 'ST';
+    }
+
+    /**
+     * Get next student code by campus (AJAX).
+     */
+    public function getNextStudentCode(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        if (!$campus) {
+            return response()->json(['code' => '']);
+        }
+
+        return response()->json([
+            'code' => $this->generateNextStudentCode($campus),
+        ]);
     }
 
     /**
@@ -179,19 +241,60 @@ class AdmissionController extends Controller
         return null;
     }
 
+    private function normalizeIdCard(?string $idCard): array
+    {
+        $digitMap = [
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+        ];
+        $cleaned = trim(strtr((string) $idCard, $digitMap));
+        $lower = strtolower($cleaned);
+        $normalized = str_replace(['-', ' ', '_', '.', '/'], '', $lower);
+
+        return [$cleaned, $lower, $normalized];
+    }
+
+    private function findParentAccountByIdCard(?string $idCard): ?ParentAccount
+    {
+        if (empty($idCard)) {
+            return null;
+        }
+
+        [$cleaned, $lower, $normalized] = $this->normalizeIdCard($idCard);
+
+        return ParentAccount::where(function ($query) use ($lower, $normalized) {
+            $query->whereRaw('LOWER(TRIM(id_card_number)) = ?', [$lower])
+                ->orWhereRaw(
+                    'LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) = ?',
+                    [$normalized]
+                )
+                ->orWhereRaw(
+                    'LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) LIKE ?',
+                    ['%' . $normalized . '%']
+                );
+        })->first();
+    }
+
     /**
      * Get sections for a specific class (AJAX endpoint).
      */
     public function getSections(Request $request)
     {
         $class = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$class) {
             return response()->json(['sections' => []]);
         }
         
         // First verify that the class exists in ClassModel (not deleted)
-        $classExists = ClassModel::whereRaw('LOWER(TRIM(COALESCE(class_name, ""))) = ?', [strtolower(trim($class))])
+        $classQuery = ClassModel::whereRaw('LOWER(TRIM(COALESCE(class_name, ""))) = ?', [strtolower(trim($class))]);
+        if ($campus) {
+            $classQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classExists = $classQuery
             ->exists();
         
         if (!$classExists) {
@@ -200,26 +303,26 @@ class AdmissionController extends Controller
         }
         
         // Use case-insensitive matching for class (same as other parts of the system)
-        $sections = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class))])
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class))])
             ->whereNotNull('name')
-            ->where('name', '!=', '')
-            ->distinct()
-            ->pluck('name')
-            ->sort()
-            ->values();
+            ->where('name', '!=', '');
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
         
         // If no sections found in Section model, try to get from students table
         if ($sections->isEmpty()) {
             $hasSection = \Schema::hasColumn('students', 'section');
             if ($hasSection) {
                 try {
-                    $sections = \App\Models\Student::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class))])
+                    $studentsQuery = \App\Models\Student::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class))])
                         ->whereNotNull('section')
-                        ->where('section', '!=', '')
-                        ->distinct()
-                        ->pluck('section')
-                        ->sort()
-                        ->values();
+                        ->where('section', '!=', '');
+                    if ($campus) {
+                        $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                    }
+                    $sections = $studentsQuery->distinct()->pluck('section')->sort()->values();
                 } catch (\Exception $e) {
                     $sections = collect();
                 }
@@ -228,6 +331,26 @@ class AdmissionController extends Controller
         
         // Only return empty if truly no sections found (don't return default sections)
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Get classes for a specific campus (AJAX endpoint).
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        if (!$campus) {
+            return response()->json(['classes' => []]);
+        }
+
+        $classes = ClassModel::whereNotNull('class_name')
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            ->distinct()
+            ->pluck('class_name')
+            ->sort()
+            ->values();
+
+        return response()->json(['classes' => $classes]);
     }
 
     /**
@@ -244,8 +367,8 @@ class AdmissionController extends Controller
             ], 400);
         }
         
-        // Find parent account by ID card number
-        $parentAccount = ParentAccount::where('id_card_number', $fatherIdCard)->first();
+        // Find parent account by ID card number (normalized)
+        $parentAccount = $this->findParentAccountByIdCard($fatherIdCard);
         
         if ($parentAccount) {
             // Get connected students count
@@ -303,7 +426,9 @@ class AdmissionController extends Controller
             'b_form_number' => ['nullable', 'string', 'max:255'],
             'monthly_fee' => ['nullable', 'numeric', 'min:0'],
             'discounted_student' => ['nullable', 'boolean'],
+            'discount_reason' => ['nullable', 'string', 'max:255'],
             'transport_route' => ['nullable', 'string', 'max:255'],
+            'transport_fare' => ['nullable', 'numeric', 'min:0'],
             'admission_notification' => ['nullable', 'string', 'max:255'],
             'create_parent_account' => ['nullable', 'boolean'],
             'generate_other_fee' => ['nullable', 'string', 'max:255'],
@@ -325,7 +450,7 @@ class AdmissionController extends Controller
         // Check if parent account already exists by Father ID Card
         $existingParentAccount = null;
         if (!empty($request->input('father_id_card'))) {
-            $existingParentAccount = ParentAccount::where('id_card_number', $request->input('father_id_card'))->first();
+            $existingParentAccount = $this->findParentAccountByIdCard($request->input('father_id_card'));
         }
         
         // Add validation for parent password if creating parent account
@@ -350,12 +475,18 @@ class AdmissionController extends Controller
 
         $photoPath = $this->handlePhotoUpload($request);
 
+        // Normalize Father ID Card for consistent matching/storage
+        if (!empty($validated['father_id_card'])) {
+            [$cleanedIdCard] = $this->normalizeIdCard($validated['father_id_card']);
+            $validated['father_id_card'] = $cleanedIdCard;
+        }
+
         // Check if parent account already exists by Father ID Card (re-check after validation)
         $parentAccountId = null;
         
         if (!empty($validated['father_id_card'])) {
             // Re-check existing parent account (in case it was created between validation and submission)
-            $existingParentAccount = ParentAccount::where('id_card_number', $validated['father_id_card'])->first();
+            $existingParentAccount = $this->findParentAccountByIdCard($validated['father_id_card']);
             
             if ($existingParentAccount) {
                 // Parent account already exists, link student to it
@@ -425,7 +556,148 @@ class AdmissionController extends Controller
             $studentData['password'] = $validated['b_form_number']; // Will be hashed automatically by Student model's setPasswordAttribute
         }
 
+        if (empty($studentData['student_code']) && !empty($validated['campus'])) {
+            $studentData['student_code'] = $this->generateNextStudentCode($validated['campus']);
+        }
+
+        if (empty($studentData['password'])) {
+            // Default student password when not provided
+            $studentData['password'] = 'student';
+        }
+
         $student = Student::create($studentData);
+        $printUrl = route('student.print', $student);
+        $feeVoucherUrl = null;
+        if (!empty($student->student_code)) {
+            $feeVoucherUrl = route('accounting.fee-voucher.print', [
+                'student_code' => $student->student_code
+            ]);
+        }
+
+        $accountantName = 'System';
+        if (auth()->guard('accountant')->check()) {
+            $accountantName = auth()->guard('accountant')->user()->name ?? 'System';
+        } elseif (auth()->guard('admin')->check()) {
+            $accountantName = auth()->guard('admin')->user()->name ?? 'System';
+        }
+
+        $admissionDate = !empty($validated['admission_date'])
+            ? Carbon::parse($validated['admission_date'])
+            : Carbon::now();
+        $admissionMonth = $admissionDate->format('F');
+        $admissionYear = $admissionDate->format('Y');
+        $defaultDueDate = $admissionDate->copy()->addDays(15)->format('Y-m-d');
+
+        if (!empty($student->student_code)) {
+            if (!empty($validated['monthly_fee']) && (float) $validated['monthly_fee'] > 0) {
+                $paymentTitle = "Monthly Fee - {$admissionMonth} {$admissionYear}";
+                $existingFee = StudentPayment::where('student_code', $student->student_code)
+                    ->where('payment_title', $paymentTitle)
+                    ->where('method', 'Generated')
+                    ->first();
+
+                if (!$existingFee) {
+                    StudentPayment::create([
+                        'campus' => $student->campus ?? $validated['campus'] ?? null,
+                        'student_code' => $student->student_code,
+                        'payment_title' => $paymentTitle,
+                        'payment_amount' => (float) $validated['monthly_fee'],
+                        'discount' => 0,
+                        'method' => 'Generated',
+                        'payment_date' => $defaultDueDate,
+                        'sms_notification' => 'Yes',
+                        'late_fee' => 0,
+                        'accountant' => $accountantName,
+                    ]);
+                }
+            }
+
+            $transportFare = $student->transport_fare ?? $request->input('transport_fare');
+            if (empty($transportFare) && !empty($validated['transport_route'])) {
+                $transportQuery = Transport::where('route_name', $validated['transport_route']);
+                if (!empty($validated['campus'])) {
+                    $transportQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))]);
+                }
+                $transport = $transportQuery->first();
+                if ($transport) {
+                    $transportFare = $transport->route_fare;
+                }
+            }
+
+            if (!empty($validated['transport_route']) && !empty($transportFare) && (float) $transportFare > 0) {
+                $paymentTitle = "Transport Fee - {$admissionMonth} {$admissionYear}";
+                $existingFee = StudentPayment::where('student_code', $student->student_code)
+                    ->where('payment_title', $paymentTitle)
+                    ->where('method', 'Generated')
+                    ->first();
+
+                if (!$existingFee) {
+                    StudentPayment::create([
+                        'campus' => $student->campus ?? $validated['campus'] ?? null,
+                        'student_code' => $student->student_code,
+                        'payment_title' => $paymentTitle,
+                        'payment_amount' => (float) $transportFare,
+                        'discount' => 0,
+                        'method' => 'Generated',
+                        'payment_date' => $defaultDueDate,
+                        'sms_notification' => 'Yes',
+                        'late_fee' => 0,
+                        'accountant' => $accountantName,
+                    ]);
+                }
+            }
+
+            if ($request->input('generate_admission_fee') == '1' &&
+                !empty($validated['admission_fee_amount']) &&
+                (float) $validated['admission_fee_amount'] > 0) {
+                $paymentTitle = 'Admission Fee';
+                $existingFee = StudentPayment::where('student_code', $student->student_code)
+                    ->where('payment_title', $paymentTitle)
+                    ->where('method', 'Generated')
+                    ->first();
+
+                if (!$existingFee) {
+                    StudentPayment::create([
+                        'campus' => $student->campus ?? $validated['campus'] ?? null,
+                        'student_code' => $student->student_code,
+                        'payment_title' => $paymentTitle,
+                        'payment_amount' => (float) $validated['admission_fee_amount'],
+                        'discount' => 0,
+                        'method' => 'Generated',
+                        'payment_date' => $defaultDueDate,
+                        'sms_notification' => 'Yes',
+                        'late_fee' => 0,
+                        'accountant' => $accountantName,
+                    ]);
+                }
+            }
+
+            if ($request->input('generate_other_fee') == '1' &&
+                !empty($validated['fee_type']) &&
+                !empty($validated['other_fee_amount']) &&
+                (float) $validated['other_fee_amount'] > 0) {
+                $paymentTitle = $validated['fee_type'];
+                $existingFee = StudentPayment::where('student_code', $student->student_code)
+                    ->where('payment_title', $paymentTitle)
+                    ->where('method', 'Generated')
+                    ->first();
+
+                if (!$existingFee) {
+                    StudentPayment::create([
+                        'campus' => $student->campus ?? $validated['campus'] ?? null,
+                        'student_code' => $student->student_code,
+                        'payment_title' => $paymentTitle,
+                        'payment_amount' => (float) $validated['other_fee_amount'],
+                        'discount' => 0,
+                        'method' => 'Generated',
+                        'payment_date' => $defaultDueDate,
+                        'sms_notification' => 'Yes',
+                        'late_fee' => 0,
+                        'accountant' => $accountantName,
+                    ]);
+                }
+            }
+        }
 
         // Save custom fee if "Generate Other Fee" is "Yes" and fee type and amount are provided
         if ($request->input('generate_other_fee') == '1' && 
@@ -453,13 +725,17 @@ class AdmissionController extends Controller
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json([
                 'success' => true,
-                'message' => $successMessage
+                'message' => $successMessage,
+                'print_url' => $printUrl,
+                'fee_voucher_url' => $feeVoucherUrl
             ]);
         }
 
         return redirect()
             ->route('admission.admit-student')
-            ->with('success', $successMessage);
+            ->with('success', $successMessage)
+            ->with('print_url', $printUrl)
+            ->with('fee_voucher_url', $feeVoucherUrl);
     }
 
     /**
@@ -752,9 +1028,9 @@ class AdmissionController extends Controller
                         }
                         
                         // Generate student code if not provided
-                        $studentCode = !empty($studentData['student_code']) 
-                            ? trim($studentData['student_code']) 
-                            : $this->generateNextStudentCode($usedStudentCodes);
+                        $studentCode = !empty($studentData['student_code'])
+                            ? trim($studentData['student_code'])
+                            : $this->generateNextStudentCode($campus, $usedStudentCodes);
                         
                         // Track used codes to avoid duplicates
                         $usedStudentCodes[] = $studentCode;
@@ -859,9 +1135,9 @@ class AdmissionController extends Controller
                     }
 
                     // Generate student code if not provided
-                    $studentCode = !empty($studentData['student_code']) 
-                        ? $studentData['student_code'] 
-                        : $this->generateNextStudentCode($usedStudentCodes);
+                    $studentCode = !empty($studentData['student_code'])
+                        ? $studentData['student_code']
+                        : $this->generateNextStudentCode($campus, $usedStudentCodes);
                     
                     // Track used codes to avoid duplicates
                     $usedStudentCodes[] = $studentCode;

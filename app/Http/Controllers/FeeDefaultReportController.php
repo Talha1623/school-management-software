@@ -40,15 +40,43 @@ class FeeDefaultReportController extends Controller
         }
 
         // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($filterCampus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+            $classesFromSubjects = \App\Models\Subject::whereNotNull('class');
+            if ($filterCampus) {
+                $classesFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $classesFromSubjects = $classesFromSubjects->distinct()->pluck('class')->sort()->values();
+            $classes = $classesFromSubjects->isEmpty()
+                ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                : $classesFromSubjects;
         }
 
         // Get sections
-        $sections = Section::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
+        $sectionsQuery = Section::whereNotNull('name');
+        if ($filterCampus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+        if ($filterClass) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+        }
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
         if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D', 'E']);
+            $sectionsFromSubjects = \App\Models\Subject::whereNotNull('section');
+            if ($filterCampus) {
+                $sectionsFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            if ($filterClass) {
+                $sectionsFromSubjects->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+            }
+            $sectionsFromSubjects = $sectionsFromSubjects->distinct()->pluck('section')->sort()->values();
+            $sections = $sectionsFromSubjects->isEmpty()
+                ? collect(['A', 'B', 'C', 'D', 'E'])
+                : $sectionsFromSubjects;
         }
 
         // Type options for fee default reports
@@ -133,6 +161,70 @@ class FeeDefaultReportController extends Controller
             'success' => true,
             'message' => 'Campus deleted successfully!'
         ]);
+    }
+
+    /**
+     * Get classes by campus (AJAX endpoint)
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+
+        if ($classes->isEmpty()) {
+            $classesFromSubjects = \App\Models\Subject::whereNotNull('class');
+            if ($campus) {
+                $classesFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classesFromSubjects = $classesFromSubjects->distinct()->pluck('class')->sort()->values();
+            $classes = $classesFromSubjects->isEmpty()
+                ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                : $classesFromSubjects;
+        }
+
+        $classes = $classes->map(function($class) {
+            return trim((string) $class);
+        })->filter(function($class) {
+            return $class !== '';
+        })->unique()->sort()->values();
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    /**
+     * Get sections by class (AJAX endpoint)
+     */
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        $campus = $request->get('campus');
+
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+
+        $sectionsQuery = Section::whereNotNull('name')
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+
+        if ($sections->isEmpty()) {
+            $sectionsFromSubjects = \App\Models\Subject::whereNotNull('section')
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            if ($campus) {
+                $sectionsFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $sectionsFromSubjects->distinct()->pluck('section')->sort()->values();
+        }
+
+        return response()->json(['sections' => $sections]);
     }
 }
 

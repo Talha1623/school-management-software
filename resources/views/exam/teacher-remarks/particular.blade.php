@@ -59,7 +59,7 @@
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
                         <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
                             <option value="">All Classes</option>
-                            @foreach($classes as $className)
+                            @foreach(($filterClasses ?? $classes) as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
                             @endforeach
                         </select>
@@ -147,10 +147,10 @@
                                         </td>
                                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                                         <td>
-                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->mark) && $student->mark && $student->mark->total_marks !== null ? number_format($student->mark->total_marks, 2) : '0' }}" readonly>
+                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->mark) && $student->mark && $student->mark->total_marks !== null ? number_format($student->mark->total_marks, 0) : '0' }}" readonly>
                                         </td>
                                         <td>
-                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->mark) && $student->mark && $student->mark->marks_obtained !== null ? number_format($student->mark->marks_obtained, 2) : '0' }}" readonly>
+                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->mark) && $student->mark && $student->mark->marks_obtained !== null ? number_format($student->mark->marks_obtained, 0) : '0' }}" readonly>
                                         </td>
                                         <td>
                                             <textarea name="remarks[{{ $student->id }}]" class="form-control form-control-sm remarks-input" placeholder="Type Teacher Remarks for {{ $student->student_name }}" rows="2" style="min-width: 300px;">{{ isset($student->mark) && $student->mark ? ($student->mark->teacher_remarks ?? '') : '' }}</textarea>
@@ -300,6 +300,56 @@ document.addEventListener('DOMContentLoaded', function() {
     const examSelect = document.getElementById('filter_exam');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const allClassOptions = classSelect ? classSelect.innerHTML : '';
+
+    function loadClasses() {
+        const campus = campusSelect ? campusSelect.value : '';
+        if (!classSelect) return;
+
+        if (!campus) {
+            classSelect.innerHTML = allClassOptions;
+            classSelect.value = '';
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            sectionSelect.disabled = true;
+            examSelect.innerHTML = '<option value="">All Exams</option>';
+            examSelect.disabled = true;
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        classSelect.disabled = true;
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        sectionSelect.disabled = true;
+        examSelect.innerHTML = '<option value="">All Exams</option>';
+        examSelect.disabled = true;
+
+        fetch(`{{ route('exam.teacher-remarks.get-classes') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        const option = document.createElement('option');
+                        option.value = className;
+                        option.textContent = className;
+                        classSelect.appendChild(option);
+                    });
+                }
+                classSelect.disabled = false;
+                @if($filterClass)
+                if (data.classes && data.classes.includes('{{ $filterClass }}')) {
+                    classSelect.value = '{{ $filterClass }}';
+                    loadSections(classSelect.value);
+                    loadExams();
+                }
+                @endif
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+    }
 
     function loadExams() {
         const campus = campusSelect ? campusSelect.value : '';
@@ -351,8 +401,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (selectedClass) {
             sectionSelect.disabled = false;
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
-            
-            fetch(`{{ route('exam.teacher-remarks.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (campusSelect && campusSelect.value) {
+                params.append('campus', campusSelect.value);
+            }
+
+            fetch(`{{ route('exam.teacher-remarks.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -384,7 +440,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load exams when campus or class changes
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
-            loadExams();
+            loadClasses();
         });
     }
 
@@ -400,14 +456,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const initialCampus = campusSelect ? campusSelect.value : '';
     const initialClass = classSelect ? classSelect.value : '';
     
-    // Load exams if both campus and class are selected
-    if (initialCampus && initialClass) {
-        loadExams();
-    }
-    
-    // Load sections if class is selected
-    if (initialClass) {
+    if (initialCampus) {
+        loadClasses();
+    } else if (initialClass) {
         loadSections(initialClass);
+        loadExams();
     }
 
     // Search functionality

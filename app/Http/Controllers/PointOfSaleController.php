@@ -93,8 +93,23 @@ class PointOfSaleController extends Controller
 
             $savedRecords = [];
             foreach ($validated['items'] as $item) {
-                // Get product for category
-                $product = Product::find($item['product_id']);
+                $product = Product::where('id', $item['product_id'])->lockForUpdate()->first();
+                if (!$product) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Product not found for sale.',
+                    ], 422);
+                }
+
+                $availableStock = (int) ($product->total_stock ?? 0);
+                if ($availableStock < (int) $item['quantity']) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient stock for ' . ($product->product_name ?? 'product') . '. Available: ' . $availableStock,
+                    ], 422);
+                }
                 
                 $saleRecord = SaleRecord::create([
                     'product_id' => $item['product_id'],
@@ -112,10 +127,8 @@ class PointOfSaleController extends Controller
                 $savedRecords[] = $saleRecord->id;
 
                 // Update product stock
-                if ($product) {
-                    $product->total_stock = max(0, ($product->total_stock ?? 0) - $item['quantity']);
-                    $product->save();
-                }
+                $product->total_stock = $availableStock - (int) $item['quantity'];
+                $product->save();
             }
 
             DB::commit();

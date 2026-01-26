@@ -26,20 +26,11 @@
                 </div>
             @endif
 
-            @php
-                $campuses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
-                $allCampuses = $campuses->merge($campusesFromSections)->unique()->sort()->values();
-                if ($allCampuses->isEmpty()) {
-                    $allCampuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-                }
-            @endphp
-
-            <form id="studentPaymentForm" method="POST" action="{{ route('accounting.direct-payment.student.store') }}">
+            <form id="studentPaymentForm" method="POST" action="{{ route('accounting.direct-payment.student.store') }}" class="compact-form">
                 @csrf
                 
-                <div class="payment-row mb-3 p-3 border rounded" style="background-color: #f8f9fa;">
-                    <div class="row g-3">
+                <div class="payment-row mb-2 p-2 border rounded" style="background-color: #f8f9fa;">
+                    <div class="row g-2">
                         <!-- Campus -->
                         <div class="col-md-6">
                             <label class="form-label mb-1 fs-13 fw-medium">Campus</label>
@@ -47,9 +38,9 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">home</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
+                                <select class="form-select form-select-sm" name="campus" id="campus" style="height: 32px;">
                                     <option value="">Select Campus</option>
-                                    @foreach($allCampuses as $campus)
+                                    @foreach($campuses as $campus)
                                         <option value="{{ $campus }}" {{ (isset($student) && $student->campus == $campus) ? 'selected' : '' }}>{{ $campus }}</option>
                                     @endforeach
                                 </select>
@@ -63,7 +54,10 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">school</span>
                                 </span>
-                                <input type="text" class="form-control form-control-sm" name="student_code" id="student_code" placeholder="Student Roll/Code" value="{{ $studentCode ?? '' }}" required style="height: 38px;">
+                                <input type="text" class="form-control form-control-sm" name="student_code" id="student_code" placeholder="Student Roll/Code" value="{{ $studentCode ?? '' }}" required style="height: 32px;">
+                            </div>
+                            <div id="studentInfo" class="mt-2" style="display: none;">
+                                <small class="text-success" id="studentName"></small>
                             </div>
                         </div>
 
@@ -74,7 +68,12 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">receipt</span>
                                 </span>
-                                <input type="text" class="form-control form-control-sm" name="payment_title" id="payment_title" placeholder="Enter Payment Title" required style="height: 38px;">
+                                <input type="text" class="form-control form-control-sm" name="payment_title" id="payment_title" placeholder="Enter Payment Title" required style="height: 32px;">
+                            </div>
+                            <div class="mt-2">
+                                <select class="form-select form-select-sm" id="generated_fee_select" style="height: 32px;" disabled>
+                                    <option value="">Generated fees will appear here</option>
+                                </select>
                             </div>
                         </div>
 
@@ -85,7 +84,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">payments</span>
                                 </span>
-                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="payment_amount" id="payment_amount" placeholder="Enter Payment Amount" required style="height: 38px;">
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="payment_amount" id="payment_amount" placeholder="Enter Payment Amount" required style="height: 32px;">
                             </div>
                         </div>
 
@@ -96,7 +95,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">remove</span>
                                 </span>
-                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="discount" id="discount" placeholder="0" value="0" style="height: 38px;">
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="discount" id="discount" placeholder="0" value="0" style="height: 32px;">
                             </div>
                         </div>
 
@@ -107,13 +106,11 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">account_balance_wallet</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="method" id="method" required style="height: 38px;">
+                                <select class="form-select form-select-sm" name="method" id="method" required style="height: 32px;">
                                     <option value="">Select Method</option>
-                                    <option value="Cash Payment" selected>Cash Payment</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Cheque">Cheque</option>
-                                    <option value="Online Payment">Online Payment</option>
-                                    <option value="Card Payment">Card Payment</option>
+                                    @foreach($methods as $method)
+                                        <option value="{{ $method }}" {{ $method === 'Cash Payment' ? 'selected' : '' }}>{{ $method }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -125,7 +122,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">calendar_today</span>
                                 </span>
-                                <input type="date" class="form-control form-control-sm" name="payment_date" id="payment_date" value="{{ date('Y-m-d') }}" required style="height: 38px;">
+                                <input type="date" class="form-control form-control-sm" name="payment_date" id="payment_date" value="{{ date('Y-m-d') }}" required style="height: 32px;">
                             </div>
                         </div>
 
@@ -136,7 +133,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">sms</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="sms_notification" id="sms_notification" required style="height: 38px;">
+                                <select class="form-select form-select-sm" name="sms_notification" id="sms_notification" required style="height: 32px;">
                                     <option value="Yes" selected>Yes</option>
                                     <option value="No">No</option>
                                 </select>
@@ -207,26 +204,122 @@
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
+
+    .compact-form .form-label {
+        margin-bottom: 2px;
+    }
+
+    .compact-form .input-group-text {
+        padding: 0 8px;
+    }
 </style>
 
 <script>
-// Auto-fill student code from URL parameter
 document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
     const studentCode = urlParams.get('student_code');
-    
-    if (studentCode) {
-        const studentCodeInput = document.getElementById('student_code');
-        if (studentCodeInput && !studentCodeInput.value) {
-            studentCodeInput.value = studentCode;
-            
-            // Optionally, you can fetch student details and auto-fill campus
-            // This is already handled by the backend if student exists
-        }
+    const studentCodeInput = document.getElementById('student_code');
+    const campusSelect = document.getElementById('campus');
+    const studentInfo = document.getElementById('studentInfo');
+    const studentName = document.getElementById('studentName');
+    const generatedFeeSelect = document.getElementById('generated_fee_select');
+    const paymentTitleInput = document.getElementById('payment_title');
+    const paymentAmountInput = document.getElementById('payment_amount');
+    let searchTimer = null;
+
+    function resetGeneratedFees() {
+        generatedFeeSelect.innerHTML = '<option value="">Generated fees will appear here</option>';
+        generatedFeeSelect.disabled = true;
     }
-    
-    // Form is now connected to database, no need for preventDefault
-    // Form will submit normally to the backend
+
+    function applyGeneratedFees(fees) {
+        resetGeneratedFees();
+        if (!fees || fees.length === 0) {
+            return;
+        }
+
+        generatedFeeSelect.innerHTML = '<option value="">Select generated fee</option>';
+        fees.forEach(fee => {
+            const option = document.createElement('option');
+            const amount = Number(fee.payment_amount || 0).toFixed(2);
+            option.value = fee.id;
+            option.textContent = `${fee.payment_title} - ${amount}`;
+            option.dataset.title = fee.payment_title || '';
+            option.dataset.amount = fee.payment_amount || 0;
+            generatedFeeSelect.appendChild(option);
+        });
+        generatedFeeSelect.disabled = false;
+    }
+
+    function fetchStudentDetails(code) {
+        if (!code) {
+            studentInfo.style.display = 'none';
+            studentName.textContent = '';
+            resetGeneratedFees();
+            return;
+        }
+
+        studentName.textContent = 'Searching...';
+        studentName.className = 'text-info';
+        studentInfo.style.display = 'block';
+
+        fetch(`{{ route('accounting.get-student-by-code') }}?student_code=${encodeURIComponent(code)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                studentName.textContent = `Student: ${data.student.student_name} (${data.student.class} - ${data.student.section})`;
+                studentName.className = 'text-success';
+
+                if (data.student.campus && !campusSelect.value) {
+                    campusSelect.value = data.student.campus;
+                }
+
+                applyGeneratedFees(data.generated_fees);
+            } else {
+                studentName.textContent = data.message || 'Student not found';
+                studentName.className = 'text-danger';
+                resetGeneratedFees();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            studentName.textContent = 'Error searching for student';
+            studentName.className = 'text-danger';
+            resetGeneratedFees();
+        });
+    }
+
+    if (studentCode && studentCodeInput && !studentCodeInput.value) {
+        studentCodeInput.value = studentCode;
+    }
+
+    if (studentCodeInput && studentCodeInput.value) {
+        fetchStudentDetails(studentCodeInput.value.trim());
+    }
+
+    studentCodeInput.addEventListener('input', function() {
+        if (searchTimer) {
+            clearTimeout(searchTimer);
+        }
+        const code = this.value.trim();
+        searchTimer = setTimeout(() => {
+            fetchStudentDetails(code);
+        }, 500);
+    });
+
+    generatedFeeSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (!selectedOption || !selectedOption.dataset.title) {
+            return;
+        }
+        paymentTitleInput.value = selectedOption.dataset.title;
+        paymentAmountInput.value = selectedOption.dataset.amount || '';
+    });
 });
 </script>
 @endsection

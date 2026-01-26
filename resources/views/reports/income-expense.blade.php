@@ -6,17 +6,17 @@
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
                 <h4 class="mb-0 fs-16 fw-semibold">Income & Expense Reports</h4>
             </div>
 
             <!-- Filter Form -->
             <form action="{{ route('reports.income-expense') }}" method="GET" id="filterForm">
-                <div class="row g-2 mb-3 align-items-end">
+                <div class="row g-2 mb-2 align-items-end">
                     <!-- Campus -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
-                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 30px; font-size: 12px;">
                             <option value="">All Campuses</option>
                             @foreach($campuses as $campus)
                                 <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
@@ -25,9 +25,9 @@
                     </div>
 
                     <!-- User Type -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_user_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">User Type</label>
-                        <select class="form-select form-select-sm" id="filter_user_type" name="filter_user_type" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_user_type" name="filter_user_type" style="height: 30px; font-size: 12px;">
                             <option value="">All Types</option>
                             @foreach($userTypeOptions as $userType)
                                 <option value="{{ $userType }}" {{ $filterUserType == $userType ? 'selected' : '' }}>{{ $userType }}</option>
@@ -36,9 +36,9 @@
                     </div>
 
                     <!-- User -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_user" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">User</label>
-                        <select class="form-select form-select-sm" id="filter_user" name="filter_user" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_user" name="filter_user" data-selected-user="{{ $filterUser }}" style="height: 30px; font-size: 12px;">
                             <option value="">All Users</option>
                             @foreach($users as $user)
                                 <option value="{{ $user }}" {{ $filterUser == $user ? 'selected' : '' }}>{{ $user }}</option>
@@ -47,20 +47,20 @@
                     </div>
 
                     <!-- From Date -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_from_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">From Date</label>
-                        <input type="date" class="form-control form-control-sm" id="filter_from_date" name="filter_from_date" value="{{ $filterFromDate }}" style="height: 32px;">
+                        <input type="date" class="form-control form-control-sm" id="filter_from_date" name="filter_from_date" value="{{ $filterFromDate }}" style="height: 30px; font-size: 12px;">
                     </div>
 
                     <!-- To Date -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_to_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">To Date</label>
-                        <input type="date" class="form-control form-control-sm" id="filter_to_date" name="filter_to_date" value="{{ $filterToDate }}" style="height: 32px;">
+                        <input type="date" class="form-control form-control-sm" id="filter_to_date" name="filter_to_date" value="{{ $filterToDate }}" style="height: 30px; font-size: 12px;">
                     </div>
 
                     <!-- Filter Button -->
-                    <div class="col-md-2">
-                        <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn w-100" style="height: 32px;">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
+                        <button type="submit" class="btn btn-sm py-1 px-2 rounded-8 filter-btn w-100" style="height: 30px;">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_alt</span>
                             <span style="font-size: 12px;">Filter</span>
                         </button>
@@ -208,15 +208,15 @@
 
 .default-table-area thead th {
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12px;
     color: #003471;
     border-bottom: 2px solid #dee2e6;
-    padding: 12px;
+    padding: 8px;
 }
 
 .default-table-area tbody td {
-    font-size: 13px;
-    padding: 12px;
+    font-size: 12px;
+    padding: 8px;
     vertical-align: middle;
 }
 
@@ -229,4 +229,63 @@
     padding: 4px 8px;
 }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
+    const userTypeSelect = document.getElementById('filter_user_type');
+    const userSelect = document.getElementById('filter_user');
+
+    function populateUsers(users, selectedUser = '') {
+        userSelect.innerHTML = '<option value="">All Users</option>';
+        if (users && users.length > 0) {
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                if (selectedUser && selectedUser === user) {
+                    option.selected = true;
+                }
+                userSelect.appendChild(option);
+            });
+        }
+    }
+
+    function loadUsers() {
+        const params = new URLSearchParams();
+        const campus = campusSelect.value;
+        const userType = userTypeSelect.value;
+        const selectedUser = userSelect.dataset.selectedUser || '';
+
+        if (campus) {
+            params.append('campus', campus);
+        }
+        if (userType) {
+            params.append('user_type', userType);
+        }
+
+        fetch(`{{ route('reports.income-expense.get-users-by-type') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateUsers(data.users || [], selectedUser);
+            })
+            .catch(error => {
+                console.error('Error loading users:', error);
+                populateUsers([], '');
+            });
+    }
+
+    campusSelect.addEventListener('change', function() {
+        userSelect.dataset.selectedUser = '';
+        loadUsers();
+    });
+
+    userTypeSelect.addEventListener('change', function() {
+        userSelect.dataset.selectedUser = '';
+        loadUsers();
+    });
+
+    loadUsers();
+});
+</script>
 @endsection

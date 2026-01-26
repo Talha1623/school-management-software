@@ -51,10 +51,11 @@
 
                 <!-- Instruction Text -->
                 <div class="text-center">
-                    <p class="instruction-text mb-0">
+                    <p class="instruction-text mb-0" id="scanInstruction">
                         <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; margin-right: 6px;">info</span>
                         Scan Student ID Card Into Barcode Machine...!
                     </p>
+                    <div id="scanMessage" class="scan-message d-none"></div>
                 </div>
             </div>
         </div>
@@ -381,6 +382,33 @@
         color: #003471;
     }
 
+    .scan-message {
+        margin-top: 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    .scan-message.success {
+        background: #e6f4ea;
+        color: #1e7e34;
+        border: 1px solid #c8e6c9;
+    }
+
+    .scan-message.warning {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeeba;
+    }
+
+    .scan-message.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
     /* ID Card Circle */
     .id-card-circle {
         width: 220px;
@@ -557,6 +585,11 @@
         margin-bottom: 0;
     }
 
+    .badge-present {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+    }
+
     /* Entry Avatar */
     .entry-item > div:first-child > div:first-child {
         background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
@@ -602,44 +635,104 @@ document.getElementById('searchBtn').addEventListener('click', function() {
 });
 
 function processBarcode(barcode) {
-    // Here you would typically make an AJAX call to fetch student information
-    // For now, showing a placeholder implementation
-    
-    // Simulate fetching student data
-    // In real implementation, you would call: fetch('/api/student/barcode/' + barcode)
-    
-    // Example: Update student information
-    document.getElementById('studentName').textContent = 'Loading...';
-    document.getElementById('studentRoll').textContent = '-';
-    document.getElementById('studentParent').textContent = '-';
-    document.getElementById('studentClassSection').textContent = '-';
-    document.getElementById('studentCampus').textContent = '-';
-    document.getElementById('studentDues').textContent = '-';
-    
-    // Simulate API call
-    setTimeout(() => {
-        // This would be replaced with actual API response
-        // For demo purposes:
-        document.getElementById('studentName').textContent = 'John Doe';
-        document.getElementById('studentRoll').textContent = '001';
-        document.getElementById('studentParent').textContent = 'Jane Doe';
-        document.getElementById('studentClassSection').textContent = '10th / A';
-        document.getElementById('studentCampus').textContent = 'Main Campus';
-        document.getElementById('studentDues').textContent = 'Rs. 5,000';
-        
-        // Add to latest entries
-        addToLatestEntries({
-            name: 'John Doe',
-            roll: '001',
-            classSection: '10th / A',
-            time: new Date().toLocaleTimeString(),
-            barcode: barcode
-        });
-        
-        // Clear input for next scan
-        document.getElementById('barcodeInput').value = '';
-        document.getElementById('barcodeInput').focus();
-    }, 500);
+    const input = document.getElementById('barcodeInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const scanMessage = document.getElementById('scanMessage');
+
+    setScanMessage('Scanning...', 'warning');
+    input.disabled = true;
+    searchBtn.disabled = true;
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+        document.querySelector('input[name="_token"]')?.value;
+
+    fetch('{{ route('attendance.barcode.scan') }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({ barcode })
+    })
+    .then(response => response.json().then(data => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok || !data.success) {
+            const message = data.message || 'Scan failed. Please try again.';
+            setScanMessage(message, 'error');
+            return;
+        }
+
+        const student = data.data.student;
+        const attendance = data.data.attendance;
+
+        updateStudentInfo(student);
+
+        if (!attendance.already_marked) {
+            const badgeInfo = getBadgeInfo(attendance);
+            addToLatestEntries({
+                name: student.name,
+                roll: student.roll,
+                classSection: student.class_section,
+                time: attendance.time,
+                statusLabel: badgeInfo.label,
+                statusClass: badgeInfo.className
+            });
+        }
+
+        const message = attendance.already_marked
+            ? 'Good bye! Attendance already marked today.'
+            : 'Attendance marked as Present.';
+        setScanMessage(message, attendance.already_marked ? 'warning' : 'success');
+    })
+    .catch(() => {
+        setScanMessage('Scan failed. Please try again.', 'error');
+    })
+    .finally(() => {
+        input.value = '';
+        input.disabled = false;
+        searchBtn.disabled = false;
+        input.focus();
+    });
+}
+
+function updateStudentInfo(student) {
+    document.getElementById('studentName').textContent = student.name || '-';
+    document.getElementById('studentRoll').textContent = student.roll || '-';
+    document.getElementById('studentParent').textContent = student.parent || '-';
+    document.getElementById('studentClassSection').textContent = student.class_section || '-';
+    document.getElementById('studentCampus').textContent = student.campus || '-';
+    document.getElementById('studentDues').textContent = formatCurrency(student.dues);
+}
+
+function setScanMessage(text, type) {
+    const scanMessage = document.getElementById('scanMessage');
+    scanMessage.textContent = text;
+    scanMessage.classList.remove('d-none', 'success', 'warning', 'error');
+    scanMessage.classList.add(type);
+}
+
+function formatCurrency(amount) {
+    if (amount === null || amount === undefined) {
+        return '-';
+    }
+    const numeric = Number(amount);
+    if (Number.isNaN(numeric)) {
+        return amount;
+    }
+    return 'Rs. ' + numeric.toLocaleString();
+}
+
+function getBadgeInfo(attendance) {
+    if (attendance.already_marked) {
+        return { label: 'Present', className: 'badge-present' };
+    }
+    const status = (attendance.status || 'Present').toLowerCase();
+    if (status === 'present') {
+        return { label: 'Present', className: 'badge-present' };
+    }
+    return { label: attendance.status || 'Present', className: 'badge-present' };
 }
 
 function addToLatestEntries(entry) {
@@ -666,8 +759,8 @@ function addToLatestEntries(entry) {
             </div>
         </div>
         <div class="text-end">
-            <span class="badge" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-bottom: 4px; display: inline-block;">
-                Present
+            <span class="badge ${entry.statusClass}" style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-bottom: 4px; display: inline-block;">
+                ${entry.statusLabel}
             </span>
             <div style="color: #6c757d; font-size: 12px; font-weight: 500;">${entry.time}</div>
         </div>

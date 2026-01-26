@@ -47,7 +47,9 @@
                                 <select class="form-select form-select-sm py-1" id="campus" name="campus" required style="height: 32px;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                        <option value="{{ $campus->campus_name ?? $campus }}" {{ ($defaultCampus ?? '') === ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                            {{ $campus->campus_name ?? $campus }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -61,10 +63,7 @@
                             <div class="mb-1">
                                 <label for="class" class="form-label mb-0 fs-13 fw-medium">Class <span class="text-danger">*</span></label>
                                 <select class="form-select form-select-sm py-1" id="class" name="class" required style="height: 32px;">
-                                    <option value="">Select Class</option>
-                                    @foreach($classes as $classItem)
-                                        <option value="{{ $classItem->class_name ?? $classItem }}">{{ $classItem->class_name ?? $classItem }}</option>
-                                    @endforeach
+                                    <option value="">Select Campus First</option>
                                 </select>
                             </div>
                         </div>
@@ -235,6 +234,53 @@ document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('campus');
     const feeMonthSelect = document.getElementById('fee_month');
     const feeYearSelect = document.getElementById('fee_year');
+
+    function resetClassAndSection() {
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        classSelect.disabled = true;
+        sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+        sectionSelect.disabled = true;
+    }
+
+    function loadClassesForCampus() {
+        const campus = campusSelect.value;
+
+        resetClassAndSection();
+        loadStudents();
+
+        if (!campus) {
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading classes...</option>';
+
+        fetch(`{{ route('accountant.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+
+            if (data.classes && data.classes.length > 0) {
+                data.classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+                classSelect.disabled = false;
+            } else {
+                classSelect.innerHTML = '<option value="">No classes found</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+        });
+    }
     
     // Function to load students
     function loadStudents() {
@@ -324,6 +370,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Initialize class/section state on load
+    if (!campusSelect.value) {
+        resetClassAndSection();
+    } else {
+        loadClassesForCampus();
+    }
+
     // Event listeners
     classSelect.addEventListener('change', function() {
         const selectedClass = this.value;
@@ -339,7 +392,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Fetch sections for selected class
-        fetch(`{{ route('accountant.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`, {
+        const sectionParams = new URLSearchParams({
+            class: selectedClass,
+            campus: campusSelect.value
+        });
+
+        fetch(`{{ route('accountant.get-sections-by-class') }}?${sectionParams.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -371,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     sectionSelect.addEventListener('change', loadStudents);
-    campusSelect.addEventListener('change', loadStudents);
+    campusSelect.addEventListener('change', loadClassesForCampus);
     feeMonthSelect.addEventListener('change', loadStudents);
     feeYearSelect.addEventListener('change', loadStudents);
     
@@ -389,8 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Also handle form reset event
     document.getElementById('monthly-fee-form').addEventListener('reset', function() {
         setTimeout(function() {
-            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
-            sectionSelect.disabled = true;
+            resetClassAndSection();
             document.getElementById('student-selection-section').style.display = 'none';
             document.getElementById('students-list').innerHTML = '';
         }, 10);
@@ -400,9 +457,14 @@ document.addEventListener('DOMContentLoaded', function() {
 // Global functions
 function resetForm() {
     const sectionSelect = document.getElementById('section');
+    const classSelect = document.getElementById('class');
     if (sectionSelect) {
         sectionSelect.innerHTML = '<option value="">Select Class First</option>';
         sectionSelect.disabled = true;
+    }
+    if (classSelect) {
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        classSelect.disabled = true;
     }
     document.getElementById('student-selection-section').style.display = 'none';
     document.getElementById('students-list').innerHTML = '';

@@ -278,6 +278,19 @@
 </style>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
+    const classSectionSelect = document.getElementById('filter_class_section');
+    const filterForm = document.getElementById('filterForm');
+
+    if (campusSelect && classSectionSelect && filterForm) {
+        campusSelect.addEventListener('change', function() {
+            classSectionSelect.value = '';
+            filterForm.submit();
+        });
+    }
+});
+
 function clearFilter(filterName) {
     const url = new URL(window.location.href);
     url.searchParams.delete(filterName);

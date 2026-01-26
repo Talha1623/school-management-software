@@ -7,6 +7,7 @@ use App\Models\CustomPayment;
 use App\Models\ManagementExpense;
 use App\Models\Student;
 use App\Models\Staff;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -22,14 +23,13 @@ class BalanceSheetController extends Controller
         $filterUserType = $request->get('filter_user_type'); // Student or Staff
         $filterUser = $request->get('filter_user'); // Student code or Staff name
 
-        // Get campuses
-        $campusesFromPayments = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromCustom = CustomPayment::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromExpenses = ManagementExpense::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromPayments->merge($campusesFromCustom)->merge($campusesFromExpenses)->unique()->sort()->values();
-        
+        // Get campuses from Campus model first, then fallback to transactions
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromPayments = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromCustom = CustomPayment::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromExpenses = ManagementExpense::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromPayments->merge($campusesFromCustom)->merge($campusesFromExpenses)->unique()->sort()->values();
         }
 
         // User Type options
@@ -39,12 +39,20 @@ class BalanceSheetController extends Controller
         $users = collect();
         
         if (!$filterUserType || $filterUserType == 'Student') {
-            $students = Student::whereNotNull('student_code')->distinct()->pluck('student_code')->sort()->values();
+            $studentsQuery = Student::whereNotNull('student_code');
+            if ($filterCampus) {
+                $studentsQuery->where('campus', $filterCampus);
+            }
+            $students = $studentsQuery->distinct()->pluck('student_code')->sort()->values();
             $users = $users->merge($students);
         }
         
         if (!$filterUserType || $filterUserType == 'Staff') {
-            $staff = Staff::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
+            $staffQuery = Staff::whereNotNull('name');
+            if ($filterCampus) {
+                $staffQuery->where('campus', $filterCampus);
+            }
+            $staff = $staffQuery->distinct()->pluck('name')->sort()->values();
             $users = $users->merge($staff);
         }
         
@@ -60,7 +68,7 @@ class BalanceSheetController extends Controller
         // Student Payments (Income)
         $studentPaymentsQuery = StudentPayment::query();
         if ($filterCampus) {
-            $studentPaymentsQuery->where('campus', $filterCampus);
+            $studentPaymentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
         }
         if ($filterUser && $filterUserType == 'Student') {
             $studentPaymentsQuery->where('student_code', $filterUser);
@@ -79,7 +87,7 @@ class BalanceSheetController extends Controller
         // Custom Payments (Income)
         $customPaymentsQuery = CustomPayment::query();
         if ($filterCampus) {
-            $customPaymentsQuery->where('campus', $filterCampus);
+            $customPaymentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
         }
         if ($filterUser && $filterUserType == 'Staff') {
             $customPaymentsQuery->where('accountant', $filterUser);
@@ -102,7 +110,7 @@ class BalanceSheetController extends Controller
         // Management Expenses
         $expensesQuery = ManagementExpense::query();
         if ($filterCampus) {
-            $expensesQuery->where('campus', $filterCampus);
+            $expensesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
         }
         $expenses = $expensesQuery->get();
         $expensesTotal = $expenses->sum('amount');
@@ -136,6 +144,35 @@ class BalanceSheetController extends Controller
             'filterUserType',
             'filterUser'
         ));
+    }
+
+    /**
+     * Get users by campus and user type.
+     */
+    public function getUsersByCampusAndType(Request $request)
+    {
+        $campus = $request->get('campus');
+        $userType = $request->get('user_type');
+
+        $users = collect();
+
+        if (!$userType || $userType === 'Student') {
+            $studentsQuery = Student::whereNotNull('student_code');
+            if ($campus) {
+                $studentsQuery->where('campus', $campus);
+            }
+            $users = $users->merge($studentsQuery->distinct()->pluck('student_code')->sort()->values());
+        }
+
+        if (!$userType || $userType === 'Staff') {
+            $staffQuery = Staff::whereNotNull('name');
+            if ($campus) {
+                $staffQuery->where('campus', $campus);
+            }
+            $users = $users->merge($staffQuery->distinct()->pluck('name')->sort()->values());
+        }
+
+        return response()->json($users->unique()->sort()->values());
     }
 }
 

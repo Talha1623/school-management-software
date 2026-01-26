@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
+use Carbon\Carbon;
 
 class AccountantController extends Controller
 {
@@ -21,6 +22,12 @@ class AccountantController extends Controller
     public function index(Request $request): View
     {
         $query = Accountant::query();
+
+        // Campus filter
+        $filterCampus = $request->get('campus');
+        if ($filterCampus) {
+            $query->where('campus', $filterCampus);
+        }
 
         // Search functionality
         if ($request->has('search') && $request->search) {
@@ -39,14 +46,21 @@ class AccountantController extends Controller
         $accountants = $query->latest()->paginate($perPage)->withQueryString();
 
         // Summary statistics
-        $totalAccountants = Accountant::count();
-        $activeAccountants = Accountant::where('app_login_enabled', true)
+        $summaryQuery = Accountant::query();
+        if ($filterCampus) {
+            $summaryQuery->where('campus', $filterCampus);
+        }
+
+        $totalAccountants = (clone $summaryQuery)->count();
+        $activeAccountants = (clone $summaryQuery)
+            ->where('app_login_enabled', true)
             ->where('web_login_enabled', true)
             ->count();
-        $restrictedAccountants = Accountant::where(function($q) {
-            $q->where('app_login_enabled', false)
-              ->orWhere('web_login_enabled', false);
-        })->count();
+        $restrictedAccountants = (clone $summaryQuery)
+            ->where(function($q) {
+                $q->where('app_login_enabled', false)
+                  ->orWhere('web_login_enabled', false);
+            })->count();
 
         // Get campuses for dropdown
         $campuses = Campus::orderBy('campus_name', 'asc')->get();
@@ -66,7 +80,7 @@ class AccountantController extends Controller
             }
         }
 
-        return view('accountant', compact('accountants', 'totalAccountants', 'activeAccountants', 'restrictedAccountants', 'campuses'));
+        return view('accountant', compact('accountants', 'totalAccountants', 'activeAccountants', 'restrictedAccountants', 'campuses', 'filterCampus'));
     }
 
     /**
@@ -411,8 +425,12 @@ class AccountantController extends Controller
         $balanceToday = $incomeToday - $expenseToday;
         
         // Get latest payments with student information (only actual payments, not generated)
-        $latestPayments = StudentPayment::leftJoin('students', 'student_payments.student_code', '=', 'students.student_code')
+        $latestPayments = StudentPayment::join('students', function ($join) {
+                $join->on(\DB::raw('LOWER(TRIM(student_payments.student_code))'), '=', \DB::raw('LOWER(TRIM(students.student_code))'));
+            })
+            ->whereNotNull('student_payments.method')
             ->where('student_payments.method', '!=', 'Generated') // Only show actual payments
+            ->whereNotNull('students.student_code')
             ->select(
                 'student_payments.*',
                 'students.student_name',
@@ -449,6 +467,11 @@ class AccountantController extends Controller
      */
     public function generateMonthlyFee(): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Get campuses from Campus model
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
         
@@ -474,9 +497,19 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
         // Get classes from ClassModel
-        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
+        $classesQuery = \App\Models\ClassModel::orderBy('class_name', 'asc');
+        if ($defaultCampus) {
+            $classesQuery->where('campus', $defaultCampus);
+        }
+        $classes = $classesQuery->get();
         
         // If no classes found, provide empty collection
         if ($classes->isEmpty()) {
@@ -504,7 +537,7 @@ class AccountantController extends Controller
             $years[] = $y;
         }
         
-        return view('accountant.generate-monthly-fee', compact('campuses', 'classes', 'sections', 'months', 'years', 'currentYear'));
+        return view('accountant.generate-monthly-fee', compact('campuses', 'classes', 'sections', 'months', 'years', 'currentYear', 'defaultCampus'));
     }
 
     /**
@@ -515,6 +548,11 @@ class AccountantController extends Controller
      */
     public function generateCustomFee(): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Get campuses from Campus model
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
         
@@ -540,9 +578,19 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
         // Get classes from ClassModel
-        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
+        $classesQuery = \App\Models\ClassModel::orderBy('class_name', 'asc');
+        if ($defaultCampus) {
+            $classesQuery->where('campus', $defaultCampus);
+        }
+        $classes = $classesQuery->get();
         
         // If no classes found, provide empty collection
         if ($classes->isEmpty()) {
@@ -565,7 +613,7 @@ class AccountantController extends Controller
             ->sort()
             ->values();
         
-        return view('accountant.generate-custom-fee', compact('campuses', 'classes', 'sections', 'feeTypes'));
+        return view('accountant.generate-custom-fee', compact('campuses', 'classes', 'sections', 'feeTypes', 'defaultCampus'));
     }
 
     /**
@@ -573,6 +621,11 @@ class AccountantController extends Controller
      */
     public function generateTransportFee(): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Get campuses from Campus model
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
         
@@ -598,9 +651,19 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
         // Get classes from ClassModel
-        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
+        $classesQuery = \App\Models\ClassModel::orderBy('class_name', 'asc');
+        if ($defaultCampus) {
+            $classesQuery->where('campus', $defaultCampus);
+        }
+        $classes = $classesQuery->get();
         
         // If no classes found, provide empty collection
         if ($classes->isEmpty()) {
@@ -620,7 +683,7 @@ class AccountantController extends Controller
             $years[] = $y;
         }
         
-        return view('accountant.generate-transport-fee', compact('campuses', 'classes', 'months', 'years', 'currentYear'));
+        return view('accountant.generate-transport-fee', compact('campuses', 'classes', 'months', 'years', 'currentYear', 'defaultCampus'));
     }
 
     /**
@@ -634,32 +697,95 @@ class AccountantController extends Controller
             'section' => ['required', 'string', 'max:255'],
             'fee_month' => ['required', 'string', 'max:255'],
             'fee_year' => ['required', 'string', 'max:255'],
+            'selected_students' => ['nullable', 'array'],
+            'selected_students.*' => ['exists:students,id'],
         ]);
+
+        // Check if students are selected
+        $selectedStudentIds = $request->input('selected_students', []);
+
+        if (empty($selectedStudentIds)) {
+            return redirect()
+                ->route('accountant.generate-transport-fee')
+                ->with('error', 'Please select at least one student to generate fees.');
+        }
 
         // Create the transport fee configuration
         $transportFee = \App\Models\TransportFee::create($validated);
 
-        // Get students matching the criteria
-        $studentsQuery = \App\Models\Student::query();
-        
-        if ($validated['campus']) {
-            $studentsQuery->where('campus', $validated['campus']);
+        // Get selected students
+        $students = \App\Models\Student::whereIn('id', $selectedStudentIds)->get();
+
+        // Generate fee for each selected student
+        $paymentTitle = "Transport Fee - {$validated['fee_month']} {$validated['fee_year']}";
+        $dueDate = Carbon::now()->addDays(15);
+
+        $generatedCount = 0;
+        $skippedCount = 0;
+
+        foreach ($students as $student) {
+            // Skip if student doesn't have transport fare or student_code
+            if (empty($student->transport_fare) || $student->transport_fare <= 0 || empty($student->student_code)) {
+                $skippedCount++;
+                continue;
+            }
+
+            // Check if fee already exists for this student, month, and year
+            $existingFee = StudentPayment::where('student_code', $student->student_code)
+                ->where('payment_title', $paymentTitle)
+                ->first();
+
+            if ($existingFee) {
+                $skippedCount++;
+                continue;
+            }
+
+            // Get accountant name based on guard
+            $accountantName = 'System';
+            if (auth()->guard('accountant')->check()) {
+                $accountantName = auth()->guard('accountant')->user()->name ?? 'System';
+            } elseif (auth()->guard('admin')->check()) {
+                $accountantName = auth()->guard('admin')->user()->name ?? 'System';
+            }
+
+            // Create fee record for this student
+            StudentPayment::create([
+                'campus' => $student->campus ?? $validated['campus'],
+                'student_code' => $student->student_code,
+                'payment_title' => $paymentTitle,
+                'payment_amount' => (float) $student->transport_fare,
+                'discount' => 0,
+                'method' => 'Generated',
+                'payment_date' => $dueDate->format('Y-m-d'),
+                'sms_notification' => 'Yes',
+                'late_fee' => 0,
+                'accountant' => $accountantName,
+            ]);
+
+            $generatedCount++;
         }
-        
-        if ($validated['class']) {
-            $studentsQuery->where('class', $validated['class']);
+
+        if ($generatedCount == 0) {
+            $message = "No transport fees were generated. ";
+            if ($skippedCount > 0) {
+                $message .= "All selected students were skipped (no transport fare set or fees already exist).";
+            } else {
+                $message .= "Selected students don't have transport fare configured.";
+            }
+
+            return redirect()
+                ->route('accountant.generate-transport-fee')
+                ->with('error', $message);
         }
-        
-        if ($validated['section']) {
-            $studentsQuery->where('section', $validated['section']);
+
+        $message = "Transport fee generated successfully for {$generatedCount} student(s)!";
+        if ($skippedCount > 0) {
+            $message .= " {$skippedCount} student(s) skipped (no transport fare set or already exists).";
         }
-        
-        $students = $studentsQuery->get();
-        $studentCount = $students->count();
 
         return redirect()
             ->route('accountant.generate-transport-fee')
-            ->with('success', "Transport fee generated successfully for {$studentCount} student(s)!");
+            ->with('success', $message);
     }
 
     /**
@@ -668,13 +794,18 @@ class AccountantController extends Controller
     public function getTransportFeeSectionsByClass(Request $request)
     {
         $className = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$className) {
             return response()->json(['sections' => []]);
         }
 
         // Get sections for the selected class
-        $sections = \App\Models\Section::where('class', $className)
+        $sectionsQuery = \App\Models\Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery
             ->orderBy('name', 'asc')
             ->get(['id', 'name'])
             ->map(function($section) {
@@ -761,6 +892,11 @@ class AccountantController extends Controller
      */
     public function studentPayment(): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Get campuses from Campus model
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
         
@@ -786,11 +922,17 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
         // Payment methods
         $methods = ['Cash', 'Bank Transfer', 'Cheque', 'Online Payment', 'Card', 'Mobile Banking'];
         
-        return view('accountant.student-payment', compact('campuses', 'methods'));
+        return view('accountant.student-payment', compact('campuses', 'methods', 'defaultCampus'));
     }
 
     /**
@@ -850,6 +992,11 @@ class AccountantController extends Controller
             ]);
         }
 
+        $generatedFees = \App\Models\StudentPayment::where('student_code', $studentCode)
+            ->where('method', 'Generated')
+            ->orderBy('payment_date', 'asc')
+            ->get(['id', 'payment_title', 'payment_amount', 'late_fee', 'payment_date']);
+
         return response()->json([
             'success' => true,
             'student' => [
@@ -858,7 +1005,8 @@ class AccountantController extends Controller
                 'campus' => $student->campus,
                 'class' => $student->class,
                 'section' => $student->section,
-            ]
+            ],
+            'generated_fees' => $generatedFees
         ]);
     }
 
@@ -867,6 +1015,11 @@ class AccountantController extends Controller
      */
     public function customPayment(): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Get campuses from Campus model
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
         
@@ -892,6 +1045,12 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
         // Get accountants
         $accountants = \App\Models\Accountant::orderBy('name', 'asc')->get();
@@ -902,7 +1061,7 @@ class AccountantController extends Controller
         // Payment methods
         $methods = ['Cash', 'Bank Transfer', 'Cheque', 'Online Payment', 'Card', 'Mobile Banking'];
         
-        return view('accountant.custom-payment', compact('campuses', 'accountants', 'methods'));
+        return view('accountant.custom-payment', compact('campuses', 'accountants', 'methods', 'defaultCampus'));
     }
 
     /**
@@ -953,8 +1112,54 @@ class AccountantController extends Controller
      */
     public function deletedFees(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
+        $filterCampus = $request->get('filter_campus');
+        if ($defaultCampus) {
+            $filterCampus = $defaultCampus;
+        }
+
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
+
         // Get deleted fees
         $query = \App\Models\DeletedFee::query();
+
+        if ($filterCampus) {
+            $query->where('campus', $filterCampus);
+        }
         
         // Search functionality
         if ($request->filled('search')) {
@@ -977,7 +1182,7 @@ class AccountantController extends Controller
         
         $deletedFees = $query->orderBy('deleted_at', 'desc')->paginate($perPage)->withQueryString();
         
-        return view('accountant.deleted-fees', compact('deletedFees'));
+        return view('accountant.deleted-fees', compact('deletedFees', 'campuses', 'filterCampus', 'defaultCampus'));
     }
 
     /**
@@ -1041,6 +1246,21 @@ class AccountantController extends Controller
         }
         
         $query = \App\Models\Student::query();
+        $currentYear = date('Y');
+        $vouchersFor = $request->get('vouchers_for');
+        $pendingPaymentsQuery = \App\Models\StudentPayment::where('method', 'Generated')
+            ->whereNotNull('student_code')
+            ->where('student_code', '!=', '');
+        if ($vouchersFor) {
+            $paymentTitle = "Monthly Fee - {$vouchersFor} {$currentYear}";
+            $pendingPaymentsQuery->where('payment_title', $paymentTitle);
+        }
+        $pendingStudentCodes = $pendingPaymentsQuery->distinct()->pluck('student_code');
+        if ($pendingStudentCodes->isNotEmpty()) {
+            $query->whereIn('student_code', $pendingStudentCodes);
+        } else {
+            $query->whereRaw('1 = 0');
+        }
         
         // Apply filters
         if ($request->filled('class')) {
@@ -1061,6 +1281,48 @@ class AccountantController extends Controller
      */
     public function familyVouchers(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
+        $filterCampus = $request->get('campus');
+        if ($defaultCampus) {
+            $filterCampus = $defaultCampus;
+        }
+
+        // Get campuses from Campus model
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        
+        // If no campuses found, get from classes or sections
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
+
         // Group students by parent (using father_name or parent_id)
         $query = \App\Models\Student::select(
             \Illuminate\Support\Facades\DB::raw('COALESCE(father_name, "Unknown") as parent_name'),
@@ -1074,13 +1336,13 @@ class AccountantController extends Controller
         ->groupBy('father_name');
         
         // Apply filters
-        if ($request->filled('campus')) {
-            $query->where('campus', $request->campus);
+        if ($filterCampus) {
+            $query->where('campus', $filterCampus);
         }
         
         $families = $query->orderBy('parent_name')->paginate(20)->withQueryString();
         
-        return view('accountant.fee-voucher.family', compact('families'));
+        return view('accountant.fee-voucher.family', compact('families', 'campuses', 'filterCampus', 'defaultCampus'));
     }
 
     /**
@@ -1104,12 +1366,27 @@ class AccountantController extends Controller
      */
     public function feeDefaulters(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
+        if ($defaultCampus) {
+            $request->merge(['filter_campus' => $defaultCampus]);
+        }
+
         // Use the same FeeDefaultReportController logic
         $controller = new \App\Http\Controllers\FeeDefaultReportController();
         $view = $controller->index($request);
         
         // Change the view to accountant version
         $viewData = $view->getData();
+        if ($defaultCampus && isset($viewData['campuses'])) {
+            $viewData['campuses'] = $viewData['campuses']->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
+        $viewData['defaultCampus'] = $defaultCampus;
         return view('accountant.fee-defaulters', $viewData);
     }
 
@@ -1118,12 +1395,27 @@ class AccountantController extends Controller
      */
     public function accountsSummary(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
+        if ($defaultCampus) {
+            $request->merge(['filter_campus' => $defaultCampus]);
+        }
+
         // Use the same AccountsSummaryController logic
         $controller = new \App\Http\Controllers\AccountsSummaryController();
         $view = $controller->index($request);
         
         // Change the view to accountant version
         $viewData = $view->getData();
+        if ($defaultCampus && isset($viewData['campuses'])) {
+            $viewData['campuses'] = $viewData['campuses']->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
+        $viewData['defaultCampus'] = $defaultCampus;
         return view('accountant.accounts-summary', $viewData);
     }
 
@@ -1132,12 +1424,29 @@ class AccountantController extends Controller
      */
     public function detailedIncome(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
+        if ($defaultCampus) {
+            $request->merge(['filter_campus' => $defaultCampus]);
+        }
+
         // Use the same DetailedIncomeController logic
         $controller = new \App\Http\Controllers\DetailedIncomeController();
         $view = $controller->index($request);
         
         // Change the view to accountant version
         $viewData = $view->getData();
+        if ($defaultCampus && isset($viewData['campuses'])) {
+            $viewData['campuses'] = collect($viewData['campuses'])
+                ->filter(function ($campus) use ($defaultCampus) {
+                    return ($campus->campus_name ?? $campus) === $defaultCampus;
+                })
+                ->values();
+        }
+        $viewData['defaultCampus'] = $defaultCampus;
         return view('accountant.detailed-income', $viewData);
     }
 
@@ -1249,8 +1558,16 @@ class AccountantController extends Controller
      */
     public function manageCategories(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Use the same StockCategoryController logic
         $query = \App\Models\StockCategory::query();
+        if ($defaultCampus) {
+            $query->where('campus', $defaultCampus);
+        }
         
         // Search functionality
         if ($request->filled('search')) {
@@ -1293,8 +1610,14 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
-        return view('accountant.manage-categories', compact('categories', 'campuses'));
+        return view('accountant.manage-categories', compact('categories', 'campuses', 'defaultCampus'));
     }
 
     /**
@@ -1323,8 +1646,11 @@ class AccountantController extends Controller
         
         $products = $query->orderBy('product_name')->paginate($perPage)->withQueryString();
 
-        // Get categories for dropdown
-        $categories = \App\Models\StockCategory::whereNotNull('category_name')->distinct()->pluck('category_name')->sort()->values();
+        // Get categories for dropdown (with campus for filtering)
+        $categories = \App\Models\StockCategory::whereNotNull('category_name')
+            ->whereNotNull('campus')
+            ->orderBy('category_name')
+            ->get(['category_name', 'campus']);
 
         // Get campuses
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
@@ -1443,8 +1769,17 @@ class AccountantController extends Controller
      */
     public function addManageExpense(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Use the same ManagementExpenseController logic
         $query = \App\Models\ManagementExpense::query();
+
+        if ($defaultCampus) {
+            $query->where('campus', $defaultCampus);
+        }
         
         // Search functionality
         if ($request->filled('search')) {
@@ -1491,11 +1826,17 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
         // Get expense categories for dropdown
         $categories = \App\Models\ExpenseCategory::orderBy('category_name')->get();
         
-        return view('accountant.add-manage-expense', compact('expenses', 'categories', 'campuses'));
+        return view('accountant.add-manage-expense', compact('expenses', 'categories', 'campuses', 'defaultCampus'));
     }
 
     /**
@@ -1503,8 +1844,16 @@ class AccountantController extends Controller
      */
     public function expenseCategories(Request $request): View
     {
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
         // Use the same ExpenseCategoryController logic
         $query = \App\Models\ExpenseCategory::query();
+        if ($defaultCampus) {
+            $query->where('campus', $defaultCampus);
+        }
         
         // Search functionality
         if ($request->filled('search')) {
@@ -1548,7 +1897,13 @@ class AccountantController extends Controller
                 $campuses->push((object)['campus_name' => $campusName]);
             }
         }
+
+        if ($defaultCampus) {
+            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
+                return ($campus->campus_name ?? $campus) === $defaultCampus;
+            })->values();
+        }
         
-        return view('accountant.expense-categories', compact('categories', 'campuses'));
+        return view('accountant.expense-categories', compact('categories', 'campuses', 'defaultCampus'));
     }
 }

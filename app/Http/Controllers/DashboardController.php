@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Models\ManagementExpense;
 use App\Models\ParentAccount;
 use App\Models\Staff;
+use App\Models\StaffAttendance;
 use App\Models\StudentAttendance;
 use App\Models\Campus;
 use App\Models\Task;
@@ -81,6 +82,25 @@ class DashboardController extends Controller
         $totalStaff = $allStaff->count();
         $maleStaff = $allStaff->where('gender', 'Male')->count();
         $femaleStaff = $allStaff->where('gender', 'Female')->count();
+
+        // Staff Attendance Chart (Last 7 Days)
+        $staffAttendanceLabels = [];
+        $staffPresentData = [];
+        $staffAbsentData = [];
+        $staffLeaveData = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $date = Carbon::today()->subDays($i);
+            $staffAttendanceLabels[] = $date->format('D');
+            $staffPresentData[] = StaffAttendance::whereDate('attendance_date', $date)
+                ->where('status', 'Present')
+                ->count();
+            $staffAbsentData[] = StaffAttendance::whereDate('attendance_date', $date)
+                ->where('status', 'Absent')
+                ->count();
+            $staffLeaveData[] = StaffAttendance::whereDate('attendance_date', $date)
+                ->where('status', 'Leave')
+                ->count();
+        }
         
         // Calculate Present Students Today
         $allActiveStudentIds = $activeStudents->pluck('id');
@@ -353,6 +373,10 @@ class DashboardController extends Controller
             'totalStaff',
             'maleStaff',
             'femaleStaff',
+            'staffAttendanceLabels',
+            'staffPresentData',
+            'staffAbsentData',
+            'staffLeaveData',
             'presentStudentsToday',
             'attendancePercentage',
             'monthWisePaidFee',

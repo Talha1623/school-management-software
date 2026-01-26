@@ -41,9 +41,16 @@ class ManageClassesController extends Controller
         // Load sections for each class (only sections that belong to existing classes)
         // Use case-insensitive matching to ensure accuracy
         foreach ($classes as $class) {
-            $sections = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class->class_name))])
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class->class_name))])
                 ->whereNotNull('name')
-                ->where('name', '!=', '')
+                ->where('name', '!=', '');
+
+            // Ensure sections are only from the same campus (if class campus is set)
+            if (!empty($class->campus)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower(trim($class->campus))]);
+            }
+
+            $sections = $sectionsQuery
                 ->orderBy('name', 'asc')
                 ->pluck('name')
                 ->toArray();
@@ -113,13 +120,27 @@ class ManageClassesController extends Controller
         }
         
         // Before creating the class, delete any orphaned sections with this class name
-        // This ensures that when a class is re-added, old sections don't automatically appear
-        $deletedSectionsCount = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className])
-            ->delete();
+        // Scope by campus to avoid removing sections from other campuses with same class
+        $sectionsCleanupQuery = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className]);
+        if ($classCampus) {
+            $sectionsCleanupQuery->where(function($query) use ($classCampus) {
+                $query->whereNull('campus')
+                    ->orWhere('campus', '')
+                    ->orWhereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$classCampus]);
+            });
+        }
+        $deletedSectionsCount = $sectionsCleanupQuery->delete();
         
-        // Also delete any orphaned subjects with this class name
-        $deletedSubjectsCount = Subject::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className])
-            ->delete();
+        // Also delete any orphaned subjects with this class name (scoped by campus)
+        $subjectsCleanupQuery = Subject::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className]);
+        if ($classCampus) {
+            $subjectsCleanupQuery->where(function($query) use ($classCampus) {
+                $query->whereNull('campus')
+                    ->orWhere('campus', '')
+                    ->orWhereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$classCampus]);
+            });
+        }
+        $deletedSubjectsCount = $subjectsCleanupQuery->delete();
         
         // Log cleanup for debugging
         if ($deletedSectionsCount > 0 || $deletedSubjectsCount > 0) {
@@ -274,19 +295,30 @@ class ManageClassesController extends Controller
         }
         
         // Clear teacher field from all sections of this class before deleting
-        // This prevents orphaned teacher assignments
-        Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className])
-            ->update(['teacher' => null]);
+        // Scope by campus to avoid touching sections from other campuses
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className]);
+        if ($classCampus) {
+            $sectionsQuery->where(function($query) use ($classCampus) {
+                $query->whereNull('campus')
+                    ->orWhere('campus', '')
+                    ->orWhereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$classCampus]);
+            });
+        }
+        $sectionsQuery->update(['teacher' => null]);
         
-        // Delete all sections associated with this class
-        // This ensures that when class is re-added, old sections don't automatically appear
-        $deletedSectionsCount = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className])
-            ->delete();
+        // Delete all sections associated with this class (scoped by campus)
+        $deletedSectionsCount = $sectionsQuery->delete();
         
-        // Delete all subjects associated with this class
-        // This ensures complete cleanup when class is deleted
-        $deletedSubjectsCount = Subject::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className])
-            ->delete();
+        // Delete all subjects associated with this class (scoped by campus)
+        $subjectsQuery = Subject::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className]);
+        if ($classCampus) {
+            $subjectsQuery->where(function($query) use ($classCampus) {
+                $query->whereNull('campus')
+                    ->orWhere('campus', '')
+                    ->orWhereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$classCampus]);
+            });
+        }
+        $deletedSubjectsCount = $subjectsQuery->delete();
         
         // Log deletion for debugging
         \Log::info('Class deleted with associated records', [

@@ -56,7 +56,7 @@ class StaffAuthController extends Controller
             ])->onlyInput('email');
         }
 
-        // Check if staff has dashboard access
+        // Check if staff has dashboard access (includes Active status)
         if (!$staff->hasDashboardAccess()) {
             return back()->withErrors([
                 'email' => 'You do not have dashboard access. Please contact administrator.',

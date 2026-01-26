@@ -6,6 +6,7 @@ use App\Models\StudentPayment;
 use App\Models\Student;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Carbon\Carbon;
@@ -19,43 +20,16 @@ class FeeDiscountController extends Controller
     {
         // Get filter values
         $filterCampus = $request->get('filter_campus');
-        $filterMonth = $request->get('filter_month');
-        $filterYear = $request->get('filter_year');
+        $filterFromDate = $request->get('filter_from_date');
+        $filterToDate = $request->get('filter_to_date');
 
-        // Get campuses from student payments
-        $campuses = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
-        
+        // Get campuses from Campus model first, then fallback to payments/classes/sections
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
         if ($campuses->isEmpty()) {
+            $campusesFromPayments = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus');
             $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
             $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-            
-            if ($campuses->isEmpty()) {
-                $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-            }
-        }
-
-        // Month options
-        $months = collect([
-            '01' => 'January',
-            '02' => 'February',
-            '03' => 'March',
-            '04' => 'April',
-            '05' => 'May',
-            '06' => 'June',
-            '07' => 'July',
-            '08' => 'August',
-            '09' => 'September',
-            '10' => 'October',
-            '11' => 'November',
-            '12' => 'December',
-        ]);
-
-        // Year options (current year and previous 5 years)
-        $currentYear = date('Y');
-        $years = collect();
-        for ($i = 0; $i < 6; $i++) {
-            $years->push($currentYear - $i);
+            $campuses = $campusesFromPayments->merge($campusesFromClasses)->merge($campusesFromSections)->unique()->sort()->values();
         }
 
         // Query student payments with discounts
@@ -64,11 +38,11 @@ class FeeDiscountController extends Controller
         if ($filterCampus) {
             $query->where('campus', $filterCampus);
         }
-        if ($filterMonth) {
-            $query->whereMonth('payment_date', $filterMonth);
+        if ($filterFromDate) {
+            $query->whereDate('payment_date', '>=', $filterFromDate);
         }
-        if ($filterYear) {
-            $query->whereYear('payment_date', $filterYear);
+        if ($filterToDate) {
+            $query->whereDate('payment_date', '<=', $filterToDate);
         }
 
         $payments = $query->orderBy('payment_date', 'desc')->get();
@@ -95,12 +69,10 @@ class FeeDiscountController extends Controller
 
         return view('reports.fee-discount', compact(
             'campuses',
-            'months',
-            'years',
             'discountRecords',
             'filterCampus',
-            'filterMonth',
-            'filterYear'
+            'filterFromDate',
+            'filterToDate'
         ));
     }
 }

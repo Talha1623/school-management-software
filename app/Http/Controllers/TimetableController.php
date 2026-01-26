@@ -8,11 +8,30 @@ use App\Models\Section;
 use App\Models\Campus;
 use App\Models\Subject;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class TimetableController extends Controller
 {
+    /**
+     * Static timetable subjects that are not stored in Subject table.
+     */
+    private function getStaticSubjects(): array
+    {
+        return [
+            '[Assembly]',
+            '[Lunch Break]',
+            '[Free Time]',
+            '[Lab Active]',
+            '[physicial/sports/activity]',
+            '[singing class]',
+            '[material arts class]',
+            '[Library Activity]',
+            '[chilligraphy class]',
+            '[other fun activities]',
+        ];
+    }
     /**
      * Display the add timetable form.
      */
@@ -157,6 +176,12 @@ class TimetableController extends Controller
             ->unique()
             ->values()
             ->toArray();
+
+        // Add static subjects so they also appear in timetable management list
+        $staticSubjectNames = collect($this->getStaticSubjects())
+            ->map(fn($name) => strtolower(trim($name)))
+            ->toArray();
+        $existingSubjectNames = array_values(array_unique(array_merge($existingSubjectNames, $staticSubjectNames)));
         
         // Filter timetables to only show those with existing classes and existing subjects
         if (!empty($existingClassNames)) {
@@ -280,7 +305,7 @@ class TimetableController extends Controller
     /**
      * Store a newly created timetable.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'campus' => ['required', 'string', 'max:255'],
@@ -292,7 +317,36 @@ class TimetableController extends Controller
             'ending_time' => ['required', 'string'],
         ]);
 
+        $hasConflict = Timetable::where('campus', $validated['campus'])
+            ->where('class', $validated['class'])
+            ->where('section', $validated['section'])
+            ->where('day', $validated['day'])
+            ->where('starting_time', $validated['starting_time'])
+            ->exists();
+
+        if ($hasConflict) {
+            $message = 'Same time already exists for this class and section.';
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $message,
+                    'errors' => [
+                        'starting_time' => [$message],
+                    ],
+                ], 422);
+            }
+
+            return back()
+                ->withErrors(['starting_time' => $message])
+                ->withInput();
+        }
+
         Timetable::create($validated);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Timetable created successfully!',
+            ], 201);
+        }
 
         return redirect()
             ->route('timetable.add')
@@ -394,6 +448,20 @@ class TimetableController extends Controller
             'ending_time' => ['required', 'string'],
         ]);
 
+        $hasConflict = Timetable::where('campus', $validated['campus'])
+            ->where('class', $validated['class'])
+            ->where('section', $validated['section'])
+            ->where('day', $validated['day'])
+            ->where('starting_time', $validated['starting_time'])
+            ->where('id', '!=', $timetable->id)
+            ->exists();
+
+        if ($hasConflict) {
+            return back()
+                ->withErrors(['starting_time' => 'Same time already exists for this class and section.'])
+                ->withInput();
+        }
+
         $timetable->update($validated);
 
         return redirect()
@@ -404,9 +472,16 @@ class TimetableController extends Controller
     /**
      * Remove the specified timetable from storage.
      */
-    public function destroy(Timetable $timetable): RedirectResponse
+    public function destroy(Timetable $timetable): RedirectResponse|JsonResponse
     {
         $timetable->delete();
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'id' => $timetable->id,
+            ]);
+        }
 
         return redirect()
             ->route('timetable.manage')
@@ -450,12 +525,17 @@ class TimetableController extends Controller
     public function getSectionsByClass(Request $request)
     {
         $className = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$className) {
             return response()->json(['sections' => []]);
         }
         
-        $sections = Section::where('class', $className)
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery
             ->whereNotNull('name')
             ->distinct()
             ->orderBy('name', 'asc')

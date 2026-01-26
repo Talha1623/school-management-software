@@ -342,7 +342,7 @@
                                 <select class="form-select section-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Class</option>
                                     @foreach($classes as $class)
-                                        <option value="{{ $class->class_name ?? $class }}">{{ $class->class_name ?? $class }}</option>
+                                        <option value="{{ $class->class_name ?? $class }}" data-campus="{{ $class->campus ?? '' }}">{{ $class->class_name ?? $class }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -355,8 +355,8 @@
                                 </span>
                                 <select class="form-select section-input" name="teacher" id="teacher" style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Teacher</option>
-                                    @foreach($teachers as $id => $teacherName)
-                                        <option value="{{ $teacherName }}">{{ $teacherName }}</option>
+                                    @foreach($teachers as $teacher)
+                                        <option value="{{ $teacher->name }}" data-campus="{{ $teacher->campus ?? '' }}">{{ $teacher->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -752,6 +752,92 @@
 </style>
 
 <script>
+function loadClassesByCampus(targetSelectId, campusValue, selectedValue = '') {
+    const selectEl = document.getElementById(targetSelectId);
+    if (!selectEl) return;
+
+    const placeholder = targetSelectId === 'filter_class' ? 'All Classes' : 'Select Class';
+    selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+
+    fetch(`{{ route('classes.manage-section.classes-by-campus') }}?campus=${encodeURIComponent(campusValue || '')}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.classes && data.classes.length > 0) {
+            data.classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                selectEl.appendChild(option);
+            });
+        }
+        if (selectedValue) {
+            selectEl.value = selectedValue;
+        }
+    })
+    .catch(() => {
+        // Keep placeholder on error
+    });
+}
+
+function filterClassOptions(campusValue, selectedClass = '') {
+    const classSelect = document.getElementById('class');
+    if (!classSelect) return;
+
+    const campusLower = (campusValue || '').toLowerCase().trim();
+    const options = Array.from(classSelect.options);
+    options.forEach((option, index) => {
+        if (index === 0) {
+            option.hidden = false;
+            option.disabled = false;
+            return;
+        }
+        const optionCampus = (option.dataset.campus || '').toLowerCase().trim();
+        const shouldShow = !campusLower || optionCampus === campusLower;
+        option.hidden = !shouldShow;
+        option.disabled = !shouldShow;
+    });
+
+    if (selectedClass) {
+        classSelect.value = selectedClass;
+    }
+
+    if (!classSelect.value || classSelect.selectedOptions[0]?.disabled) {
+        classSelect.value = '';
+    }
+}
+
+function filterTeacherOptions(campusValue, selectedTeacher = '') {
+    const teacherSelect = document.getElementById('teacher');
+    if (!teacherSelect) return;
+
+    const campusLower = (campusValue || '').toLowerCase().trim();
+    const options = Array.from(teacherSelect.options);
+    options.forEach((option, index) => {
+        if (index === 0) {
+            option.hidden = false;
+            option.disabled = false;
+            return;
+        }
+        const optionCampus = (option.dataset.campus || '').toLowerCase().trim();
+        const shouldShow = !campusLower || optionCampus === campusLower || optionCampus === '';
+        option.hidden = !shouldShow;
+        option.disabled = !shouldShow;
+    });
+
+    if (selectedTeacher) {
+        teacherSelect.value = selectedTeacher;
+    }
+
+    if (!teacherSelect.value || teacherSelect.selectedOptions[0]?.disabled) {
+        teacherSelect.value = '';
+    }
+}
+
 // Reset form when opening modal for new section
 function resetForm() {
     document.getElementById('sectionForm').reset();
@@ -766,6 +852,9 @@ function resetForm() {
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
         Save Section
     `;
+
+    loadClassesByCampus('class', '');
+    filterTeacherOptions('');
 }
 
 // Edit section function
@@ -773,8 +862,8 @@ function editSection(id, campus, name, nickName, className, teacher, session) {
     document.getElementById('campus').value = campus;
     document.getElementById('name').value = name;
     document.getElementById('nick_name').value = nickName || '';
-    document.getElementById('class').value = className;
-    document.getElementById('teacher').value = teacher || '';
+    loadClassesByCampus('class', campus, className);
+    filterTeacherOptions(campus, teacher || '');
     document.getElementById('session').value = session || '';
     document.getElementById('sectionForm').action = "{{ url('classes/manage-section') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
@@ -791,6 +880,26 @@ function editSection(id, campus, name, nickName, className, teacher, session) {
     const modal = new bootstrap.Modal(document.getElementById('sectionModal'));
     modal.show();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const filterCampusSelect = document.getElementById('filter_campus');
+    const filterClassSelect = document.getElementById('filter_class');
+    if (filterCampusSelect && filterClassSelect) {
+        loadClassesByCampus('filter_class', filterCampusSelect.value, filterClassSelect.value);
+        filterCampusSelect.addEventListener('change', function() {
+            loadClassesByCampus('filter_class', this.value);
+        });
+    }
+
+    const campusSelect = document.getElementById('campus');
+    if (campusSelect) {
+        loadClassesByCampus('class', campusSelect.value);
+        campusSelect.addEventListener('change', function() {
+            loadClassesByCampus('class', this.value);
+            filterTeacherOptions(this.value);
+        });
+    }
+});
 
 // Search functionality
 function performSearch() {

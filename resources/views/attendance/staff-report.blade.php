@@ -19,6 +19,12 @@
 
             <!-- Filter Form -->
             <form method="GET" action="{{ route('attendance.staff-report') }}" id="filterForm">
+                @if(!empty($filterStaffId))
+                    <input type="hidden" name="staff_id" value="{{ $filterStaffId }}">
+                @endif
+                @if(!empty($reportType))
+                    <input type="hidden" name="report_type" value="{{ $reportType }}">
+                @endif
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->
                     <div class="col-md-3">
@@ -104,14 +110,16 @@
             </form>
 
             <!-- Attendance Report - Only show when filters are applied -->
-            @if(request('filter_campus') && request('filter_designation'))
+            @if(request('staff_id') || (request('filter_campus') && request('filter_designation')))
             <div class="mt-4">
                 <!-- Report Header -->
                 <div class="text-center mb-4" style="padding-bottom: 20px;">
                     <h2 class="mb-2 fw-bold" style="color: #003471; font-size: 28px;">ICMS</h2>
-                    <h4 class="mb-3 fw-semibold" style="color: #495057; font-size: 18px;">Staff Attendance Sheet</h4>
+                    <h4 class="mb-3 fw-semibold" style="color: #495057; font-size: 18px;">
+                        {{ ($reportType ?? '') === 'performance' ? 'Teacher Performance Report' : 'Staff Attendance Sheet' }}
+                    </h4>
                     <div class="d-flex justify-content-center gap-4 flex-wrap" style="font-size: 14px; color: #6c757d;">
-                        <span><strong>Campus:</strong> {{ request('filter_campus') }}</span>
+                        <span><strong>Campus:</strong> {{ request('filter_campus') ?? $filterCampus }}</span>
                         <span><strong>Designation:</strong> {{ $filterDesignation }}</span>
                         <span><strong>{{ $monthName }}, {{ $filterYear }}</strong></span>
                     </div>
@@ -132,6 +140,8 @@
                                 @endfor
                                 <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #e7f3ff;">Present Days</th>
                                 <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #ffe7e7;">Absent Days</th>
+                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #f1f1f1;">Leave Days</th>
+                                <th style="padding: 8px; text-align: center; min-width: 90px; border: 1px solid #dee2e6; background-color: #e9ecef;">Half Days</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -140,6 +150,8 @@
                                     $presentDays = 0;
                                     $absentDays = 0;
                                     $staffAttendance = $attendanceData[$staff->id] ?? [];
+                                    $leaveDays = 0;
+                                    $halfDays = 0;
                                     
                                     // Count present and absent days dynamically
                                     foreach ($staffAttendance as $day => $status) {
@@ -148,6 +160,10 @@
                                             $presentDays++;
                                         } elseif ($statusUpper === 'A') {
                                             $absentDays++;
+                                        } elseif ($statusUpper === 'L') {
+                                            $leaveDays++;
+                                        } elseif ($statusUpper === 'HD') {
+                                            $halfDays++;
                                         }
                                     }
                                 @endphp
@@ -178,6 +194,8 @@
                                                 $cellStyle = 'background-color: #17a2b8; color: white; font-weight: bold;';
                                             } elseif ($statusUpper === 'L') {
                                                 $cellStyle = 'background-color: #6c757d; color: white; font-weight: bold;';
+                                            } elseif ($statusUpper === 'HD') {
+                                                $cellStyle = 'background-color: #adb5bd; color: white; font-weight: bold;';
                                             }
                                         @endphp
                                         <td style="padding: 4px; text-align: center; border: 1px solid #dee2e6; {{ $cellStyle }}">
@@ -189,6 +207,12 @@
                                     </td>
                                     <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #ffe7e7; font-weight: bold;">
                                         {{ $absentDays }}
+                                    </td>
+                                    <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #f1f1f1; font-weight: bold;">
+                                        {{ $leaveDays }}
+                                    </td>
+                                    <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #e9ecef; font-weight: bold;">
+                                        {{ $halfDays }}
                                     </td>
                                 </tr>
                             @endforeach

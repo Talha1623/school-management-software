@@ -270,6 +270,12 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         // Teacher Attendance Report
         Route::match(['GET', 'POST'], '/attendance-report', [App\Http\Controllers\Api\TeacherBehaviorController::class, 'getAttendanceReport'])->name('attendance-report');
         
+        // Staff Attendance Report (for staff/teachers to view their own attendance)
+        Route::get('/staff-attendance/report', [App\Http\Controllers\Api\StaffAttendanceController::class, 'attendanceReport'])->name('staff-attendance.report');
+        
+        // Staff Salary Report (for staff/teachers to view their own salary)
+        Route::get('/staff-salary/report', [App\Http\Controllers\Api\StaffSalaryController::class, 'salaryReport'])->name('staff-salary.report');
+        
         // Academic Calendar Events Routes
         Route::post('/events/create', [App\Http\Controllers\Api\TeacherEventController::class, 'create'])->name('events.create');
         Route::get('/events/list', [App\Http\Controllers\Api\TeacherEventController::class, 'list'])->name('events.list');
@@ -290,7 +296,9 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::post('/homework-diary/create', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'create'])->name('homework-diary.create');
         Route::post('/homework-diary/create-bulk', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'createBulk'])->name('homework-diary.create-bulk');
         Route::get('/homework-diary/list', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'list'])->name('homework-diary.list');
+        Route::get('/homework-diary/previous', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'previousDate'])->name('homework-diary.previous-date');
         Route::put('/homework-diary/{id}', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'update'])->name('homework-diary.update');
+        Route::post('/homework-diary/update', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'updateBySubjectDate'])->name('homework-diary.update-by-subject-date');
         Route::delete('/homework-diary/{id}', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'delete'])->name('homework-diary.delete');
         
         // Noticeboard Routes (Read-only for teachers)

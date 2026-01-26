@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SaleRecord;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class SaleRecordController extends Controller
@@ -92,6 +93,18 @@ class SaleRecordController extends Controller
             'totalRecordsInDB',
             'todayRecords'
         ));
+    }
+
+    /**
+     * Remove the specified sale record.
+     */
+    public function destroy(SaleRecord $saleRecord): RedirectResponse
+    {
+        $saleRecord->delete();
+
+        return redirect()
+            ->back()
+            ->with('success', 'Sale record deleted successfully!');
     }
 }
 

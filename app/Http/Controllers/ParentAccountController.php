@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\ParentAccount;
 use App\Models\Student;
+use App\Models\StudentPayment;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Carbon\Carbon;
 
 class ParentAccountController extends Controller
 {
@@ -46,9 +49,62 @@ class ParentAccountController extends Controller
     }
 
     /**
+     * Print parent accounts list.
+     */
+    public function print(Request $request): View
+    {
+        $parents = ParentAccount::query()
+            ->orderBy('name')
+            ->get();
+
+        return view('parent.manage-access-print', [
+            'parents' => $parents,
+            'printedAt' => Carbon::now()->format('d-m-Y H:i'),
+        ]);
+    }
+
+    /**
+     * Print dues report for a parent account.
+     */
+    public function printDuesReport(Request $request, ParentAccount $parent_account): View
+    {
+        $students = Student::where('parent_account_id', $parent_account->id)->get();
+        $studentCodes = $students->pluck('student_code')->filter()->values();
+        $payments = collect();
+
+        if ($studentCodes->isNotEmpty()) {
+            $payments = StudentPayment::whereIn('student_code', $studentCodes)
+                ->where('method', 'Generated')
+                ->orderBy('student_code')
+                ->orderBy('payment_date')
+                ->get();
+        }
+
+        $studentsByCode = $students->keyBy(function ($student) {
+            return $student->student_code;
+        });
+
+        $totalDue = $payments->sum(function ($payment) {
+            $amount = (float) ($payment->payment_amount ?? 0);
+            $discount = (float) ($payment->discount ?? 0);
+            $lateFee = (float) ($payment->late_fee ?? 0);
+            return $amount - $discount + $lateFee;
+        });
+
+        return view('parent.dues-report-print', [
+            'parent' => $parent_account,
+            'studentsByCode' => $studentsByCode,
+            'payments' => $payments,
+            'totalDue' => $totalDue,
+            'printedAt' => Carbon::now()->format('d-m-Y H:i'),
+            'autoPrint' => $request->get('auto_print'),
+        ]);
+    }
+
+    /**
      * Store a newly created parent account.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -62,7 +118,14 @@ class ParentAccountController extends Controller
         ]);
 
         // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
-        ParentAccount::create($validated);
+        $parent = ParentAccount::create($validated);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'parent' => $parent,
+            ]);
+        }
 
         return redirect()
             ->route('parent.manage-access')
@@ -101,9 +164,32 @@ class ParentAccountController extends Controller
     /**
      * Remove the specified parent account.
      */
-    public function destroy(ParentAccount $parent_account): RedirectResponse
+    public function destroy($parent_account): RedirectResponse|JsonResponse
     {
-        $parent_account->delete();
+        $parent = ParentAccount::find($parent_account);
+
+        if (!$parent) {
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'id' => $parent_account,
+                    'message' => 'Parent account already deleted.',
+                ]);
+            }
+
+            return redirect()
+                ->route('parent.manage-access')
+                ->with('error', 'Parent account not found.');
+        }
+
+        $parent->delete();
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'id' => $parent->id,
+            ]);
+        }
 
         return redirect()
             ->route('parent.manage-access')

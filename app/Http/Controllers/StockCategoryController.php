@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\StockCategory;
+use App\Models\Product;
+use App\Models\SaleRecord;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
@@ -117,6 +119,17 @@ class StockCategoryController extends Controller
      */
     public function destroy(StockCategory $stockCategory): RedirectResponse
     {
+        $categoryName = $stockCategory->category_name;
+        $categoryCampus = $stockCategory->campus;
+
+        // Clear category from related products and sales so it no longer appears in listings.
+        Product::whereRaw('LOWER(TRIM(category)) = ?', [strtolower(trim($categoryName))])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($categoryCampus))])
+            ->update(['category' => '']);
+        SaleRecord::whereRaw('LOWER(TRIM(category)) = ?', [strtolower(trim($categoryName))])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($categoryCampus))])
+            ->update(['category' => '']);
+
         $stockCategory->delete();
 
         // Redirect based on which route was used (accountant or stock)

@@ -57,7 +57,7 @@
                                 <select class="form-select form-select-sm py-1" id="class" name="class" required style="height: 32px;">
                                     <option value="">Select Class</option>
                                     @foreach($classes as $classItem)
-                                        <option value="{{ $classItem->class_name ?? $classItem }}" {{ ($timetable->class == ($classItem->class_name ?? $classItem)) ? 'selected' : '' }}>{{ $classItem->class_name ?? $classItem }}</option>
+                                        <option value="{{ $classItem->class_name ?? $classItem }}" data-campus="{{ $classItem->campus ?? '' }}" {{ ($timetable->class == ($classItem->class_name ?? $classItem)) ? 'selected' : '' }}>{{ $classItem->class_name ?? $classItem }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -89,11 +89,26 @@
                         <div class="card bg-light border-0 rounded-10 p-2 mb-2">
                             <h5 class="mb-1 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -8px -8px 8px -8px; background-color: #003471;">Subject</h5>
                             
+                            @php
+                                $staticSubjects = [
+                                    '[Assembly]',
+                                    '[Lunch Break]',
+                                    '[Free Time]',
+                                    '[Lab Active]',
+                                    '[physicial/sports/activity]',
+                                    '[singing class]',
+                                    '[material arts class]',
+                                    '[Library Activity]',
+                                    '[chilligraphy class]',
+                                    '[other fun activities]',
+                                ];
+                                $allSubjects = collect($subjects ?? [])->merge($staticSubjects)->unique()->values();
+                            @endphp
                             <div class="mb-1">
                                 <label for="subject" class="form-label mb-0 fs-13 fw-medium">Subject <span class="text-danger">*</span></label>
                                 <select class="form-select form-select-sm py-1" id="subject" name="subject" required style="height: 32px;">
                                     <option value="">Select Subject</option>
-                                    @foreach($subjects as $subject)
+                                    @foreach($allSubjects as $subject)
                                         <option value="{{ $subject }}" {{ ($timetable->subject == $subject) ? 'selected' : '' }}>{{ $subject }}</option>
                                     @endforeach
                                 </select>
@@ -186,8 +201,33 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
+
+    function filterClassOptions(campusValue, selectedClass = '') {
+        if (!classSelect) return;
+        const campusLower = (campusValue || '').toLowerCase().trim();
+        Array.from(classSelect.options).forEach((option, index) => {
+            if (index === 0) {
+                option.hidden = false;
+                option.disabled = false;
+                return;
+            }
+            const optionCampus = (option.dataset.campus || '').toLowerCase().trim();
+            const shouldShow = !campusLower || optionCampus === campusLower;
+            option.hidden = !shouldShow;
+            option.disabled = !shouldShow;
+        });
+
+        if (selectedClass) {
+            classSelect.value = selectedClass;
+        }
+
+        if (!classSelect.value || classSelect.selectedOptions[0]?.disabled) {
+            classSelect.value = '';
+        }
+    }
     
     // Function to load sections based on selected class
     function loadSections(className) {
@@ -202,7 +242,12 @@ document.addEventListener('DOMContentLoaded', function() {
         sectionSelect.disabled = true;
         
         // Make AJAX request
-        fetch(`{{ route('timetable.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+        const params = new URLSearchParams();
+        params.append('class', className);
+        if (campusSelect && campusSelect.value) {
+            params.append('campus', campusSelect.value);
+        }
+        fetch(`{{ route('timetable.get-sections-by-class') }}?${params.toString()}`, {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
@@ -247,10 +292,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            filterClassOptions(this.value);
+            loadSections('');
+            sectionSelect.value = '';
+        });
+    }
     
     // Load sections on page load if class is already selected
     @if($timetable->class)
+        filterClassOptions('{{ $timetable->campus }}', '{{ $timetable->class }}');
         loadSections('{{ $timetable->class }}');
+    @else
+        filterClassOptions('{{ $timetable->campus }}');
     @endif
 });
 </script>

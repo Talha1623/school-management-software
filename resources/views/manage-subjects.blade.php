@@ -670,8 +670,8 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">school</span>
                                 </span>
-                                <select class="form-select subject-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;">
-                                    <option value="">Select Class</option>
+                                <select class="form-select subject-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;" disabled>
+                                    <option value="">Select Campus First</option>
                                     @foreach($classes as $class)
                                         <option value="{{ $class->class_name ?? $class }}">{{ $class->class_name ?? $class }}</option>
                                     @endforeach
@@ -695,11 +695,8 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">person</span>
                                 </span>
-                                <select class="form-select subject-input" name="teacher" id="teacher" style="border: none; border-left: 1px solid #e0e7ff;">
-                                    <option value="">Select Teacher</option>
-                                    @foreach($teachers as $id => $teacherName)
-                                        <option value="{{ $teacherName }}">{{ $teacherName }}</option>
-                                    @endforeach
+                                <select class="form-select subject-input" name="teacher" id="teacher" style="border: none; border-left: 1px solid #e0e7ff;" disabled>
+                                    <option value="">Select Campus First</option>
                                 </select>
                             </div>
                         </div>
@@ -735,14 +732,59 @@
 </div>
 
 <script>
+function loadClassesByCampus(classSelect, campusValue, selectedClass = '', placeholder = 'All Classes', requireCampus = false) {
+    if (!classSelect) return;
+
+    const campusName = campusValue || '';
+    if (requireCampus && !campusName) {
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        classSelect.disabled = true;
+        return;
+    }
+
+    classSelect.innerHTML = '<option value="">Loading...</option>';
+    classSelect.disabled = true;
+
+    fetch(`{{ route('manage-subjects.get-classes-by-campus') }}?campus=${encodeURIComponent(campusName)}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        classSelect.innerHTML = `<option value="">${placeholder}</option>`;
+        if (data.classes && data.classes.length > 0) {
+            data.classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                if (selectedClass && selectedClass === className) {
+                    option.selected = true;
+                }
+                classSelect.appendChild(option);
+            });
+        }
+        classSelect.disabled = false;
+    })
+    .catch(error => {
+        console.error('Error loading classes:', error);
+        classSelect.innerHTML = '<option value="">Error loading classes</option>';
+        classSelect.disabled = true;
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // For filter form
+    const filterCampusSelect = document.getElementById('filter_campus');
     const filterClassSelect = document.getElementById('filter_class');
     const filterSectionSelect = document.getElementById('filter_section');
     
     // For modal form
+    const modalCampusSelect = document.getElementById('campus');
     const modalClassSelect = document.getElementById('class');
     const modalSectionSelect = document.getElementById('section');
+
     
     // Function to load sections for filter form
     function loadFilterSections(className) {
@@ -755,7 +797,12 @@ document.addEventListener('DOMContentLoaded', function() {
         filterSectionSelect.innerHTML = '<option value="">Loading sections...</option>';
         filterSectionSelect.disabled = true;
         
-        fetch(`{{ route('manage-subjects.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+        const params = new URLSearchParams();
+        params.append('class', className);
+        if (filterCampusSelect && filterCampusSelect.value) {
+            params.append('campus', filterCampusSelect.value);
+        }
+        fetch(`{{ route('manage-subjects.get-sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -800,7 +847,12 @@ document.addEventListener('DOMContentLoaded', function() {
         modalSectionSelect.innerHTML = '<option value="">Loading sections...</option>';
         modalSectionSelect.disabled = true;
         
-        fetch(`{{ route('manage-subjects.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+        const params = new URLSearchParams();
+        params.append('class', className);
+        if (modalCampusSelect && modalCampusSelect.value) {
+            params.append('campus', modalCampusSelect.value);
+        }
+        fetch(`{{ route('manage-subjects.get-sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -827,16 +879,49 @@ document.addEventListener('DOMContentLoaded', function() {
             modalSectionSelect.innerHTML = '<option value="">Error loading sections</option>';
         });
     }
-    
-    // Filter form class change handler
-    if (filterClassSelect) {
-        // Load sections on page load if class is already selected
-        @if(request('filter_class'))
-            loadFilterSections('{{ request('filter_class') }}');
-        @endif
-        
-        filterClassSelect.addEventListener('change', function() {
-            loadFilterSections(this.value);
+
+    function loadModalTeachers(campusName, selectedTeacher = '') {
+        const teacherSelect = document.getElementById('teacher');
+        if (!teacherSelect) return;
+
+        if (!campusName) {
+            teacherSelect.innerHTML = '<option value="">Select Campus First</option>';
+            teacherSelect.disabled = true;
+            return;
+        }
+
+        teacherSelect.innerHTML = '<option value="">Loading...</option>';
+        teacherSelect.disabled = true;
+
+        fetch(`{{ route('manage-subjects.get-teachers-by-campus') }}?campus=${encodeURIComponent(campusName)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            teacherSelect.innerHTML = '<option value="">Select Teacher</option>';
+            if (data.teachers && data.teachers.length > 0) {
+                data.teachers.forEach(teacherName => {
+                    const option = document.createElement('option');
+                    option.value = teacherName;
+                    option.textContent = teacherName;
+                    if (selectedTeacher && selectedTeacher === teacherName) {
+                        option.selected = true;
+                    }
+                    teacherSelect.appendChild(option);
+                });
+                teacherSelect.disabled = false;
+            } else {
+                teacherSelect.innerHTML = '<option value="">No teachers found</option>';
+                teacherSelect.disabled = true;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching teachers:', error);
+            teacherSelect.innerHTML = '<option value="">Error loading teachers</option>';
+            teacherSelect.disabled = true;
         });
     }
     
@@ -849,6 +934,14 @@ document.addEventListener('DOMContentLoaded', function() {
         
         filterClassSelect.addEventListener('change', function() {
             loadFilterSections(this.value);
+        });
+    }
+
+    if (filterCampusSelect) {
+        filterCampusSelect.addEventListener('change', function() {
+            loadClassesByCampus(filterClassSelect, this.value, '', 'All Classes', false);
+            loadFilterSections('');
+            filterSectionSelect.value = '';
         });
     }
     
@@ -858,6 +951,20 @@ document.addEventListener('DOMContentLoaded', function() {
             loadModalSections(this.value);
         });
     }
+
+    if (modalCampusSelect) {
+        modalCampusSelect.addEventListener('change', function() {
+            loadClassesByCampus(modalClassSelect, this.value, '', 'Select Class', true);
+            loadModalSections('');
+            modalSectionSelect.value = '';
+            loadModalTeachers(this.value);
+        });
+    }
+
+    // Initial load based on selected campus (filter + modal)
+    loadClassesByCampus(filterClassSelect, filterCampusSelect?.value || '', '{{ request('filter_class') }}', 'All Classes', false);
+    loadClassesByCampus(modalClassSelect, modalCampusSelect?.value || '', '', 'Select Class', true);
+    loadModalTeachers(modalCampusSelect?.value || '');
 });
 
 // Reset form when opening modal for new subject
@@ -881,20 +988,31 @@ function resetForm() {
         modalSectionSelect.innerHTML = '<option value="">Select Class First</option>';
         modalSectionSelect.disabled = true;
     }
+
+    const modalCampusSelect = document.getElementById('campus');
+    const modalClassSelect = document.getElementById('class');
+    loadClassesByCampus(modalClassSelect, modalCampusSelect?.value || '', '', 'Select Class', true);
+    loadModalTeachers(modalCampusSelect?.value || '');
 }
 
 // Edit subject function
 function editSubject(id, campus, subjectName, className, section, teacher, session) {
     document.getElementById('campus').value = campus;
     document.getElementById('subject_name').value = subjectName;
-    document.getElementById('class').value = className;
-    document.getElementById('teacher').value = teacher || '';
+    const modalClassSelect = document.getElementById('class');
+    loadClassesByCampus(modalClassSelect, campus, className, 'Select Class', true);
+    loadModalTeachers(campus, teacher || '');
     document.getElementById('session').value = session || '';
     
     // Load sections for the class
     const modalSectionSelect = document.getElementById('section');
     if (className) {
-        fetch(`{{ route('manage-subjects.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+        const params = new URLSearchParams();
+        params.append('class', className);
+        if (campus) {
+            params.append('campus', campus);
+        }
+        fetch(`{{ route('manage-subjects.get-sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'

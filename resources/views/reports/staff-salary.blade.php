@@ -12,6 +12,9 @@
 
             <!-- Filter Form -->
             <form action="{{ route('reports.staff-salary') }}" method="GET" id="filterForm">
+                @if(!empty($filterStaffId))
+                    <input type="hidden" name="staff_id" value="{{ $filterStaffId }}">
+                @endif
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->
                     <div class="col-md-3">
@@ -57,7 +60,7 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_campus', 'filter_month', 'filter_year']))
+            @if(request()->hasAny(['filter_campus', 'filter_month', 'filter_year', 'staff_id']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">

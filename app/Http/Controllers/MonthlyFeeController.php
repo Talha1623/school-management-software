@@ -78,6 +78,24 @@ class MonthlyFeeController extends Controller
         return view('accounting.generate-monthly-fee', compact('campuses', 'classes', 'sections', 'months', 'years', 'currentYear'));
     }
 
+    public function getClassesByCampus(Request $request)
+    {
+        $campus = $request->get('campus');
+
+        if (!$campus) {
+            return response()->json(['classes' => []]);
+        }
+
+        $classes = ClassModel::whereNotNull('class_name')
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            ->distinct()
+            ->orderBy('class_name', 'asc')
+            ->pluck('class_name')
+            ->values();
+
+        return response()->json(['classes' => $classes]);
+    }
+
     /**
      * Store the generated monthly fee.
      */
@@ -114,7 +132,7 @@ class MonthlyFeeController extends Controller
                 ->with('error', 'Please select at least one student to generate fees.');
         }
 
-        // Create the monthly fee configuration (if it doesn't exist)
+        // Create or update the monthly fee configuration
         $monthlyFee = MonthlyFee::firstOrCreate([
             'campus' => $validated['campus'],
             'class' => $validated['class'],
@@ -125,6 +143,12 @@ class MonthlyFeeController extends Controller
             'due_date' => $validated['due_date'],
             'late_fee' => $validated['late_fee'],
         ]);
+        if ($monthlyFee->exists) {
+            $monthlyFee->update([
+                'due_date' => $validated['due_date'],
+                'late_fee' => $validated['late_fee'],
+            ]);
+        }
 
         // Get selected students
         $students = Student::whereIn('id', $selectedStudentIds)->get();
@@ -133,6 +157,7 @@ class MonthlyFeeController extends Controller
         $dueDate = Carbon::parse($validated['due_date']);
         $paymentTitle = "Monthly Fee - {$validated['fee_month']} {$validated['fee_year']}";
         $lateFeeAmount = (float) $validated['late_fee'];
+        $isLateFeeApplicable = $lateFeeAmount > 0 && Carbon::today()->greaterThan($dueDate);
         
         $generatedCount = 0;
         $skippedCount = 0;
@@ -172,7 +197,7 @@ class MonthlyFeeController extends Controller
                 'method' => 'Generated', // Indicates this is a generated fee, not actual payment
                 'payment_date' => $dueDate->format('Y-m-d'), // Due date (will be updated when payment is made)
                 'sms_notification' => 'Yes',
-                'late_fee' => 0, // Will be calculated when actual payment is made
+                'late_fee' => $isLateFeeApplicable ? $lateFeeAmount : 0,
                 'accountant' => $accountantName,
             ]);
             
@@ -210,14 +235,19 @@ class MonthlyFeeController extends Controller
     public function getSectionsByClass(Request $request)
     {
         $className = $request->get('class');
-        
+        $campus = $request->get('campus');
+
         if (!$className) {
             return response()->json(['sections' => []]);
         }
 
-        // Get sections for the selected class
-        $sections = Section::where('class', $className)
-            ->orderBy('name', 'asc')
+        // Get sections for the selected class (optionally filter by campus)
+        $sectionsQuery = Section::where('class', $className);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        $sections = $sectionsQuery->orderBy('name', 'asc')
             ->get(['id', 'name'])
             ->map(function($section) {
                 return [

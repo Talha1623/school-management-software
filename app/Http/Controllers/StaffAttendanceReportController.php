@@ -24,6 +24,8 @@ class StaffAttendanceReportController extends Controller
         $filterDesignation = $request->get('filter_designation');
         $filterMonth = (int) $request->get('filter_month', date('m'));
         $filterYear = (int) $request->get('filter_year', date('Y'));
+        $filterStaffId = $request->get('staff_id');
+        $reportType = $request->get('report_type');
 
         // Check if staff is logged in and is a teacher
         $loggedInStaff = Auth::guard('staff')->user();
@@ -100,7 +102,14 @@ class StaffAttendanceReportController extends Controller
         $daysInMonth = 0;
         $monthName = '';
         
-        if ($filterCampus && $filterDesignation) {
+        if ($filterStaffId) {
+            $staff = Staff::where('id', $filterStaffId)->first();
+            if ($staff) {
+                $filterCampus = $filterCampus ?: $staff->campus;
+                $filterDesignation = $filterDesignation ?: $staff->designation;
+                $staffList = collect([$staff]);
+            }
+        } elseif ($filterCampus && $filterDesignation) {
             $staffQuery = Staff::query();
             
             $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
@@ -156,6 +165,8 @@ class StaffAttendanceReportController extends Controller
                             $attendanceData[$staff->id][$day] = 'S';
                         } elseif ($status === 'LEAVE') {
                             $attendanceData[$staff->id][$day] = 'L';
+                        } elseif ($status === 'HALF DAY' || $status === 'HALFDAY' || $status === 'HALF-DAY') {
+                            $attendanceData[$staff->id][$day] = 'HD';
                         } else {
                             $attendanceData[$staff->id][$day] = '';
                         }
@@ -190,7 +201,9 @@ class StaffAttendanceReportController extends Controller
             'filterCampus',
             'filterDesignation',
             'filterMonth',
-            'filterYear'
+            'filterYear',
+            'filterStaffId',
+            'reportType'
         ));
     }
 }

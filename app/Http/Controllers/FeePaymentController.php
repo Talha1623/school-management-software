@@ -46,8 +46,12 @@ class FeePaymentController extends Controller
         $balanceToday = $incomeToday - $expenseToday;
         
         // Get latest payments with student information (only actual payments, not generated)
-        $latestPayments = StudentPayment::leftJoin('students', 'student_payments.student_code', '=', 'students.student_code')
+        $latestPayments = StudentPayment::join('students', function ($join) {
+                $join->on(\DB::raw('LOWER(TRIM(student_payments.student_code))'), '=', \DB::raw('LOWER(TRIM(students.student_code))'));
+            })
+            ->whereNotNull('student_payments.method')
             ->where('student_payments.method', '!=', 'Generated') // Only show actual payments
+            ->whereNotNull('students.student_code')
             ->select(
                 'student_payments.*',
                 'students.student_name',

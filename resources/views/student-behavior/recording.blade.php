@@ -32,10 +32,24 @@
                             </select>
                         </div>
 
+                        <!-- Campus -->
+                        <div class="col-md-2 col-sm-6">
+                            <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                            <select class="form-select form-select-sm filter-select" id="filter_campus" name="filter_campus">
+                                <option value="">Select Campus</option>
+                                @foreach($campuses as $campus)
+                                    @php
+                                        $campusNameOption = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                                    @endphp
+                                    <option value="{{ $campusNameOption }}" {{ $filterCampus == $campusNameOption ? 'selected' : '' }}>{{ $campusNameOption }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
                         <!-- Class -->
                         <div class="col-md-2 col-sm-6">
                             <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                            <select class="form-select form-select-sm filter-select" id="filter_class" name="filter_class">
+                            <select class="form-select form-select-sm filter-select" id="filter_class" name="filter_class" data-selected-class="{{ $filterClass }}">
                                 <option value="">Select Class</option>
                                 @foreach($classes as $class)
                                     <option value="{{ $class }}" {{ $filterClass == $class ? 'selected' : '' }}>{{ $class }}</option>
@@ -63,7 +77,7 @@
                         </div>
 
                         <!-- Filter Button -->
-                        <div class="col-md-4 col-sm-6">
+                        <div class="col-md-2 col-sm-6">
                             <button type="submit" class="btn btn-sm w-100 filter-btn d-inline-flex align-items-center justify-content-center gap-1">
                                 <span class="material-symbols-outlined" style="font-size: 14px;">filter_alt</span>
                                 <span style="font-size: 12px; white-space: nowrap;">Filter</span>
@@ -446,26 +460,88 @@
 
 <script>
 // Load sections dynamically when class changes
-document.getElementById('filter_class')?.addEventListener('change', function() {
+const campusSelect = document.getElementById('filter_campus');
+const classSelect = document.getElementById('filter_class');
+const sectionSelect = document.getElementById('filter_section');
+
+function resetSections() {
+    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+    sectionSelect.disabled = true;
+}
+
+function populateClasses(classes, selectedClass = '') {
+    classSelect.innerHTML = '<option value="">Select Class</option>';
+    if (classes && classes.length > 0) {
+        classes.forEach(className => {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            if (selectedClass && selectedClass === className) {
+                option.selected = true;
+            }
+            classSelect.appendChild(option);
+        });
+        classSelect.disabled = false;
+    } else {
+        classSelect.innerHTML = '<option value="">No classes found</option>';
+        classSelect.disabled = false;
+    }
+}
+
+function loadClassesByCampus(campus, selectedClass = '') {
+    classSelect.disabled = true;
+    classSelect.innerHTML = '<option value="">Loading...</option>';
+    resetSections();
+
+    const params = new URLSearchParams();
+    if (campus) {
+        params.append('campus', campus);
+    }
+
+    fetch(`{{ route('student-behavior.recording.get-classes-by-campus') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            populateClasses(data.classes || [], selectedClass);
+            if (selectedClass) {
+                classSelect.dispatchEvent(new Event('change'));
+            }
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            classSelect.disabled = false;
+        });
+}
+
+campusSelect?.addEventListener('change', function() {
+    const campusValue = this.value;
+    loadClassesByCampus(campusValue, '');
+});
+
+classSelect?.addEventListener('change', function() {
     const classValue = this.value;
-    const sectionSelect = document.getElementById('filter_section');
-    
+    const campusValue = campusSelect?.value || '';
+
     if (!classValue) {
-        sectionSelect.innerHTML = '<option value="">Select Section</option>';
-        sectionSelect.disabled = true;
+        resetSections();
         return;
     }
-    
+
     // Show loading state
     sectionSelect.disabled = true;
     sectionSelect.innerHTML = '<option value="">Loading...</option>';
-    
+
     // Fetch sections via AJAX
-    fetch(`{{ route('student-behavior.recording.get-sections-by-class') }}?class=${encodeURIComponent(classValue)}`)
+    const params = new URLSearchParams();
+    params.append('class', classValue);
+    if (campusValue) {
+        params.append('campus', campusValue);
+    }
+    fetch(`{{ route('student-behavior.recording.get-sections-by-class') }}?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             sectionSelect.innerHTML = '<option value="">Select Section</option>';
-            
+
             if (data.sections && data.sections.length > 0) {
                 data.sections.forEach(section => {
                     const option = document.createElement('option');
@@ -484,6 +560,14 @@ document.getElementById('filter_class')?.addEventListener('change', function() {
             sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
             sectionSelect.disabled = false;
         });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const selectedCampus = campusSelect?.value || '';
+    const selectedClass = classSelect?.dataset?.selectedClass || '';
+    if (campusSelect) {
+        loadClassesByCampus(selectedCampus, selectedClass);
+    }
 });
 
 function clearSearch() {

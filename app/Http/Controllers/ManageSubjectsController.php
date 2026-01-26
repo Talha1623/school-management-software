@@ -248,6 +248,7 @@ class ManageSubjectsController extends Controller
     public function getSectionsByClass(Request $request)
     {
         $className = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$className) {
             return response()->json(['sections' => []]);
@@ -263,7 +264,11 @@ class ManageSubjectsController extends Controller
         }
 
         // Get sections for the selected class (only non-deleted sections)
-        $sections = Section::where('class', $className)
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery
             ->whereNotNull('name')
             ->whereNotNull('class')
             ->orderBy('name', 'asc')
@@ -276,6 +281,78 @@ class ManageSubjectsController extends Controller
             });
 
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Get classes by campus (AJAX).
+     */
+    public function getClassesByCampus(Request $request)
+    {
+        $campus = $request->get('campus');
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        $classes = $classesQuery->distinct()
+            ->orderBy('class_name', 'asc')
+            ->pluck('class_name')
+            ->map(function ($className) {
+                return trim((string) $className);
+            })
+            ->filter(function ($className) {
+                return $className !== '';
+            })
+            ->unique()
+            ->values();
+
+        if ($classes->isEmpty()) {
+            $fallbackQuery = Section::whereNotNull('class');
+            if ($campus) {
+                $fallbackQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classes = $fallbackQuery->distinct()
+                ->pluck('class')
+                ->map(function ($className) {
+                    return trim((string) $className);
+                })
+                ->filter(function ($className) {
+                    return $className !== '';
+                })
+                ->unique()
+                ->sort()
+                ->values();
+        }
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    /**
+     * Get teachers by campus (AJAX).
+     */
+    public function getTeachersByCampus(Request $request)
+    {
+        $campus = $request->get('campus');
+
+        $teachersQuery = Staff::whereRaw('LOWER(TRIM(designation)) LIKE ?', ['%teacher%'])
+            ->whereNotNull('name');
+        if ($campus) {
+            $teachersQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        $teachers = $teachersQuery->orderBy('name')
+            ->pluck('name')
+            ->map(function ($name) {
+                return trim((string) $name);
+            })
+            ->filter(function ($name) {
+                return $name !== '';
+            })
+            ->unique()
+            ->values();
+
+        return response()->json(['teachers' => $teachers]);
     }
 
     /**

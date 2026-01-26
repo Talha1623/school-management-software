@@ -58,30 +58,32 @@ class BulkProductController extends Controller
             while (($data = fgetcsv($handle)) !== false) {
                 $rowNumber++;
                 
-                // Expected format: Product Name, Category, Purchase Price, Sale Price, Total Stock, Campus
-                if (count($data) < 6) {
-                    $errors[] = "Row {$rowNumber}: Insufficient columns. Expected 6 columns.";
+                // Expected format: Product Name, Product Code, Campus, Category, Purchase Price, Sale Price, Total Stock
+                if (count($data) < 7) {
+                    $errors[] = "Row {$rowNumber}: Insufficient columns. Expected 7 columns.";
                     $errorCount++;
                     continue;
                 }
 
                 $productData = [
                     'product_name' => trim($data[0]),
-                    'category' => trim($data[1]),
-                    'purchase_price' => trim($data[2]),
-                    'sale_price' => trim($data[3]),
-                    'total_stock' => trim($data[4]),
-                    'campus' => trim($data[5]),
+                    'product_code' => trim($data[1]),
+                    'campus' => trim($data[2]),
+                    'category' => trim($data[3]),
+                    'purchase_price' => trim($data[4]),
+                    'sale_price' => trim($data[5]),
+                    'total_stock' => trim($data[6]),
                 ];
 
                 // Validate row data
                 $validator = Validator::make($productData, [
                     'product_name' => ['required', 'string', 'max:255'],
+                    'product_code' => ['nullable', 'string', 'max:255'],
+                    'campus' => ['required', 'string', 'max:255'],
                     'category' => ['required', 'string', 'max:255'],
                     'purchase_price' => ['required', 'numeric', 'min:0'],
                     'sale_price' => ['required', 'numeric', 'min:0'],
                     'total_stock' => ['required', 'integer', 'min:0'],
-                    'campus' => ['required', 'string', 'max:255'],
                 ]);
 
                 if ($validator->fails()) {
@@ -91,6 +93,21 @@ class BulkProductController extends Controller
                 }
 
                 try {
+                    // Ensure category exists for the campus
+                    $categoryName = $productData['category'];
+                    $campusName = $productData['campus'];
+                    $existingCategory = StockCategory::whereRaw('LOWER(TRIM(category_name)) = ?', [strtolower(trim($categoryName))])
+                        ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))])
+                        ->first();
+
+                    if (!$existingCategory) {
+                        StockCategory::create([
+                            'category_name' => $categoryName,
+                            'description' => null,
+                            'campus' => $campusName,
+                        ]);
+                    }
+
                     Product::create($productData);
                     $successCount++;
                 } catch (\Exception $e) {
@@ -136,11 +153,11 @@ class BulkProductController extends Controller
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             
             // Header row
-            fputcsv($file, ['Product Name', 'Category', 'Purchase Price', 'Sale Price', 'Total Stock', 'Campus']);
+            fputcsv($file, ['Product Name', 'Product Code', 'Campus', 'Category', 'Purchase Price', 'Sale Price', 'Total Stock']);
             
             // Sample data row
-            fputcsv($file, ['Sample Product 1', 'Electronics', '100.00', '150.00', '50', 'Main Campus']);
-            fputcsv($file, ['Sample Product 2', 'Stationery', '20.00', '30.00', '100', 'Main Campus']);
+            fputcsv($file, ['Sample Product 1', 'PRD-001', 'Main Campus', 'Electronics', '100.00', '150.00', '50']);
+            fputcsv($file, ['Sample Product 2', 'PRD-002', 'Main Campus', 'Stationery', '20.00', '30.00', '100']);
             
             fclose($file);
         };

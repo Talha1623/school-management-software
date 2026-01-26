@@ -14,7 +14,7 @@
             <form action="{{ route('reports.fee-discount') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->
-                    <div class="col-md-3">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
@@ -24,30 +24,20 @@
                         </select>
                     </div>
 
-                    <!-- Month -->
-                    <div class="col-md-3">
-                        <label for="filter_month" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Month</label>
-                        <select class="form-select form-select-sm" id="filter_month" name="filter_month" style="height: 32px;">
-                            <option value="">All Months</option>
-                            @foreach($months as $monthValue => $monthName)
-                                <option value="{{ $monthValue }}" {{ $filterMonth == $monthValue ? 'selected' : '' }}>{{ $monthName }}</option>
-                            @endforeach
-                        </select>
+                    <!-- From Date -->
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
+                        <label for="filter_from_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">From Date</label>
+                        <input type="date" class="form-control form-control-sm" id="filter_from_date" name="filter_from_date" value="{{ $filterFromDate }}" style="height: 32px;">
                     </div>
 
-                    <!-- Year -->
-                    <div class="col-md-3">
-                        <label for="filter_year" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Year</label>
-                        <select class="form-select form-select-sm" id="filter_year" name="filter_year" style="height: 32px;">
-                            <option value="">All Years</option>
-                            @foreach($years as $year)
-                                <option value="{{ $year }}" {{ $filterYear == $year ? 'selected' : '' }}>{{ $year }}</option>
-                            @endforeach
-                        </select>
+                    <!-- To Date -->
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
+                        <label for="filter_to_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">To Date</label>
+                        <input type="date" class="form-control form-control-sm" id="filter_to_date" name="filter_to_date" value="{{ $filterToDate }}" style="height: 32px;">
                     </div>
 
                     <!-- Filter Button -->
-                    <div class="col-md-3">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn w-100" style="height: 32px;">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_alt</span>
                             <span style="font-size: 12px;">Filter</span>
@@ -57,7 +47,7 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_campus', 'filter_month', 'filter_year']))
+            @if(request()->hasAny(['filter_campus', 'filter_from_date', 'filter_to_date']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">

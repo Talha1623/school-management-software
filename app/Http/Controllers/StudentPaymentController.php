@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\StudentPayment;
 use App\Models\MonthlyFee;
 use App\Models\Student;
+use App\Models\Campus;
+use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -23,8 +26,52 @@ class StudentPaymentController extends Controller
         if ($studentCode) {
             $student = Student::where('student_code', $studentCode)->first();
         }
+
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        }
+
+        $methods = ['Cash Payment', 'Bank Transfer', 'Cheque', 'Online Payment', 'Card Payment'];
         
-        return view('accounting.direct-payment.student', compact('student', 'studentCode'));
+        return view('accounting.direct-payment.student', compact('student', 'studentCode', 'campuses', 'methods'));
+    }
+
+    public function getStudentByCode(Request $request)
+    {
+        $studentCode = $request->get('student_code');
+        
+        if (!$studentCode) {
+            return response()->json(['success' => false, 'message' => 'Student code is required']);
+        }
+
+        $student = Student::where('student_code', $studentCode)->first();
+        
+        if (!$student) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Student not found with this code'
+            ]);
+        }
+
+        $generatedFees = StudentPayment::where('student_code', $studentCode)
+            ->where('method', 'Generated')
+            ->orderBy('payment_date', 'asc')
+            ->get(['id', 'payment_title', 'payment_amount', 'late_fee', 'payment_date']);
+
+        return response()->json([
+            'success' => true,
+            'student' => [
+                'student_code' => $student->student_code,
+                'student_name' => $student->student_name,
+                'campus' => $student->campus,
+                'class' => $student->class,
+                'section' => $student->section,
+            ],
+            'generated_fees' => $generatedFees
+        ]);
     }
 
     /**

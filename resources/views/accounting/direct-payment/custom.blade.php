@@ -26,20 +26,11 @@
                 </div>
             @endif
 
-            @php
-                $campuses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
-                $allCampuses = $campuses->merge($campusesFromSections)->unique()->sort()->values();
-                if ($allCampuses->isEmpty()) {
-                    $allCampuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-                }
-            @endphp
-
-            <form id="customPaymentForm" method="POST" action="{{ route('accounting.direct-payment.custom.store') }}">
+            <form id="customPaymentForm" method="POST" action="{{ route('accounting.direct-payment.custom.store') }}" class="compact-form">
                 @csrf
                 
-                <div class="payment-row mb-3 p-3 border rounded" style="background-color: #f8f9fa;">
-                    <div class="row g-3">
+                <div class="payment-row mb-2 p-2 border rounded" style="background-color: #f8f9fa;">
+                    <div class="row g-2">
                         <!-- Campus -->
                         <div class="col-md-6">
                             <label class="form-label mb-1 fs-13 fw-medium">Campus</label>
@@ -47,9 +38,9 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">home</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
+                                <select class="form-select form-select-sm" name="campus" id="campus" style="height: 32px;">
                                     <option value="">Select Campus</option>
-                                    @foreach($allCampuses as $campus)
+                                    @foreach($campuses as $campus)
                                         <option value="{{ $campus }}">{{ $campus }}</option>
                                     @endforeach
                                 </select>
@@ -63,7 +54,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">receipt</span>
                                 </span>
-                                <input type="text" class="form-control form-control-sm" name="payment_title" id="payment_title" placeholder="Enter Payment Title" required style="height: 38px;">
+                                <input type="text" class="form-control form-control-sm" name="payment_title" id="payment_title" placeholder="Enter Payment Title" required style="height: 32px;">
                             </div>
                         </div>
 
@@ -74,7 +65,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">payments</span>
                                 </span>
-                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="payment_amount" id="payment_amount" placeholder="Enter Payment Amount" required style="height: 38px;">
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="payment_amount" id="payment_amount" placeholder="Enter Payment Amount" required style="height: 32px;">
                             </div>
                         </div>
 
@@ -85,11 +76,8 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">person</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="accountant" id="accountant" style="height: 38px;">
+                                <select class="form-select form-select-sm" name="accountant" id="accountant" style="height: 32px;">
                                     <option value="">Select Accountant</option>
-                                    @foreach($accountants as $accountant)
-                                        <option value="{{ $accountant->name }}">{{ $accountant->name }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -101,13 +89,11 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">account_balance_wallet</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="method" id="method" required style="height: 38px;">
+                                <select class="form-select form-select-sm" name="method" id="method" required style="height: 32px;">
                                     <option value="">Select Method</option>
-                                    <option value="Cash Payment" selected>Cash Payment</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Cheque">Cheque</option>
-                                    <option value="Online Payment">Online Payment</option>
-                                    <option value="Card Payment">Card Payment</option>
+                                    @foreach($methods as $method)
+                                        <option value="{{ $method }}" {{ $method === 'Cash Payment' ? 'selected' : '' }}>{{ $method }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -119,7 +105,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">notifications</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="notify_admin" id="notify_admin" required style="height: 38px;">
+                                <select class="form-select form-select-sm" name="notify_admin" id="notify_admin" required style="height: 32px;">
                                     <option value="Yes" selected>Yes</option>
                                     <option value="No">No</option>
                                 </select>
@@ -133,7 +119,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">calendar_today</span>
                                 </span>
-                                <input type="date" class="form-control form-control-sm" name="payment_date" id="payment_date" value="{{ date('Y-m-d') }}" required style="height: 38px;">
+                                <input type="date" class="form-control form-control-sm" name="payment_date" id="payment_date" value="{{ date('Y-m-d') }}" required style="height: 32px;">
                             </div>
                         </div>
                     </div>
@@ -201,10 +187,49 @@
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
+
+    .compact-form .form-label {
+        margin-bottom: 2px;
+    }
+
+    .compact-form .input-group-text {
+        padding: 0 8px;
+    }
 </style>
 
 <script>
-// Form is now connected to database, no need for preventDefault
-// Form will submit normally to the backend
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
+    const accountantSelect = document.getElementById('accountant');
+
+    function resetAccountants() {
+        accountantSelect.innerHTML = '<option value="">Select Accountant</option>';
+    }
+
+    function loadAccountants() {
+        resetAccountants();
+        const params = new URLSearchParams();
+        if (campusSelect.value) {
+            params.append('campus', campusSelect.value);
+        }
+
+        fetch(`{{ route('accounting.direct-payment.custom.get-accountants') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(accountants => {
+                accountants.forEach(accountant => {
+                    const option = document.createElement('option');
+                    option.value = accountant.name;
+                    option.textContent = accountant.name;
+                    accountantSelect.appendChild(option);
+                });
+            })
+            .catch(() => {});
+    }
+
+    if (campusSelect && accountantSelect) {
+        campusSelect.addEventListener('change', loadAccountants);
+        loadAccountants();
+    }
+});
 </script>
 @endsection

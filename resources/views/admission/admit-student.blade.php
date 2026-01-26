@@ -232,10 +232,10 @@
                             </div>
                             
                             <div class="mb-2">
-                                <label for="b_form_number" class="form-label mb-0 fs-13 fw-medium">B-Form Number</label>
+                                <label for="b_form_number" class="form-label mb-0 fs-13 fw-medium">Student Password</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">description</span></span>
-                                    <input type="text" class="form-control border-start-0 py-1" id="b_form_number" name="b_form_number" placeholder="B-Form Number" style="height: 32px; font-size: 13px;">
+                                    <input type="text" class="form-control border-start-0 py-1" id="b_form_number" name="b_form_number" value="{{ old('b_form_number', 'student') }}" placeholder="Student Password" style="height: 32px; font-size: 13px;">
                                 </div>
                             </div>
                             
@@ -251,11 +251,29 @@
                                 <label for="discounted_student" class="form-label mb-0 fs-13 fw-medium">Discounted Student?</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">percent</span></span>
-                                    <select class="form-select border-start-0 py-1" id="discounted_student" name="discounted_student" style="height: 32px; font-size: 13px;">
+                                    <select class="form-select border-start-0 py-1" id="discounted_student" name="discounted_student" style="height: 32px; font-size: 13px;" onchange="toggleDiscountField()">
                                         <option value="">Select</option>
                                         <option value="1" {{ old('discounted_student') == '1' ? 'selected' : '' }}>Yes</option>
                                         <option value="0" {{ old('discounted_student') == '0' ? 'selected' : '' }}>No</option>
                                     </select>
+                                </div>
+                            </div>
+
+                            <!-- Discount Amount Field (hidden by default) -->
+                            <div class="mb-2" id="discount_amount_container" style="display: none;">
+                                <label for="discount_amount" class="form-label mb-0 fs-13 fw-medium">Discount Amount</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">payments</span></span>
+                                    <input type="number" step="0.01" class="form-control border-start-0 py-1" id="discount_amount" name="discount_amount" placeholder="Discount amount" style="height: 32px; font-size: 13px;" value="{{ old('discount_amount') }}">
+                                </div>
+                            </div>
+
+                            <!-- Discount Reason Field (hidden by default) -->
+                            <div class="mb-2" id="discount_reason_container" style="display: none;">
+                                <label for="discount_reason" class="form-label mb-0 fs-13 fw-medium">Discount Reason</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">description</span></span>
+                                    <input type="text" class="form-control border-start-0 py-1" id="discount_reason" name="discount_reason" placeholder="Reason for discount" style="height: 32px; font-size: 13px;" value="{{ old('discount_reason') }}">
                                 </div>
                             </div>
                             
@@ -286,11 +304,7 @@
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">notifications</span></span>
                                     <select class="form-select border-start-0 py-1" id="admission_notification" name="admission_notification" style="height: 32px; font-size: 13px;">
-                                        <option value="">Select</option>
-                                        <option value="whatsapp_only" {{ old('admission_notification') == 'whatsapp_only' ? 'selected' : '' }}>WhatsApp Only</option>
-                                        <option value="sms_only" {{ old('admission_notification') == 'sms_only' ? 'selected' : '' }}>SMS Only</option>
-                                        <option value="whatsapp_app" {{ old('admission_notification') == 'whatsapp_app' ? 'selected' : '' }}>WhatsApp & App</option>
-                                        <option value="dont_notify" {{ old('admission_notification') == 'dont_notify' ? 'selected' : '' }}>Don't Notify</option>
+                                        <option value="sms_app" {{ old('admission_notification') == 'sms_app' ? 'selected' : '' }}>SMS App</option>
                                     </select>
                                 </div>
                             </div>
@@ -417,7 +431,11 @@
                                         <option value="">Select Section</option>
                                         @if(old('class'))
                                             @php
-                                                $sectionsForClass = \App\Models\Section::where('class', old('class'))->whereNotNull('name')->distinct()->pluck('name')->sort();
+                                                $sectionsQuery = \App\Models\Section::where('class', old('class'))->whereNotNull('name');
+                                                if (old('campus')) {
+                                                    $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim(old('campus'))) ]);
+                                                }
+                                                $sectionsForClass = $sectionsQuery->distinct()->pluck('name')->sort();
                                             @endphp
                                             @foreach($sectionsForClass as $section)
                                                 <option value="{{ $section }}" {{ old('section') == $section ? 'selected' : '' }}>{{ $section }}</option>
@@ -463,6 +481,21 @@
                             <button type="submit" class="btn px-5 py-2 fw-semibold" style="background-color: #003471; color: #ffffff; border: 2px solid #003471; box-shadow: 0 4px 12px rgba(0, 52, 113, 0.2);">
                                 <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #ffffff;">check_circle</span>
                                 Admit Student
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-2" id="printAdmitContainer" style="display: {{ (session('print_url') || session('fee_voucher_url')) ? 'block' : 'none' }};">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-end gap-2 flex-wrap">
+                            <button type="button" class="btn btn-outline-secondary" id="printAdmitBtn" data-print-url="{{ session('print_url') }}">
+                                <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">print</span>
+                                Print Student Details
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" id="printFeeVoucherBtn" data-fee-url="{{ session('fee_voucher_url') }}">
+                                <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">receipt</span>
+                                Print Fee Voucher
                             </button>
                         </div>
                     </div>
@@ -673,31 +706,111 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Load sections based on class selection
-document.getElementById('class').addEventListener('change', function() {
-    const classValue = this.value;
+function loadClassesForCampus(campusValue, selectedClass = '') {
+    const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
-    
-    // Clear existing options except the first one
+    const studentCodeInput = document.getElementById('student_code');
+
+    classSelect.innerHTML = '<option value="">Select Class</option>';
     sectionSelect.innerHTML = '<option value="">Select Section</option>';
-    
-    if (classValue) {
-        // Fetch sections via AJAX
-        fetch(`{{ route('admission.get-sections') }}?class=${encodeURIComponent(classValue)}`)
+
+    if (!campusValue) {
+        return;
+    }
+
+    fetch(`{{ route('admission.get-classes') }}?campus=${encodeURIComponent(campusValue)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.classes && data.classes.length > 0) {
+                data.classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    if (selectedClass && selectedClass === className) {
+                        option.selected = true;
+                    }
+                    classSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+        });
+
+    if (studentCodeInput) {
+        if (!campusValue) {
+            studentCodeInput.value = '';
+            return;
+        }
+
+        fetch(`{{ route('admission.get-next-student-code') }}?campus=${encodeURIComponent(campusValue)}`)
             .then(response => response.json())
             .then(data => {
-                if (data.sections && data.sections.length > 0) {
-                    data.sections.forEach(section => {
-                        const option = document.createElement('option');
-                        option.value = section;
-                        option.textContent = section;
-                        sectionSelect.appendChild(option);
-                    });
-                }
+                studentCodeInput.value = data.code || '';
             })
             .catch(error => {
-                console.error('Error loading sections:', error);
+                console.error('Error loading student code:', error);
             });
+    }
+}
+
+function loadSectionsForClass(classValue, campusValue, selectedSection = '') {
+    const sectionSelect = document.getElementById('section');
+    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+
+    if (!classValue) {
+        return;
+    }
+
+    const query = `class=${encodeURIComponent(classValue)}&campus=${encodeURIComponent(campusValue || '')}`;
+    fetch(`{{ route('admission.get-sections') }}?${query}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    if (selectedSection && selectedSection === section) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
+    const classSelect = document.getElementById('class');
+
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClassesForCampus(this.value);
+            loadTransportRoutesByCampus(this.value);
+            loadTransportFare('');
+        });
+    }
+
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            const campusValue = campusSelect ? campusSelect.value : '';
+            loadSectionsForClass(this.value, campusValue);
+        });
+    }
+
+    const initialCampus = campusSelect ? campusSelect.value : '';
+    const initialClass = `{{ old('class') ?? '' }}`;
+    const initialSection = `{{ old('section') ?? '' }}`;
+
+    if (initialCampus) {
+        loadClassesForCampus(initialCampus, initialClass);
+        if (initialClass) {
+            loadSectionsForClass(initialClass, initialCampus, initialSection);
+        }
     }
 });
 
@@ -751,6 +864,41 @@ function showToast(message, type = 'success') {
     }
 }
 
+function setPrintButtons(printUrl, feeVoucherUrl) {
+    const container = document.getElementById('printAdmitContainer');
+    const admitButton = document.getElementById('printAdmitBtn');
+    const feeButton = document.getElementById('printFeeVoucherBtn');
+    if (!container) {
+        return;
+    }
+
+    if (admitButton) {
+        if (printUrl) {
+            admitButton.dataset.printUrl = printUrl;
+            admitButton.onclick = function() {
+                window.open(printUrl, '_blank');
+            };
+            admitButton.style.display = 'inline-flex';
+        } else {
+            admitButton.style.display = 'none';
+        }
+    }
+
+    if (feeButton) {
+        if (feeVoucherUrl) {
+            feeButton.dataset.feeUrl = feeVoucherUrl;
+            feeButton.onclick = function() {
+                window.open(feeVoucherUrl, '_blank');
+            };
+            feeButton.style.display = 'inline-flex';
+        } else {
+            feeButton.style.display = 'none';
+        }
+    }
+
+    container.style.display = (printUrl || feeVoucherUrl) ? 'block' : 'none';
+}
+
 // Handle form submission via AJAX
 document.getElementById('admission-form').addEventListener('submit', function(e) {
     e.preventDefault(); // Prevent default form submission
@@ -793,6 +941,7 @@ document.getElementById('admission-form').addEventListener('submit', function(e)
         if (data.success) {
             // Show success toast
             showToast(data.message, 'success');
+            setPrintButtons(data.print_url, data.fee_voucher_url);
             
             // Reset form after 1 second
             setTimeout(() => {
@@ -861,6 +1010,8 @@ document.getElementById('admission-form').addEventListener('submit', function(e)
 function loadTransportFare(routeName) {
     const transportFareContainer = document.getElementById('transport_fare_container');
     const transportFareInput = document.getElementById('transport_fare');
+    const campusSelect = document.getElementById('campus');
+    const campusValue = campusSelect ? campusSelect.value : '';
     
     if (!routeName) {
         // Hide transport fare field if no route selected
@@ -879,7 +1030,7 @@ function loadTransportFare(routeName) {
     }
     
     // Fetch route fare via AJAX
-    fetch(`{{ route('admission.get-route-fare') }}?route=${encodeURIComponent(routeName)}`)
+    fetch(`{{ route('admission.get-route-fare') }}?route=${encodeURIComponent(routeName)}&campus=${encodeURIComponent(campusValue || '')}`)
         .then(response => response.json())
         .then(data => {
             if (transportFareInput) {
@@ -897,6 +1048,69 @@ function loadTransportFare(routeName) {
                 transportFareInput.value = '';
             }
         });
+}
+
+function loadTransportRoutesByCampus(campusValue, selectedRoute = '') {
+    const transportSelect = document.getElementById('transport_route');
+    if (!transportSelect) return;
+
+    transportSelect.innerHTML = '<option value="">Loading...</option>';
+
+    fetch(`{{ route('admission.get-transport-routes') }}?campus=${encodeURIComponent(campusValue || '')}`)
+        .then(response => response.json())
+        .then(data => {
+            transportSelect.innerHTML = '<option value="">Select Transport Route</option>';
+            if (data.routes && data.routes.length > 0) {
+                data.routes.forEach(route => {
+                    const option = document.createElement('option');
+                    option.value = route;
+                    option.textContent = route;
+                    if (selectedRoute && selectedRoute === route) {
+                        option.selected = true;
+                    }
+                    transportSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading transport routes:', error);
+            transportSelect.innerHTML = '<option value="">Select Transport Route</option>';
+        });
+}
+
+// Toggle discount amount field based on "Discounted Student" selection
+function toggleDiscountField() {
+    const discountedStudent = document.getElementById('discounted_student');
+    const discountAmountContainer = document.getElementById('discount_amount_container');
+    const discountAmountInput = document.getElementById('discount_amount');
+    const discountReasonContainer = document.getElementById('discount_reason_container');
+    const discountReasonInput = document.getElementById('discount_reason');
+
+    if (!discountedStudent || !discountAmountContainer) {
+        return;
+    }
+
+    if (discountedStudent.value === '1') {
+        discountAmountContainer.style.display = 'block';
+        if (discountReasonContainer) {
+            discountReasonContainer.style.display = 'block';
+        }
+        if (discountReasonInput) {
+            discountReasonInput.required = true;
+        }
+    } else {
+        discountAmountContainer.style.display = 'none';
+        if (discountAmountInput) {
+            discountAmountInput.value = '';
+        }
+        if (discountReasonContainer) {
+            discountReasonContainer.style.display = 'none';
+        }
+        if (discountReasonInput) {
+            discountReasonInput.required = false;
+            discountReasonInput.value = '';
+        }
+    }
 }
 
 // Toggle admission fee amount field based on "Generate Admission Fee" selection
@@ -980,17 +1194,31 @@ function toggleOtherFeeAmount() {
 document.addEventListener('DOMContentLoaded', function() {
     toggleAdmissionFeeAmount();
     toggleOtherFeeFields();
+    toggleDiscountField();
     
     // Load transport fare if route is already selected (for form validation errors)
     const transportRoute = document.getElementById('transport_route');
-    if (transportRoute && transportRoute.value) {
-        loadTransportFare(transportRoute.value);
+    const campusSelect = document.getElementById('campus');
+    const selectedCampus = campusSelect ? campusSelect.value : '';
+    const selectedRoute = transportRoute ? transportRoute.value : '';
+
+    loadTransportRoutesByCampus(selectedCampus, selectedRoute);
+    if (selectedRoute) {
+        loadTransportFare(selectedRoute);
     } else {
         // Hide transport fare field if no route selected
         const transportFareContainer = document.getElementById('transport_fare_container');
         if (transportFareContainer) {
             transportFareContainer.style.display = 'none';
         }
+    }
+
+    const printButton = document.getElementById('printAdmitBtn');
+    const feeButton = document.getElementById('printFeeVoucherBtn');
+    const printUrl = printButton?.dataset.printUrl || '';
+    const feeUrl = feeButton?.dataset.feeUrl || '';
+    if (printUrl || feeUrl) {
+        setPrintButtons(printUrl, feeUrl);
     }
 });
 </script>

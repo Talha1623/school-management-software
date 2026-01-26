@@ -8,11 +8,6 @@
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Fee Default Reports</h4>
-                <!-- Add Campus Button -->
-                <button type="button" class="btn btn-sm px-3 py-1 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;" data-bs-toggle="modal" data-bs-target="#addCampusModal">
-                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">add</span>
-                    <span>Add Campus</span>
-                </button>
             </div>
 
             <!-- Filter Form -->
@@ -32,7 +27,7 @@
                     <!-- Class -->
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" data-selected-class="{{ $filterClass }}" style="height: 32px;">
                             <option value="">All Classes</option>
                             @foreach($classes as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
@@ -43,7 +38,7 @@
                     <!-- Section -->
                     <div class="col-md-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" data-selected-section="{{ $filterSection }}" style="height: 32px;">
                             <option value="">All Sections</option>
                             @foreach($sections as $sectionName)
                                 <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
@@ -202,11 +197,6 @@
                     </div>
                 </div>
             </div>
-            @else
-                <div class="alert alert-info" role="alert">
-                    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">info</span>
-                    <strong>Please select filters and click "Apply Filter" to view fee default reports.</strong>
-                </div>
             @endif
         </div>
     </div>
@@ -344,138 +334,116 @@
     }
 </style>
 
-<!-- Add Campus Modal -->
-<div class="modal fade" id="addCampusModal" tabindex="-1" aria-labelledby="addCampusModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addCampusModalLabel">Add New Campus</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="addCampusForm">
-                @csrf
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="campus_name" class="form-label">Campus Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="campus_name" name="campus_name" required>
-                        <div class="text-danger mt-1" id="campus_name_error"></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;">Add Campus</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Add Campus Form Submission
-    document.getElementById('addCampusForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        const errorDiv = document.getElementById('campus_name_error');
-        errorDiv.textContent = '';
-        
-        fetch('{{ route("accountant.fee-defaulters.campus.store") }}', {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                'Accept': 'application/json',
-            },
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Add new option to select dropdown
-                const select = document.getElementById('filter_campus');
-                const option = document.createElement('option');
-                option.value = data.campus.campus_name;
-                option.setAttribute('data-campus-id', data.campus.id);
-                option.textContent = data.campus.campus_name;
-                select.appendChild(option);
-                
-                // Close modal and reset form
-                const modal = bootstrap.Modal.getInstance(document.getElementById('addCampusModal'));
-                modal.hide();
-                this.reset();
-                
-                // Show success message
-                alert('Campus added successfully!');
-            } else {
-                if (data.errors && data.errors.campus_name) {
-                    errorDiv.textContent = data.errors.campus_name[0];
-                } else {
-                    errorDiv.textContent = data.message || 'Error adding campus';
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            errorDiv.textContent = 'An error occurred. Please try again.';
-        });
-    });
-    
-    // Delete Campus functionality
     const campusSelect = document.getElementById('filter_campus');
-    campusSelect.addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
-        const campusId = selectedOption.getAttribute('data-campus-id');
-        
-        // Remove any existing delete button
-        const existingBtn = document.querySelector('.delete-campus-btn');
-        if (existingBtn) {
-            existingBtn.remove();
-        }
-        
-        // Add delete button if a campus is selected and has an ID
-        if (campusId && this.value) {
-            const deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'btn btn-sm btn-danger delete-campus-btn ms-2';
-            deleteBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px;">delete</span>';
-            deleteBtn.title = 'Delete Campus';
-            deleteBtn.onclick = function() {
-                if (confirm('Are you sure you want to delete this campus?')) {
-                    fetch(`{{ route("accountant.fee-defaulters.campus.destroy", ":id") }}`.replace(':id', campusId), {
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Remove option from select
-                            selectedOption.remove();
-                            campusSelect.value = '';
-                            deleteBtn.remove();
-                            alert('Campus deleted successfully!');
-                        } else {
-                            alert(data.message || 'Error deleting campus');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('An error occurred. Please try again.');
-                    });
-                }
-            };
-            
-            // Insert delete button after the select
-            this.parentElement.appendChild(deleteBtn);
-        }
-    });
-    
-    // Trigger change event on page load if a campus is selected
-    if (campusSelect.value) {
-        campusSelect.dispatchEvent(new Event('change'));
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+
+    function resetSections() {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        sectionSelect.disabled = true;
     }
+
+    function populateClasses(classes, selectedClass = '') {
+        classSelect.innerHTML = '<option value="">All Classes</option>';
+        if (classes && classes.length > 0) {
+            classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                if (selectedClass && selectedClass === className) {
+                    option.selected = true;
+                }
+                classSelect.appendChild(option);
+            });
+            classSelect.disabled = false;
+        } else {
+            classSelect.innerHTML = '<option value="">No classes found</option>';
+            classSelect.disabled = false;
+        }
+    }
+
+    function populateSections(sections, selectedSection = '') {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        if (sections && sections.length > 0) {
+            sections.forEach(sectionName => {
+                const option = document.createElement('option');
+                option.value = sectionName;
+                option.textContent = sectionName;
+                if (selectedSection && selectedSection === sectionName) {
+                    option.selected = true;
+                }
+                sectionSelect.appendChild(option);
+            });
+        }
+        sectionSelect.disabled = false;
+    }
+
+    function loadClassesByCampus(campus, selectedClass = '', selectedSection = '') {
+        classSelect.disabled = true;
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        resetSections();
+
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
+        }
+
+        fetch(`{{ route('accountant.fee-defaulters.get-classes-by-campus') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateClasses(data.classes || [], selectedClass);
+                if (selectedClass) {
+                    loadSections(selectedClass, selectedSection);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+    }
+
+    function loadSections(selectedClass, selectedSection = '') {
+        const campus = campusSelect.value;
+        if (!selectedClass) {
+            resetSections();
+            return;
+        }
+
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+
+        const params = new URLSearchParams();
+        params.append('class', selectedClass);
+        if (campus) {
+            params.append('campus', campus);
+        }
+
+        fetch(`{{ route('accountant.fee-defaulters.get-sections-by-class') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateSections(data.sections || [], selectedSection);
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                sectionSelect.disabled = false;
+            });
+    }
+
+    campusSelect.addEventListener('change', function() {
+        loadClassesByCampus(this.value);
+    });
+
+    classSelect.addEventListener('change', function() {
+        loadSections(this.value);
+    });
+
+    const selectedClass = classSelect.dataset.selectedClass || '';
+    const selectedSection = sectionSelect.dataset.selectedSection || '';
+    loadClassesByCampus(campusSelect.value, selectedClass, selectedSection);
 });
 </script>
 @endsection

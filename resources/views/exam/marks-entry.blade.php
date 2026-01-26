@@ -27,10 +27,24 @@
             <!-- Filter Form -->
             <form action="{{ route('exam.marks-entry') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
+                    <!-- Campus -->
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <!-- Exam -->
                     <div class="col-md-2">
                         <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam Name</label>
-                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;" {{ !$filterClass || !$filterSection ? 'disabled' : '' }}>
+                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;" {{ !$filterCampus || !$filterClass || !$filterSection ? 'disabled' : '' }}>
                             <option value="">Select Exam</option>
                             @if(isset($exams) && $exams->count() > 0)
                                 @foreach($exams as $examName)
@@ -47,7 +61,7 @@
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
                         <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
                             <option value="">All Classes</option>
-                            @foreach($classes as $className)
+                            @foreach(($filterClasses ?? $classes) as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
                             @endforeach
                         </select>
@@ -148,6 +162,7 @@
                     <div class="table-responsive">
                         <form id="marksForm" method="POST" action="{{ route('exam.marks-entry.save') }}">
                             @csrf
+                            <input type="hidden" name="campus" value="{{ request('filter_campus') ?? $filterCampus ?? '' }}" required>
                             <input type="hidden" name="exam_name" value="{{ request('filter_exam') ?? $filterExam ?? '' }}" required>
                             <input type="hidden" name="class" value="{{ request('filter_class') ?? $filterClass ?? '' }}" required>
                             <input type="hidden" name="section" value="{{ request('filter_section') ?? $filterSection ?? '' }}">
@@ -175,13 +190,13 @@
                                         </td>
                                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="0.01" value="{{ $student->mark && $student->mark->marks_obtained !== null ? $student->mark->marks_obtained : '' }}" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->marks_obtained !== null ? $student->mark->marks_obtained : '' }}" style="width: 100px;">
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="0.01" value="{{ $student->mark && $student->mark->total_marks !== null ? $student->mark->total_marks : '' }}" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->total_marks !== null ? $student->mark->total_marks : '' }}" style="width: 100px;">
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="0.01" value="{{ $student->mark && $student->mark->passing_marks !== null ? $student->mark->passing_marks : '' }}" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->passing_marks !== null ? $student->mark->passing_marks : '' }}" style="width: 100px;">
                                         </td>
                                     </tr>
                                     @empty
@@ -297,9 +312,97 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
     const subjectSelect = document.getElementById('filter_subject');
+    const examSelect = document.getElementById('filter_exam');
+    const allClassOptions = classSelect ? classSelect.innerHTML : '';
+
+    function loadClasses() {
+        if (!classSelect) return;
+
+        const campus = campusSelect ? campusSelect.value : '';
+        if (!campus) {
+            classSelect.innerHTML = allClassOptions;
+            classSelect.value = '';
+            if (sectionSelect) {
+                sectionSelect.disabled = true;
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            }
+            if (subjectSelect) {
+                subjectSelect.disabled = true;
+                subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+            }
+            if (examSelect) {
+                examSelect.disabled = true;
+                examSelect.innerHTML = '<option value="">Select Exam</option>';
+            }
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        fetch(`{{ route('exam.marks-entry.get-classes') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        classSelect.innerHTML += `<option value="${className}">${className}</option>`;
+                    });
+                }
+                @if($filterClass)
+                if (data.classes && data.classes.includes('{{ $filterClass }}')) {
+                    classSelect.value = '{{ $filterClass }}';
+                    loadSections(classSelect.value);
+                }
+                @endif
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            });
+    }
+
+    function loadExams() {
+        if (!examSelect) return;
+
+        const campus = campusSelect ? campusSelect.value : '';
+        if (!campus) {
+            examSelect.disabled = true;
+            examSelect.innerHTML = '<option value="">Select Exam</option>';
+            return;
+        }
+
+        examSelect.disabled = true;
+        examSelect.innerHTML = '<option value="">Loading...</option>';
+        fetch(`{{ route('exam.marks-entry.get-exams') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                examSelect.innerHTML = '<option value="">Select Exam</option>';
+                if (data.exams && data.exams.length > 0) {
+                    data.exams.forEach(exam => {
+                        const option = document.createElement('option');
+                        option.value = exam;
+                        option.textContent = exam;
+                        if (exam === '{{ $filterExam }}') {
+                            option.selected = true;
+                        }
+                        examSelect.appendChild(option);
+                    });
+                }
+                if (!(classSelect && classSelect.value) || !(sectionSelect && sectionSelect.value)) {
+                    examSelect.disabled = true;
+                } else {
+                    examSelect.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading exams:', error);
+                examSelect.innerHTML = '<option value="">Error loading exams</option>';
+                examSelect.disabled = false;
+            });
+    }
 
     // Load sections when class changes
     if (classSelect) {
@@ -321,7 +424,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     subjectSelect.disabled = true;
                     subjectSelect.innerHTML = '<option value="">Select Subject</option>';
                 }
-                const examSelect = document.getElementById('filter_exam');
                 if (examSelect) {
                     examSelect.disabled = true;
                 }
@@ -337,7 +439,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const selectedSection = this.value;
             if (selectedSection && classSelect && classSelect.value) {
                 // Enable exam and subject dropdowns
-                const examSelect = document.getElementById('filter_exam');
                 if (examSelect) {
                     examSelect.disabled = false;
                 }
@@ -347,7 +448,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 loadSubjects();
             } else {
                 // Disable exam and subject dropdowns if no section selected
-                const examSelect = document.getElementById('filter_exam');
                 if (examSelect) {
                     examSelect.disabled = true;
                 }
@@ -359,13 +459,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses();
+            loadExams();
+        });
+    }
+
     function loadSections(selectedClass) {
         if (!sectionSelect) return;
         
         if (selectedClass) {
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
-            
-            fetch(`{{ route('exam.marks-entry.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (campusSelect && campusSelect.value) {
+                params.append('campus', campusSelect.value);
+            }
+
+            fetch(`{{ route('exam.marks-entry.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">Select Section</option>';
@@ -407,6 +520,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const params = new URLSearchParams();
         if (classValue) params.append('class', classValue);
         if (section) params.append('section', section);
+        if (campusSelect && campusSelect.value) params.append('campus', campusSelect.value);
         
         // Get the currently selected subject value before reloading
         const currentSelectedSubject = subjectSelect ? subjectSelect.value : '';
@@ -442,10 +556,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Initial load if filters are already set
+    const initialCampus = campusSelect ? campusSelect.value : '';
     const initialClass = classSelect ? classSelect.value : '';
     const initialSection = sectionSelect ? sectionSelect.value : '';
     
-    if (initialClass) {
+    if (initialCampus) {
+        loadClasses();
+        loadExams();
+    } else if (initialClass) {
         if (sectionSelect) {
             sectionSelect.disabled = false;
         }
@@ -458,7 +576,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (subjectSelect) {
             subjectSelect.disabled = true;
         }
-        const examSelect = document.getElementById('filter_exam');
         if (examSelect) {
             examSelect.disabled = true;
         }
@@ -466,7 +583,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (initialClass && initialSection) {
         // Enable exam and subject dropdowns if both class and section are selected
-        const examSelect = document.getElementById('filter_exam');
         if (examSelect) {
             examSelect.disabled = false;
         }
@@ -483,7 +599,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (subjectSelect) {
             subjectSelect.disabled = true;
         }
-        const examSelect = document.getElementById('filter_exam');
         if (examSelect) {
             examSelect.disabled = true;
         }
@@ -561,6 +676,51 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    function normalizeNumberInput(value) {
+        if (value === null || value === undefined || value === '') {
+            return '';
+        }
+        const parsed = parseFloat(value);
+        if (Number.isNaN(parsed)) {
+            return value;
+        }
+        if (Number.isInteger(parsed)) {
+            return parsed.toString();
+        }
+        return parsed.toString();
+    }
+
+    function setupBulkMarksSync(inputClass) {
+        const inputs = Array.from(document.querySelectorAll(inputClass));
+        if (!inputs.length) return;
+
+        // Normalize initial values to remove trailing .00
+        inputs.forEach((input) => {
+            input.value = normalizeNumberInput(input.value);
+        });
+
+        const masterInput = inputs[0];
+        masterInput.addEventListener('input', function () {
+            const normalized = normalizeNumberInput(this.value);
+            this.value = normalized;
+            inputs.forEach((input, index) => {
+                if (index === 0) return;
+                input.value = normalized;
+            });
+        });
+    }
+
+    setupBulkMarksSync('.marks-total');
+    setupBulkMarksSync('.marks-passing');
+
+    const obtainedInputs = Array.from(document.querySelectorAll('.marks-obtained'));
+    obtainedInputs.forEach((input) => {
+        input.value = normalizeNumberInput(input.value);
+        input.addEventListener('input', function () {
+            this.value = normalizeNumberInput(this.value);
+        });
+    });
 });
 </script>
 @endsection

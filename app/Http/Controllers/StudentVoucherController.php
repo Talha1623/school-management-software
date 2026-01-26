@@ -34,6 +34,26 @@ class StudentVoucherController extends Controller
         }
         
         $query = Student::query();
+        $currentYear = date('Y');
+        $vouchersFor = $request->get('vouchers_for');
+        $pendingPaymentsQuery = StudentPayment::where('method', 'Generated')
+            ->whereNotNull('student_code')
+            ->where('student_code', '!=', '');
+        if ($request->filled('student_code')) {
+            $pendingPaymentsQuery->where('student_code', $request->student_code);
+        }
+        if ($vouchersFor) {
+            $paymentTitle = "Monthly Fee - {$vouchersFor} {$currentYear}";
+            $pendingPaymentsQuery->where('payment_title', $paymentTitle);
+        }
+        $pendingStudentCodes = $pendingPaymentsQuery->distinct()->pluck('student_code');
+        if ($request->filled('student_code')) {
+            $query->where('student_code', $request->student_code);
+        } elseif ($pendingStudentCodes->isNotEmpty()) {
+            $query->whereIn('student_code', $pendingStudentCodes);
+        } else {
+            $query->whereRaw('1 = 0');
+        }
         
         // Apply filters
         if ($request->filled('class')) {
@@ -83,6 +103,13 @@ class StudentVoucherController extends Controller
     public function print(Request $request): View
     {
         $query = Student::query();
+        $parentStudentCodes = collect();
+        if ($request->filled('parent_id')) {
+            $parentStudentCodes = Student::where('parent_account_id', $request->parent_id)
+                ->whereNotNull('student_code')
+                ->where('student_code', '!=', '')
+                ->pluck('student_code');
+        }
         
         // Apply filters
         if ($request->filled('class')) {
@@ -93,11 +120,47 @@ class StudentVoucherController extends Controller
             $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->section))]);
         }
         
+        $currentYear = date('Y');
+        $vouchersFor = $request->get('vouchers_for', date('F'));
+        $pendingPaymentsQuery = StudentPayment::where('method', 'Generated')
+            ->whereNotNull('student_code')
+            ->where('student_code', '!=', '');
+        if ($request->filled('parent_id') && $parentStudentCodes->isNotEmpty()) {
+            $pendingPaymentsQuery->whereIn('student_code', $parentStudentCodes);
+        }
+        if ($request->filled('student_code')) {
+            $pendingPaymentsQuery->where('student_code', $request->student_code);
+        }
+        if ($vouchersFor) {
+            $paymentTitle = "Monthly Fee - {$vouchersFor} {$currentYear}";
+            $pendingPaymentsQuery->where('payment_title', $paymentTitle);
+        }
+        $pendingStudentCodes = $pendingPaymentsQuery->distinct()->pluck('student_code');
+        if ($request->filled('parent_id')) {
+            if ($parentStudentCodes->isNotEmpty()) {
+                $query->whereIn('student_code', $parentStudentCodes);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($request->filled('student_code')) {
+            $query->where('student_code', $request->student_code);
+        } elseif ($pendingStudentCodes->isNotEmpty()) {
+            $query->whereIn('student_code', $pendingStudentCodes);
+        } else {
+            $query->whereRaw('1 = 0');
+        }
+
         $students = $query->orderBy('student_name')->get();
         
-        $type = $request->get('type', 'Monthly Fee');
+        $type = $request->get('type', 'three_copies');
         $vouchersFor = $request->get('vouchers_for', date('F')); // Month name
-        $currentYear = date('Y');
+
+        $copyMap = [
+            'three_copies' => ['PARENT COPY', 'SCHOOL COPY', 'STUDENT COPY'],
+            'two_copies' => ['PARENT COPY', 'SCHOOL COPY'],
+            'thermal_copies' => ['THERMAL COPY'],
+        ];
+        $copyLabels = $copyMap[$type] ?? $copyMap['three_copies'];
         
         // Get fee data for each student
         $vouchers = [];
@@ -211,10 +274,28 @@ class StudentVoucherController extends Controller
                         'amount' => $amount,
                         'sort_order' => 1, // Monthly fees first
                     ]);
-                } else {
-                    // Custom fee - use payment_title as fee type
+                } elseif (preg_match('/Transport Fee - (\w+) (\d+)/', $payment->payment_title, $matches)) {
+                    $month = $matches[1];
+                    $year = $matches[2];
+                    $routeLabel = !empty($student->transport_route)
+                        ? "Transport Route ({$student->transport_route})"
+                        : 'Transport Route';
+                    $description = "{$routeLabel} - {$month} ({$year})";
+                    $monthlyFees->push([
+                        'description' => $description,
+                        'amount' => $amount,
+                        'sort_order' => 1, // Keep transport with monthly fees
+                    ]);
+                } elseif (strtolower(trim($payment->payment_title)) === 'admission fee') {
                     $customFees->push([
-                        'description' => $payment->payment_title, // Fee Type name
+                        'description' => 'Generate Admission Fee',
+                        'amount' => $amount,
+                        'sort_order' => 2,
+                    ]);
+                } else {
+                    // Custom fee - show fee type in description
+                    $customFees->push([
+                        'description' => "Generate Custom Fee - {$payment->payment_title}",
                         'amount' => $amount,
                         'sort_order' => 2, // Custom fees after monthly fees
                     ]);
@@ -251,7 +332,7 @@ class StudentVoucherController extends Controller
             ];
         }
         
-        return view('accounting.fee-voucher.print', compact('vouchers', 'type', 'vouchersFor', 'currentYear'));
+        return view('accounting.fee-voucher.print', compact('vouchers', 'type', 'vouchersFor', 'currentYear', 'copyLabels'));
     }
 }
 

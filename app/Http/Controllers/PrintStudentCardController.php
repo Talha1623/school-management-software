@@ -5,16 +5,47 @@ namespace App\Http\Controllers;
 use App\Models\Student;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PrintStudentCardController extends Controller
 {
     /**
+     * Check if Student model uses soft deletes
+     */
+    private function usesSoftDeletes(): bool
+    {
+        return in_array(
+            \Illuminate\Database\Eloquent\SoftDeletes::class,
+            class_uses_recursive(Student::class)
+        );
+    }
+    
+    /**
+     * Apply soft delete filter to query if soft deletes are enabled
+     */
+    private function applySoftDeleteFilter($query)
+    {
+        if ($this->usesSoftDeletes()) {
+            $query->withoutTrashed();
+        }
+        return $query;
+    }
+    
+    /**
      * Display the print student card page with dynamic data.
      */
     public function index(Request $request)
     {
+        // Get campuses
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        }
+
         // Get all classes from database
         $classes = ClassModel::whereNotNull('class_name')
             ->distinct()
@@ -23,10 +54,15 @@ class PrintStudentCardController extends Controller
             ->sort()
             ->values();
         
-        // If no classes in ClassModel, get from students
+        // If no classes in ClassModel, get from students (only active students, not deleted)
         if ($classes->isEmpty()) {
-            $classes = Student::whereNotNull('class')
-                ->distinct()
+            $studentQuery = Student::whereNotNull('class')
+                ->where('class', '!=', '');
+            
+            // Exclude soft deleted students if soft deletes are being used
+            $this->applySoftDeleteFilter($studentQuery);
+            
+            $classes = $studentQuery->distinct()
                 ->pluck('class')
                 ->sort()
                 ->values();
@@ -35,18 +71,30 @@ class PrintStudentCardController extends Controller
         // If AJAX request for sections (when class changes)
         if ($request->ajax() || $request->wantsJson()) {
             $filteredSections = collect();
+            $campus = trim((string) $request->get('campus'));
             
             if ($request->filled('class') && $request->class != '') {
                 // Get sections from Section model for selected class
                 $sectionsFromModel = Section::where('class', $request->class)
+                    ->when($campus !== '', function ($query) use ($campus) {
+                        $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                    })
                     ->whereNotNull('name')
                     ->distinct()
                     ->pluck('name');
                 
-                // Get sections from Students for selected class
-                $sectionsFromStudents = Student::where('class', $request->class)
+                // Get sections from Students for selected class (only active students, not deleted)
+                $studentQuery = Student::where('class', $request->class)
+                    ->when($campus !== '', function ($query) use ($campus) {
+                        $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                    })
                     ->whereNotNull('section')
-                    ->distinct()
+                    ->where('section', '!=', '');
+                
+                // Exclude soft deleted students if soft deletes are being used
+                $this->applySoftDeleteFilter($studentQuery);
+                
+                $sectionsFromStudents = $studentQuery->distinct()
                     ->pluck('section');
                 
                 // Combine both sources and get unique sections
@@ -58,12 +106,23 @@ class PrintStudentCardController extends Controller
                 // If no class selected, return all sections
                 // Get sections from Section model
                 $sectionsFromModel = Section::whereNotNull('name')
+                    ->when($campus !== '', function ($query) use ($campus) {
+                        $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                    })
                     ->distinct()
                     ->pluck('name');
                 
-                // Get sections from Students
-                $sectionsFromStudents = Student::whereNotNull('section')
-                    ->distinct()
+                // Get sections from Students (only active students, not deleted)
+                $studentQuery = Student::whereNotNull('section')
+                    ->when($campus !== '', function ($query) use ($campus) {
+                        $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                    })
+                    ->where('section', '!=', '');
+                
+                // Exclude soft deleted students if soft deletes are being used
+                $this->applySoftDeleteFilter($studentQuery);
+                
+                $sectionsFromStudents = $studentQuery->distinct()
                     ->pluck('section');
                 
                 // Combine both sources and get unique sections
@@ -84,9 +143,14 @@ class PrintStudentCardController extends Controller
             ->distinct()
             ->pluck('name');
         
-        // Get sections from Students
-        $sectionsFromStudents = Student::whereNotNull('section')
-            ->distinct()
+        // Get sections from Students (only active students, not deleted)
+        $studentQuery = Student::whereNotNull('section')
+            ->where('section', '!=', '');
+        
+        // Exclude soft deleted students if soft deletes are being used
+        $this->applySoftDeleteFilter($studentQuery);
+        
+        $sectionsFromStudents = $studentQuery->distinct()
             ->pluck('section');
         
         // Combine both sources and get unique sections
@@ -124,7 +188,7 @@ class PrintStudentCardController extends Controller
             ]);
         }
         
-        return view('id-card.print-student', compact('classes', 'sections', 'sessions', 'types'));
+        return view('id-card.print-student', compact('classes', 'sections', 'sessions', 'types', 'campuses'));
     }
     
     /**
@@ -133,6 +197,25 @@ class PrintStudentCardController extends Controller
     private function getFilteredStudents(Request $request)
     {
         $query = Student::query();
+        
+        // Exclude soft deleted students (if soft deletes are being used)
+        // This ensures deleted students don't appear in the card
+        $this->applySoftDeleteFilter($query);
+        
+        // Only include students with valid class (required field)
+        // This ensures only active/added students with class are shown
+        $query->whereNotNull('class')
+              ->where('class', '!=', '');
+
+        if ($request->filled('student_id')) {
+            $query->where('id', $request->student_id);
+        } elseif ($request->filled('student_code')) {
+            $query->where('student_code', $request->student_code);
+        }
+
+        if ($request->filled('campus') && $request->campus != '') {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+        }
         
         // Filter by Type (if you have a student_type field, use it here)
         // For now, we'll skip type filtering as it's not in the Student model
@@ -152,6 +235,9 @@ class PrintStudentCardController extends Controller
         // If session is provided, filter students by matching sections
         if ($request->filled('session') && $request->session != '') {
             $sessionQuery = Section::where('session', $request->session);
+            if ($request->filled('campus') && $request->campus != '') {
+                $sessionQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+            }
             
             // If class is selected, filter sections by class
             if ($request->filled('class') && $request->class != '') {

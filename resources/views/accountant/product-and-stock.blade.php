@@ -236,16 +236,32 @@
                                 <input type="text" class="form-control product-input" name="product_code" id="product_code" placeholder="Enter product code (optional)">
                             </div>
                         </div>
-                        <div class="col-md-12">
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm product-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
+                                </span>
+                                <select class="form-control product-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Campus</option>
+                                    @if(isset($campuses) && $campuses->count() > 0)
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                        @endforeach
+                                    @endif
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Category <span class="text-danger">*</span></label>
                             <div class="input-group input-group-sm product-input-group">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">category</span>
                                 </span>
-                                <select class="form-control product-input" name="category" id="category" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                <select class="form-control product-input" name="category" id="category" required disabled style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Category</option>
                                     @foreach($categories as $cat)
-                                        <option value="{{ $cat }}">{{ $cat }}</option>
+                                        <option value="{{ $cat->category_name }}" data-campus="{{ $cat->campus }}">{{ $cat->category_name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -275,22 +291,6 @@
                                     <span class="material-symbols-outlined" style="font-size: 15px;">inventory</span>
                                 </span>
                                 <input type="number" class="form-control product-input" name="total_stock" id="total_stock" placeholder="0" required min="0">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus <span class="text-danger">*</span></label>
-                            <div class="input-group input-group-sm product-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                    <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
-                                </span>
-                                <select class="form-control product-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
-                                    <option value="">Select Campus</option>
-                                    @if(isset($campuses) && $campuses->count() > 0)
-                                        @foreach($campuses as $campus)
-                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
-                                        @endforeach
-                                    @endif
-                                </select>
                             </div>
                         </div>
                     </div>
@@ -699,17 +699,19 @@ function resetForm() {
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
         Save Product
     `;
+
+    updateCategoryOptions('');
 }
 
 // Edit product function
 function editProduct(id, productName, productCode, category, purchasePrice, salePrice, totalStock, campus) {
     document.getElementById('product_name').value = productName;
     document.getElementById('product_code').value = productCode || '';
-    document.getElementById('category').value = category;
     document.getElementById('purchase_price').value = purchasePrice;
     document.getElementById('sale_price').value = salePrice;
     document.getElementById('total_stock').value = totalStock;
     document.getElementById('campus').value = campus;
+    updateCategoryOptions(campus, category);
     document.getElementById('productForm').action = "{{ url('accountant/product-and-stock') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
     document.getElementById('productModalLabel').innerHTML = `
@@ -724,6 +726,53 @@ function editProduct(id, productName, productCode, category, purchasePrice, sale
     const modal = new bootstrap.Modal(document.getElementById('productModal'));
     modal.show();
 }
+
+function normalizeValue(value) {
+    return (value || '').toString().trim().toLowerCase();
+}
+
+function updateCategoryOptions(selectedCampus, preselectedCategory = '') {
+    const campusValue = normalizeValue(selectedCampus);
+    const categorySelect = document.getElementById('category');
+    const options = Array.from(categorySelect.querySelectorAll('option[data-campus]'));
+
+    let hasVisible = false;
+    options.forEach((option) => {
+        const optionCampus = normalizeValue(option.dataset.campus);
+        const isMatch = campusValue && optionCampus === campusValue;
+        option.hidden = !isMatch;
+        if (option.selected && !isMatch) {
+            option.selected = false;
+        }
+        if (isMatch) {
+            hasVisible = true;
+        }
+    });
+
+    categorySelect.disabled = !campusValue || !hasVisible;
+
+    if (campusValue && preselectedCategory) {
+        const categoryValue = normalizeValue(preselectedCategory);
+        const matchOption = options.find((option) => {
+            return normalizeValue(option.value) === categoryValue
+                && normalizeValue(option.dataset.campus) === campusValue;
+        });
+        if (matchOption) {
+            matchOption.selected = true;
+            categorySelect.disabled = false;
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const campusSelect = document.getElementById('campus');
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function () {
+            updateCategoryOptions(this.value);
+        });
+    }
+    updateCategoryOptions('');
+});
 
 // Search functionality
 function performSearch() {

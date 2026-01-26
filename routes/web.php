@@ -55,6 +55,8 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::patch('/task-management/{task}/status', [App\Http\Controllers\TaskManagementController::class, 'updateStatus'])->name('task-management.update-status');
         Route::get('/fee-payment', [App\Http\Controllers\AccountantController::class, 'feePayment'])->name('fee-payment');
         Route::get('/family-fee-calculator', [App\Http\Controllers\AccountantController::class, 'familyFeeCalculator'])->name('family-fee-calculator');
+        Route::post('/family-fee-calculator/pay-all', [App\Http\Controllers\FamilyFeeCalculatorController::class, 'payAll'])
+            ->name('family-fee-calculator.pay-all');
         
         // Family Fee Calculator - Search by Father ID Card
         Route::get('/family-fee-calculator/search-by-id-card', function (\Illuminate\Http\Request $request) {
@@ -67,36 +69,51 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
                 ], 400);
             }
             
-            // Clean the input CNIC
-            $cleanedIdCard = trim($fatherIdCard);
+            // Clean the input CNIC (normalize Unicode digits)
+            $rawIdCard = trim((string) $fatherIdCard);
+            $digitMap = [
+                '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+                '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+                '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+                '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+            ];
+            $cleanedIdCard = trim(strtr((string) $fatherIdCard, $digitMap));
             $lowerIdCard = strtolower($cleanedIdCard);
-            $normalizedIdCard = str_replace(['-', ' ', '_'], '', $lowerIdCard);
+            $normalizedIdCard = str_replace(['-', ' ', '_', '.', '/'], '', $lowerIdCard);
             
             // Find parent account by ID card number (case-insensitive, trimmed)
-            $parentAccount = \App\Models\ParentAccount::where(function($query) use ($lowerIdCard, $normalizedIdCard) {
+            $parentAccount = \App\Models\ParentAccount::where(function($query) use ($lowerIdCard, $normalizedIdCard, $rawIdCard) {
                 $query->whereRaw('LOWER(TRIM(id_card_number)) = ?', [$lowerIdCard])
-                      ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", "")) = ?', [$normalizedIdCard]);
+                      ->orWhereRaw('TRIM(id_card_number) = ?', [$rawIdCard])
+                      ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) = ?', [$normalizedIdCard])
+                      ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) LIKE ?', ['%' . $normalizedIdCard . '%']);
             })->first();
             
             // Get ALL students by father_id_card - use comprehensive query that handles all cases
-            $studentsByFatherIdCard = \App\Models\Student::where(function($query) use ($cleanedIdCard) {
+            $studentsByFatherIdCard = \App\Models\Student::where(function($query) use ($cleanedIdCard, $normalizedIdCard, $rawIdCard) {
                 // Try all possible matching strategies
                 $query->where('father_id_card', $cleanedIdCard)  // Exact match
+                      ->orWhere('father_id_card', $rawIdCard)  // Exact raw (Unicode digits)
                       ->orWhere('father_id_card', 'LIKE', $cleanedIdCard)  // LIKE exact
                       ->orWhere('father_id_card', 'LIKE', '%' . $cleanedIdCard . '%')  // LIKE partial
+                      ->orWhere('father_id_card', 'LIKE', '%' . $rawIdCard . '%')  // LIKE partial raw
                       ->orWhereRaw('LOWER(father_id_card) = LOWER(?)', [$cleanedIdCard])  // Case-insensitive
+                      ->orWhereRaw('LOWER(father_id_card) = LOWER(?)', [$rawIdCard])  // Case-insensitive raw
                       ->orWhereRaw('TRIM(father_id_card) = ?', [$cleanedIdCard])  // Trimmed
+                      ->orWhereRaw('TRIM(father_id_card) = ?', [$rawIdCard])  // Trimmed raw
                       ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [$cleanedIdCard])  // Case-insensitive trimmed
-                      ->orWhereRaw('CAST(father_id_card AS CHAR) = ?', [$cleanedIdCard]);  // Cast to string (handles numeric types)
+                      ->orWhereRaw('CAST(father_id_card AS CHAR) = ?', [$cleanedIdCard])  // Cast to string (handles numeric types)
+                      ->orWhereRaw('CAST(father_id_card AS CHAR) LIKE ?', ['%' . $cleanedIdCard . '%'])
+                      ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) LIKE ?', ['%' . $normalizedIdCard . '%']);
             })
-            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'transport_fare', 'generate_other_fee', 'other_fee_amount', 'generate_admission_fee', 'admission_fee_amount', 'father_name', 'father_phone', 'father_email', 'home_address')
             ->get();
             
             // If still no results, try one more time with DB::raw for absolute certainty
             if ($studentsByFatherIdCard->isEmpty()) {
                 $studentsByFatherIdCard = \App\Models\Student::whereRaw('father_id_card = ? OR father_id_card LIKE ? OR LOWER(father_id_card) = LOWER(?)', 
                     [$cleanedIdCard, '%' . $cleanedIdCard . '%', $cleanedIdCard])
-                    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+                    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'transport_fare', 'generate_other_fee', 'other_fee_amount', 'generate_admission_fee', 'admission_fee_amount', 'father_name', 'father_phone', 'father_email', 'home_address')
                     ->get();
             }
             
@@ -104,7 +121,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
             $studentsByParentAccount = collect();
             if ($parentAccount) {
                 $studentsByParentAccount = \App\Models\Student::where('parent_account_id', $parentAccount->id)
-                    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee')
+                    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'transport_fare', 'generate_other_fee', 'other_fee_amount', 'generate_admission_fee', 'admission_fee_amount')
                     ->get();
             }
             
@@ -178,21 +195,30 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
                         'section' => $student->section,
                         'campus' => $student->campus,
                         'monthly_fee' => $student->monthly_fee,
+                        'transport_fare' => $student->transport_fare,
+                        'generate_other_fee' => $student->generate_other_fee,
+                        'other_fee_amount' => $student->other_fee_amount,
+                        'generate_admission_fee' => $student->generate_admission_fee,
+                        'admission_fee_amount' => $student->admission_fee_amount,
                     ];
                 })->values()->toArray()
             ]);
         })->name('family-fee-calculator.search-by-id-card');
         Route::get('/generate-monthly-fee', [App\Http\Controllers\AccountantController::class, 'generateMonthlyFee'])->name('generate-monthly-fee');
         Route::post('/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'store'])->name('generate-monthly-fee.store');
+        Route::get('/get-classes-by-campus', [App\Http\Controllers\MonthlyFeeController::class, 'getClassesByCampus'])->name('get-classes-by-campus');
         Route::get('/get-sections-by-class', [App\Http\Controllers\MonthlyFeeController::class, 'getSectionsByClass'])->name('get-sections-by-class');
         Route::get('/get-students-with-fee-status', [App\Http\Controllers\MonthlyFeeController::class, 'getStudentsWithFeeStatus'])->name('get-students-with-fee-status');
         Route::get('/generate-custom-fee', [App\Http\Controllers\AccountantController::class, 'generateCustomFee'])->name('generate-custom-fee');
         Route::post('/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'store'])->name('generate-custom-fee.store');
+        Route::get('/custom-fee/get-classes-by-campus', [App\Http\Controllers\MonthlyFeeController::class, 'getClassesByCampus'])->name('custom-fee.get-classes-by-campus');
         Route::get('/custom-fee/get-sections-by-class', [App\Http\Controllers\CustomFeeController::class, 'getSectionsByClass'])->name('custom-fee.get-sections-by-class');
         Route::get('/custom-fee/get-students', [App\Http\Controllers\CustomFeeController::class, 'getStudents'])->name('custom-fee.get-students');
         Route::get('/generate-transport-fee', [App\Http\Controllers\AccountantController::class, 'generateTransportFee'])->name('generate-transport-fee');
         Route::post('/generate-transport-fee', [App\Http\Controllers\AccountantController::class, 'storeTransportFee'])->name('generate-transport-fee.store');
+        Route::get('/generate-transport-fee/get-classes-by-campus', [App\Http\Controllers\MonthlyFeeController::class, 'getClassesByCampus'])->name('transport-fee.get-classes-by-campus');
         Route::get('/generate-transport-fee/get-sections-by-class', [App\Http\Controllers\AccountantController::class, 'getTransportFeeSectionsByClass'])->name('transport-fee.get-sections-by-class');
+        Route::get('/generate-transport-fee/get-students-with-fee-status', [App\Http\Controllers\TransportFeeController::class, 'getStudentsWithFeeStatus'])->name('transport-fee.get-students-with-fee-status');
         Route::get('/fee-type', [App\Http\Controllers\AccountantController::class, 'feeType'])->name('fee-type');
         Route::post('/fee-type', [App\Http\Controllers\FeeTypeController::class, 'store'])->name('fee-type.store');
         Route::get('/fee-type/export/{format}', [App\Http\Controllers\FeeTypeController::class, 'export'])->name('fee-type.export');
@@ -220,6 +246,8 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::put('/add-manage-expense/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'update'])->name('add-manage-expense.update');
         Route::delete('/add-manage-expense/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'destroy'])->name('add-manage-expense.destroy');
         Route::get('/add-manage-expense/export/{format}', [App\Http\Controllers\ManagementExpenseController::class, 'export'])->name('add-manage-expense.export');
+        Route::get('/add-manage-expense/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'show'])->name('add-manage-expense.show');
+        Route::get('/add-manage-expense/{managementExpense}/print', [App\Http\Controllers\ManagementExpenseController::class, 'print'])->name('add-manage-expense.print');
         
         Route::get('/expense-categories', [App\Http\Controllers\AccountantController::class, 'expenseCategories'])->name('expense-categories');
         Route::post('/expense-categories', [App\Http\Controllers\ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
@@ -233,6 +261,8 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::get('/fee-defaulters', [App\Http\Controllers\AccountantController::class, 'feeDefaulters'])->name('fee-defaulters');
         Route::post('/fee-defaulters/campus', [App\Http\Controllers\FeeDefaultReportController::class, 'storeCampus'])->name('fee-defaulters.campus.store');
         Route::delete('/fee-defaulters/campus/{campus}', [App\Http\Controllers\FeeDefaultReportController::class, 'destroyCampus'])->name('fee-defaulters.campus.destroy');
+        Route::get('/fee-defaulters/get-classes-by-campus', [App\Http\Controllers\FeeDefaultReportController::class, 'getClassesByCampus'])->name('fee-defaulters.get-classes-by-campus');
+        Route::get('/fee-defaulters/get-sections-by-class', [App\Http\Controllers\FeeDefaultReportController::class, 'getSectionsByClass'])->name('fee-defaulters.get-sections-by-class');
         Route::get('/accounts-summary', [App\Http\Controllers\AccountantController::class, 'accountsSummary'])->name('accounts-summary');
         Route::post('/accounts-summary/campus', [App\Http\Controllers\AccountsSummaryController::class, 'storeCampus'])->name('accounts-summary.campus.store');
         Route::delete('/accounts-summary/campus/{campus}', [App\Http\Controllers\AccountsSummaryController::class, 'destroyCampus'])->name('accounts-summary.campus.destroy');
@@ -262,6 +292,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::get('/product-and-stock/export/{format}', [App\Http\Controllers\ProductController::class, 'export'])->name('product-and-stock.export');
         
         Route::get('/manage-all-sales', [App\Http\Controllers\AccountantController::class, 'manageAllSales'])->name('manage-all-sales');
+        Route::delete('/manage-all-sales/{saleRecord}', [App\Http\Controllers\SaleRecordController::class, 'destroy'])->name('manage-all-sales.destroy');
     });
 });
 
@@ -293,8 +324,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
 Route::get('/admission/admit-student', [App\Http\Controllers\AdmissionController::class, 'create'])->name('admission.admit-student');
 Route::post('/admission/admit-student', [App\Http\Controllers\AdmissionController::class, 'store'])->name('admission.admit-student.store');
 Route::get('/admission/get-sections', [App\Http\Controllers\AdmissionController::class, 'getSections'])->name('admission.get-sections');
+Route::get('/admission/get-classes', [App\Http\Controllers\AdmissionController::class, 'getClassesByCampus'])->name('admission.get-classes');
 Route::get('/admission/get-parent-by-id-card', [App\Http\Controllers\AdmissionController::class, 'getParentByIdCard'])->name('admission.get-parent-by-id-card');
+Route::get('/admission/get-next-student-code', [App\Http\Controllers\AdmissionController::class, 'getNextStudentCode'])->name('admission.get-next-student-code');
 Route::get('/admission/get-route-fare', [App\Http\Controllers\AdmissionController::class, 'getRouteFare'])->name('admission.get-route-fare');
+Route::get('/admission/get-transport-routes', [App\Http\Controllers\AdmissionController::class, 'getTransportRoutesByCampus'])->name('admission.get-transport-routes');
 
 Route::get('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkCreate'])->name('admission.admit-bulk-student');
 Route::post('/admission/admit-bulk-student', [App\Http\Controllers\AdmissionController::class, 'bulkStore'])->name('admission.admit-bulk-student.store');
@@ -321,6 +355,8 @@ Route::post('/admission/inquiry/send-sms', [App\Http\Controllers\AdmissionInquir
 
 // Student Management Routes
 Route::get('/student/information', [App\Http\Controllers\StudentController::class, 'index'])->name('student.information');
+Route::get('/student/information/classes-by-campus', [App\Http\Controllers\StudentController::class, 'getClassesByCampus'])->name('student.information.classes-by-campus');
+Route::get('/student/information/sections-by-class', [App\Http\Controllers\StudentController::class, 'getSectionsByClass'])->name('student.information.sections-by-class');
 Route::get('/student/information/export/{format}', [App\Http\Controllers\StudentController::class, 'export'])->name('student.information.export');
 Route::delete('/student/information/delete-all', [App\Http\Controllers\StudentController::class, 'deleteAll'])->name('student.information.delete-all');
 
@@ -328,16 +364,19 @@ Route::delete('/student/information/delete-all', [App\Http\Controllers\StudentCo
 Route::get('/student/promotion', [App\Http\Controllers\StudentPromotionController::class, 'index'])->name('student.promotion');
 Route::post('/student/promotion', [App\Http\Controllers\StudentPromotionController::class, 'promote'])->name('student.promotion.promote');
 Route::get('/student/promotion/get-sections', [App\Http\Controllers\StudentPromotionController::class, 'getSections'])->name('student.promotion.get-sections');
+Route::get('/student/promotion/get-classes-by-campus', [App\Http\Controllers\StudentPromotionController::class, 'getClassesByCampus'])->name('student.promotion.get-classes-by-campus');
 
 // Student Birthday Routes (must be before /student/{student} route)
 Route::get('/student/birthday', [App\Http\Controllers\StudentBirthdayController::class, 'index'])->name('student.birthday');
 Route::get('/student/birthday/export/{format}', [App\Http\Controllers\StudentBirthdayController::class, 'export'])->name('student.birthday.export');
+Route::get('/student/birthday/{student}/card', [App\Http\Controllers\StudentBirthdayController::class, 'printBirthdayCard'])->name('student.birthday.card.print');
 
 // Student Transfer Routes (must be before /student/{student} route)
 Route::get('/student/transfer', [App\Http\Controllers\StudentTransferController::class, 'index'])->name('student.transfer');
 Route::post('/student/transfer', [App\Http\Controllers\StudentTransferController::class, 'transfer'])->name('student.transfer.store');
 Route::get('/student/transfer/get-students', [App\Http\Controllers\StudentTransferController::class, 'getStudents'])->name('student.transfer.get-students');
 Route::get('/student/transfer/search-student', [App\Http\Controllers\StudentTransferController::class, 'searchStudent'])->name('student.transfer.search-student');
+Route::get('/student/transfer/get-classes-by-campus', [App\Http\Controllers\StudentTransferController::class, 'getClassesByCampus'])->name('student.transfer.get-classes-by-campus');
 
 // Admission routes
 Route::get('/admission/get-route-fare', [App\Http\Controllers\AdmissionController::class, 'getRouteFare'])->name('admission.get-route-fare');
@@ -346,10 +385,13 @@ Route::get('/admission/get-route-fare', [App\Http\Controllers\AdmissionControlle
 Route::get('/student/info-report', function () {
     return view('student.info-report');
 })->name('student.info-report');
+Route::get('/student/info-report/print', [App\Http\Controllers\StudentInfoReportController::class, 'print'])
+    ->name('student.info-report.print');
 
 // Student Edit Route (must be before /student/{student} route)
 Route::get('/student/{student}/edit', [App\Http\Controllers\StudentController::class, 'edit'])->name('student.edit');
 Route::put('/student/{student}', [App\Http\Controllers\StudentController::class, 'update'])->name('student.update');
+Route::get('/student/{student}/print', [App\Http\Controllers\StudentController::class, 'print'])->name('student.print');
 
 // Student Delete Route (must be before /student/{student} route)
 Route::delete('/student/{student}', [App\Http\Controllers\StudentController::class, 'destroy'])->name('student.delete');
@@ -361,6 +403,8 @@ Route::get('/dashboard/crm', [DashboardController::class, 'crm'])->name('dashboa
 
 // Parent Account Routes
 Route::get('/parent/manage-access', [App\Http\Controllers\ParentAccountController::class, 'index'])->name('parent.manage-access');
+Route::get('/parent/manage-access/print', [App\Http\Controllers\ParentAccountController::class, 'print'])
+    ->name('parent.manage-access.print');
 Route::post('/parent/manage-access', [App\Http\Controllers\ParentAccountController::class, 'store'])->name('parent.manage-access.store');
 Route::delete('/parent/manage-access/delete-all', [App\Http\Controllers\ParentAccountController::class, 'deleteAll'])->name('parent.manage-access.delete-all');
 Route::put('/parent/manage-access/{parent_account}', [App\Http\Controllers\ParentAccountController::class, 'update'])->name('parent.manage-access.update');
@@ -377,14 +421,21 @@ Route::get('/parent/account-request/export/{format}', [App\Http\Controllers\Pare
 Route::get('/parent/print-gate-passes', [App\Http\Controllers\PrintGatePassesController::class, 'index'])->name('parent.print-gate-passes');
 Route::post('/parent/print-gate-passes', [App\Http\Controllers\PrintGatePassesController::class, 'index'])->name('parent.print-gate-passes.filter');
 Route::get('/parent/print-gate-passes/print', [App\Http\Controllers\PrintGatePassesController::class, 'print'])->name('parent.print-gate-passes.print');
+Route::get('/parent/{parent_account}/dues-report/print', [App\Http\Controllers\ParentAccountController::class, 'printDuesReport'])->name('parent.dues-report.print');
 
 Route::get('/parent/info-request', [App\Http\Controllers\ParentInfoRequestController::class, 'index'])->name('parent.info-request');
 Route::post('/parent/info-request/filter', [App\Http\Controllers\ParentInfoRequestController::class, 'filter'])->name('parent.info-request.filter');
+Route::get('/parent/info-request/all-parents/print', [App\Http\Controllers\ParentInfoRequestController::class, 'allParentsReport'])->name('parent.info-request.all-parents.print');
+Route::get('/parent/info-request/parent-credit/print', [App\Http\Controllers\ParentInfoRequestController::class, 'parentCreditReport'])->name('parent.info-request.parent-credit.print');
+Route::get('/parent/info-request/family-tree/print', [App\Http\Controllers\ParentInfoRequestController::class, 'familyTreeReport'])->name('parent.info-request.family-tree.print');
+Route::get('/parent/info-request/defaulter-parents/print', [App\Http\Controllers\ParentInfoRequestController::class, 'defaulterParentsReport'])->name('parent.info-request.defaulter-parents.print');
 
 Route::get('/dashboard/project-management', [DashboardController::class, 'projectManagement'])->name('dashboard.project-management');
 
 // Staff Management Routes
 Route::get('/staff/management', [App\Http\Controllers\StaffManagementController::class, 'index'])->name('staff.management');
+Route::get('/staff/management/print', [App\Http\Controllers\StaffManagementController::class, 'print'])
+    ->name('staff.management.print');
 Route::get('/staff/management/next-emp-id', [App\Http\Controllers\StaffManagementController::class, 'getNextEmployeeId'])->name('staff.management.next-emp-id');
 Route::post('/staff/management', [App\Http\Controllers\StaffManagementController::class, 'store'])->name('staff.management.store');
 Route::delete('/staff/management/delete-all', [App\Http\Controllers\StaffManagementController::class, 'deleteAll'])->name('staff.management.delete-all');
@@ -442,17 +493,21 @@ Route::get('/dashboard/hr-management', [DashboardController::class, 'hrManagemen
 Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function () {
     Route::get('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'create'])->name('accounting.generate-monthly-fee');
     Route::post('/accounting/generate-monthly-fee', [App\Http\Controllers\MonthlyFeeController::class, 'store'])->name('accounting.generate-monthly-fee.store');
+    Route::get('/accounting/get-classes-by-campus', [App\Http\Controllers\MonthlyFeeController::class, 'getClassesByCampus'])->name('accounting.get-classes-by-campus');
     Route::get('/accounting/get-sections-by-class', [App\Http\Controllers\MonthlyFeeController::class, 'getSectionsByClass'])->name('accounting.get-sections-by-class');
     Route::get('/accounting/get-students-with-fee-status', [App\Http\Controllers\MonthlyFeeController::class, 'getStudentsWithFeeStatus'])->name('accounting.get-students-with-fee-status');
 
     Route::get('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'create'])->name('accounting.generate-custom-fee');
     Route::post('/accounting/generate-custom-fee', [App\Http\Controllers\CustomFeeController::class, 'store'])->name('accounting.generate-custom-fee.store');
+    Route::get('/accounting/custom-fee/get-classes-by-campus', [App\Http\Controllers\MonthlyFeeController::class, 'getClassesByCampus'])->name('accounting.custom-fee.get-classes-by-campus');
     Route::get('/accounting/custom-fee/get-sections-by-class', [App\Http\Controllers\CustomFeeController::class, 'getSectionsByClass'])->name('accounting.custom-fee.get-sections-by-class');
     Route::get('/accounting/custom-fee/get-students', [App\Http\Controllers\CustomFeeController::class, 'getStudents'])->name('accounting.custom-fee.get-students');
 
     Route::get('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'create'])->name('accounting.generate-transport-fee');
     Route::post('/accounting/generate-transport-fee', [App\Http\Controllers\TransportFeeController::class, 'store'])->name('accounting.generate-transport-fee.store');
+    Route::get('/accounting/transport-fee/get-classes-by-campus', [App\Http\Controllers\MonthlyFeeController::class, 'getClassesByCampus'])->name('accounting.transport-fee.get-classes-by-campus');
     Route::get('/accounting/transport-fee/get-sections-by-class', [App\Http\Controllers\TransportFeeController::class, 'getSectionsByClass'])->name('accounting.transport-fee.get-sections-by-class');
+    Route::get('/accounting/transport-fee/get-students-with-fee-status', [App\Http\Controllers\TransportFeeController::class, 'getStudentsWithFeeStatus'])->name('accounting.transport-fee.get-students-with-fee-status');
 });
 
 // Fee Type Routes
@@ -481,6 +536,8 @@ Route::get('/accounting/family-fee-calculator', function () {
     
     return view('accounting.family-fee-calculator', compact('families'));
 })->name('accounting.family-fee-calculator');
+    Route::post('/accounting/family-fee-calculator/pay-all', [App\Http\Controllers\FamilyFeeCalculatorController::class, 'payAll'])
+        ->name('accounting.family-fee-calculator.pay-all');
 
 // Family Fee Calculator - Get Students by Family
 Route::get('/accounting/family-fee-calculator/students', function (\Illuminate\Http\Request $request) {
@@ -526,36 +583,51 @@ Route::get('/accounting/family-fee-calculator/search-by-id-card', function (\Ill
         ], 400);
     }
     
-    // Clean the input CNIC
-    $cleanedIdCard = trim($fatherIdCard);
+    // Clean the input CNIC (normalize Unicode digits)
+    $rawIdCard = trim((string) $fatherIdCard);
+    $digitMap = [
+        '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+        '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+        '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+        '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+    ];
+    $cleanedIdCard = trim(strtr((string) $fatherIdCard, $digitMap));
     $lowerIdCard = strtolower($cleanedIdCard);
-    $normalizedIdCard = str_replace(['-', ' ', '_'], '', $lowerIdCard);
+    $normalizedIdCard = str_replace(['-', ' ', '_', '.', '/'], '', $lowerIdCard);
     
     // Find parent account by ID card number (case-insensitive, trimmed)
-    $parentAccount = \App\Models\ParentAccount::where(function($query) use ($lowerIdCard, $normalizedIdCard) {
+    $parentAccount = \App\Models\ParentAccount::where(function($query) use ($lowerIdCard, $normalizedIdCard, $rawIdCard) {
         $query->whereRaw('LOWER(TRIM(id_card_number)) = ?', [$lowerIdCard])
-              ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", "")) = ?', [$normalizedIdCard]);
+              ->orWhereRaw('TRIM(id_card_number) = ?', [$rawIdCard])
+              ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) = ?', [$normalizedIdCard])
+              ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) LIKE ?', ['%' . $normalizedIdCard . '%']);
     })->first();
     
     // Get ALL students by father_id_card - use comprehensive query that handles all cases
-    $studentsByFatherIdCard = \App\Models\Student::where(function($query) use ($cleanedIdCard) {
+    $studentsByFatherIdCard = \App\Models\Student::where(function($query) use ($cleanedIdCard, $normalizedIdCard, $rawIdCard) {
         // Try all possible matching strategies
         $query->where('father_id_card', $cleanedIdCard)  // Exact match
+              ->orWhere('father_id_card', $rawIdCard)  // Exact raw (Unicode digits)
               ->orWhere('father_id_card', 'LIKE', $cleanedIdCard)  // LIKE exact
               ->orWhere('father_id_card', 'LIKE', '%' . $cleanedIdCard . '%')  // LIKE partial
+              ->orWhere('father_id_card', 'LIKE', '%' . $rawIdCard . '%')  // LIKE partial raw
               ->orWhereRaw('LOWER(father_id_card) = LOWER(?)', [$cleanedIdCard])  // Case-insensitive
+              ->orWhereRaw('LOWER(father_id_card) = LOWER(?)', [$rawIdCard])  // Case-insensitive raw
               ->orWhereRaw('TRIM(father_id_card) = ?', [$cleanedIdCard])  // Trimmed
+              ->orWhereRaw('TRIM(father_id_card) = ?', [$rawIdCard])  // Trimmed raw
               ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [$cleanedIdCard])  // Case-insensitive trimmed
-              ->orWhereRaw('CAST(father_id_card AS CHAR) = ?', [$cleanedIdCard]);  // Cast to string (handles numeric types)
+              ->orWhereRaw('CAST(father_id_card AS CHAR) = ?', [$cleanedIdCard])  // Cast to string (handles numeric types)
+              ->orWhereRaw('CAST(father_id_card AS CHAR) LIKE ?', ['%' . $cleanedIdCard . '%'])
+              ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) LIKE ?', ['%' . $normalizedIdCard . '%']);
     })
-    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+    ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'transport_fare', 'generate_other_fee', 'other_fee_amount', 'generate_admission_fee', 'admission_fee_amount', 'father_name', 'father_phone', 'father_email', 'home_address')
     ->get();
     
     // If still no results, try one more time with DB::raw for absolute certainty
     if ($studentsByFatherIdCard->isEmpty()) {
         $studentsByFatherIdCard = \App\Models\Student::whereRaw('father_id_card = ? OR father_id_card LIKE ? OR LOWER(father_id_card) = LOWER(?)', 
             [$cleanedIdCard, '%' . $cleanedIdCard . '%', $cleanedIdCard])
-            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'transport_fare', 'generate_other_fee', 'other_fee_amount', 'generate_admission_fee', 'admission_fee_amount', 'father_name', 'father_phone', 'father_email', 'home_address')
             ->get();
     }
     
@@ -563,7 +635,7 @@ Route::get('/accounting/family-fee-calculator/search-by-id-card', function (\Ill
     $studentsByParentAccount = collect();
     if ($parentAccount) {
         $studentsByParentAccount = \App\Models\Student::where('parent_account_id', $parentAccount->id)
-            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee')
+            ->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'transport_fare', 'generate_other_fee', 'other_fee_amount', 'generate_admission_fee', 'admission_fee_amount')
             ->get();
     }
     
@@ -637,6 +709,11 @@ Route::get('/accounting/family-fee-calculator/search-by-id-card', function (\Ill
                 'section' => $student->section,
                 'campus' => $student->campus,
                 'monthly_fee' => $student->monthly_fee,
+                'transport_fare' => $student->transport_fare,
+                'generate_other_fee' => $student->generate_other_fee,
+                'other_fee_amount' => $student->other_fee_amount,
+                'generate_admission_fee' => $student->generate_admission_fee,
+                'admission_fee_amount' => $student->admission_fee_amount,
             ];
         })->values()->toArray()
     ]);
@@ -647,6 +724,7 @@ Route::get('/accounting/manage-advance-fee', [App\Http\Controllers\AdvanceFeeCon
 Route::post('/accounting/manage-advance-fee', [App\Http\Controllers\AdvanceFeeController::class, 'store'])->name('accounting.manage-advance-fee.store');
 Route::get('/accounting/manage-advance-fee/export/{format}', [App\Http\Controllers\AdvanceFeeController::class, 'export'])->name('accounting.manage-advance-fee.export');
 Route::get('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controllers\AdvanceFeeController::class, 'show'])->name('accounting.manage-advance-fee.show');
+Route::get('/accounting/manage-advance-fee/{advanceFee}/students', [App\Http\Controllers\AdvanceFeeController::class, 'connectedStudents'])->name('accounting.manage-advance-fee.students');
 Route::put('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controllers\AdvanceFeeController::class, 'update'])->name('accounting.manage-advance-fee.update');
 Route::delete('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controllers\AdvanceFeeController::class, 'destroy'])->name('accounting.manage-advance-fee.destroy');
 
@@ -655,37 +733,68 @@ Route::get('/accounting/parent-wallet/installments', function () {
     return view('accounting.parent-wallet.installments');
 })->name('accounting.parent-wallet.installments');
 
+Route::get('/accounting/parent-wallet/installments/data', function () {
+    $payments = \App\Models\StudentPayment::with('student')
+        ->whereRaw('LOWER(payment_title) LIKE ?', ['%installment%'])
+        ->orderBy('payment_date', 'desc')
+        ->limit(500)
+        ->get();
+
+    $items = $payments->map(function ($payment) {
+        $student = $payment->student;
+        $studentCode = $payment->student_code;
+        $moreLink = $studentCode
+            ? '<a class="btn btn-sm btn-outline-primary" href="' . route('accounting.direct-payment.student', ['student_code' => $studentCode]) . '">View</a>'
+            : '';
+
+        $paymentDate = $payment->payment_date ? \Carbon\Carbon::parse($payment->payment_date) : null;
+        $feeMonth = $paymentDate ? $paymentDate->format('F Y') : null;
+        $amountPaid = (float) $payment->payment_amount - (float) ($payment->discount ?? 0);
+
+        return [
+            'name' => $student->student_name ?? 'N/A',
+            'parent' => $student->father_name ?? 'N/A',
+            'class_section' => trim(($student->class ?? '') . '/' . ($student->section ?? ''), '/'),
+            'installment_title' => $payment->payment_title ?? 'N/A',
+            'fee_month' => $feeMonth ?? 'N/A',
+            'installment_fee' => (float) $payment->payment_amount,
+            'amount_paid' => max($amountPaid, 0),
+            'more' => $moreLink,
+        ];
+    })->values();
+
+    return response()->json(['items' => $items]);
+})->name('accounting.parent-wallet.installments.data');
+
 Route::get('/accounting/parent-wallet/sms-fee-duration', function () {
     return view('accounting.parent-wallet.sms-fee-duration');
 })->name('accounting.parent-wallet.sms-fee-duration');
 
-Route::get('/accounting/parent-wallet/print-balance-sheet', function () {
-    return view('accounting.parent-wallet.print-balance-sheet');
-})->name('accounting.parent-wallet.print-balance-sheet');
+Route::get('/accounting/parent-wallet/print-balance-sheet', [App\Http\Controllers\BalanceSheetController::class, 'index'])->name('accounting.parent-wallet.print-balance-sheet');
 
-Route::get('/accounting/parent-wallet/deleted-fees', function () {
-    return view('accounting.parent-wallet.deleted-fees');
-})->name('accounting.parent-wallet.deleted-fees');
+Route::get('/accounting/parent-wallet/deleted-fees', [App\Http\Controllers\DeletedFeeController::class, 'index'])->name('accounting.parent-wallet.deleted-fees');
+Route::post('/accounting/parent-wallet/deleted-fees/{deletedFee}/restore', [App\Http\Controllers\DeletedFeeController::class, 'restore'])->name('accounting.parent-wallet.deleted-fees.restore');
 
-Route::get('/accounting/parent-wallet/bulk-fee-payment', function () {
-    return view('accounting.parent-wallet.bulk-fee-payment');
-})->name('accounting.parent-wallet.bulk-fee-payment');
+Route::get('/accounting/parent-wallet/bulk-fee-payment', [App\Http\Controllers\BulkFeePaymentController::class, 'index'])->name('accounting.parent-wallet.bulk-fee-payment');
+Route::get('/accounting/parent-wallet/bulk-fee-payment/data', [App\Http\Controllers\BulkFeePaymentController::class, 'data'])->name('accounting.parent-wallet.bulk-fee-payment.data');
 
-Route::get('/accounting/parent-wallet/discount-student', function () {
-    return view('accounting.parent-wallet.discount-student');
-})->name('accounting.parent-wallet.discount-student');
+Route::get('/accounting/parent-wallet/discount-student', [App\Http\Controllers\StudentDiscountController::class, 'index'])->name('accounting.parent-wallet.discount-student');
+Route::post('/accounting/parent-wallet/discount-student', [App\Http\Controllers\StudentDiscountController::class, 'store'])->name('accounting.parent-wallet.discount-student.store');
+Route::put('/accounting/parent-wallet/discount-student/{studentDiscount}', [App\Http\Controllers\StudentDiscountController::class, 'update'])->name('accounting.parent-wallet.discount-student.update');
+Route::delete('/accounting/parent-wallet/discount-student/{studentDiscount}', [App\Http\Controllers\StudentDiscountController::class, 'destroy'])->name('accounting.parent-wallet.discount-student.delete');
 
-Route::get('/accounting/parent-wallet/accounts-settlement', function () {
-    return view('accounting.parent-wallet.accounts-settlement');
-})->name('accounting.parent-wallet.accounts-settlement');
+Route::get('/accounting/parent-wallet/accounts-settlement', [App\Http\Controllers\AccountsSettlementController::class, 'index'])->name('accounting.parent-wallet.accounts-settlement');
+Route::delete('/accounting/parent-wallet/accounts-settlement/{type}/{id}', [App\Http\Controllers\AccountsSettlementController::class, 'destroy'])->name('accounting.parent-wallet.accounts-settlement.delete');
 
-Route::get('/accounting/parent-wallet/online-rejected-payments', function () {
-    return view('accounting.parent-wallet.online-rejected-payments');
-})->name('accounting.parent-wallet.online-rejected-payments');
+Route::get('/accounting/parent-wallet/online-rejected-payments', [App\Http\Controllers\OnlineRejectedPaymentController::class, 'index'])->name('accounting.parent-wallet.online-rejected-payments');
+Route::get('/accounting/parent-wallet/online-rejected-payments/export/{format}', [App\Http\Controllers\OnlineRejectedPaymentController::class, 'export'])->name('accounting.parent-wallet.online-rejected-payments.export');
+Route::delete('/accounting/parent-wallet/online-rejected-payments/{payment}', [App\Http\Controllers\OnlineRejectedPaymentController::class, 'destroy'])->name('accounting.parent-wallet.online-rejected-payments.delete');
 
 // Direct Payment Routes
 Route::get('/accounting/direct-payment/student', [App\Http\Controllers\StudentPaymentController::class, 'create'])->name('accounting.direct-payment.student');
 Route::post('/accounting/direct-payment/student', [App\Http\Controllers\StudentPaymentController::class, 'store'])->name('accounting.direct-payment.student.store');
+    Route::get('/accounting/get-student-by-code', [App\Http\Controllers\StudentPaymentController::class, 'getStudentByCode'])->name('accounting.get-student-by-code');
+Route::get('/accounting/direct-payment/custom/get-accountants', [App\Http\Controllers\CustomPaymentController::class, 'getAccountantsByCampus'])->name('accounting.direct-payment.custom.get-accountants');
 
 // Make Installment Route
 Route::get('/accounting/make-installment', function (\Illuminate\Http\Request $request) {
@@ -801,9 +910,17 @@ Route::post('/accounting/direct-payment/custom', [App\Http\Controllers\CustomPay
 // Fee Increment Routes
 Route::get('/accounting/fee-increment/percentage', [App\Http\Controllers\FeeIncrementPercentageController::class, 'create'])->name('accounting.fee-increment.percentage');
 Route::post('/accounting/fee-increment/percentage', [App\Http\Controllers\FeeIncrementPercentageController::class, 'store'])->name('accounting.fee-increment.percentage.store');
+Route::get('/accounting/fee-increment/percentage/get-classes-by-campus', [App\Http\Controllers\FeeIncrementPercentageController::class, 'getClassesByCampus'])->name('accounting.fee-increment.percentage.get-classes-by-campus');
+Route::get('/accounting/fee-increment/percentage/get-sections-by-class', [App\Http\Controllers\FeeIncrementPercentageController::class, 'getSectionsByClass'])->name('accounting.fee-increment.percentage.get-sections-by-class');
 
 Route::get('/accounting/fee-increment/amount', [App\Http\Controllers\FeeIncrementAmountController::class, 'create'])->name('accounting.fee-increment.amount');
 Route::post('/accounting/fee-increment/amount', [App\Http\Controllers\FeeIncrementAmountController::class, 'store'])->name('accounting.fee-increment.amount.store');
+Route::get('/accounting/fee-increment/amount/get-classes-by-campus', [App\Http\Controllers\FeeIncrementAmountController::class, 'getClassesByCampus'])->name('accounting.fee-increment.amount.get-classes-by-campus');
+Route::get('/accounting/fee-increment/amount/get-sections-by-class', [App\Http\Controllers\FeeIncrementAmountController::class, 'getSectionsByClass'])->name('accounting.fee-increment.amount.get-sections-by-class');
+
+Route::get('/accounting/fee-document/decrement-percentage/get-classes-by-campus', [App\Http\Controllers\FeeDecrementPercentageController::class, 'getClassesByCampus'])->name('accounting.fee-document.decrement-percentage.get-classes-by-campus');
+Route::get('/accounting/fee-document/decrement-percentage/get-sections-by-class', [App\Http\Controllers\FeeDecrementPercentageController::class, 'getSectionsByClass'])->name('accounting.fee-document.decrement-percentage.get-sections-by-class');
+Route::get('/accounting/fee-document/decrement-percentage/get-accountants', [App\Http\Controllers\FeeDecrementPercentageController::class, 'getAccountantsByCampus'])->name('accounting.fee-document.decrement-percentage.get-accountants');
 
 // Fee Document Routes
 Route::get('/accounting/fee-document/decrement-percentage', [App\Http\Controllers\FeeDecrementPercentageController::class, 'create'])->name('accounting.fee-document.decrement-percentage');
@@ -811,6 +928,9 @@ Route::post('/accounting/fee-document/decrement-percentage', [App\Http\Controlle
 
 Route::get('/accounting/fee-document/decrement-amount', [App\Http\Controllers\FeeDecrementAmountController::class, 'create'])->name('accounting.fee-document.decrement-amount');
 Route::post('/accounting/fee-document/decrement-amount', [App\Http\Controllers\FeeDecrementAmountController::class, 'store'])->name('accounting.fee-document.decrement-amount.store');
+Route::get('/accounting/fee-document/decrement-amount/get-classes-by-campus', [App\Http\Controllers\FeeDecrementAmountController::class, 'getClassesByCampus'])->name('accounting.fee-document.decrement-amount.get-classes-by-campus');
+Route::get('/accounting/fee-document/decrement-amount/get-sections-by-class', [App\Http\Controllers\FeeDecrementAmountController::class, 'getSectionsByClass'])->name('accounting.fee-document.decrement-amount.get-sections-by-class');
+Route::get('/accounting/fee-document/decrement-amount/get-accountants', [App\Http\Controllers\FeeDecrementAmountController::class, 'getAccountantsByCampus'])->name('accounting.fee-document.decrement-amount.get-accountants');
  
 // Fee Voucher Routes
 Route::get('/accounting/fee-voucher/student', [App\Http\Controllers\StudentVoucherController::class, 'index'])->name('accounting.fee-voucher.student');
@@ -833,6 +953,7 @@ Route::delete('/classes/manage-classes/{class_model}', [App\Http\Controllers\Man
 Route::get('/classes/manage-classes/export/{format}', [App\Http\Controllers\ManageClassesController::class, 'export'])->name('classes.manage-classes.export');
 
 Route::get('/classes/manage-section', [App\Http\Controllers\ManageSectionController::class, 'index'])->name('classes.manage-section');
+Route::get('/classes/manage-section/classes-by-campus', [App\Http\Controllers\ManageSectionController::class, 'getClassesByCampus'])->name('classes.manage-section.classes-by-campus');
 Route::post('/classes/manage-section', [App\Http\Controllers\ManageSectionController::class, 'store'])->name('classes.manage-section.store');
 Route::put('/classes/manage-section/{section}', [App\Http\Controllers\ManageSectionController::class, 'update'])->name('classes.manage-section.update');
 Route::delete('/classes/manage-section/{section}', [App\Http\Controllers\ManageSectionController::class, 'destroy'])->name('classes.manage-section.destroy');
@@ -844,11 +965,17 @@ Route::post('/manage-subjects', [App\Http\Controllers\ManageSubjectsController::
 Route::put('/manage-subjects/{subject}', [App\Http\Controllers\ManageSubjectsController::class, 'update'])->name('manage-subjects.update');
 Route::delete('/manage-subjects/{subject}', [App\Http\Controllers\ManageSubjectsController::class, 'destroy'])->name('manage-subjects.destroy');
 Route::get('/manage-subjects/get-sections-by-class', [App\Http\Controllers\ManageSubjectsController::class, 'getSectionsByClass'])->name('manage-subjects.get-sections-by-class');
+Route::get('/manage-subjects/get-classes-by-campus', [App\Http\Controllers\ManageSubjectsController::class, 'getClassesByCampus'])->name('manage-subjects.get-classes-by-campus');
+Route::get('/manage-subjects/get-teachers-by-campus', [App\Http\Controllers\ManageSubjectsController::class, 'getTeachersByCampus'])->name('manage-subjects.get-teachers-by-campus');
 Route::get('/manage-subjects/export/{format}', [App\Http\Controllers\ManageSubjectsController::class, 'export'])->name('manage-subjects.export');
 
 // Manage Attendance Routes
 Route::get('/attendance/student', [App\Http\Controllers\StudentAttendanceController::class, 'index'])->name('attendance.student')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::get('/attendance/present-today/print', [App\Http\Controllers\StudentAttendanceController::class, 'printPresentToday'])
+    ->name('attendance.present-today.print')
+    ->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 Route::get('/attendance/student/get-sections-by-class', [App\Http\Controllers\StudentAttendanceController::class, 'getSectionsByClass'])->name('attendance.student.get-sections-by-class');
+Route::get('/attendance/student/get-classes-by-campus', [App\Http\Controllers\StudentAttendanceController::class, 'getClassesByCampus'])->name('attendance.student.get-classes-by-campus');
 Route::post('/attendance/student/store', [App\Http\Controllers\StudentAttendanceController::class, 'store'])->name('attendance.student.store')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 
 Route::get('/attendance/staff', [App\Http\Controllers\StaffAttendanceController::class, 'index'])->name('attendance.staff')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
@@ -858,6 +985,9 @@ Route::get('/staff/attendance/overview', [App\Http\Controllers\StaffAttendanceCo
 Route::get('/attendance/barcode', function () {
     return view('attendance.barcode');
 })->name('attendance.barcode');
+Route::post('/attendance/barcode/scan', [App\Http\Controllers\StudentAttendanceController::class, 'scanBarcode'])
+    ->name('attendance.barcode.scan')
+    ->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 
 Route::get('/attendance/biometric', function () {
     return view('attendance.biometric');
@@ -875,6 +1005,15 @@ Route::get('/attendance/account/export/{format}', [App\Http\Controllers\Attendan
 
 Route::get('/attendance/report', [App\Http\Controllers\AttendanceReportController::class, 'index'])->name('attendance.report');
 Route::get('/attendance/staff-report', [App\Http\Controllers\StaffAttendanceReportController::class, 'index'])->name('attendance.staff-report');
+Route::get('/attendance/all-reports', [App\Http\Controllers\AttendancePrintableController::class, 'index'])->name('attendance.all-reports');
+Route::get('/attendance/absent-students-today/print', [App\Http\Controllers\AttendancePrintableController::class, 'absentStudentsToday'])->name('attendance.absent-students-today.print');
+Route::get('/attendance/absent-staff-today/print', [App\Http\Controllers\AttendancePrintableController::class, 'absentStaffToday'])->name('attendance.absent-staff-today.print');
+Route::get('/attendance/present-staff-today/print', [App\Http\Controllers\AttendancePrintableController::class, 'presentStaffToday'])->name('attendance.present-staff-today.print');
+Route::get('/attendance/subject-lecture-summary/print', [App\Http\Controllers\AttendancePrintableController::class, 'subjectLectureSummary'])->name('attendance.subject-lecture-summary.print');
+Route::get('/attendance/staff-hourly-summary/print', [App\Http\Controllers\AttendancePrintableController::class, 'staffHourlySummary'])->name('attendance.staff-hourly-summary.print');
+Route::get('/attendance/classwise-summary/print', [App\Http\Controllers\AttendancePrintableController::class, 'classWiseSummary'])->name('attendance.classwise-summary.print');
+Route::get('/attendance/student-summary/print', [App\Http\Controllers\AttendancePrintableController::class, 'studentSummary'])->name('attendance.student-summary.print');
+Route::get('/attendance/staff-summary/print', [App\Http\Controllers\AttendancePrintableController::class, 'staffSummary'])->name('attendance.staff-summary.print');
 
 // Online Classes Routes
 Route::get('/online-classes', [App\Http\Controllers\OnlineClassesController::class, 'index'])->name('online-classes');
@@ -931,14 +1070,40 @@ Route::get('/fee-payment/search-student', function (\Illuminate\Http\Request $re
     $searchLower = strtolower(trim($search));
     
     // Search students by name or code
-    $students = \App\Models\Student::where(function($query) use ($search, $searchLower) {
+    $matchedStudents = \App\Models\Student::where(function($query) use ($search, $searchLower) {
             $query->whereRaw('LOWER(student_name) LIKE ?', ["%{$searchLower}%"])
                   ->orWhere('student_code', 'like', "%{$search}%")
                   ->orWhere('gr_number', 'like', "%{$search}%");
         })
-        ->select('id', 'student_name', 'student_code', 'father_name', 'class', 'section', 'campus', 'monthly_fee')
+        ->select('id', 'student_name', 'student_code', 'father_name', 'father_id_card', 'parent_account_id', 'class', 'section', 'campus', 'monthly_fee')
         ->orderBy('student_name', 'asc')
         ->limit(50)
+        ->get();
+
+    $fatherIdCards = $matchedStudents->pluck('father_id_card')
+        ->filter(fn($value) => !empty(trim((string) $value)))
+        ->values();
+    $parentAccountIds = $matchedStudents->pluck('parent_account_id')
+        ->filter()
+        ->values();
+
+    $studentsQuery = \App\Models\Student::query();
+    if ($fatherIdCards->isNotEmpty() || $parentAccountIds->isNotEmpty()) {
+        $studentsQuery->where(function($query) use ($fatherIdCards, $parentAccountIds) {
+            if ($fatherIdCards->isNotEmpty()) {
+                $query->whereIn('father_id_card', $fatherIdCards);
+            }
+            if ($parentAccountIds->isNotEmpty()) {
+                $query->orWhereIn('parent_account_id', $parentAccountIds);
+            }
+        });
+    } else {
+        $studentsQuery->whereRaw('1 = 0');
+    }
+
+    $students = $studentsQuery
+        ->select('id', 'student_name', 'student_code', 'father_name', 'class', 'section', 'campus', 'monthly_fee')
+        ->orderBy('student_name', 'asc')
         ->get();
     
     return response()->json([
@@ -946,6 +1111,7 @@ Route::get('/fee-payment/search-student', function (\Illuminate\Http\Request $re
         'students' => $students->map(function ($student) {
             // Check if student has unpaid fees
             $totalPaid = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                ->where('method', '!=', 'Generated')
                 ->sum('payment_amount');
             $monthlyFee = $student->monthly_fee ?? 0;
             $hasUnpaid = ($monthlyFee > 0 && $totalPaid < $monthlyFee);
@@ -1016,8 +1182,9 @@ Route::get('/fee-payment/search-by-cnic', function (\Illuminate\Http\Request $re
         'success' => true,
         'students' => $students->map(function ($student) {
             // Check if student has unpaid fees
-            $totalPaid = \App\Models\StudentPayment::where('student_code', $student->student_code)
-                ->sum('payment_amount');
+        $totalPaid = \App\Models\StudentPayment::where('student_code', $student->student_code)
+            ->where('method', '!=', 'Generated')
+            ->sum('payment_amount');
             $monthlyFee = $student->monthly_fee ?? 0;
             $hasUnpaid = ($monthlyFee > 0 && $totalPaid < $monthlyFee);
             $unpaidAmount = max(0, $monthlyFee - $totalPaid);
@@ -1044,6 +1211,8 @@ Route::post('/expense-management/add', [App\Http\Controllers\ManagementExpenseCo
 Route::put('/expense-management/add/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'update'])->name('expense-management.add.update');
 Route::delete('/expense-management/add/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'destroy'])->name('expense-management.add.destroy');
 Route::get('/expense-management/add/export/{format}', [App\Http\Controllers\ManagementExpenseController::class, 'export'])->name('expense-management.add.export');
+Route::get('/expense-management/add/{managementExpense}', [App\Http\Controllers\ManagementExpenseController::class, 'show'])->name('expense-management.add.show');
+Route::get('/expense-management/add/{managementExpense}/print', [App\Http\Controllers\ManagementExpenseController::class, 'print'])->name('expense-management.add.print');
 
 Route::get('/expense-management/categories', [App\Http\Controllers\ExpenseCategoryController::class, 'index'])->name('expense-management.categories');
 Route::post('/expense-management/categories', [App\Http\Controllers\ExpenseCategoryController::class, 'store'])->name('expense-management.categories.store');
@@ -1075,9 +1244,11 @@ Route::get('/salary-loan/loan-management/export/{format}', [App\Http\Controllers
 Route::get('/salary-loan/salary-setting', [App\Http\Controllers\SalarySettingController::class, 'index'])->name('salary-loan.salary-setting');
 Route::put('/salary-loan/salary-setting', [App\Http\Controllers\SalarySettingController::class, 'update'])->name('salary-loan.salary-setting.update');
 
-Route::get('/salary-loan/report', function () {
-    return view('salary-loan.report');
-})->name('salary-loan.report');
+Route::get('/salary-loan/report', [App\Http\Controllers\SalaryLoanReportController::class, 'index'])->name('salary-loan.report');
+Route::get('/salary-loan/report/unpaid-salaries', [App\Http\Controllers\SalaryLoanReportController::class, 'printUnpaid'])->name('salary-loan.report.unpaid');
+Route::get('/salary-loan/report/paid-salaries', [App\Http\Controllers\SalaryLoanReportController::class, 'printPaid'])->name('salary-loan.report.paid');
+Route::get('/salary-loan/report/loan-applications', [App\Http\Controllers\SalaryLoanReportController::class, 'printLoanApplications'])->name('salary-loan.report.loan-applications');
+Route::get('/salary-loan/report/loan-defaulters', [App\Http\Controllers\SalaryLoanReportController::class, 'printLoanDefaulters'])->name('salary-loan.report.loan-defaulters');
 
 // Salary Increment Routes
 Route::get('/salary-loan/increment/percentage', [App\Http\Controllers\SalaryIncrementPercentageController::class, 'index'])->name('salary-loan.increment.percentage');
@@ -1103,16 +1274,22 @@ Route::get('/dashboard/finance', [DashboardController::class, 'finance'])->name(
 Route::get('/reports/fee-default', [App\Http\Controllers\FeeDefaultReportController::class, 'index'])->name('reports.fee-default');
 Route::post('/reports/fee-default/campus', [App\Http\Controllers\FeeDefaultReportController::class, 'storeCampus'])->name('reports.fee-default.campus.store');
 Route::delete('/reports/fee-default/campus/{campus}', [App\Http\Controllers\FeeDefaultReportController::class, 'destroyCampus'])->name('reports.fee-default.campus.destroy');
+Route::get('/reports/fee-default/get-classes-by-campus', [App\Http\Controllers\FeeDefaultReportController::class, 'getClassesByCampus'])->name('reports.fee-default.get-classes-by-campus');
+Route::get('/reports/fee-default/get-sections-by-class', [App\Http\Controllers\FeeDefaultReportController::class, 'getSectionsByClass'])->name('reports.fee-default.get-sections-by-class');
 
-Route::get('/reports/head-wise-dues', function () {
-    return view('reports.head-wise-dues');
-})->name('reports.head-wise-dues');
+Route::get('/reports/head-wise-dues', [App\Http\Controllers\HeadWiseDuesController::class, 'index'])->name('reports.head-wise-dues');
+Route::get('/reports/head-wise-dues/get-classes-by-campus', [App\Http\Controllers\HeadWiseDuesController::class, 'getClassesByCampus'])->name('reports.head-wise-dues.get-classes-by-campus');
 
 Route::get('/reports/income-expense', [App\Http\Controllers\IncomeExpenseReportController::class, 'index'])->name('reports.income-expense');
+Route::get('/reports/income-expense/get-users-by-type', [App\Http\Controllers\IncomeExpenseReportController::class, 'getUsersByType'])->name('reports.income-expense.get-users-by-type');
 
 Route::get('/reports/debit-credit', [App\Http\Controllers\DebitCreditStatementController::class, 'index'])->name('reports.debit-credit');
+Route::get('/reports/debit-credit/get-classes-by-campus', [App\Http\Controllers\DebitCreditStatementController::class, 'getClassesByCampus'])->name('reports.debit-credit.get-classes-by-campus');
+Route::get('/reports/debit-credit/get-sections-by-class', [App\Http\Controllers\DebitCreditStatementController::class, 'getSectionsByClass'])->name('reports.debit-credit.get-sections-by-class');
 
 Route::get('/reports/unpaid-invoices', [App\Http\Controllers\UnpaidInvoicesController::class, 'index'])->name('reports.unpaid-invoices');
+Route::get('/reports/unpaid-invoices/get-classes-by-campus', [App\Http\Controllers\UnpaidInvoicesController::class, 'getClassesByCampus'])->name('reports.unpaid-invoices.get-classes-by-campus');
+Route::get('/reports/unpaid-invoices/get-sections-by-class', [App\Http\Controllers\UnpaidInvoicesController::class, 'getSectionsByClass'])->name('reports.unpaid-invoices.get-sections-by-class');
 
 Route::get('/reports/fee-discount', [App\Http\Controllers\FeeDiscountController::class, 'index'])->name('reports.fee-discount');
 
@@ -1121,15 +1298,22 @@ Route::post('/reports/accounts-summary/campus', [App\Http\Controllers\AccountsSu
 Route::delete('/reports/accounts-summary/campus/{campus}', [App\Http\Controllers\AccountsSummaryController::class, 'destroyCampus'])->name('reports.accounts-summary.campus.destroy');
 
 Route::get('/reports/detailed-income', [App\Http\Controllers\DetailedIncomeController::class, 'index'])->name('reports.detailed-income');
+Route::get('/reports/detailed-income/get-classes-by-campus', [App\Http\Controllers\DetailedIncomeController::class, 'getClassesByCampus'])->name('reports.detailed-income.get-classes-by-campus');
+Route::get('/reports/detailed-income/get-sections-by-class', [App\Http\Controllers\DetailedIncomeController::class, 'getSectionsByClass'])->name('reports.detailed-income.get-sections-by-class');
 
 Route::get('/reports/detailed-expense', [App\Http\Controllers\DetailedExpenseController::class, 'index'])->name('reports.detailed-expense');
+Route::get('/reports/detailed-expense/get-classes-by-campus', [App\Http\Controllers\DetailedExpenseController::class, 'getClassesByCampus'])->name('reports.detailed-expense.get-classes-by-campus');
+Route::get('/reports/detailed-expense/get-sections-by-class', [App\Http\Controllers\DetailedExpenseController::class, 'getSectionsByClass'])->name('reports.detailed-expense.get-sections-by-class');
 
 Route::get('/reports/staff-salary', [App\Http\Controllers\StaffSalaryReportController::class, 'index'])->name('reports.staff-salary');
 Route::get('/reports/staff-salary-summarized', [App\Http\Controllers\StaffSalaryReportController::class, 'summarized'])->name('reports.staff-salary-summarized');
 
 Route::get('/reports/balance-sheet', [App\Http\Controllers\BalanceSheetController::class, 'index'])->name('reports.balance-sheet');
+Route::get('/reports/balance-sheet/get-users-by-campus-and-type', [App\Http\Controllers\BalanceSheetController::class, 'getUsersByCampusAndType'])->name('reports.balance-sheet.get-users-by-campus-and-type');
 
 Route::get('/reports/admission-data', [App\Http\Controllers\AdmissionDataReportController::class, 'index'])->name('reports.admission-data');
+Route::get('/reports/admission-data/get-classes-by-campus', [App\Http\Controllers\AdmissionDataReportController::class, 'getClassesByCampus'])->name('reports.admission-data.get-classes-by-campus');
+Route::get('/reports/admission-data/get-sections-by-class', [App\Http\Controllers\AdmissionDataReportController::class, 'getSectionsByClass'])->name('reports.admission-data.get-sections-by-class');
 
 // Stock & Inventory Routes
 Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(function () {
@@ -1155,14 +1339,15 @@ Route::post('/stock/add-bulk-products', [App\Http\Controllers\BulkProductControl
 Route::get('/stock/add-bulk-products/download-template', [App\Http\Controllers\BulkProductController::class, 'downloadTemplate'])->name('stock.add-bulk-products.download-template');
 
 Route::get('/stock/manage-sale-records', [App\Http\Controllers\SaleRecordController::class, 'index'])->name('stock.manage-sale-records');
+Route::delete('/stock/manage-sale-records/{saleRecord}', [App\Http\Controllers\SaleRecordController::class, 'destroy'])->name('stock.manage-sale-records.destroy');
 
-Route::get('/stock/sale-reports', function () {
-    return view('stock.sale-reports');
-})->name('stock.sale-reports');
+Route::get('/stock/sale-reports', [App\Http\Controllers\StockReportController::class, 'index'])->name('stock.sale-reports');
+Route::get('/stock/sale-reports/print/{reportType}', [App\Http\Controllers\StockReportController::class, 'printReport'])->name('stock.sale-reports.print');
 
 // Student Behavior Management Routes
 Route::get('/student-behavior/recording', [App\Http\Controllers\BehaviorRecordingController::class, 'index'])->name('student-behavior.recording')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 Route::get('/student-behavior/recording/get-sections-by-class', [App\Http\Controllers\BehaviorRecordingController::class, 'getSectionsByClass'])->name('student-behavior.recording.get-sections-by-class');
+Route::get('/student-behavior/recording/get-classes-by-campus', [App\Http\Controllers\BehaviorRecordingController::class, 'getClassesByCampus'])->name('student-behavior.recording.get-classes-by-campus');
 Route::post('/student-behavior/recording/store', [App\Http\Controllers\BehaviorRecordingController::class, 'store'])->name('student-behavior.recording.store')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 
 Route::get('/student-behavior/categories', [App\Http\Controllers\BehaviorCategoryController::class, 'index'])->name('student-behavior.categories');
@@ -1175,6 +1360,7 @@ Route::get('/student-behavior/progress-tracking', [App\Http\Controllers\Progress
 
 Route::get('/student-behavior/reporting-analysis', [App\Http\Controllers\ReportingAnalysisController::class, 'index'])->name('student-behavior.reporting-analysis');
 Route::get('/student-behavior/reporting-analysis/get-sections', [App\Http\Controllers\ReportingAnalysisController::class, 'getSectionsByClass'])->name('student-behavior.reporting-analysis.get-sections');
+Route::get('/student-behavior/reporting-analysis/get-classes', [App\Http\Controllers\ReportingAnalysisController::class, 'getClassesByCampus'])->name('student-behavior.reporting-analysis.get-classes');
 Route::get('/student-behavior/reporting-analysis/report', [App\Http\Controllers\ReportingAnalysisController::class, 'report'])->name('student-behavior.reporting-analysis.report');
 
 // Question Paper Routes
@@ -1291,18 +1477,24 @@ Route::get('/exam/list/export/{format}', [App\Http\Controllers\ExamController::c
 
 Route::get('/exam/marks-entry', [App\Http\Controllers\ExamController::class, 'marksEntry'])->name('exam.marks-entry');
 Route::post('/exam/marks-entry/save', [App\Http\Controllers\ExamController::class, 'saveExamMarks'])->name('exam.marks-entry.save');
+Route::get('/exam/marks-entry/get-classes', [App\Http\Controllers\ExamController::class, 'getClassesForMarksEntry'])->name('exam.marks-entry.get-classes');
+Route::get('/exam/marks-entry/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForMarksEntry'])->name('exam.marks-entry.get-exams');
 Route::get('/exam/marks-entry/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForMarksEntry'])->name('exam.marks-entry.get-sections');
 Route::get('/exam/marks-entry/get-subjects', [App\Http\Controllers\ExamController::class, 'getSubjectsForMarksEntry'])->name('exam.marks-entry.get-subjects');
 
 Route::get('/exam/print-admit-cards', [App\Http\Controllers\ExamController::class, 'printAdmitCards'])->name('exam.print-admit-cards');
 Route::get('/exam/print-admit-cards/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForPrintAdmitCards'])->name('exam.print-admit-cards.get-exams');
+Route::get('/exam/print-admit-cards/get-classes', [App\Http\Controllers\ExamController::class, 'getClassesForPrintAdmitCards'])->name('exam.print-admit-cards.get-classes');
 
 Route::get('/exam/send-admit-cards', function () {
     return view('exam.send-admit-cards');
 })->name('exam.send-admit-cards');
 
 // Exam Grades
-Route::get('/exam/grades/particular', [App\Http\Controllers\ExamController::class, 'gradesParticular'])->name('exam.grades.particular');
+Route::get('/exam/grades/particular', [App\Http\Controllers\ParticularExamGradeController::class, 'index'])->name('exam.grades.particular');
+Route::post('/exam/grades/particular', [App\Http\Controllers\ParticularExamGradeController::class, 'store'])->name('exam.grades.particular.store');
+Route::put('/exam/grades/particular/{particularExamGrade}', [App\Http\Controllers\ParticularExamGradeController::class, 'update'])->name('exam.grades.particular.update');
+Route::delete('/exam/grades/particular/{particularExamGrade}', [App\Http\Controllers\ParticularExamGradeController::class, 'destroy'])->name('exam.grades.particular.destroy');
 Route::get('/exam/grades/get-exams', [App\Http\Controllers\ExamController::class, 'getExams'])->name('exam.grades.get-exams');
 
 Route::get('/exam/grades/final', [App\Http\Controllers\FinalExamGradeController::class, 'index'])->name('exam.grades.final');
@@ -1315,6 +1507,7 @@ Route::get('/exam/grades/final/export/{format}', [App\Http\Controllers\FinalExam
 Route::get('/exam/teacher-remarks/particular', [App\Http\Controllers\ExamController::class, 'teacherRemarksParticular'])->name('exam.teacher-remarks.particular');
 Route::post('/exam/teacher-remarks/particular/save', [App\Http\Controllers\ExamController::class, 'saveTeacherRemarksParticular'])->name('exam.teacher-remarks.particular.save');
 Route::get('/exam/teacher-remarks/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForTeacherRemarks'])->name('exam.teacher-remarks.get-exams');
+Route::get('/exam/teacher-remarks/get-classes', [App\Http\Controllers\ExamController::class, 'getClassesForTeacherRemarks'])->name('exam.teacher-remarks.get-classes');
 Route::get('/exam/teacher-remarks/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForTeacherRemarks'])->name('exam.teacher-remarks.get-sections');
 
 Route::get('/exam/teacher-remarks/final', [App\Http\Controllers\ExamController::class, 'teacherRemarksFinal'])->name('exam.teacher-remarks.final');
@@ -1322,6 +1515,9 @@ Route::post('/exam/teacher-remarks/final/save', [App\Http\Controllers\ExamContro
 
 // Exam Timetable
 Route::get('/exam/timetable/add', [App\Http\Controllers\ExamController::class, 'addTimetable'])->name('exam.timetable.add');
+Route::post('/exam/timetable/add', [App\Http\Controllers\ExamController::class, 'storeTimetable'])->name('exam.timetable.store');
+Route::get('/exam/timetable/get-classes', [App\Http\Controllers\ExamController::class, 'getClassesForTimetable'])->name('exam.timetable.get-classes');
+Route::get('/exam/timetable/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForTimetable'])->name('exam.timetable.get-exams');
 Route::get('/exam/timetable/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForTimetable'])->name('exam.timetable.get-sections');
 Route::get('/exam/timetable/get-subjects', [App\Http\Controllers\ExamController::class, 'getSubjectsForTimetable'])->name('exam.timetable.get-subjects');
 
@@ -1330,12 +1526,14 @@ Route::get('/exam/timetable/get-exams-manage', [App\Http\Controllers\ExamControl
 
 // Tabulation Sheet
 Route::get('/exam/tabulation-sheet/particular', [App\Http\Controllers\ExamController::class, 'tabulationSheetParticular'])->name('exam.tabulation-sheet.particular');
+Route::get('/exam/tabulation-sheet/get-classes', [App\Http\Controllers\ExamController::class, 'getClassesForTabulationSheet'])->name('exam.tabulation-sheet.get-classes');
 Route::get('/exam/tabulation-sheet/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForTabulationSheet'])->name('exam.tabulation-sheet.get-exams');
 
 Route::get('/exam/tabulation-sheet/final', [App\Http\Controllers\ExamController::class, 'tabulationSheetFinal'])->name('exam.tabulation-sheet.final');
 
 // Position Holders
 Route::get('/exam/position-holders/particular', [App\Http\Controllers\ExamController::class, 'positionHoldersParticular'])->name('exam.position-holders.particular');
+Route::get('/exam/position-holders/get-classes', [App\Http\Controllers\ExamController::class, 'getClassesForPositionHolders'])->name('exam.position-holders.get-classes');
 Route::get('/exam/position-holders/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForPositionHolders'])->name('exam.position-holders.get-exams');
 
 Route::get('/exam/position-holders/final', [App\Http\Controllers\ExamController::class, 'positionHoldersFinal'])->name('exam.position-holders.final');
@@ -1350,9 +1548,12 @@ Route::get('/exam/send-marks/final', function () {
 })->name('exam.send-marks.final');
 
 // Print Marksheet
-Route::get('/exam/print-marksheet/particular', function () {
-    return view('exam.print-marksheet.particular');
-})->name('exam.print-marksheet.particular');
+Route::get('/exam/print-marksheet/particular', [App\Http\Controllers\ExamController::class, 'printMarksheetParticular'])->name('exam.print-marksheet.particular');
+Route::get('/exam/print-marksheet/particular/get-classes', [App\Http\Controllers\ExamController::class, 'getClassesForPrintMarksheet'])->name('exam.print-marksheet.particular.get-classes');
+Route::get('/exam/print-marksheet/particular/get-sections', [App\Http\Controllers\ExamController::class, 'getSectionsForPrintMarksheet'])->name('exam.print-marksheet.particular.get-sections');
+Route::get('/exam/print-marksheet/particular/get-exams', [App\Http\Controllers\ExamController::class, 'getExamsForPrintMarksheet'])->name('exam.print-marksheet.particular.get-exams');
+Route::get('/exam/print-marksheet/particular/get-sessions', [App\Http\Controllers\ExamController::class, 'getSessionsForPrintMarksheet'])->name('exam.print-marksheet.particular.get-sessions');
+Route::get('/exam/report', [App\Http\Controllers\ExamController::class, 'examReport'])->name('exam.report');
 
 Route::get('/exam/print-marksheet/final', function () {
     return view('exam.print-marksheet.final');
@@ -1364,6 +1565,7 @@ Route::post('/quiz/manage', [App\Http\Controllers\QuizController::class, 'store'
 Route::put('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'update'])->name('quiz.manage.update');
 Route::delete('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'destroy'])->name('quiz.manage.destroy');
 Route::get('/quiz/manage/export/{format}', [App\Http\Controllers\QuizController::class, 'export'])->name('quiz.manage.export');
+Route::get('/quiz/manage/get-classes-by-campus', [App\Http\Controllers\QuizController::class, 'getClassesByCampus'])->name('quiz.manage.get-classes-by-campus');
 Route::get('/quiz/manage/get-sections-by-class', [App\Http\Controllers\QuizController::class, 'getSectionsByClass'])->name('quiz.manage.get-sections-by-class');
 
 // Certification Routes
@@ -1371,12 +1573,14 @@ Route::get('/certification/student', [App\Http\Controllers\CertificationControll
 Route::get('/certification/student/get-classes', [App\Http\Controllers\CertificationController::class, 'getClasses'])->name('certification.student.get-classes');
 Route::get('/certification/student/get-sections', [App\Http\Controllers\CertificationController::class, 'getSections'])->name('certification.student.get-sections');
 Route::get('/certification/student/{student}/generate', [App\Http\Controllers\CertificationController::class, 'generateCertificate'])->name('certification.student.generate');
+Route::get('/certification/staff/get-staff-types', [App\Http\Controllers\CertificationController::class, 'getStaffTypes'])->name('certification.staff.get-staff-types');
 
 Route::get('/certification/staff', [App\Http\Controllers\CertificationController::class, 'staff'])->name('certification.staff');
 Route::get('/certification/staff/{staff}/generate', [App\Http\Controllers\CertificationController::class, 'generateStaffCertificate'])->name('certification.staff.generate');
 
 // Daily Homework Diary Routes
 Route::get('/homework-diary/manage', [App\Http\Controllers\HomeworkDiaryController::class, 'manage'])->name('homework-diary.manage');
+Route::get('/homework-diary/get-classes-by-campus', [App\Http\Controllers\HomeworkDiaryController::class, 'getClassesByCampus'])->name('homework-diary.get-classes-by-campus');
 Route::get('/homework-diary/get-sections', [App\Http\Controllers\HomeworkDiaryController::class, 'getSections'])->name('homework-diary.get-sections');
 Route::post('/homework-diary/store', [App\Http\Controllers\HomeworkDiaryController::class, 'store'])->name('homework-diary.store');
 Route::post('/homework-diary/send', [App\Http\Controllers\HomeworkDiaryController::class, 'sendDiary'])->name('homework-diary.send');
@@ -1390,6 +1594,7 @@ Route::get('/study-material/lms', [App\Http\Controllers\StudyMaterialController:
 Route::post('/study-material/lms', [App\Http\Controllers\StudyMaterialController::class, 'store'])->name('study-material.store');
 Route::get('/study-material/{studyMaterial}/view-file', [App\Http\Controllers\StudyMaterialController::class, 'viewFile'])->name('study-material.view-file');
 Route::delete('/study-material/lms/{studyMaterial}', [App\Http\Controllers\StudyMaterialController::class, 'destroy'])->name('study-material.destroy');
+Route::get('/study-material/get-classes-by-campus', [App\Http\Controllers\StudyMaterialController::class, 'getClassesByCampus'])->name('study-material.get-classes-by-campus');
 Route::get('/study-material/get-sections-by-class', [App\Http\Controllers\StudyMaterialController::class, 'getSectionsByClass'])->name('study-material.get-sections-by-class');
 Route::get('/study-material/get-subjects-by-class-section', [App\Http\Controllers\StudyMaterialController::class, 'getSubjectsByClassSection'])->name('study-material.get-subjects-by-class-section');
 

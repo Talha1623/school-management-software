@@ -91,7 +91,7 @@ class StudentAttendanceController extends Controller
                 ], 400);
             }
 
-            // If student_id is provided, return only that student's attendance
+            // If student_id is provided, return that student's attendance with monthly summary
             $targetStudent = $student; // Default to authenticated student
             if ($request->filled('student_id')) {
                 $targetStudentId = (int) $request->student_id;
@@ -108,10 +108,78 @@ class StudentAttendanceController extends Controller
                     ], 404);
                 }
 
-                // Get attendance record for this specific student and date
+                if (!$targetStudent->campus || !$targetStudent->class || !$targetStudent->section) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Student information incomplete. Cannot fetch attendance.',
+                        'data' => null,
+                        'token' => null,
+                    ], 400);
+                }
+
+                // Get month and year from the provided date
+                $month = $attendanceDate->month;
+                $year = $attendanceDate->year;
+                
+                // Get start and end dates of the month
+                $monthStart = Carbon::create($year, $month, 1)->startOfDay();
+                $monthEnd = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+
+                // Get all attendance records for this student for the entire month
+                $monthlyAttendances = StudentAttendance::where('student_id', $targetStudentId)
+                    ->whereBetween('attendance_date', [$monthStart->format('Y-m-d'), $monthEnd->format('Y-m-d')])
+                    ->orderBy('attendance_date', 'asc')
+                    ->get();
+
+                // Calculate monthly totals
+                $totalPresent = $monthlyAttendances->where('status', 'Present')->count();
+                $totalAbsent = $monthlyAttendances->where('status', 'Absent')->count();
+                $totalLeave = $monthlyAttendances->where('status', 'Leave')->count();
+                
+                // Calculate total late (check if status is "Late" or remarks contain "late")
+                $totalLate = $monthlyAttendances->filter(function($att) {
+                    return strtolower($att->status) === 'late' 
+                        || (isset($att->remarks) && stripos($att->remarks, 'late') !== false);
+                })->count();
+                
+                // Calculate total hours (for now 0, can be enhanced if time tracking is added)
+                // Assuming 6 hours per day for present days (can be configured)
+                $hoursPerDay = 6; // Default school hours per day
+                $totalHours = $totalPresent * $hoursPerDay;
+
+                // Get attendance for the specific date
                 $attendance = StudentAttendance::where('student_id', $targetStudentId)
                     ->whereDate('attendance_date', $attendanceDate->format('Y-m-d'))
                     ->first();
+
+                // Format date-wise attendance
+                $attendanceByDate = $monthlyAttendances->map(function($att) {
+                    return [
+                        'date' => Carbon::parse($att->attendance_date)->format('Y-m-d'),
+                        'date_formatted' => Carbon::parse($att->attendance_date)->format('d M Y'),
+                        'status' => $att->status,
+                        'remarks' => $att->remarks,
+                    ];
+                })->values();
+
+                // Get all dates in the month and fill missing dates with 'N/A'
+                $allDatesInMonth = [];
+                $currentDate = $monthStart->copy();
+                while ($currentDate->lte($monthEnd)) {
+                    $dateStr = $currentDate->format('Y-m-d');
+                    $existingAttendance = $monthlyAttendances->first(function($att) use ($dateStr) {
+                        return Carbon::parse($att->attendance_date)->format('Y-m-d') === $dateStr;
+                    });
+                    
+                    $allDatesInMonth[] = [
+                        'date' => $dateStr,
+                        'date_formatted' => $currentDate->format('d M Y'),
+                        'status' => $existingAttendance ? $existingAttendance->status : 'N/A',
+                        'remarks' => $existingAttendance ? $existingAttendance->remarks : null,
+                    ];
+                    
+                    $currentDate->addDay();
+                }
 
                 $studentsData = [[
                     'id' => $targetStudent->id,
@@ -123,6 +191,32 @@ class StudentAttendanceController extends Controller
                     'status' => $attendance ? $attendance->status : 'N/A',
                     'remarks' => $attendance ? $attendance->remarks : null,
                 ]];
+
+                // Return response with monthly summary and date-wise attendance
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Class attendance retrieved successfully',
+                    'data' => [
+                        'date' => $attendanceDate->format('Y-m-d'),
+                        'date_formatted' => $attendanceDate->format('d M Y'),
+                        'month' => $month,
+                        'year' => $year,
+                        'month_formatted' => $attendanceDate->format('F Y'),
+                        'class' => $targetStudent->class,
+                        'section' => $targetStudent->section,
+                        'campus' => $targetStudent->campus,
+                        'monthly_summary' => [
+                            'total_present' => $totalPresent,
+                            'total_absent' => $totalAbsent,
+                            'total_leave' => $totalLeave,
+                            'total_late' => $totalLate,
+                            'total_hours' => $totalHours,
+                        ],
+                        'students' => $studentsData,
+                        'attendance_by_date' => $allDatesInMonth,
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
             } else {
                 // Get all students in the same class and section
                 $classStudents = Student::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])

@@ -207,6 +207,50 @@
 </style>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
+    const staffTypeSelect = document.getElementById('filter_staff_type');
+    const initialStaffType = staffTypeSelect ? staffTypeSelect.value : '';
+
+    if (campusSelect && staffTypeSelect) {
+        campusSelect.addEventListener('change', function() {
+            const selectedCampus = this.value;
+
+            staffTypeSelect.innerHTML = '<option value=\"\">All Types</option>';
+
+            const params = new URLSearchParams();
+            if (selectedCampus) {
+                params.append('campus', selectedCampus);
+            }
+
+            fetch(`{{ route('certification.staff.get-staff-types') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    staffTypeSelect.innerHTML = '<option value=\"\">All Types</option>';
+                    if (data && data.length > 0) {
+                        data.forEach(type => {
+                            const option = document.createElement('option');
+                            option.value = type;
+                            option.textContent = type;
+                            staffTypeSelect.appendChild(option);
+                        });
+                    }
+                    if (initialStaffType) {
+                        staffTypeSelect.value = initialStaffType;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading staff types:', error);
+                    staffTypeSelect.innerHTML = '<option value=\"\">Error loading types</option>';
+                });
+        });
+
+        if (campusSelect.value) {
+            campusSelect.dispatchEvent(new Event('change'));
+        }
+    }
+});
+
 // Search functionality
 function performSearch() {
     const searchInput = document.getElementById('searchInput');

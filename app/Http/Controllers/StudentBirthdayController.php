@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Student;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class StudentBirthdayController extends Controller
@@ -12,8 +15,7 @@ class StudentBirthdayController extends Controller
      */
     public function index(): View
     {
-        // Empty array - no static data
-        $students = [];
+        $students = $this->getStudentsData();
 
         return view('student.birthday', compact('students'));
     }
@@ -39,11 +41,64 @@ class StudentBirthdayController extends Controller
     }
 
     /**
+     * Print birthday card for a student.
+     */
+    public function printBirthdayCard(Student $student): View
+    {
+        return view('student.birthday-card-print', [
+            'student' => $student,
+            'printedAt' => now()->format('d-m-Y H:i'),
+            'autoPrint' => request()->get('auto_print'),
+        ]);
+    }
+
+    /**
      * Get students data (empty for now)
      */
     private function getStudentsData()
     {
-        return [];
+        $today = Carbon::today();
+
+        $students = Student::whereNotNull('date_of_birth')
+            ->whereNotNull('class')
+            ->where('class', '!=', '')
+            ->orderByRaw("DATE_FORMAT(date_of_birth, '%m-%d') asc")
+            ->get();
+
+        return $students->map(function (Student $student) use ($today) {
+            $birthday = $student->date_of_birth ? Carbon::parse($student->date_of_birth) : null;
+            $status = 'N/A';
+            $wish = 'Pending';
+            $birthdayCard = 'Pending';
+
+            if ($birthday) {
+                $birthdayThisYear = $birthday->copy()->year($today->year);
+                if ($birthdayThisYear->isSameDay($today)) {
+                    $status = 'Today';
+                    $wish = 'Sent';
+                    $birthdayCard = 'Sent';
+                } elseif ($birthdayThisYear->isAfter($today)) {
+                    $status = 'Upcoming';
+                } else {
+                    $status = 'Past';
+                }
+            }
+
+            return [
+                'id' => $student->id,
+                'roll' => $student->student_code ?? $student->gr_number ?? 'N/A',
+                'student' => $student->student_name ?? 'N/A',
+                'parent' => $student->father_name ?? 'N/A',
+                'class' => $student->class ?? 'N/A',
+                'section' => $student->section ?? 'N/A',
+                'birthday' => $student->date_of_birth ? $student->date_of_birth->format('Y-m-d') : null,
+                'status' => $status,
+                'birthday_card' => $birthdayCard,
+                'wish' => $wish,
+                'picture' => $student->photo ? Storage::url($student->photo) : null,
+                'parent_phone' => $student->whatsapp_number ?: $student->father_phone,
+            ];
+        })->values();
     }
 
     /**

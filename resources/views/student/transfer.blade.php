@@ -35,7 +35,7 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     From Campus
                                 </label>
-                                <select class="form-select form-select-sm" name="from_campus" id="from_campus" onchange="loadStudents()">
+                                <select class="form-select form-select-sm" name="from_campus" id="from_campus" onchange="loadStudents('campus')">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
                                         <option value="{{ $campus }}">{{ $campus }}</option>
@@ -48,7 +48,7 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     To Campus <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select form-select-sm" name="to_campus" id="to_campus" required>
+                                <select class="form-select form-select-sm" name="to_campus" id="to_campus" required onchange="loadClassesByToCampus(this.value)">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
                                         <option value="{{ $campus }}">{{ $campus }}</option>
@@ -61,8 +61,8 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Class <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select form-select-sm" name="class" id="class" required onchange="loadStudents()">
-                                    <option value="">Select Class</option>
+                                <select class="form-select form-select-sm" name="class" id="class" required onchange="loadStudents('class')" disabled>
+                                    <option value="">Select Campus First</option>
                                     @foreach($classes as $class)
                                         <option value="{{ $class }}">{{ $class }}</option>
                                     @endforeach
@@ -74,9 +74,10 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Student Code <span class="text-danger">*</span>
                                 </label>
-                                <input type="text" class="form-control form-control-sm" name="student_code" id="student_code" placeholder="Type Student Code" required autocomplete="off" onkeyup="searchStudent(this.value)">
+                                <select class="form-select form-select-sm" name="student_code" id="student_code" required onchange="selectStudentByCode(this.value)">
+                                    <option value="">Select Student Code</option>
+                                </select>
                                 <input type="hidden" name="student_id" id="student_id">
-                                <div id="student-suggestions" class="position-absolute bg-white border rounded shadow-sm" style="display: none; max-height: 200px; overflow-y: auto; z-index: 1000; width: 100%; margin-top: 2px; left: 0; right: 0;"></div>
                                 <div id="student-info" class="mt-1" style="display: none;">
                                     <small class="text-success">
                                         <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check_circle</span>
@@ -207,76 +208,169 @@
 <script>
 let searchTimeout;
 
-// Search student by code or name
-function searchStudent(query) {
+function resetStudentSelection() {
     const studentCodeInput = document.getElementById('student_code');
     const studentIdInput = document.getElementById('student_id');
-    const suggestionsDiv = document.getElementById('student-suggestions');
     const studentInfoDiv = document.getElementById('student-info');
     const studentNameDisplay = document.getElementById('student-name-display');
-    
-    // Clear previous timeout
-    clearTimeout(searchTimeout);
-    
-    // Hide suggestions if query is empty
-    if (!query || query.length < 2) {
-        suggestionsDiv.style.display = 'none';
-        studentInfoDiv.style.display = 'none';
-        studentIdInput.value = '';
-        return;
-    }
-    
-    // Debounce search
-    searchTimeout = setTimeout(() => {
-        fetch(`{{ route('student.transfer.search-student') }}?code=${encodeURIComponent(query)}`)
-            .then(response => response.json())
-            .then(data => {
-                suggestionsDiv.innerHTML = '';
-                
-                if (data.students && data.students.length > 0) {
-                    suggestionsDiv.style.display = 'block';
-                    
-                    data.students.forEach(student => {
-                        const div = document.createElement('div');
-                        div.className = 'p-2 border-bottom cursor-pointer student-suggestion-item';
-                        div.style.cursor = 'pointer';
-                        div.innerHTML = `
-                            <div class="fw-semibold">${student.code}</div>
-                            <div class="text-muted small">${student.name} - ${student.class} ${student.section || ''}</div>
-                        `;
-                        div.onclick = function() {
-                            studentCodeInput.value = student.code;
-                            studentIdInput.value = student.id;
-                            studentNameDisplay.textContent = student.name;
-                            studentInfoDiv.style.display = 'block';
-                            suggestionsDiv.style.display = 'none';
-                        };
-                        div.onmouseover = function() {
-                            this.style.backgroundColor = '#f8f9fa';
-                        };
-                        div.onmouseout = function() {
-                            this.style.backgroundColor = 'white';
-                        };
-                        suggestionsDiv.appendChild(div);
-                    });
-                } else {
-                    suggestionsDiv.style.display = 'none';
-                }
-            })
-            .catch(error => {
-                console.error('Error searching students:', error);
-                suggestionsDiv.style.display = 'none';
-            });
-    }, 300);
+
+    if (studentCodeInput) studentCodeInput.value = '';
+    if (studentIdInput) studentIdInput.value = '';
+    if (studentNameDisplay) studentNameDisplay.textContent = '';
+    if (studentInfoDiv) studentInfoDiv.style.display = 'none';
 }
 
-// Hide suggestions when clicking outside
-document.addEventListener('click', function(e) {
-    const suggestionsDiv = document.getElementById('student-suggestions');
-    const studentCodeInput = document.getElementById('student_code');
-    
-    if (!suggestionsDiv.contains(e.target) && e.target !== studentCodeInput) {
-        suggestionsDiv.style.display = 'none';
+function loadClassesByCampus(campusValue) {
+    if (!classSelect) return;
+
+    if (!campusValue) {
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        classSelect.disabled = true;
+        resetStudentSelection();
+        return;
+    }
+
+    classSelect.innerHTML = '<option value="">Loading classes...</option>';
+    classSelect.disabled = true;
+
+    fetch(`{{ route('student.transfer.get-classes-by-campus') }}?campus=${encodeURIComponent(campusValue)}`)
+        .then(response => response.json())
+        .then(data => {
+            const classes = Array.isArray(data.classes) ? data.classes : [];
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+
+            if (classes.length > 0) {
+                classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+                classSelect.disabled = false;
+            } else {
+                classSelect.innerHTML = '<option value="">No classes found</option>';
+                classSelect.disabled = true;
+            }
+            loadStudentsByClass();
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            classSelect.disabled = true;
+        });
+}
+
+function loadClassesByToCampus(campusValue) {
+    const classSelect = document.getElementById('class');
+    if (!classSelect) return;
+
+    if (!campusValue) {
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        classSelect.disabled = true;
+        return;
+    }
+
+    classSelect.innerHTML = '<option value="">Loading classes...</option>';
+    classSelect.disabled = true;
+
+    fetch(`{{ route('student.transfer.get-classes-by-campus') }}?campus=${encodeURIComponent(campusValue)}`)
+        .then(response => response.json())
+        .then(data => {
+            const classes = Array.isArray(data.classes) ? data.classes : [];
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+
+            if (classes.length > 0) {
+                classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+                classSelect.disabled = false;
+            } else {
+                classSelect.innerHTML = '<option value="">No classes found</option>';
+                classSelect.disabled = true;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            classSelect.disabled = true;
+        });
+}
+
+function loadStudents(source) {
+    const campusValue = document.getElementById('from_campus')?.value;
+    if (source === 'campus') {
+        loadStudentsByClass();
+        return;
+    }
+    if (source === 'class') {
+        return;
+    }
+    loadStudentsByClass();
+}
+
+function loadStudentsByClass() {
+    const campusValue = document.getElementById('from_campus')?.value;
+    const studentCodeSelect = document.getElementById('student_code');
+
+    resetStudentSelection();
+
+    if (!campusValue || !studentCodeSelect) {
+        return;
+    }
+
+    studentCodeSelect.innerHTML = '<option value="">Loading...</option>';
+
+    const params = new URLSearchParams();
+    params.append('campus', campusValue);
+
+    fetch(`{{ route('student.transfer.get-students') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            const students = Array.isArray(data.students) ? data.students : [];
+            studentCodeSelect.innerHTML = '<option value="">Select Student Code</option>';
+            students.forEach(student => {
+                const option = document.createElement('option');
+                option.value = student.code;
+                option.textContent = `${student.code} - ${student.name}`;
+                option.dataset.studentId = student.id;
+                option.dataset.studentName = student.name;
+                option.dataset.studentClass = student.class || '';
+                studentCodeSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading students:', error);
+            studentCodeSelect.innerHTML = '<option value="">Error loading students</option>';
+        });
+}
+
+function selectStudentByCode(code) {
+    const studentCodeSelect = document.getElementById('student_code');
+    const studentIdInput = document.getElementById('student_id');
+    const studentInfoDiv = document.getElementById('student-info');
+    const studentNameDisplay = document.getElementById('student-name-display');
+
+    if (!studentCodeSelect || !studentIdInput || !studentInfoDiv || !studentNameDisplay) {
+        return;
+    }
+
+    const selectedOption = studentCodeSelect.options[studentCodeSelect.selectedIndex];
+    const studentId = selectedOption?.dataset?.studentId || '';
+    const studentName = selectedOption?.dataset?.studentName || '';
+
+    studentIdInput.value = studentId;
+    studentNameDisplay.textContent = studentName;
+    studentInfoDiv.style.display = studentId ? 'block' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const campusValue = document.getElementById('from_campus')?.value;
+    if (campusValue) {
+        loadClassesByCampus(campusValue);
+        loadStudentsByClass();
     }
 });
 
@@ -284,10 +378,9 @@ document.addEventListener('click', function(e) {
 document.getElementById('transferForm').addEventListener('submit', function(e) {
     const toCampus = document.getElementById('to_campus').value;
     const classValue = document.getElementById('class').value;
-    const studentCode = document.getElementById('student_code').value;
     const studentId = document.getElementById('student_id').value;
     
-    if (!toCampus || !classValue || !studentCode) {
+    if (!toCampus || !classValue) {
         e.preventDefault();
         alert('Please fill in all required fields (marked with *)');
         return false;
@@ -295,7 +388,7 @@ document.getElementById('transferForm').addEventListener('submit', function(e) {
     
     if (!studentId) {
         e.preventDefault();
-        alert('Please select a valid student from the suggestions.');
+        alert('Please select a student from the list.');
         return false;
     }
     

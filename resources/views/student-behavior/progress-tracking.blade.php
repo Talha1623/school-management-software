@@ -99,8 +99,8 @@
                                 @endif
                             </div>
                             <div class="mb-2" style="font-size: 11px; color: #666;">
-                                <span>{{ $campus && $campus->phone ? $campus->phone : config('app.phone', '+923316074246') }}</span> | 
-                                <span>{{ $campus && $campus->email ? $campus->email : config('app.email', 'arainabdurrehman3@gmail.com') }}</span>
+                                <span>{{ $contactPhone }}</span> | 
+                                <span>{{ $contactEmail }}</span>
                             </div>
                             <div class="mt-2 pt-2 border-top">
                                 <h5 class="mb-0 fw-bold" style="color: #000; font-size: 14px;">Behavior Report | {{ $student->student_name }}</h5>
@@ -324,5 +324,11 @@ document.addEventListener('DOMContentLoaded', function() {
 function printReport() {
     window.print();
 }
+
+@if(request()->get('auto_print') && $student)
+window.addEventListener('load', function() {
+    window.print();
+});
+@endif
 </script>
 @endsection

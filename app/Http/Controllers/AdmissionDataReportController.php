@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Student;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -19,35 +20,45 @@ class AdmissionDataReportController extends Controller
         $filterCampus = $request->get('filter_campus');
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
-        $filterStatus = $request->get('filter_status');
-
-        // Get campuses from students
-        $campuses = Student::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
-        
+        $filterYears = $request->get('filter_year', []);
+        if (!is_array($filterYears)) {
+            $filterYears = [$filterYears];
+        }
+        $filterYears = array_values(array_filter($filterYears));
+        // Get campuses from Campus model first, then fallback to students/classes/sections
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
+        if ($campuses->isEmpty()) {
+            $campuses = Student::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
+        }
         if ($campuses->isEmpty()) {
             $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
             $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
             $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-            
-            if ($campuses->isEmpty()) {
-                $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-            }
         }
 
         // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($filterCampus) {
+            $classesQuery->where('campus', $filterCampus);
         }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
 
         // Get sections
-        $sections = Section::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D', 'E']);
+        $sectionsQuery = Section::whereNotNull('name');
+        if ($filterCampus) {
+            $sectionsQuery->where('campus', $filterCampus);
         }
+        if ($filterClass) {
+            $sectionsQuery->where('class', $filterClass);
+        }
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
 
-        // Status options
-        $statusOptions = collect(['Active', 'Inactive', 'Pending', 'Graduated', 'Transferred']);
+        // Admission years
+        $years = Student::whereNotNull('admission_date')
+            ->selectRaw('YEAR(admission_date) as year')
+            ->distinct()
+            ->orderBy('year', 'desc')
+            ->pluck('year');
 
         // Query students
         $query = Student::query();
@@ -61,6 +72,13 @@ class AdmissionDataReportController extends Controller
         if ($filterSection) {
             $query->where('section', $filterSection);
         }
+        if (!empty($filterYears)) {
+            $query->where(function ($yearQuery) use ($filterYears) {
+                foreach ($filterYears as $year) {
+                    $yearQuery->orWhereYear('admission_date', $year);
+                }
+            });
+        }
 
         $students = $query->orderBy('student_name')->get();
 
@@ -68,31 +86,15 @@ class AdmissionDataReportController extends Controller
         $admissionRecords = collect();
 
         foreach ($students as $student) {
-            // Determine status based on student data
-            // Default to Active if student has admission_date
-            $status = $student->admission_date ? 'Active' : 'Pending';
-            
-            // Apply status filter if specified
-            if ($filterStatus && $status != $filterStatus) {
-                continue;
-            }
-
             $admissionRecords->push([
                 'student_code' => $student->student_code,
                 'student_name' => $student->student_name,
                 'surname_caste' => $student->surname_caste,
-                'gender' => $student->gender,
-                'date_of_birth' => $student->date_of_birth,
-                'photo' => $student->photo,
                 'campus' => $student->campus,
                 'class' => $student->class,
                 'section' => $student->section,
                 'admission_date' => $student->admission_date,
                 'father_name' => $student->father_name,
-                'father_phone' => $student->father_phone,
-                'whatsapp_number' => $student->whatsapp_number,
-                'gr_number' => $student->gr_number,
-                'status' => $status,
             ]);
         }
 
@@ -100,13 +102,45 @@ class AdmissionDataReportController extends Controller
             'campuses',
             'classes',
             'sections',
-            'statusOptions',
+            'years',
             'admissionRecords',
             'filterCampus',
             'filterClass',
             'filterSection',
-            'filterStatus'
+            'filterYears'
         ));
+    }
+
+    /**
+     * Get classes by campus for admission data report.
+     */
+    public function getClassesByCampus(Request $request)
+    {
+        $campus = $request->get('campus');
+        $query = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $query->where('campus', $campus);
+        }
+        $classes = $query->distinct()->pluck('class_name')->sort()->values();
+        return response()->json($classes);
+    }
+
+    /**
+     * Get sections by class and campus for admission data report.
+     */
+    public function getSectionsByClass(Request $request)
+    {
+        $class = $request->get('class');
+        $campus = $request->get('campus');
+        $query = Section::whereNotNull('name');
+        if ($campus) {
+            $query->where('campus', $campus);
+        }
+        if ($class) {
+            $query->where('class', $class);
+        }
+        $sections = $query->distinct()->pluck('name')->sort()->values();
+        return response()->json($sections);
     }
 }
 

@@ -109,7 +109,11 @@
             </div>
 
             <!-- Staff Attendance Table -->
-            @if(isset($staffList) && $staffList->count() > 0)
+            @if(isset($campus) && $campus)
+                <div class="mb-2">
+                    <span class="badge bg-primary">Campus: {{ $campus }}</span>
+                </div>
+                @if(isset($staffList) && $staffList->count() > 0)
                 <form action="{{ route('attendance.staff.store') }}" method="POST" id="saveAttendanceForm">
                     @csrf
                     <input type="hidden" name="date" value="{{ $date }}">
@@ -117,22 +121,45 @@
                     <input type="hidden" name="staff_category" value="{{ $staffCategory }}">
                     <input type="hidden" name="type" value="{{ $type }}">
 
-                    <!-- Late Arrival Time - Single Input for All -->
-                    <div class="card border-0 shadow-sm mb-3" style="border-radius: 8px; overflow: hidden;">
-                        <div class="card-body p-3">
-                            <div class="row align-items-center">
-                                <div class="col-md-3">
-                                    <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
-                                        Late Arrival Time
-                                    </label>
-                                    <input type="time" name="late_arrival_time" id="late_arrival_time" class="form-control form-control-sm" value="09:00" style="height: 32px;">
-                                </div>
-                                <div class="col-md-9">
-                                    <small class="text-muted">This time will be used to calculate late arrival for all staff members.</small>
+                    @if(!isset($type) || $type !== 'Subject Attendance')
+                        <!-- Late Arrival Time - Single Input for All -->
+                        <div class="card border-0 shadow-sm mb-3" style="border-radius: 8px; overflow: hidden;">
+                            <div class="card-body p-3">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
+                                            Late Arrival Time
+                                        </label>
+                                        <input type="time" name="late_arrival_time" id="late_arrival_time" class="form-control form-control-sm" value="09:00" style="height: 32px;">
+                                    </div>
+                                    <div class="col-md-9">
+                                        <small class="text-muted">This time will be used to calculate late arrival for all staff members.</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    @endif
+
+                    @if(!isset($type) || $type !== 'Subject Attendance')
+                        <div class="d-flex flex-wrap justify-content-center gap-2 mb-3">
+                            <button type="button" class="btn btn-sm btn-success text-white px-2 py-1" onclick="markAllStaffStatus('Present')">
+                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span>
+                                <span style="font-size: 12px;">Mark All Present</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger text-white px-2 py-1" onclick="markAllStaffStatus('Absent')">
+                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">close</span>
+                                <span style="font-size: 12px;">Mark All Absent</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-warning text-white px-2 py-1" onclick="markAllStaffStatus('Holiday')">
+                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event</span>
+                                <span style="font-size: 12px;">Mark All Holiday</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-primary text-white px-2 py-1" onclick="markAllStaffStatus('Sunday')">
+                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event_available</span>
+                                <span style="font-size: 12px;">Mark All Sunday</span>
+                            </button>
+                        </div>
+                    @endif
 
                     <div class="card border-0 shadow-sm mb-3" style="border-radius: 8px; overflow: hidden;">
                         <div class="card-body p-3">
@@ -144,11 +171,17 @@
                                             <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Name</th>
                                             <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Father/Husband</th>
                                             <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Designation</th>
-                                            <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Attendance Status</th>
-                                            <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Arrival Timing</th>
-                                            <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Exit Timing</th>
-                                            <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Late Arrival</th>
-                                            <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Leave Deduction</th>
+                                            @if(isset($type) && $type === 'Subject Attendance')
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Assigned Subjects ({{ $dateLabel ?? '' }})</th>
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Conducted Lectures ({{ $dateLabel ?? '' }})</th>
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Late Arrival</th>
+                                            @else
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Attendance Status</th>
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Arrival Timing</th>
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Exit Timing</th>
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Late Arrival</th>
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Leave Deduction</th>
+                                            @endif
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -159,50 +192,72 @@
                                                 $startTime = $attendance['start_time'] ?? '';
                                                 $endTime = $attendance['end_time'] ?? '';
                                                 $lateArrival = $attendance['late_arrival'] ?? null;
+                                                $conductedLectures = $attendance['conducted_lectures'] ?? '';
+                                                $assignedSubjects = $assignedSubjectsByStaff[$staff->id] ?? [];
                                             @endphp
                                             <tr style="height: 60px;">
                                                 <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">{{ $staff->emp_id ?? 'N/A' }}</td>
                                                 <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;"><strong>{{ $staff->name }}</strong></td>
                                                 <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">{{ $staff->father_husband_name ?? 'N/A' }}</td>
                                                 <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">{{ $staff->designation ?? 'N/A' }}</td>
-                                                <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                    <select name="attendance[{{ $staff->id }}][status]" class="form-select form-select-sm attendance-status" style="min-width: 120px;">
-                                                        <option value="">Select Status</option>
-                                                        <option value="Present" {{ $status == 'Present' ? 'selected' : '' }}>Present</option>
-                                                        <option value="Absent" {{ $status == 'Absent' ? 'selected' : '' }}>Absent</option>
-                                                        <option value="Leave" {{ $status == 'Leave' ? 'selected' : '' }}>Leave</option>
-                                                        <option value="Half Day" {{ $status == 'Half Day' ? 'selected' : '' }}>Half Day</option>
-                                                    </select>
-                                                    <input type="hidden" name="attendance[{{ $staff->id }}][staff_id]" value="{{ $staff->id }}">
-                                                </td>
-                                                <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                    <input type="time" name="attendance[{{ $staff->id }}][start_time]" class="form-control form-control-sm arrival-time" value="{{ $startTime ? date('H:i', strtotime($startTime)) : '' }}" style="min-width: 100px;">
-                                                </td>
-                                                <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                    <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $endTime ? date('H:i', strtotime($endTime)) : '' }}" style="min-width: 100px;">
-                                                </td>
-                                                <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                    <div class="d-flex flex-column gap-2">
-                                                        <select name="attendance[{{ $staff->id }}][auto_late_arrival]" class="form-select form-select-sm auto-late-arrival" style="min-width: 80px;">
-                                                            <option value="Auto" selected>Auto</option>
+                                                <input type="hidden" name="attendance[{{ $staff->id }}][staff_id]" value="{{ $staff->id }}">
+                                                @if(isset($type) && $type === 'Subject Attendance')
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle; min-width: 220px;">
+                                                        <span class="badge bg-info text-white" style="font-size: 12px;">
+                                                            {{ !empty($assignedSubjects) ? count($assignedSubjects) : 0 }}
+                                                        </span>
+                                                    </td>
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <input type="number" min="0" class="form-control form-control-sm" name="attendance[{{ $staff->id }}][conducted_lectures]" value="{{ $conductedLectures !== null ? $conductedLectures : '' }}" style="width: 120px;">
+                                                    </td>
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <select name="attendance[{{ $staff->id }}][late_arrival]" class="form-select form-select-sm" style="min-width: 90px;">
+                                                            <option value="Auto">Auto</option>
                                                             <option value="Yes">Yes</option>
                                                             <option value="No">No</option>
                                                         </select>
-                                                        <div class="late-arrival-display" style="min-height: 20px;">
-                                                            @if($lateArrival)
-                                                                <span class="badge bg-warning text-dark">{{ $lateArrival }}</span>
-                                                            @else
-                                                                <span class="text-muted">-</span>
-                                                            @endif
+                                                    </td>
+                                                @else
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <select name="attendance[{{ $staff->id }}][status]" class="form-select form-select-sm attendance-status" style="min-width: 120px;">
+                                                            <option value="">Select Status</option>
+                                                            <option value="Present" {{ $status == 'Present' ? 'selected' : '' }}>Present</option>
+                                                            <option value="Absent" {{ $status == 'Absent' ? 'selected' : '' }}>Absent</option>
+                                                            <option value="Holiday" {{ $status == 'Holiday' ? 'selected' : '' }}>Holiday</option>
+                                                            <option value="Sunday" {{ $status == 'Sunday' ? 'selected' : '' }}>Sunday</option>
+                                                            <option value="Leave" {{ $status == 'Leave' ? 'selected' : '' }}>Leave</option>
+                                                            <option value="Half Day" {{ $status == 'Half Day' ? 'selected' : '' }}>Half Day</option>
+                                                        </select>
+                                                    </td>
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <input type="time" name="attendance[{{ $staff->id }}][start_time]" class="form-control form-control-sm arrival-time" value="{{ $startTime ? date('H:i', strtotime($startTime)) : '' }}" style="min-width: 100px;">
+                                                    </td>
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $endTime ? date('H:i', strtotime($endTime)) : '' }}" style="min-width: 100px;">
+                                                    </td>
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <div class="d-flex flex-column gap-2">
+                                                            <select name="attendance[{{ $staff->id }}][auto_late_arrival]" class="form-select form-select-sm auto-late-arrival" style="min-width: 80px;">
+                                                                <option value="Auto" selected>Auto</option>
+                                                                <option value="Yes">Yes</option>
+                                                                <option value="No">No</option>
+                                                            </select>
+                                                            <div class="late-arrival-display" style="min-height: 20px;">
+                                                                @if($lateArrival)
+                                                                    <span class="badge bg-warning text-dark">{{ $lateArrival }}</span>
+                                                                @else
+                                                                    <span class="text-muted">-</span>
+                                                                @endif
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </td>
-                                                <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                    <select name="attendance[{{ $staff->id }}][leave_deduction]" class="form-select form-select-sm" style="min-width: 100px;">
-                                                        <option value="No" {{ (isset($attendance['leave_deduction']) && $attendance['leave_deduction'] == 'No') ? 'selected' : '' }}>No</option>
-                                                        <option value="Yes" {{ (isset($attendance['leave_deduction']) && $attendance['leave_deduction'] == 'Yes') ? 'selected' : '' }}>Yes</option>
-                                                    </select>
-                                                </td>
+                                                    </td>
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <select name="attendance[{{ $staff->id }}][leave_deduction]" class="form-select form-select-sm" style="min-width: 100px;">
+                                                            <option value="No" {{ (isset($attendance['leave_deduction']) && $attendance['leave_deduction'] == 'No') ? 'selected' : '' }}>No</option>
+                                                            <option value="Yes" {{ (isset($attendance['leave_deduction']) && $attendance['leave_deduction'] == 'Yes') ? 'selected' : '' }}>Yes</option>
+                                                        </select>
+                                                    </td>
+                                                @endif
                                             </tr>
                                         @endforeach
                                     </tbody>
@@ -219,10 +274,16 @@
                         </button>
                     </div>
                 </form>
-            @elseif(request()->has('campus') || request()->has('staff_category') || request()->has('date'))
+                @else
+                    <div class="alert alert-info">
+                        <span class="material-symbols-outlined" style="vertical-align: middle;">info</span>
+                        No staff found with the selected filters.
+                    </div>
+                @endif
+            @else
                 <div class="alert alert-info">
                     <span class="material-symbols-outlined" style="vertical-align: middle;">info</span>
-                    No staff found with the selected filters.
+                    Select a campus and click Filter to view staff attendance.
                 </div>
             @endif
         </div>
@@ -337,6 +398,13 @@
 </style>
 
 <script>
+function markAllStaffStatus(status) {
+    const statusSelects = document.querySelectorAll('.attendance-status');
+    statusSelects.forEach(select => {
+        select.value = status;
+    });
+}
+
 // Calculate late arrival when arrival time changes (only if Auto is Yes)
 document.addEventListener('DOMContentLoaded', function() {
     const arrivalTimeInputs = document.querySelectorAll('.arrival-time');
@@ -411,6 +479,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveForm = document.getElementById('saveAttendanceForm');
     if (saveForm) {
         saveForm.addEventListener('submit', function(e) {
+            const typeSelect = document.getElementById('type');
+            const isSubjectAttendance = typeSelect && typeSelect.value === 'Subject Attendance';
+
+            if (isSubjectAttendance) {
+                const lectureInputs = document.querySelectorAll('input[name$="[conducted_lectures]"]');
+                let hasLectureValue = false;
+                lectureInputs.forEach(input => {
+                    if (input.value !== '') {
+                        hasLectureValue = true;
+                    }
+                });
+
+                if (!hasLectureValue) {
+                    e.preventDefault();
+                    alert('Please enter conducted lectures before saving.');
+                    return false;
+                }
+                return;
+            }
+
             // Validate that at least one attendance status is selected
             const statusSelects = document.querySelectorAll('.attendance-status');
             let hasSelection = false;

@@ -58,7 +58,7 @@
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
                         <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
                             <option value="">All Classes</option>
-                            @foreach($classes as $className)
+                            @foreach(($filterClasses ?? $classes) as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
                             @endforeach
                         </select>
@@ -752,6 +752,7 @@ function resetForm() {
 
 // Dynamic section and subject loading
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
     const subjectSelect = document.getElementById('subject');
@@ -759,12 +760,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const youtubeUrlField = document.getElementById('youtubeUrlField');
     const fileUploadField = document.getElementById('fileUploadField');
 
+    // Load classes when campus changes (modal form)
+    if (campusSelect && classSelect) {
+        campusSelect.addEventListener('change', function() {
+            const selectedCampus = this.value;
+            loadClassesForCampus(selectedCampus);
+        });
+    }
+
     // Load sections when class changes
     if (classSelect && sectionSelect) {
         classSelect.addEventListener('change', function() {
             const selectedClass = this.value;
             if (selectedClass) {
-                loadSections(selectedClass);
+                loadSections(selectedClass, campusSelect ? campusSelect.value : '');
                 // Also load subjects
                 loadSubjects(selectedClass, sectionSelect.value);
             } else {
@@ -810,13 +819,55 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function loadSections(selectedClass) {
+    function loadClassesForCampus(selectedCampus) {
+        if (!classSelect) return;
+
+        if (!selectedCampus) {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            sectionSelect.disabled = true;
+            subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+            subjectSelect.disabled = true;
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        fetch(`{{ route('study-material.get-classes-by-campus') }}?campus=${encodeURIComponent(selectedCampus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">Select Class</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        const option = document.createElement('option');
+                        option.value = className;
+                        option.textContent = className;
+                        classSelect.appendChild(option);
+                    });
+                }
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                sectionSelect.disabled = true;
+                subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+                subjectSelect.disabled = true;
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            });
+    }
+
+    function loadSections(selectedClass, selectedCampus) {
         if (!sectionSelect) return;
         
         sectionSelect.innerHTML = '<option value="">Loading...</option>';
         sectionSelect.disabled = true;
+
+        const params = new URLSearchParams();
+        params.append('class', selectedClass);
+        if (selectedCampus) {
+            params.append('campus', selectedCampus);
+        }
         
-        fetch(`{{ route('study-material.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`)
+        fetch(`{{ route('study-material.get-sections-by-class') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 sectionSelect.innerHTML = '<option value="">Select Section</option>';
@@ -879,17 +930,74 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Filter form section loading
 document.addEventListener('DOMContentLoaded', function() {
+    const filterCampusSelect = document.getElementById('filter_campus');
     const filterClassSelect = document.getElementById('filter_class');
     const filterSectionSelect = document.getElementById('filter_section');
+    const allClassOptions = filterClassSelect ? filterClassSelect.innerHTML : '';
+
+    function loadFilterClasses(selectedCampus, selectedClass = '') {
+        if (!filterClassSelect) return;
+
+        if (!selectedCampus) {
+            filterClassSelect.innerHTML = allClassOptions;
+            filterClassSelect.value = '';
+            if (filterSectionSelect) {
+                filterSectionSelect.innerHTML = '<option value="">All Sections</option>';
+                filterSectionSelect.disabled = true;
+            }
+            return;
+        }
+
+        filterClassSelect.innerHTML = '<option value="">Loading...</option>';
+        fetch(`{{ route('study-material.get-classes-by-campus') }}?campus=${encodeURIComponent(selectedCampus)}`)
+            .then(response => response.json())
+            .then(data => {
+                filterClassSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        const option = document.createElement('option');
+                        option.value = className;
+                        option.textContent = className;
+                        filterClassSelect.appendChild(option);
+                    });
+                }
+                if (selectedClass) {
+                    filterClassSelect.value = selectedClass;
+                }
+                if (filterClassSelect.value) {
+                    filterClassSelect.dispatchEvent(new Event('change'));
+                } else if (filterSectionSelect) {
+                    filterSectionSelect.innerHTML = '<option value="">All Sections</option>';
+                    filterSectionSelect.disabled = true;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                filterClassSelect.innerHTML = '<option value="">Error loading classes</option>';
+            });
+    }
+
+    if (filterCampusSelect && filterClassSelect) {
+        filterCampusSelect.addEventListener('change', function() {
+            loadFilterClasses(this.value);
+        });
+    }
 
     if (filterClassSelect && filterSectionSelect) {
         filterClassSelect.addEventListener('change', function() {
             const selectedClass = this.value;
+            const selectedCampus = filterCampusSelect ? filterCampusSelect.value : '';
             if (selectedClass) {
                 filterSectionSelect.innerHTML = '<option value="">Loading...</option>';
                 filterSectionSelect.disabled = true;
                 
-                fetch(`{{ route('study-material.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`)
+                const params = new URLSearchParams();
+                params.append('class', selectedClass);
+                if (selectedCampus) {
+                    params.append('campus', selectedCampus);
+                }
+                
+                fetch(`{{ route('study-material.get-sections-by-class') }}?${params.toString()}`)
                     .then(response => response.json())
                     .then(data => {
                         filterSectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -915,7 +1023,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // Initial load if class is already selected
-        if (filterClassSelect.value) {
+        if (filterCampusSelect && filterCampusSelect.value) {
+            const initialClass = filterClassSelect.value;
+            loadFilterClasses(filterCampusSelect.value, initialClass);
+        } else if (filterClassSelect.value) {
             filterClassSelect.dispatchEvent(new Event('change'));
         }
     }

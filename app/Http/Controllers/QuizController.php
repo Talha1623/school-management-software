@@ -51,12 +51,8 @@ class QuizController extends Controller
             });
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-        
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
-        }
+        // Get classes (dynamic only, no static fallback)
+        $classes = $this->getClassesForCampus(null);
 
         // Sections will be loaded dynamically via AJAX based on class selection
         $sections = collect();
@@ -214,27 +210,65 @@ class QuizController extends Controller
     public function getSectionsByClass(Request $request): JsonResponse
     {
         $class = $request->get('class');
+        $campus = $request->get('campus');
         if (!$class) {
             return response()->json(['sections' => []]);
         }
         
-        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-            ->whereNotNull('name')
-            ->distinct()
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name');
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery->distinct()
             ->pluck('name')
             ->sort()
             ->values();
         
         if ($sections->isEmpty()) {
-            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('section')
-                ->distinct()
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section');
+            if ($campus) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $subjectsQuery->distinct()
                 ->pluck('section')
                 ->sort()
                 ->values();
         }
         
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Get classes based on campus (AJAX).
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        $classes = $this->getClassesForCampus($campus);
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    private function getClassesForCampus(?string $campus)
+    {
+        $campus = trim((string) $campus);
+        $campusLower = strtolower($campus);
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus !== '') {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+        }
+
+        return $classesQuery->distinct()
+            ->orderBy('class_name', 'asc')
+            ->pluck('class_name')
+            ->map(fn($class) => trim((string) $class))
+            ->filter(fn($class) => $class !== '')
+            ->unique()
+            ->sort()
+            ->values();
     }
 }
 

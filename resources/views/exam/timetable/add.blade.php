@@ -11,14 +11,28 @@
             </div>
 
             <!-- Form -->
-            <form action="#" method="POST" id="timetableForm">
+            <form action="{{ route('exam.timetable.store') }}" method="POST" id="timetableForm">
                 @csrf
                 <div class="row g-2 mb-3 align-items-end">
+                    <!-- Campus -->
+                    <div class="col-md-3">
+                        <label for="campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="campus" name="campus" style="height: 32px;">
+                            <option value="">Select Campus</option>
+                            @foreach($campuses as $campus)
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}">{{ $campusName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    
                     <!-- Class -->
                     <div class="col-md-3">
                         <label for="class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                        <select class="form-select form-select-sm" id="class" name="class" style="height: 32px;">
-                            <option value="">Select Class</option>
+                        <select class="form-select form-select-sm" id="class" name="class" style="height: 32px;" disabled>
+                            <option value="">Select Campus First</option>
                             @foreach($classes as $className)
                                 <option value="{{ $className }}">{{ $className }}</option>
                             @endforeach
@@ -44,8 +58,8 @@
                     <!-- Exam -->
                     <div class="col-md-3">
                         <label for="exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam</label>
-                        <select class="form-select form-select-sm" id="exam" name="exam" style="height: 32px;">
-                            <option value="">Select Exam</option>
+                        <select class="form-select form-select-sm" id="exam" name="exam" style="height: 32px;" disabled>
+                            <option value="">Select Campus First</option>
                             @foreach($exams as $examName)
                                 <option value="{{ $examName }}">{{ $examName }}</option>
                             @endforeach
@@ -76,6 +90,14 @@
                         <input type="text" class="form-control form-control-sm" id="room_block" name="room_block" placeholder="Enter Room/Block" style="height: 32px;">
                     </div>
                 </div>
+                <div class="row">
+                    <div class="col-md-12 text-end">
+                        <button type="submit" class="btn btn-sm py-2 px-4 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+                            <span style="font-size: 12px;">Save Timetable</span>
+                        </button>
+                    </div>
+                </div>
             </form>
         </div>
     </div>
@@ -83,22 +105,99 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
     const subjectSelect = document.getElementById('subject');
+    const examSelect = document.getElementById('exam');
+
+    function loadClasses(selectedCampus) {
+        if (!classSelect) return;
+
+        if (!selectedCampus) {
+            classSelect.innerHTML = '<option value="">Select Campus First</option>';
+            classSelect.disabled = true;
+            sectionSelect.disabled = true;
+            sectionSelect.innerHTML = '<option value="">Select a class first</option>';
+            subjectSelect.disabled = true;
+            subjectSelect.innerHTML = '<option value="">Select a class first</option>';
+            examSelect.disabled = true;
+            examSelect.innerHTML = '<option value="">Select Campus First</option>';
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        classSelect.disabled = true;
+        fetch(`{{ route('exam.timetable.get-classes') }}?campus=${encodeURIComponent(selectedCampus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">Select Class</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        classSelect.innerHTML += `<option value="${className}">${className}</option>`;
+                    });
+                }
+                classSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+
+        loadExams(selectedCampus);
+    }
+
+    function loadExams(selectedCampus) {
+        if (!examSelect) return;
+
+        if (!selectedCampus) {
+            examSelect.disabled = true;
+            examSelect.innerHTML = '<option value="">Select Campus First</option>';
+            return;
+        }
+
+        examSelect.disabled = true;
+        examSelect.innerHTML = '<option value="">Loading...</option>';
+
+        fetch(`{{ route('exam.timetable.get-exams') }}?campus=${encodeURIComponent(selectedCampus)}`)
+            .then(response => response.json())
+            .then(data => {
+                examSelect.innerHTML = '<option value="">Select Exam</option>';
+                data.forEach(exam => {
+                    examSelect.innerHTML += `<option value="${exam}">${exam}</option>`;
+                });
+                examSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error loading exams:', error);
+                examSelect.innerHTML = '<option value="">Error loading exams</option>';
+                examSelect.disabled = false;
+            });
+    }
 
     function loadSections(selectedClass) {
         if (selectedClass) {
             sectionSelect.disabled = false;
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
+
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (campusSelect && campusSelect.value) {
+                params.append('campus', campusSelect.value);
+            }
             
-            fetch(`{{ route('exam.timetable.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            fetch(`{{ route('exam.timetable.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">Select Section</option>';
-                    data.forEach(section => {
-                        sectionSelect.innerHTML += `<option value="${section}">${section}</option>`;
-                    });
+                    if (data && data.length > 0) {
+                        data.forEach(section => {
+                            sectionSelect.innerHTML += `<option value="${section}">${section}</option>`;
+                        });
+                    } else {
+                        sectionSelect.innerHTML = '<option value="">No sections found</option>';
+                    }
                 })
                 .catch(error => {
                     console.error('Error loading sections:', error);
@@ -120,6 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const params = new URLSearchParams();
             if (selectedClass) params.append('class', selectedClass);
             if (selectedSection) params.append('section', selectedSection);
+            if (campusSelect && campusSelect.value) params.append('campus', campusSelect.value);
             
             fetch(`{{ route('exam.timetable.get-subjects') }}?${params.toString()}`)
                 .then(response => response.json())
@@ -137,6 +237,12 @@ document.addEventListener('DOMContentLoaded', function() {
             subjectSelect.disabled = true;
             subjectSelect.innerHTML = '<option value="">Select a class first</option>';
         }
+    }
+
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses(this.value);
+        });
     }
 
     classSelect.addEventListener('change', function() {

@@ -68,10 +68,10 @@ class ManageSalariesController extends Controller
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
         ]);
 
-        // Calculate new salary generated (basic + bonus - deduction)
+        // Calculate new salary generated (base + bonus - deduction)
         $bonusAmount = $validated['bonus_amount'] ?? 0;
         $deductionAmount = $validated['deduction_amount'] ?? 0;
-        $newSalaryGenerated = $salary->basic + $bonusAmount - $deductionAmount;
+        $newSalaryGenerated = $salary->salary_generated + $bonusAmount - $deductionAmount;
 
         // Determine status based on fully_paid or amount_paid
         $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
@@ -79,7 +79,7 @@ class ManageSalariesController extends Controller
         if ($fullyPaid || $validated['amount_paid'] >= $newSalaryGenerated) {
             $status = 'Paid';
         } elseif ($validated['amount_paid'] > 0) {
-            $status = 'Partial';
+            $status = 'Issued';
         }
 
         // Update salary
@@ -104,7 +104,7 @@ class ManageSalariesController extends Controller
     public function updateStatus(Request $request, Salary $salary)
     {
         $validated = $request->validate([
-            'status' => ['required', 'in:Pending,Paid,Partial'],
+            'status' => ['required', 'in:Pending,Paid,Issued'],
         ]);
 
         $salary->update($validated);

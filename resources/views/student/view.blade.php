@@ -338,17 +338,26 @@ use Illuminate\Support\Facades\Storage;
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">directions_bus</span>
                                             Transport Route
                                         </div>
-                                        <div class="info-value">{{ $student->transport_route ?? 'N/A' }}</div>
+                                        <div class="info-value">
+                                            @if($student->transport_route)
+                                                {{ $student->transport_route }}
+                                                @if(isset($transportFare) && $transportFare !== null)
+                                                    <span class="text-muted">( {{ number_format($transportFare, 2) }} )</span>
+                                                @endif
+                                            @else
+                                                N/A
+                                            @endif
+                                        </div>
                                     </div>
                                 </div>
-                                @if($student->transport_fare)
+                                @if(isset($transportFare) && $transportFare !== null)
                                 <div class="col-md-6">
                                     <div class="info-item">
                                         <div class="info-label">
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">payments</span>
                                             Transport Fare
                                         </div>
-                                        <div class="info-value">{{ number_format($student->transport_fare, 2) }}</div>
+                                        <div class="info-value">{{ number_format($transportFare, 2) }}</div>
                                     </div>
                                 </div>
                                 @endif

@@ -92,21 +92,32 @@
                             <option value="100" {{ request('per_page', 100) == 100 ? 'selected' : '' }}>100</option>
                         </select>
                     </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="filterCampus" class="mb-0 fs-13 fw-medium text-dark">Campus:</label>
+                        <select id="filterCampus" class="form-select form-select-sm" style="width: auto; min-width: 160px;" onchange="updateCampusFilter(this.value)">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                <option value="{{ $campus->campus_name ?? $campus }}" {{ ($filterCampus ?? '') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                    {{ $campus->campus_name ?? $campus }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Right Side -->
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <!-- Export Buttons -->
                     <div class="d-flex gap-2">
-                        <a href="{{ route('accountants.export', ['format' => 'excel']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                        <a href="{{ route('accountants.export', ['format' => 'excel']) }}{{ request()->hasAny(['search','campus']) ? '?' . http_build_query(request()->only(['search','campus'])) : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
                             <span>Excel</span>
                         </a>
-                        <a href="{{ route('accountants.export', ['format' => 'csv']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                        <a href="{{ route('accountants.export', ['format' => 'csv']) }}{{ request()->hasAny(['search','campus']) ? '?' . http_build_query(request()->only(['search','campus'])) : '' }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">file_present</span>
                             <span>CSV</span>
                         </a>
-                        <a href="{{ route('accountants.export', ['format' => 'pdf']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                        <a href="{{ route('accountants.export', ['format' => 'pdf']) }}{{ request()->hasAny(['search','campus']) ? '?' . http_build_query(request()->only(['search','campus'])) : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
                             <span>PDF</span>
                         </a>
@@ -1257,6 +1268,17 @@ function toggleWebLogin(id) {
 function updateEntriesPerPage(value) {
     const url = new URL(window.location.href);
     url.searchParams.set('per_page', value);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+
+function updateCampusFilter(value) {
+    const url = new URL(window.location.href);
+    if (value) {
+        url.searchParams.set('campus', value);
+    } else {
+        url.searchParams.delete('campus');
+    }
     url.searchParams.set('page', '1');
     window.location.href = url.toString();
 }

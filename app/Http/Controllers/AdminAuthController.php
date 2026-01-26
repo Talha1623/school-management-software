@@ -15,7 +15,7 @@ class AdminAuthController extends Controller
     /**
      * Show the admin login form.
      */
-    public function showLoginForm(): View
+    public function showLoginForm(): View|RedirectResponse
     {
         // If already logged in, redirect to dashboard
         if (Auth::guard('admin')->check()) {

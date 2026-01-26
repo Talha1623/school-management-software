@@ -60,7 +60,7 @@
                         <div class="position-relative">
                             <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px; padding-right: {{ request('filter_class') ? '30px' : '12px' }};">
                                 <option value="">All Classes</option>
-                                @foreach($classes as $className)
+                                @foreach(($filterClasses ?? $classes) as $className)
                                     <option value="{{ $className }}" {{ request('filter_class') == $className ? 'selected' : '' }}>{{ $className }}</option>
                                 @endforeach
                             </select>
@@ -380,6 +380,14 @@ function clearFilter(filterName) {
     url.searchParams.delete(filterName);
     url.searchParams.delete('page');
     
+    // If clearing campus, also clear class and section
+    if (filterName === 'filter_campus') {
+        url.searchParams.delete('filter_class');
+        url.searchParams.delete('filter_section');
+        document.getElementById('filter_class').innerHTML = '<option value="">All Classes</option>';
+        document.getElementById('filter_section').innerHTML = '<option value="">All Sections</option>';
+    }
+
     // If clearing class, also clear section
     if (filterName === 'filter_class') {
         url.searchParams.delete('filter_section');
@@ -396,14 +404,59 @@ function clearFilter(filterName) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const allClassOptions = classSelect ? classSelect.innerHTML : '';
+
+    function loadClasses(selectedCampus, selectedClass = '') {
+        if (!classSelect) return;
+
+        if (!selectedCampus) {
+            classSelect.innerHTML = allClassOptions;
+            classSelect.value = '';
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        fetch(`{{ route('homework-diary.get-classes-by-campus') }}?campus=${encodeURIComponent(selectedCampus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        const option = document.createElement('option');
+                        option.value = className;
+                        option.textContent = className;
+                        classSelect.appendChild(option);
+                    });
+                }
+                if (selectedClass) {
+                    classSelect.value = selectedClass;
+                }
+                if (classSelect.value) {
+                    loadSections(classSelect.value);
+                } else {
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            });
+    }
 
     function loadSections(selectedClass) {
         if (selectedClass) {
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (campusSelect && campusSelect.value) {
+                params.append('campus', campusSelect.value);
+            }
             
-            fetch(`{{ route('homework-diary.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            fetch(`{{ route('homework-diary.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -428,13 +481,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    classSelect.addEventListener('change', function() {
-        loadSections(this.value);
-    });
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses(this.value);
+        });
+    }
+
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            loadSections(this.value);
+        });
+    }
 
     // Initial load of sections if a class is already selected
-    const initialClass = classSelect.value;
-    if (initialClass) {
+    const initialClass = classSelect ? classSelect.value : '';
+    if (campusSelect && campusSelect.value) {
+        loadClasses(campusSelect.value, initialClass);
+    } else if (initialClass) {
         loadSections(initialClass);
     }
 });

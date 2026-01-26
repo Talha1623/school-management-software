@@ -46,13 +46,21 @@ class StudentPromotionController extends Controller
             }
         }
         
-        // Get classes from ClassModel
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        // Get classes from ClassModel (campus-wise if selected)
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($request->filled('campus')) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         if ($classes->isEmpty()) {
             // Fallback to students table if ClassModel is empty
             if ($hasClass) {
                 try {
-                    $classes = Student::distinct()->pluck('class')->sort()->values();
+                    $studentsQuery = Student::query();
+                    if ($request->filled('campus') && $hasCampus) {
+                        $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+                    }
+                    $classes = $studentsQuery->distinct()->pluck('class')->sort()->values();
                 } catch (\Exception $e) {
                     $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
                 }
@@ -66,7 +74,11 @@ class StudentPromotionController extends Controller
         if ($request->filled('from_class')) {
             // Get sections from Section model for the selected class
             try {
-                $sections = Section::where('class', $request->from_class)
+                $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->from_class))]);
+                if ($request->filled('campus')) {
+                    $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+                }
+                $sections = $sectionsQuery
                     ->whereNotNull('name')
                     ->distinct()
                     ->pluck('name')
@@ -76,7 +88,11 @@ class StudentPromotionController extends Controller
                 // Fallback to students table
                 if ($hasSection) {
                     try {
-                        $sections = Student::where('class', $request->from_class)
+                        $sectionsQuery = Student::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->from_class))]);
+                        if ($request->filled('campus') && $hasCampus) {
+                            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+                        }
+                        $sections = $sectionsQuery
                             ->whereNotNull('section')
                             ->distinct()
                             ->pluck('section')
@@ -92,12 +108,20 @@ class StudentPromotionController extends Controller
         } else {
             // Get all sections from Section model
             try {
-                $sections = Section::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
+                $sectionsQuery = Section::whereNotNull('name');
+                if ($request->filled('campus')) {
+                    $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+                }
+                $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
             } catch (\Exception $e) {
                 // Fallback to students table
                 if ($hasSection) {
                     try {
-                        $sections = Student::whereNotNull('section')->distinct()->pluck('section')->sort()->values();
+                        $sectionsQuery = Student::whereNotNull('section');
+                        if ($request->filled('campus') && $hasCampus) {
+                            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+                        }
+                        $sections = $sectionsQuery->distinct()->pluck('section')->sort()->values();
                     } catch (\Exception $e2) {
                         $sections = collect(['A', 'B', 'C', 'D', 'E']);
                     }
@@ -149,9 +173,13 @@ class StudentPromotionController extends Controller
             'from_section' => ['nullable', 'string', 'max:255'],
             'to_class' => ['required', 'string', 'max:255'],
             'to_section' => ['nullable', 'string', 'max:255'],
+            'student_ids' => ['required', 'array', 'min:1'],
+            'student_ids.*' => ['integer', 'exists:students,id'],
         ], [
             'from_class.required' => 'Please select Promotion From Class',
             'to_class.required' => 'Please select Promotion To Class',
+            'student_ids.required' => 'Please select at least one student to promote',
+            'student_ids.min' => 'Please select at least one student to promote',
         ]);
 
         // Check if required columns exist
@@ -175,6 +203,9 @@ class StudentPromotionController extends Controller
         if (Schema::hasColumn('students', 'section') && !empty($validated['from_section'])) {
             $query->where('section', $validated['from_section']);
         }
+
+        // Only promote selected students
+        $query->whereIn('id', $validated['student_ids']);
 
         // Update students
         $updateData = ['class' => $validated['to_class']];
@@ -203,6 +234,7 @@ class StudentPromotionController extends Controller
     public function getSections(Request $request)
     {
         $class = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$class) {
             return response()->json(['sections' => []]);
@@ -210,7 +242,11 @@ class StudentPromotionController extends Controller
         
             // First try to get sections from Section model (only assigned sections)
         try {
-            $sections = Section::where('class', $class)
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            if ($campus) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $sectionsQuery
                 ->whereNotNull('name')
                 ->where('name', '!=', '')
                 ->distinct()
@@ -222,7 +258,11 @@ class StudentPromotionController extends Controller
             $hasSection = Schema::hasColumn('students', 'section');
             if ($hasSection) {
                 try {
-                    $sections = Student::where('class', $class)
+                    $sectionsQuery = Student::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                    if ($campus) {
+                        $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                    }
+                    $sections = $sectionsQuery
                         ->whereNotNull('section')
                         ->where('section', '!=', '')
                         ->distinct()
@@ -240,6 +280,30 @@ class StudentPromotionController extends Controller
         // Return only assigned sections, don't add default sections
         // If no sections are assigned, return empty array
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Get classes by campus (AJAX)
+     */
+    public function getClassesByCampus(Request $request)
+    {
+        $campus = $request->get('campus');
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+
+        if ($classes->isEmpty()) {
+            $studentsQuery = Student::whereNotNull('class');
+            if ($campus && Schema::hasColumn('students', 'campus')) {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classes = $studentsQuery->distinct()->pluck('class')->sort()->values();
+        }
+
+        return response()->json(['classes' => $classes]);
     }
 }
 

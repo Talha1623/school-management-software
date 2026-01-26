@@ -156,13 +156,13 @@
                                         </td>
                                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="0.01" style="width: 100px;" value="{{ $existingMark ? ($existingMark->marks_obtained ?? '') : '' }}">
+                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->marks_obtained ?? '') : '' }}">
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="0.01" style="width: 100px;" value="{{ $existingMark ? ($existingMark->total_marks ?? '') : '' }}">
+                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->total_marks ?? '') : '' }}">
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="0.01" style="width: 100px;" value="{{ $existingMark ? ($existingMark->passing_marks ?? '') : '' }}">
+                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->passing_marks ?? '') : '' }}">
                                         </td>
                                     </tr>
                                     @empty
@@ -582,6 +582,50 @@ document.addEventListener('DOMContentLoaded', function() {
             searchInput.dispatchEvent(new Event('input'));
         });
     }
+
+    function normalizeNumberInput(value) {
+        if (value === null || value === undefined || value === '') {
+            return '';
+        }
+        const parsed = parseFloat(value);
+        if (Number.isNaN(parsed)) {
+            return value;
+        }
+        if (Number.isInteger(parsed)) {
+            return parsed.toString();
+        }
+        return parsed.toString();
+    }
+
+    function setupBulkMarksSync(inputClass) {
+        const inputs = Array.from(document.querySelectorAll(inputClass));
+        if (!inputs.length) return;
+
+        inputs.forEach((input) => {
+            input.value = normalizeNumberInput(input.value);
+        });
+
+        const masterInput = inputs[0];
+        masterInput.addEventListener('input', function () {
+            const normalized = normalizeNumberInput(this.value);
+            this.value = normalized;
+            inputs.forEach((input, index) => {
+                if (index === 0) return;
+                input.value = normalized;
+            });
+        });
+    }
+
+    setupBulkMarksSync('.marks-total');
+    setupBulkMarksSync('.marks-passing');
+
+    const obtainedInputs = Array.from(document.querySelectorAll('.marks-obtained'));
+    obtainedInputs.forEach((input) => {
+        input.value = normalizeNumberInput(input.value);
+        input.addEventListener('input', function () {
+            this.value = normalizeNumberInput(this.value);
+        });
+    });
 });
 </script>
 @endsection

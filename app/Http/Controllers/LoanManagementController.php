@@ -51,7 +51,7 @@ class LoanManagementController extends Controller
             'repayment_instalments' => ['required', 'integer', 'min:1'],
         ]);
 
-        $validated['status'] = 'Pending';
+        $validated['status'] = 'Approved';
 
         Loan::create($validated);
 

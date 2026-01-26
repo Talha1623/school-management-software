@@ -80,6 +80,12 @@ class PrintStaffCardController extends Controller
     {
         $query = Staff::query();
         
+        // Filter by specific staff
+        if ($request->filled('staff_id')) {
+            $query->where('id', $request->staff_id);
+            return $query->orderBy('name', 'asc')->get();
+        }
+
         // Filter by Campus (case-insensitive)
         if ($request->filled('campus') && $request->campus != '') {
             $campus = trim($request->campus);

@@ -26,25 +26,6 @@
                 </div>
             @endif
 
-            @php
-                $campuses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
-                $allCampuses = $campuses->merge($campusesFromSections)->unique()->sort()->values();
-                if ($allCampuses->isEmpty()) {
-                    $allCampuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-                }
-                
-                $classes = \App\Models\ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort();
-                if ($classes->isEmpty()) {
-                    $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
-                }
-                
-                $sections = \App\Models\Section::whereNotNull('name')->distinct()->pluck('name')->sort();
-                if ($sections->isEmpty()) {
-                    $sections = collect(['A', 'B', 'C', 'D', 'E']);
-                }
-            @endphp
-
             <form id="feeDecrementPercentageForm" method="POST" action="{{ route('accounting.fee-document.decrement-percentage.store') }}">
                 @csrf
                 
@@ -59,7 +40,7 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
                                     <option value="">Select Campus</option>
-                                    @foreach($allCampuses as $campus)
+                                    @foreach($campuses as $campus)
                                         <option value="{{ $campus }}">{{ $campus }}</option>
                                     @endforeach
                                 </select>
@@ -75,9 +56,6 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="class" id="class" style="height: 38px;">
                                     <option value="">Select Class</option>
-                                    @foreach($classes as $className)
-                                        <option value="{{ $className }}">{{ $className }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -91,10 +69,13 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="section" id="section" style="height: 38px;">
                                     <option value="">Select Section</option>
-                                    @foreach($sections as $sectionName)
-                                        <option value="{{ $sectionName }}">{{ $sectionName }}</option>
-                                    @endforeach
                                 </select>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="section_select_all">
+                                <label class="form-check-label" for="section_select_all" style="font-size: 12px;">
+                                    Select All Sections
+                                </label>
                             </div>
                         </div>
 
@@ -118,9 +99,6 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="accountant" id="accountant" style="height: 38px;">
                                     <option value="">Select Accountant</option>
-                                    @foreach($accountants as $accountant)
-                                        <option value="{{ $accountant->name }}">{{ $accountant->name }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -203,7 +181,116 @@
 </style>
 
 <script>
-// Form is now connected to database, no need for preventDefault
-// Form will submit normally to the backend
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
+    const classSelect = document.getElementById('class');
+    const sectionSelect = document.getElementById('section');
+    const sectionSelectAll = document.getElementById('section_select_all');
+    const accountantSelect = document.getElementById('accountant');
+
+    function resetSelect(selectEl, placeholder) {
+        selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+    }
+
+    function loadClassesByCampus(campus) {
+        resetSelect(classSelect, 'Select Class');
+        resetSelect(sectionSelect, 'Select Section');
+        if (sectionSelectAll) {
+            sectionSelectAll.checked = false;
+            sectionSelect.disabled = false;
+        }
+
+        if (!campus) {
+            return;
+        }
+
+        fetch(`{{ route('accounting.fee-document.decrement-percentage.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(classes => {
+                classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+            })
+            .catch(() => {});
+    }
+
+    function loadSectionsByClass(campus, className) {
+        resetSelect(sectionSelect, 'Select Section');
+        if (sectionSelectAll) {
+            sectionSelectAll.checked = false;
+            sectionSelect.disabled = false;
+        }
+
+        if (!className) {
+            return;
+        }
+
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
+        }
+        params.append('class', className);
+
+        fetch(`{{ route('accounting.fee-document.decrement-percentage.get-sections-by-class') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(sections => {
+                sections.forEach(sectionName => {
+                    const option = document.createElement('option');
+                    option.value = sectionName;
+                    option.textContent = sectionName;
+                    sectionSelect.appendChild(option);
+                });
+            })
+            .catch(() => {});
+    }
+
+    function resetAccountants() {
+        accountantSelect.innerHTML = '<option value="">Select Accountant</option>';
+    }
+
+    function loadAccountantsByCampus(campus) {
+        resetAccountants();
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
+        }
+        fetch(`{{ route('accounting.fee-document.decrement-percentage.get-accountants') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(accountants => {
+                accountants.forEach(accountant => {
+                    const option = document.createElement('option');
+                    option.value = accountant.name;
+                    option.textContent = accountant.name;
+                    accountantSelect.appendChild(option);
+                });
+            })
+            .catch(() => {});
+    }
+
+    campusSelect.addEventListener('change', function() {
+        loadClassesByCampus(this.value);
+        loadAccountantsByCampus(this.value);
+    });
+
+    classSelect.addEventListener('change', function() {
+        loadSectionsByClass(campusSelect.value, this.value);
+    });
+
+    loadAccountantsByCampus(campusSelect.value);
+
+    if (sectionSelectAll) {
+        sectionSelectAll.addEventListener('change', function() {
+            if (this.checked) {
+                sectionSelect.value = '';
+                sectionSelect.disabled = true;
+            } else {
+                sectionSelect.disabled = false;
+            }
+        });
+    }
+});
 </script>
 @endsection

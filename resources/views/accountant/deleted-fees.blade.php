@@ -37,6 +37,18 @@
                             <option value="100" {{ request('per_page', 100) == 100 ? 'selected' : '' }}>100</option>
                         </select>
                     </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="filter_campus" class="mb-0 fs-13 fw-medium text-dark">Campus:</label>
+                        <select id="filter_campus" class="form-select form-select-sm" style="width: auto; min-width: 180px;" onchange="updateCampusFilter(this.value)">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                @php($campusName = $campus->campus_name ?? $campus)
+                                <option value="{{ $campusName }}" {{ ($filterCampus ?? '') === $campusName ? 'selected' : '' }}>
+                                    {{ $campusName }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Right Side -->
@@ -254,6 +266,17 @@
 function updateEntriesPerPage(value) {
     const url = new URL(window.location.href);
     url.searchParams.set('per_page', value);
+    url.searchParams.delete('page');
+    window.location.href = url.toString();
+}
+
+function updateCampusFilter(value) {
+    const url = new URL(window.location.href);
+    if (value) {
+        url.searchParams.set('filter_campus', value);
+    } else {
+        url.searchParams.delete('filter_campus');
+    }
     url.searchParams.delete('page');
     window.location.href = url.toString();
 }

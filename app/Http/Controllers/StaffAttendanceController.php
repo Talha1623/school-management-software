@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\StaffAttendance;
 use App\Models\Campus;
+use App\Models\Subject;
+use App\Models\SalarySetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +35,19 @@ class StaffAttendanceController extends Controller
             $staffQuery->where('designation', $staffCategory);
         }
 
+        if ($type === 'Subject Attendance') {
+            $staffQuery->where('salary_type', 'lecture');
+        } elseif ($type) {
+            $staffQuery->where(function ($query) {
+                $query->whereNull('salary_type')
+                    ->orWhere('salary_type', '!=', 'lecture');
+            });
+        }
+
         $staffList = $staffQuery->orderBy('name', 'asc')->get();
+        if (!$type && $staffList->where('salary_type', 'lecture')->isNotEmpty()) {
+            $type = 'Subject Attendance';
+        }
 
         // Get existing attendance data for the selected date
         $attendanceData = [];
@@ -50,6 +64,7 @@ class StaffAttendanceController extends Controller
                     'status' => $attendance ? $attendance->status : null,
                     'start_time' => $attendance ? $attendance->start_time : null,
                     'end_time' => $attendance ? $attendance->end_time : null,
+                    'conducted_lectures' => $attendance ? $attendance->conducted_lectures : null,
                     'late_arrival' => $this->calculateLateArrival($attendance ? $attendance->start_time : null),
                 ];
             }
@@ -62,6 +77,36 @@ class StaffAttendanceController extends Controller
             ->unique()
             ->values();
 
+        $assignedSubjectsByStaff = [];
+        if ($staffList->isNotEmpty()) {
+            $staffNameToId = $staffList->mapWithKeys(function ($staff) {
+                return [strtolower(trim((string) $staff->name)) => $staff->id];
+            });
+
+            $subjectsQuery = Subject::whereNotNull('teacher');
+            if ($campus) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $subjects = $subjectsQuery->get(['teacher', 'class', 'section', 'subject_name']);
+
+            foreach ($subjects as $subject) {
+                $teacherKey = strtolower(trim((string) $subject->teacher));
+                if (!isset($staffNameToId[$teacherKey])) {
+                    continue;
+                }
+                $staffId = $staffNameToId[$teacherKey];
+                $labelParts = array_filter([
+                    $subject->class ?? null,
+                    $subject->section ?? null
+                ]);
+                $label = implode(' ', $labelParts);
+                $subjectLabel = trim(($label ? $label . ': ' : '') . ($subject->subject_name ?? ''));
+                $assignedSubjectsByStaff[$staffId][] = $subjectLabel !== '' ? $subjectLabel : 'N/A';
+            }
+        }
+
+        $dateLabel = Carbon::parse($date)->format('d F Y');
+
         return view('attendance.staff', [
             'staffList' => $staffList,
             'attendanceData' => $attendanceData,
@@ -70,6 +115,8 @@ class StaffAttendanceController extends Controller
             'staffCategory' => $staffCategory,
             'type' => $type,
             'date' => $date,
+            'dateLabel' => $dateLabel,
+            'assignedSubjectsByStaff' => $assignedSubjectsByStaff,
         ]);
     }
 
@@ -82,28 +129,61 @@ class StaffAttendanceController extends Controller
             'date' => 'required|date',
             'attendance' => 'required|array',
             'attendance.*.staff_id' => 'required|exists:staff,id',
-            'attendance.*.status' => 'nullable|in:Present,Absent,Leave,Half Day',
+            'attendance.*.status' => 'nullable|in:Present,Absent,Holiday,Sunday,Leave,Half Day',
             'attendance.*.start_time' => 'nullable|date_format:H:i',
             'attendance.*.end_time' => 'nullable|date_format:H:i',
             'attendance.*.leave_deduction' => 'nullable|in:Yes,No',
+            'attendance.*.conducted_lectures' => 'nullable|integer|min:0',
+            'attendance.*.late_arrival' => 'nullable|in:Auto,Yes,No',
         ]);
 
         $date = $request->input('date');
         $attendanceData = $request->input('attendance', []);
 
-        // Filter out entries without status (only save entries with status selected)
-        $attendanceData = array_filter($attendanceData, function($data) {
-            return !empty($data['status']);
-        });
+        // Detect subject attendance even if type is missing
+        $attendanceType = strtolower(trim((string) $request->input('type')));
+        $hasLecturesField = false;
+        $hasLateArrivalField = false;
+        $hasStatusField = false;
+        foreach ($attendanceData as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            if (array_key_exists('conducted_lectures', $row)) {
+                $hasLecturesField = true;
+            }
+            if (array_key_exists('late_arrival', $row)) {
+                $hasLateArrivalField = true;
+            }
+            if (array_key_exists('status', $row)) {
+                $hasStatusField = true;
+            }
+        }
+        $isSubjectAttendance = ($attendanceType === 'subject attendance')
+            || (!$hasStatusField && ($hasLecturesField || $hasLateArrivalField || !empty($attendanceData)));
+
+        // Filter out entries without any data
+        if ($isSubjectAttendance) {
+            $attendanceData = array_filter($attendanceData, function($data) {
+                return is_array($data) && !empty($data['staff_id']);
+            });
+        } else {
+            $attendanceData = array_filter($attendanceData, function($data) {
+                return !empty($data['status']);
+            });
+        }
 
         if (empty($attendanceData)) {
+            if ($isSubjectAttendance) {
+                return redirect()->back()->with('info', 'No lectures entered to save.')->withInput();
+            }
             return redirect()->back()->with('error', 'Please select at least one attendance status before saving.')->withInput();
         }
 
         DB::beginTransaction();
         try {
             foreach ($attendanceData as $data) {
-                if (empty($data['status'])) {
+                if (!$isSubjectAttendance && empty($data['status'])) {
                     continue;
                 }
 
@@ -112,20 +192,39 @@ class StaffAttendanceController extends Controller
                     continue;
                 }
 
+                $conductedLectures = isset($data['conducted_lectures']) && $data['conducted_lectures'] !== ''
+                    ? (int) $data['conducted_lectures']
+                    : 0;
+                $lateArrival = $data['late_arrival'] ?? null;
+                $status = $data['status'] ?? null;
+                if ($isSubjectAttendance) {
+                    if ($conductedLectures !== null) {
+                        $status = ($conductedLectures > 0) ? 'Present' : 'Absent';
+                    } elseif (!$status) {
+                        $status = 'N/A';
+                    }
+                }
+
+                $remarks = $data['remarks'] ?? (isset($data['leave_deduction']) ? 'Leave Deduction: ' . $data['leave_deduction'] : null);
+                if ($isSubjectAttendance && $lateArrival) {
+                    $remarks = trim(($remarks ? $remarks . ' | ' : '') . 'Late Arrival: ' . $lateArrival);
+                }
+
                 StaffAttendance::updateOrCreate(
                     [
                         'staff_id' => $data['staff_id'],
                         'attendance_date' => $date,
                     ],
                     [
-                        'status' => $data['status'],
+                        'status' => $status,
                         'start_time' => $data['start_time'] ?? null,
                         'end_time' => $data['end_time'] ?? null,
+                        'conducted_lectures' => $conductedLectures,
                         'campus' => $staff->campus,
                         'designation' => $staff->designation,
                         'class' => null,
                         'section' => null,
-                        'remarks' => $data['remarks'] ?? (isset($data['leave_deduction']) ? 'Leave Deduction: ' . $data['leave_deduction'] : null),
+                        'remarks' => $remarks,
                     ]
                 );
             }
@@ -155,7 +254,8 @@ class StaffAttendanceController extends Controller
         try {
             // Handle different time formats
             $time = is_string($startTime) ? $startTime : $startTime->format('H:i:s');
-            $standardTime = '09:00:00';
+            $settings = SalarySetting::getSettings();
+            $standardTime = $settings->late_arrival_time ?? '09:00:00';
             
             $start = strtotime($time);
             $standard = strtotime($standardTime);

@@ -6,6 +6,7 @@ use App\Models\Staff;
 use App\Models\Campus;
 use App\Models\Section;
 use App\Models\Subject;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 
 class StaffManagementController extends Controller
 {
@@ -57,6 +59,21 @@ class StaffManagementController extends Controller
         $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
         return view('staff.management', compact('staff', 'totalTeachers', 'presentToday', 'absentToday', 'campuses'));
+    }
+
+    /**
+     * Print staff list.
+     */
+    public function print(Request $request): View
+    {
+        $staff = Staff::query()
+            ->orderBy('name')
+            ->get();
+
+        return view('staff.management-print', [
+            'staff' => $staff,
+            'printedAt' => Carbon::now()->format('d-m-Y H:i'),
+        ]);
     }
 
     /**
@@ -104,7 +121,7 @@ class StaffManagementController extends Controller
     /**
      * Store a newly created staff member.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         // Check if user is super admin
         if (!Auth::guard('admin')->check()) {
@@ -137,7 +154,7 @@ class StaffManagementController extends Controller
             'salary_type' => ['nullable', 'string', 'in:full time,per hour,lecture'],
             'salary' => ['nullable', 'numeric', 'min:0'],
             'email' => ['nullable', 'email', 'max:255', 'unique:staff,email'],
-            'password' => ['nullable', 'string', 'min:6'],
+            'password' => ['nullable', 'string'],
             'home_address' => ['nullable', 'string'],
             'photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:2048'],
             'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
@@ -155,7 +172,7 @@ class StaffManagementController extends Controller
 
         // Auto-generate password if not provided (for dashboard access)
         if (empty($validated['password'])) {
-            $validated['password'] = $empId . '@123'; // Default password: EMP001@123
+            $validated['password'] = 'staff';
         }
         // Password will be hashed automatically by Staff model's setPasswordAttribute mutator
 
@@ -168,7 +185,15 @@ class StaffManagementController extends Controller
             $validated['cv_resume'] = $request->file('cv_resume')->store('staff/cv', 'public');
         }
 
-        Staff::create($validated);
+        $staff = Staff::create($validated);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'staff' => $staff,
+                'photo_url' => $staff->photo ? Storage::url($staff->photo) : null,
+            ]);
+        }
 
         return redirect()
             ->route('staff.management')
@@ -211,7 +236,7 @@ class StaffManagementController extends Controller
             'salary_type' => ['nullable', 'string', 'in:full time,per hour,lecture'],
             'salary' => ['nullable', 'numeric', 'min:0'],
             'email' => ['nullable', 'email', 'max:255', 'unique:staff,email,' . $staff->id],
-            'password' => ['nullable', 'string', 'min:6'],
+            'password' => ['nullable', 'string'],
             'home_address' => ['nullable', 'string'],
             'photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:2048'],
             'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
@@ -250,11 +275,26 @@ class StaffManagementController extends Controller
     /**
      * Remove the specified staff member.
      */
-    public function destroy(Staff $staff): RedirectResponse
+    public function destroy($staff): RedirectResponse|JsonResponse
     {
+        $staffModel = $staff instanceof Staff ? $staff : Staff::find($staff);
+        if (!$staffModel) {
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'id' => $staff,
+                    'message' => 'Staff member already deleted.',
+                ]);
+            }
+
+            return redirect()
+                ->route('staff.management')
+                ->with('error', 'Staff member not found.');
+        }
+
         // Get staff name before deletion for removing from sections and subjects
-        $staffName = trim($staff->name ?? '');
-        $isTeacher = $staff->isTeacher();
+        $staffName = trim($staffModel->name ?? '');
+        $isTeacher = $staffModel->isTeacher();
 
         // Remove staff member from all sections where they are assigned (for ALL staff, not just teachers)
         if (!empty($staffName)) {
@@ -300,14 +340,14 @@ class StaffManagementController extends Controller
         }
 
         // Delete associated files
-        if ($staff->photo) {
-            Storage::disk('public')->delete($staff->photo);
+        if ($staffModel->photo) {
+            Storage::disk('public')->delete($staffModel->photo);
         }
-        if ($staff->cv_resume) {
-            Storage::disk('public')->delete($staff->cv_resume);
+        if ($staffModel->cv_resume) {
+            Storage::disk('public')->delete($staffModel->cv_resume);
         }
 
-        $staff->delete();
+        $staffModel->delete();
 
         $message = 'Staff member deleted successfully!';
         if (!empty($staffName)) {
@@ -315,6 +355,14 @@ class StaffManagementController extends Controller
         }
         if ($isTeacher) {
             $message .= ' Teacher has also been removed from all assigned subjects.';
+        }
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'id' => $staffModel->id,
+                'message' => $message,
+            ]);
         }
 
         return redirect()

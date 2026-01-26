@@ -105,27 +105,23 @@
                                         </span>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
-                                        @php
-                                            $statusClass = match($student['status'] ?? '') {
-                                                'Today' => 'bg-success',
-                                                'Upcoming' => 'bg-info',
-                                                'Past' => 'bg-secondary',
-                                                default => 'bg-secondary'
-                                            };
-                                        @endphp
-                                        <span class="badge {{ $statusClass }} text-white" style="font-size: 11px;">{{ $student['status'] ?? 'N/A' }}</span>
+                                        @if(($student['status'] ?? '') === 'Today')
+                                            <span class="status-pill status-pill-today">Today is their birthday</span>
+                                        @else
+                                            <span class="status-pill status-pill-muted">Today is their birthday</span>
+                                        @endif
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
-                                        @php
-                                            $cardClass = ($student['birthday_card'] ?? '') === 'Sent' ? 'bg-success' : 'bg-warning';
-                                        @endphp
-                                        <span class="badge {{ $cardClass }} text-white" style="font-size: 11px;">{{ $student['birthday_card'] ?? 'Pending' }}</span>
+                                        <a href="{{ route('student.birthday.card.print', ['student' => $student['id'], 'auto_print' => 1]) }}" target="_blank" class="action-pill action-pill-card">
+                                            <span class="material-symbols-outlined">card_giftcard</span>
+                                            <span>Print Birthday Card</span>
+                                        </a>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
-                                        @php
-                                            $wishClass = ($student['wish'] ?? '') === 'Sent' ? 'bg-success' : 'bg-warning';
-                                        @endphp
-                                        <span class="badge {{ $wishClass }} text-white" style="font-size: 11px;">{{ $student['wish'] ?? 'Pending' }}</span>
+                                        <button type="button" class="action-pill action-pill-wish action-btn-wish" data-phone="{{ $student['parent_phone'] ?? '' }}">
+                                            <span class="material-symbols-outlined">send</span>
+                                            <span>Click To Wish</span>
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
@@ -238,6 +234,68 @@
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
     }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+    }
+
+    .status-pill-today {
+        background: #28a745;
+        color: #fff;
+    }
+
+    .status-pill-muted {
+        background: #6c757d;
+        color: #fff;
+    }
+
+    .action-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .action-pill .material-symbols-outlined {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .action-pill-card {
+        background: #0d6efd;
+        border-color: #0b5ed7;
+    }
+
+    .action-pill-wish {
+        background: #ff9800;
+        border-color: #f57c00;
+    }
+
+    .action-pill:hover,
+    .action-pill:focus,
+    .status-pill:hover,
+    .status-pill:focus {
+        transform: none;
+        box-shadow: none;
+        filter: none;
+        text-decoration: none;
+        color: #fff;
+    }
     
     .default-table-area table thead th:first-child {
         border-left: 1px solid #dee2e6;
@@ -320,6 +378,22 @@
 </style>
 
 <script>
+function normalizePhone(raw) {
+    return (raw || '').replace(/[^\d]/g, '');
+}
+
+document.addEventListener('click', function(event) {
+    const button = event.target.closest('.action-btn-wish');
+    if (!button) return;
+    const phoneRaw = button.getAttribute('data-phone') || '';
+    const phone = normalizePhone(phoneRaw);
+    if (!phone) {
+        alert('Parent phone not available for this student.');
+        return;
+    }
+    window.open(`https://wa.me/${phone}`, '_blank');
+});
+
 function printStudentTable() {
     const printWindow = window.open('', '_blank');
     const table = document.getElementById('studentBirthdayTable');

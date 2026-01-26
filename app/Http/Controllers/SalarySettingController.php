@@ -15,7 +15,7 @@ class SalarySettingController extends Controller
     public function index(): View
     {
         $settings = SalarySetting::getSettings();
-        
+
         return view('salary-loan.salary-setting', compact('settings'));
     }
 

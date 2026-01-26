@@ -8,10 +8,6 @@
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Manage Advance Fee</h4>
-                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 advance-fee-add-btn" data-bs-toggle="modal" data-bs-target="#advanceFeeModal" onclick="resetForm()">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Record</span>
-                </button>
             </div>
 
             @if(session('success'))
@@ -155,6 +151,15 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
+                                                <button type="button" class="btn btn-sm btn-success px-2 py-1" title="Increase Credit" onclick="openIncreaseModal({{ $advanceFee->id }})">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">add</span>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-warning px-2 py-1" title="Decrease Credit" onclick="openDecreaseModal({{ $advanceFee->id }})">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">remove</span>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-info px-2 py-1" title="Connected Students" onclick="openConnectedStudents({{ $advanceFee->id }})">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">group</span>
+                                                </button>
                                                 <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editAdvanceFee({{ $advanceFee->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
@@ -308,6 +313,120 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Increase Credit Modal -->
+<div class="modal fade" id="increaseCreditModal" tabindex="-1" aria-labelledby="increaseCreditModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0" id="increaseCreditModalLabel">Increase Credit</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <form id="increaseCreditForm" method="POST">
+                @csrf
+                @method('PUT')
+                <input type="hidden" name="name" id="increase_name">
+                <div class="modal-body p-3">
+                    <div class="mb-2">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Name</label>
+                        <input type="text" class="form-control form-control-sm" id="increase_display_name" readonly>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">ID Card Number</label>
+                        <input type="text" class="form-control form-control-sm" id="increase_id_card" readonly>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Current Credit</label>
+                        <input type="text" class="form-control form-control-sm" id="increase_current_credit" readonly>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Increase Credit</label>
+                        <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="increase" id="increase_amount" value="0">
+                    </div>
+                    <div>
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">New Credit</label>
+                        <input type="text" class="form-control form-control-sm" id="increase_new_credit" readonly>
+                    </div>
+                </div>
+                <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                    <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">Close</button>
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 advance-fee-submit-btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Decrease Credit Modal -->
+<div class="modal fade" id="decreaseCreditModal" tabindex="-1" aria-labelledby="decreaseCreditModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0" id="decreaseCreditModalLabel">Decrease Credit</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <form id="decreaseCreditForm" method="POST">
+                @csrf
+                @method('PUT')
+                <input type="hidden" name="name" id="decrease_name">
+                <div class="modal-body p-3">
+                    <div class="mb-2">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Name</label>
+                        <input type="text" class="form-control form-control-sm" id="decrease_display_name" readonly>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">ID Card Number</label>
+                        <input type="text" class="form-control form-control-sm" id="decrease_id_card" readonly>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Current Credit</label>
+                        <input type="text" class="form-control form-control-sm" id="decrease_current_credit" readonly>
+                    </div>
+                    <div>
+                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Minus Credit</label>
+                        <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="decrease" id="decrease_amount" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                    <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">Close</button>
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 advance-fee-submit-btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Connected Students Modal -->
+<div class="modal fade" id="connectedStudentsModal" tabindex="-1" aria-labelledby="connectedStudentsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0" id="connectedStudentsModalLabel">Connected Students</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Student</th>
+                                <th>Student Code</th>
+                                <th>Class/Section</th>
+                                <th>Campus</th>
+                            </tr>
+                        </thead>
+                        <tbody id="connectedStudentsBody">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-3">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -604,6 +723,80 @@ function editAdvanceFee(id) {
         });
 }
 
+function fetchAdvanceFeeData(id) {
+    return fetch(`{{ url('/accounting/manage-advance-fee') }}/${id}`)
+        .then(response => response.json());
+}
+
+function openIncreaseModal(id) {
+    fetchAdvanceFeeData(id)
+        .then(data => {
+            document.getElementById('increaseCreditForm').action = '{{ route('accounting.manage-advance-fee.update', ':id') }}'.replace(':id', id);
+            document.getElementById('increase_name').value = data.name || '';
+            document.getElementById('increase_display_name').value = data.name || '';
+            document.getElementById('increase_id_card').value = data.id_card_number || '';
+            const current = parseFloat(data.available_credit || 0);
+            document.getElementById('increase_current_credit').value = current.toFixed(2);
+            document.getElementById('increase_amount').value = 0;
+            document.getElementById('increase_new_credit').value = current.toFixed(2);
+
+            const modal = new bootstrap.Modal(document.getElementById('increaseCreditModal'));
+            modal.show();
+        })
+        .catch(() => {
+            alert('Error loading advance fee data');
+        });
+}
+
+function openDecreaseModal(id) {
+    fetchAdvanceFeeData(id)
+        .then(data => {
+            document.getElementById('decreaseCreditForm').action = '{{ route('accounting.manage-advance-fee.update', ':id') }}'.replace(':id', id);
+            document.getElementById('decrease_name').value = data.name || '';
+            document.getElementById('decrease_display_name').value = data.name || '';
+            document.getElementById('decrease_id_card').value = data.id_card_number || '';
+            const current = parseFloat(data.available_credit || 0);
+            document.getElementById('decrease_current_credit').value = current.toFixed(2);
+            document.getElementById('decrease_amount').value = 0;
+
+            const modal = new bootstrap.Modal(document.getElementById('decreaseCreditModal'));
+            modal.show();
+        })
+        .catch(() => {
+            alert('Error loading advance fee data');
+        });
+}
+
+function openConnectedStudents(id) {
+    const tbody = document.getElementById('connectedStudentsBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Loading...</td></tr>';
+
+    fetch(`{{ url('/accounting/manage-advance-fee') }}/${id}/students`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.students || data.students.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No connected students found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.students.map((student, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${student.student_name || 'N/A'}</td>
+                    <td>${student.student_code || 'N/A'}</td>
+                    <td>${student.class || 'N/A'}${student.section ? ' / ' + student.section : ''}</td>
+                    <td>${student.campus || 'N/A'}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(() => {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Error loading students.</td></tr>';
+        });
+
+    const modal = new bootstrap.Modal(document.getElementById('connectedStudentsModal'));
+    modal.show();
+}
+
 // Search functionality
 function performSearch() {
     const searchInput = document.getElementById('searchInput');
@@ -657,6 +850,19 @@ function updateEntriesPerPage(value) {
     url.searchParams.set('page', '1');
     window.location.href = url.toString();
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    const increaseAmount = document.getElementById('increase_amount');
+    const increaseCurrent = document.getElementById('increase_current_credit');
+    const increaseNew = document.getElementById('increase_new_credit');
+    if (increaseAmount && increaseCurrent && increaseNew) {
+        increaseAmount.addEventListener('input', function () {
+            const current = parseFloat(increaseCurrent.value || 0);
+            const inc = parseFloat(this.value || 0);
+            increaseNew.value = (current + inc).toFixed(2);
+        });
+    }
+});
 
 // Print table
 function printTable() {

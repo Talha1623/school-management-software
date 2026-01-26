@@ -25,6 +25,7 @@ class AttendanceReportController extends Controller
         $filterClassSection = $request->get('filter_class_section');
         $filterMonth = (int) $request->get('filter_month', date('m'));
         $filterYear = (int) $request->get('filter_year', date('Y'));
+        $filterCampusNormalized = $filterCampus ? strtolower(trim($filterCampus)) : null;
 
         // Get logged-in staff/teacher
         $staff = Auth::guard('staff')->user();
@@ -69,14 +70,22 @@ class AttendanceReportController extends Controller
         $classes = collect();
         if ($isTeacher) {
             // Get classes from teacher's assigned subjects
-            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+            $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereNotNull('class')
-                ->get();
+                ->whereNotNull('campus');
+            if ($filterCampusNormalized) {
+                $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+            }
+            $assignedSubjects = $assignedSubjectsQuery->get();
             
             // Get classes from teacher's assigned sections
-            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+            $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereNotNull('class')
-                ->get();
+                ->whereNotNull('campus');
+            if ($filterCampusNormalized) {
+                $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+            }
+            $assignedSections = $assignedSectionsQuery->get();
             
             // Merge classes from both sources
             $classes = $assignedSubjects->pluck('class')
@@ -92,10 +101,20 @@ class AttendanceReportController extends Controller
                 ->values();
         } else {
             // For non-teachers, get all classes
-            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+            $classesQuery = ClassModel::whereNotNull('class_name');
+            if ($filterCampusNormalized) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+            }
+            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
             if ($classes->isEmpty()) {
-                $classesFromSubjects = Subject::whereNotNull('class')->distinct()->pluck('class')->sort();
-                $classes = $classesFromSubjects->isEmpty() ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']) : $classesFromSubjects;
+                $classesFromSubjectsQuery = Subject::whereNotNull('class');
+                if ($filterCampusNormalized) {
+                    $classesFromSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+                }
+                $classesFromSubjects = $classesFromSubjectsQuery->distinct()->pluck('class')->sort();
+                $classes = $classesFromSubjects->isEmpty()
+                    ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                    : $classesFromSubjects;
             }
         }
 
@@ -106,16 +125,24 @@ class AttendanceReportController extends Controller
             $sections = collect();
             if ($isTeacher) {
                 // Get sections from teacher's assigned subjects for this class
-                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                     ->whereNotNull('section')
-                    ->get();
+                    ->whereNotNull('campus');
+                if ($filterCampusNormalized) {
+                    $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+                }
+                $assignedSubjects = $assignedSubjectsQuery->get();
                 
                 // Get sections from teacher's assigned sections for this class
-                $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
+                $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                     ->whereNotNull('name')
-                    ->get();
+                    ->whereNotNull('campus');
+                if ($filterCampusNormalized) {
+                    $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+                }
+                $assignedSections = $assignedSectionsQuery->get();
                 
                 // Merge sections from both sources
                 $sections = $assignedSubjects->pluck('section')
@@ -131,7 +158,12 @@ class AttendanceReportController extends Controller
                     ->values();
             } else {
                 // For non-teachers, get all sections
-                $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereNotNull('name');
+                if ($filterCampusNormalized) {
+                    $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+                }
+                $sections = $sectionsQuery
                     ->whereNotNull('name')
                     ->distinct()
                     ->pluck('name')
@@ -139,11 +171,13 @@ class AttendanceReportController extends Controller
                     ->values();
                 
                 if ($sections->isEmpty()) {
-                    $sectionsFromSubjects = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    $sectionsFromSubjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                         ->whereNotNull('section')
-                        ->distinct()
-                        ->pluck('section')
-                        ->sort();
+                        ->distinct();
+                    if ($filterCampusNormalized) {
+                        $sectionsFromSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$filterCampusNormalized]);
+                    }
+                    $sectionsFromSubjects = $sectionsFromSubjectsQuery->pluck('section')->sort();
                     $sections = $sectionsFromSubjects;
                 }
             }

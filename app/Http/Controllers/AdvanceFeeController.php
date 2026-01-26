@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AdvanceFee;
+use App\Models\Student;
+use App\Models\ParentAccount;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -77,6 +79,42 @@ class AdvanceFeeController extends Controller
     public function show(AdvanceFee $advanceFee)
     {
         return response()->json($advanceFee);
+    }
+
+    /**
+     * Get connected students for the given advance fee record.
+     */
+    public function connectedStudents(AdvanceFee $advanceFee)
+    {
+        $students = collect();
+
+        if (!empty($advanceFee->parent_id) && ctype_digit((string) $advanceFee->parent_id)) {
+            $parentAccount = ParentAccount::find((int) $advanceFee->parent_id);
+            if ($parentAccount) {
+                $students = $students->merge($parentAccount->students);
+            }
+        }
+
+        if (!empty($advanceFee->id_card_number)) {
+            $students = $students->merge(
+                Student::where('father_id_card', $advanceFee->id_card_number)->get()
+            );
+        }
+
+        $students = $students->unique('id')->values();
+
+        return response()->json([
+            'students' => $students->map(function ($student) {
+                return [
+                    'id' => $student->id,
+                    'student_name' => $student->student_name,
+                    'student_code' => $student->student_code,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                ];
+            }),
+        ]);
     }
 
     /**

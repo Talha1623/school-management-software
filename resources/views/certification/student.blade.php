@@ -47,7 +47,7 @@
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
                         <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
                             <option value="">All Classes</option>
-                            @foreach($classes as $className)
+                            @foreach(($filterClasses ?? $classes) as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
                             @endforeach
                         </select>
@@ -72,6 +72,7 @@
                             <option value="Character Certificate" {{ $filterCertificateType == 'Character Certificate' ? 'selected' : '' }}>Character Certificate</option>
                             <option value="School Leaving Certificate" {{ $filterCertificateType == 'School Leaving Certificate' ? 'selected' : '' }}>School Leaving Certificate</option>
                             <option value="Date of Birth Certificate" {{ $filterCertificateType == 'Date of Birth Certificate' ? 'selected' : '' }}>Date of Birth Certificate</option>
+                            <option value="Provisional Certificate" {{ $filterCertificateType == 'Provisional Certificate' ? 'selected' : '' }}>Provisional Certificate</option>
                         </select>
                     </div>
                 </div>

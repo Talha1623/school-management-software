@@ -150,16 +150,21 @@
                                             <span class="badge bg-warning text-dark">{{ $salary->late }}</span>
                                         </td>
                                         <td>
-                                            <strong class="text-primary">₹{{ number_format($salary->basic, 2) }}</strong>
+                                            <strong class="text-primary">{{ number_format($salary->basic, 2) }}</strong>
+                                            <div>
+                                                <span class="badge bg-light text-dark" style="font-size: 10px;">
+                                                    {{ $salary->staff->salary_type ?? 'full time' }}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td>
-                                            <strong class="text-success">₹{{ number_format($salary->salary_generated, 2) }}</strong>
+                                            <strong class="text-success">{{ number_format($salary->salary_generated, 2) }}</strong>
                                         </td>
                                         <td>
-                                            <strong class="text-info">₹{{ number_format($salary->amount_paid, 2) }}</strong>
+                                            <strong class="text-info">{{ number_format($salary->amount_paid, 2) }}</strong>
                                         </td>
                                         <td>
-                                            <strong class="text-warning">₹{{ number_format($salary->loan_repayment, 2) }}</strong>
+                                            <strong class="text-warning">{{ number_format($salary->loan_repayment, 2) }}</strong>
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
@@ -191,8 +196,8 @@
                                                             <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
                                                                 @csrf
                                                                 @method('PUT')
-                                                                <input type="hidden" name="status" value="Partial">
-                                                                <button type="submit" class="dropdown-item {{ $salary->status == 'Partial' ? 'active' : '' }}">Partial</button>
+                                                                <input type="hidden" name="status" value="Issued">
+                                                                <button type="submit" class="dropdown-item {{ $salary->status == 'Issued' ? 'active' : '' }}">Issued</button>
                                                             </form>
                                                         </li>
                                                     </ul>

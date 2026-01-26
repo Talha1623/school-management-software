@@ -247,6 +247,14 @@
             }
         }
     </style>
+
+@if(request()->get('auto_print'))
+    <script>
+        window.addEventListener('load', function() {
+            window.print();
+        });
+    </script>
+@endif
 </head>
 
 <body>

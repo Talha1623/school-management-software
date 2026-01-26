@@ -205,6 +205,7 @@
     </div>
     
     <div class="report-info">
+        <p><strong>Campus:</strong> {{ $campus ?? 'All' }}</p>
         <p><strong>Class:</strong> {{ $class ?? 'All' }}</p>
         @if($section)
         <p><strong>Section:</strong> {{ $section }}</p>

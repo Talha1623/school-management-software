@@ -65,7 +65,10 @@ class Staff extends Authenticatable
      */
     public function hasDashboardAccess(): bool
     {
-        return !empty($this->email) && !empty($this->password);
+        $status = strtolower(trim($this->status ?? ''));
+        $isActive = $status === '' || $status === 'active';
+
+        return $isActive && !empty($this->email) && !empty($this->password);
     }
 
     /**

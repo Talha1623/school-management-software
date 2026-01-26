@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BehaviorRecord;
+use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Student;
@@ -20,15 +21,35 @@ class ReportingAnalysisController extends Controller
      */
     public function index(Request $request): View
     {
+        $filterCampus = $request->get('campus');
+
+        // Get campuses for dropdown - first from Campus model, then fallback
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
+        }
+
         // Get classes for filter form
         $classes = collect();
         $staff = Auth::guard('staff')->user();
         
         if ($staff && $staff->isTeacher()) {
-            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
-            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+            if ($filterCampus) {
+                $assignedSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $assignedSubjects = $assignedSubjects->get();
+
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+            if ($filterCampus) {
+                $assignedSections->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $assignedSections = $assignedSections->get();
             $classes = $assignedSubjects->pluck('class')
                 ->merge($assignedSections->pluck('class'))
                 ->map(function($class) {
@@ -41,9 +62,17 @@ class ReportingAnalysisController extends Controller
                 ->sort()
                 ->values();
         } else {
-            $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+            $classesQuery = ClassModel::whereNotNull('class_name');
+            if ($filterCampus) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
             if ($classes->isEmpty()) {
-                $classesFromSubjects = Subject::whereNotNull('class')->distinct()->pluck('class')->sort();
+                $classesFromSubjects = Subject::whereNotNull('class');
+                if ($filterCampus) {
+                    $classesFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                }
+                $classesFromSubjects = $classesFromSubjects->distinct()->pluck('class')->sort();
                 $classes = $classesFromSubjects->isEmpty() ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']) : $classesFromSubjects;
             }
         }
@@ -70,9 +99,11 @@ class ReportingAnalysisController extends Controller
         ];
 
         return view('student-behavior.reporting-analysis', compact(
+            'campuses',
             'classes',
             'years',
-            'reportTypes'
+            'reportTypes',
+            'filterCampus'
         ));
     }
 
@@ -81,6 +112,7 @@ class ReportingAnalysisController extends Controller
      */
     public function report(Request $request): View
     {
+        $campus = $request->get('campus');
         $class = $request->get('class');
         $section = $request->get('section');
         $reportType = $request->get('report_type', 'summary');
@@ -98,6 +130,11 @@ class ReportingAnalysisController extends Controller
         if ($section) {
             $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
         }
+        
+        // Filter by campus
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
 
         // Filter by year
         if ($year) {
@@ -111,6 +148,9 @@ class ReportingAnalysisController extends Controller
         }
         if ($section) {
             $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+        }
+        if ($campus) {
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
         $students = $studentsQuery->get();
 
@@ -186,6 +226,9 @@ class ReportingAnalysisController extends Controller
                 if ($section) {
                     $previousYearRecords->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
                 }
+                if ($campus) {
+                    $previousYearRecords->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                }
                 $previousYearRecords = $previousYearRecords->get();
                 $reportData = [
                     'current_year' => $year,
@@ -229,6 +272,7 @@ class ReportingAnalysisController extends Controller
         return view('student-behavior.report-print', compact(
             'reportData',
             'reportType',
+            'campus',
             'class',
             'section',
             'year'
@@ -241,6 +285,7 @@ class ReportingAnalysisController extends Controller
     public function getSectionsByClass(Request $request): JsonResponse
     {
         $class = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$class) {
             return response()->json(['sections' => []]);
@@ -253,13 +298,19 @@ class ReportingAnalysisController extends Controller
         if ($staff && $staff->isTeacher()) {
             // Get sections from teacher's assigned subjects for this class
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->get();
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            if ($campus) {
+                $assignedSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $assignedSubjects = $assignedSubjects->get();
             
             // Get sections from teacher's assigned sections for this class
             $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->get();
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            if ($campus) {
+                $assignedSections->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $assignedSections = $assignedSections->get();
             
             // Merge sections from both sources
             $sections = $assignedSubjects->pluck('section')
@@ -275,7 +326,11 @@ class ReportingAnalysisController extends Controller
                 ->values();
         } else {
             // For non-teachers, get all sections
-            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            if ($campus) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $sectionsQuery
                 ->whereNotNull('name')
                 ->distinct()
                 ->pluck('name')
@@ -284,7 +339,11 @@ class ReportingAnalysisController extends Controller
             
             if ($sections->isEmpty()) {
                 $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                    ->whereNotNull('section')
+                    ->whereNotNull('section');
+                if ($campus) {
+                    $sections->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                }
+                $sections = $sections
                     ->distinct()
                     ->pluck('section')
                     ->sort()
@@ -301,6 +360,7 @@ class ReportingAnalysisController extends Controller
     public function getReportData(Request $request): JsonResponse
     {
         try {
+            $campus = $request->get('campus');
             $class = $request->get('class');
             $section = $request->get('section');
             $reportType = $request->get('report_type', 'summary');
@@ -318,6 +378,9 @@ class ReportingAnalysisController extends Controller
             if ($section) {
                 $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
             }
+            if ($campus) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
 
             // Filter by year
             if ($year) {
@@ -331,6 +394,9 @@ class ReportingAnalysisController extends Controller
             }
             if ($section) {
                 $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            }
+            if ($campus) {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
             $students = $studentsQuery->get();
 
@@ -430,6 +496,9 @@ class ReportingAnalysisController extends Controller
                     if ($section) {
                         $previousYearRecords->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
                     }
+                    if ($campus) {
+                        $previousYearRecords->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                    }
                     $previousYearRecords = $previousYearRecords->get();
                     
                     $reportData = [
@@ -481,6 +550,7 @@ class ReportingAnalysisController extends Controller
                 'success' => true,
                 'data' => $reportData,
                 'filters' => [
+                    'campus' => $campus,
                     'class' => $class,
                     'section' => $section,
                     'report_type' => $reportType,
@@ -494,6 +564,67 @@ class ReportingAnalysisController extends Controller
                 'message' => 'Error generating report: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Get classes by campus (AJAX endpoint)
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        $staff = Auth::guard('staff')->user();
+        $classes = collect();
+
+        if ($staff && $staff->isTeacher()) {
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+            if ($campus) {
+                $assignedSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $assignedSubjects = $assignedSubjects->get();
+
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+            if ($campus) {
+                $assignedSections->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $assignedSections = $assignedSections->get();
+
+            $classes = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function($class) {
+                    return trim($class);
+                })
+                ->filter(function($class) {
+                    return !empty($class);
+                })
+                ->unique()
+                ->sort()
+                ->values();
+        } else {
+            $classesQuery = ClassModel::whereNotNull('class_name');
+            if ($campus) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+
+            if ($classes->isEmpty()) {
+                $classesFromSubjects = Subject::whereNotNull('class');
+                if ($campus) {
+                    $classesFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                }
+                $classesFromSubjects = $classesFromSubjects->distinct()->pluck('class')->sort();
+                $classes = $classesFromSubjects->isEmpty()
+                    ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                    : $classesFromSubjects;
+            }
+        }
+
+        $classes = $classes->map(function($class) {
+            return trim((string) $class);
+        })->filter(function($class) {
+            return $class !== '';
+        })->unique()->sort()->values();
+
+        return response()->json(['classes' => $classes]);
     }
 }
 

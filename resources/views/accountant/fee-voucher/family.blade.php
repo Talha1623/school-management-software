@@ -38,16 +38,11 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
                                     <option value="">All Campuses</option>
-                                    @php
-                                        $campuses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                                        $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
-                                        $allCampuses = $campuses->merge($campusesFromSections)->unique()->sort()->values();
-                                        if ($allCampuses->isEmpty()) {
-                                            $allCampuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-                                        }
-                                    @endphp
-                                    @foreach($allCampuses as $campus)
-                                        <option value="{{ $campus }}" {{ request('campus') == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                                    @foreach($campuses as $campus)
+                                        @php($campusName = $campus->campus_name ?? $campus)
+                                        <option value="{{ $campusName }}" {{ ($filterCampus ?? request('campus')) == $campusName ? 'selected' : '' }}>
+                                            {{ $campusName }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>

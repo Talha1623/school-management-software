@@ -132,7 +132,7 @@
                         </thead>
                         <tbody>
                             @forelse($parents as $parent)
-                                <tr>
+                                <tr data-parent-id="{{ $parent->id }}">
                                     <td style="padding: 8px 12px; font-size: 13px;">{{ $loop->iteration + (($parents->currentPage() - 1) * $parents->perPage()) }}</td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
                                         <strong class="text-primary">{{ $parent->name }}</strong>
@@ -193,13 +193,35 @@
                                             <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editParent({{ $parent->id }}, '{{ addslashes($parent->name) }}', '{{ addslashes($parent->email) }}', '{{ $parent->phone ?? '' }}', '{{ $parent->whatsapp ?? '' }}', '{{ $parent->id_card_number ?? '' }}', '{{ addslashes($parent->address ?? '') }}', '{{ addslashes($parent->profession ?? '') }}')" title="Edit">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </button>
-                                            <form action="{{ route('parent.manage-access.destroy', $parent) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this parent account?');">
+                                            <form action="{{ route('parent.manage-access.destroy', $parent) }}" method="POST" class="d-inline parent-delete-form" data-parent-id="{{ $parent->id }}">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                             </form>
+                                            <div class="dropdown parent-action-dropdown">
+                                                <button class="btn btn-sm btn-dark px-2 py-1 no-caret" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Print Actions">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">pie_chart</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end parent-action-menu">
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('accounting.fee-voucher.print', ['parent_id' => $parent->id, 'auto_print' => 1]) }}" target="_blank">
+                                                            Parent Voucher
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('parent.dues-report.print', ['parent_account' => $parent->id, 'auto_print' => 1]) }}" target="_blank">
+                                                            Dues Report
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('parent.print-gate-passes.print', ['parent_id' => $parent->id, 'auto_print' => 1]) }}" target="_blank">
+                                                            Gate Pass
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -267,7 +289,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
                                 </span>
-                                <input type="password" class="form-control parent-input" name="password" id="password" placeholder="Enter password" required>
+                                <input type="text" class="form-control parent-input" name="password" id="password" value="parent" placeholder="Enter password" required>
                             </div>
                             <small class="text-muted" id="passwordHint" style="font-size: 11px;">Leave blank to keep current password when editing</small>
                         </div>
@@ -358,7 +380,7 @@
                             <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                 <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
                             </span>
-                            <input type="password" class="form-control" name="password" id="reset_password" placeholder="Enter new password" required minlength="6">
+                            <input type="text" class="form-control" name="password" id="reset_password" value="parent" placeholder="Enter new password" required minlength="6">
                         </div>
                         <small class="text-muted" style="font-size: 11px;">Minimum 6 characters</small>
                     </div>
@@ -368,7 +390,7 @@
                             <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                 <span class="material-symbols-outlined" style="font-size: 15px;">lock</span>
                             </span>
-                            <input type="password" class="form-control" name="password_confirmation" id="reset_password_confirmation" placeholder="Confirm new password" required minlength="6">
+                            <input type="text" class="form-control" name="password_confirmation" id="reset_password_confirmation" value="parent" placeholder="Confirm new password" required minlength="6">
                         </div>
                     </div>
                 </div>
@@ -559,6 +581,18 @@
         background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 52, 113, 0.35);
+    }
+
+    .parent-action-dropdown .no-caret::after {
+        display: none !important;
+    }
+
+    .parent-action-menu {
+        min-width: 200px;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+        z-index: 1050;
     }
     
     #parentModal .parent-submit-btn:active {
@@ -1023,6 +1057,7 @@ function resetForm() {
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('parentModalLabel').textContent = 'Add New Parent';
     document.getElementById('password').required = true;
+    document.getElementById('password').value = 'parent';
     document.getElementById('passwordRequired').style.display = 'inline';
     document.getElementById('passwordHint').style.display = 'none';
 }
@@ -1122,10 +1157,205 @@ function printTable() {
 function resetPassword(parentId, parentName) {
     document.getElementById('resetPasswordForm').action = '{{ route('parent.manage-access.reset-password', ':id') }}'.replace(':id', parentId);
     document.getElementById('reset_parent_name').value = parentName;
-    document.getElementById('reset_password').value = '';
-    document.getElementById('reset_password_confirmation').value = '';
+    document.getElementById('reset_password').value = 'parent';
+    document.getElementById('reset_password_confirmation').value = 'parent';
     new bootstrap.Modal(document.getElementById('resetPasswordModal')).show();
 }
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    };
+    return String(text || '').replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+function buildParentRow(parent) {
+    const deleteUrl = '{{ route('parent.manage-access.destroy', ':id') }}'.replace(':id', parent.id);
+    const editUrl = '{{ route('parent.manage-access.update', ':id') }}'.replace(':id', parent.id);
+    const voucherUrl = "{{ route('accounting.fee-voucher.print', ['parent_id' => ':id', 'auto_print' => 1]) }}".replace(':id', parent.id);
+    const duesUrl = "{{ route('parent.dues-report.print', ['parent_account' => ':id', 'auto_print' => 1]) }}".replace(':id', parent.id);
+    const gatePassUrl = "{{ route('parent.print-gate-passes.print', ['parent_id' => ':id', 'auto_print' => 1]) }}".replace(':id', parent.id);
+
+    return `
+        <tr data-parent-id="${parent.id}">
+            <td style="padding: 8px 12px; font-size: 13px;">NEW</td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                <strong class="text-primary">${escapeHtml(parent.name)}</strong>
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                <span class="text-muted">
+                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span>
+                    ${escapeHtml(parent.email)}
+                </span>
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                ${parent.phone ? `<span class="badge bg-light text-dark" style="font-size: 11px;"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">phone</span> ${escapeHtml(parent.phone)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                ${parent.whatsapp ? `<span class="badge bg-success text-white" style="font-size: 11px;"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">chat</span> ${escapeHtml(parent.whatsapp)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                ${parent.id_card_number ? `<span class="badge bg-info text-white" style="font-size: 11px;">${escapeHtml(parent.id_card_number)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                <span class="text-muted" title="${escapeHtml(parent.address)}">
+                    ${parent.address ? escapeHtml(parent.address).slice(0, 30) : 'N/A'}
+                </span>
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                ${parent.profession ? `<span class="badge bg-secondary text-white" style="font-size: 11px;">${escapeHtml(parent.profession)}</span>` : '<span class="text-muted">N/A</span>'}
+            </td>
+            <td class="text-end" style="padding: 8px 12px; font-size: 13px; text-align: center;">
+                <div class="d-inline-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-warning px-2 py-1" onclick="resetPassword(${parent.id}, '${escapeHtml(parent.name)}')" title="Reset Password">
+                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">lock_reset</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-info px-2 py-1" onclick="connectStudent(${parent.id}, '${escapeHtml(parent.name)}', '${escapeHtml(parent.id_card_number)}', '${escapeHtml(parent.email)}')" title="Connect Student">
+                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">link</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editParent(${parent.id}, '${escapeHtml(parent.name)}', '${escapeHtml(parent.email)}', '${escapeHtml(parent.phone)}', '${escapeHtml(parent.whatsapp)}', '${escapeHtml(parent.id_card_number)}', '${escapeHtml(parent.address)}', '${escapeHtml(parent.profession)}')" title="Edit">
+                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
+                    </button>
+                    <form action="${deleteUrl}" method="POST" class="d-inline parent-delete-form" data-parent-id="${parent.id}">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
+                            <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
+                        </button>
+                    </form>
+                    <div class="dropdown parent-action-dropdown">
+                        <button class="btn btn-sm btn-dark px-2 py-1 no-caret" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Print Actions">
+                            <span class="material-symbols-outlined" style="font-size: 14px; color: white;">pie_chart</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end parent-action-menu">
+                            <li>
+                                <a class="dropdown-item" href="${voucherUrl}" target="_blank">Parent Voucher</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="${duesUrl}" target="_blank">Dues Report</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="${gatePassUrl}" target="_blank">Gate Pass</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+function removeEmptyRowIfExists(tbody) {
+    const emptyRow = tbody.querySelector('tr td[colspan]');
+    if (emptyRow) {
+        emptyRow.closest('tr').remove();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const parentForm = document.getElementById('parentForm');
+    const tbody = document.querySelector('.default-table-area tbody');
+
+    if (parentForm) {
+        parentForm.addEventListener('submit', async function (event) {
+            const methodField = document.getElementById('methodField');
+            if (methodField && methodField.innerHTML.includes('PUT')) {
+                return;
+            }
+            event.preventDefault();
+
+            const formData = new FormData(parentForm);
+            const response = await fetch(parentForm.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                body: formData,
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                if (data && data.errors) {
+                    const firstError = Object.values(data.errors)[0];
+                    alert(Array.isArray(firstError) ? firstError[0] : firstError);
+                } else {
+                    alert('Unable to add parent. Please check the form.');
+                }
+                return;
+            }
+
+            const data = await response.json();
+            if (data && data.parent) {
+                removeEmptyRowIfExists(tbody);
+                tbody.insertAdjacentHTML('afterbegin', buildParentRow(data.parent));
+            }
+
+            const modalEl = document.getElementById('parentModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            parentForm.reset();
+            document.getElementById('password').value = 'parent';
+        });
+    }
+
+    document.addEventListener('submit', async function (event) {
+        const form = event.target;
+        if (!form.classList.contains('parent-delete-form')) return;
+        event.preventDefault();
+
+        if (!confirm('Are you sure you want to delete this parent account?')) {
+            return;
+        }
+
+        const response = await fetch(form.action, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+            credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            alert(errorText || 'Unable to delete parent. Please try again.');
+            return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        const parentId = data && data.id ? data.id : form.dataset.parentId;
+        const row = tbody.querySelector(`tr[data-parent-id="${parentId}"]`);
+        if (row) {
+            row.remove();
+        }
+
+        if (tbody.querySelectorAll('tr').length === 0) {
+            tbody.insertAdjacentHTML('beforeend', `
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-5">
+                        <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
+                        <p class="mt-2 mb-0">No parent accounts found.</p>
+                    </td>
+                </tr>
+            `);
+        }
+    });
+});
 
 let allStudents = [];
 

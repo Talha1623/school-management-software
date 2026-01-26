@@ -36,6 +36,7 @@ class Student extends Authenticatable
         'b_form_number',
         'monthly_fee',
         'discounted_student',
+        'discount_reason',
         'transport_route',
         'transport_fare',
         'admission_notification',

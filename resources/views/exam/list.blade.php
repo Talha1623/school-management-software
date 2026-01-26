@@ -53,11 +53,11 @@
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <!-- Export Buttons -->
                     <div class="d-flex gap-2">
-                        <a href="{{ route('exam.list.export', ['format' => 'excel']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                        <a href="{{ route('exam.list.export', ['format' => 'excel']) }}{{ request()->hasAny(['search', 'filter_campus']) ? ('?' . http_build_query(array_filter(['search' => request('search'), 'filter_campus' => request('filter_campus')]))) : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
                             <span>Excel</span>
                         </a>
-                        <a href="{{ route('exam.list.export', ['format' => 'pdf']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                        <a href="{{ route('exam.list.export', ['format' => 'pdf']) }}{{ request()->hasAny(['search', 'filter_campus']) ? ('?' . http_build_query(array_filter(['search' => request('search'), 'filter_campus' => request('filter_campus')]))) : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
                             <span>PDF</span>
                         </a>
@@ -67,6 +67,20 @@
                         </button>
                     </div>
                     
+                    <!-- Campus Filter -->
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="filter_campus" class="mb-0 fs-13 fw-medium text-dark">Campus:</label>
+                        <select id="filter_campus" class="form-select form-select-sm" style="width: auto; min-width: 140px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ ($filterCampus ?? '') === $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <!-- Search -->
                     <div class="d-flex align-items-center gap-2">
                         <label for="searchInput" class="mb-0 fs-13 fw-medium text-dark">Search:</label>
@@ -653,6 +667,9 @@ function editExam(id, campus, examName, description, examDate, session) {
 function updateEntriesPerPage(value) {
     const url = new URL(window.location.href);
     url.searchParams.set('per_page', value);
+    if (document.getElementById('filter_campus')?.value) {
+        url.searchParams.set('filter_campus', document.getElementById('filter_campus').value);
+    }
     window.location.href = url.toString();
 }
 
@@ -676,6 +693,12 @@ function performSearch() {
     } else {
         url.searchParams.delete('search');
     }
+    const filterCampusValue = document.getElementById('filter_campus')?.value || '';
+    if (filterCampusValue) {
+        url.searchParams.set('filter_campus', filterCampusValue);
+    } else {
+        url.searchParams.delete('filter_campus');
+    }
     url.searchParams.delete('page');
     window.location.href = url.toString();
 }
@@ -683,6 +706,12 @@ function performSearch() {
 function clearSearch() {
     const url = new URL(window.location.href);
     url.searchParams.delete('search');
+    const filterCampusValue = document.getElementById('filter_campus')?.value || '';
+    if (filterCampusValue) {
+        url.searchParams.set('filter_campus', filterCampusValue);
+    } else {
+        url.searchParams.delete('filter_campus');
+    }
     url.searchParams.delete('page');
     window.location.href = url.toString();
 }
@@ -693,6 +722,20 @@ function printTable() {
 
 // Auto-dismiss toast notifications
 document.addEventListener('DOMContentLoaded', function() {
+    const campusFilter = document.getElementById('filter_campus');
+    if (campusFilter) {
+        campusFilter.addEventListener('change', function() {
+            const url = new URL(window.location.href);
+            if (this.value) {
+                url.searchParams.set('filter_campus', this.value);
+            } else {
+                url.searchParams.delete('filter_campus');
+            }
+            url.searchParams.delete('page');
+            window.location.href = url.toString();
+        });
+    }
+
     const successAlert = document.getElementById('successAlert');
     const errorAlert = document.getElementById('errorAlert');
     

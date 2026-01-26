@@ -182,6 +182,25 @@ class ManagementExpenseController extends Controller
     }
 
     /**
+     * Show a single management expense.
+     */
+    public function show(ManagementExpense $managementExpense): View
+    {
+        return view('expense-management.show', compact('managementExpense'));
+    }
+
+    /**
+     * Print a single management expense.
+     */
+    public function print(ManagementExpense $managementExpense): View
+    {
+        return view('expense-management.print', [
+            'managementExpense' => $managementExpense,
+            'printedAt' => now()->format('d-m-Y H:i'),
+        ]);
+    }
+
+    /**
      * Export management expenses to Excel, CSV, or PDF
      */
     public function export(Request $request, string $format)

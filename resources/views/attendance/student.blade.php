@@ -27,6 +27,24 @@
             <!-- Attendance Form -->
             <form method="GET" action="{{ route('attendance.student') }}" id="attendanceForm">
                 <div class="row g-2 align-items-end">
+                    <!-- Campus Field -->
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-0 fs-13 fw-medium">Campus</label>
+                        <div class="position-relative">
+                            <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px; padding-right: {{ request('filter_campus') ? '30px' : '12px' }};">
+                                <option value="">Select Campus</option>
+                                @foreach($campuses as $campus)
+                                    <option value="{{ $campus->campus_name ?? $campus }}" {{ request('filter_campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>{{ $campus->campus_name ?? $campus }}</option>
+                                @endforeach
+                            </select>
+                            @if(request('filter_campus'))
+                                <button type="button" class="btn btn-sm position-absolute" onclick="clearFilter('filter_campus')" style="right: 25px; top: 50%; transform: translateY(-50%); padding: 0; width: 20px; height: 20px; background: transparent; border: none; color: #dc3545; z-index: 10;" title="Clear Campus">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">close</span>
+                                </button>
+                            @endif
+                        </div>
+                    </div>
+
                     <!-- Type Field -->
                     <div class="col-md-2">
                         <label for="filter_type" class="form-label mb-0 fs-13 fw-medium">Type</label>
@@ -49,8 +67,8 @@
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-0 fs-13 fw-medium">Class</label>
                         <div class="position-relative">
-                            <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px; padding-right: {{ request('filter_class') ? '30px' : '12px' }};">
-                                <option value="">Select Class</option>
+                            <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px; padding-right: {{ request('filter_class') ? '30px' : '12px' }};" {{ request('filter_campus') ? '' : 'disabled' }}>
+                                <option value="">{{ request('filter_campus') ? 'Select Class' : 'Select Campus First' }}</option>
                                 @foreach($classes as $class)
                                     <option value="{{ $class }}" {{ request('filter_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
                                 @endforeach
@@ -424,9 +442,56 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
     
+    function loadClasses(campusName, selectedClass = '') {
+        if (!classSelect) return;
+
+        if (!campusName) {
+            classSelect.innerHTML = '<option value="">Select Campus First</option>';
+            classSelect.disabled = true;
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            sectionSelect.disabled = true;
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading classes...</option>';
+        classSelect.disabled = true;
+
+        fetch(`{{ route('attendance.student.get-classes-by-campus') }}?campus=${encodeURIComponent(campusName)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            if (data.classes && data.classes.length > 0) {
+                data.classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    if (selectedClass && selectedClass === className) {
+                        option.selected = true;
+                    }
+                    classSelect.appendChild(option);
+                });
+                classSelect.disabled = false;
+            } else {
+                classSelect.innerHTML = '<option value="">No classes found</option>';
+                classSelect.disabled = true;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            classSelect.disabled = true;
+        });
+    }
+
     // Function to load sections for selected class
     function loadSections(className) {
         if (!className) {
@@ -438,7 +503,12 @@ document.addEventListener('DOMContentLoaded', function() {
         sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
         sectionSelect.disabled = true;
         
-        fetch(`{{ route('attendance.student.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+        const params = new URLSearchParams();
+        params.append('class', className);
+        if (campusSelect && campusSelect.value) {
+            params.append('campus', campusSelect.value);
+        }
+        fetch(`{{ route('attendance.student.get-sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -475,6 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Load sections on page load if class is already selected
+    loadClasses('{{ request('filter_campus') }}', '{{ request('filter_class') }}');
     @if(request('filter_class'))
         loadSections('{{ request('filter_class') }}');
     @endif
@@ -484,6 +555,13 @@ document.addEventListener('DOMContentLoaded', function() {
         classSelect.addEventListener('change', function() {
             loadSections(this.value);
             // Clear section when class changes
+            sectionSelect.value = '';
+        });
+    }
+
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses(this.value);
             sectionSelect.value = '';
         });
     }
@@ -498,6 +576,21 @@ function clearFilter(filterName) {
     if (filterName === 'filter_class') {
         url.searchParams.delete('filter_section');
         const sectionSelect = document.getElementById('filter_section');
+        if (sectionSelect) {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            sectionSelect.disabled = true;
+        }
+    }
+
+    if (filterName === 'filter_campus') {
+        url.searchParams.delete('filter_class');
+        url.searchParams.delete('filter_section');
+        const classSelect = document.getElementById('filter_class');
+        const sectionSelect = document.getElementById('filter_section');
+        if (classSelect) {
+            classSelect.innerHTML = '<option value="">Select Campus First</option>';
+            classSelect.disabled = true;
+        }
         if (sectionSelect) {
             sectionSelect.innerHTML = '<option value="">Select Section</option>';
             sectionSelect.disabled = true;

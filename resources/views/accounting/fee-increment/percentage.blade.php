@@ -26,25 +26,6 @@
                 </div>
             @endif
 
-            @php
-                $campuses = \App\Models\ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                $campusesFromSections = \App\Models\Section::whereNotNull('campus')->distinct()->pluck('campus');
-                $allCampuses = $campuses->merge($campusesFromSections)->unique()->sort()->values();
-                if ($allCampuses->isEmpty()) {
-                    $allCampuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-                }
-                
-                $classes = \App\Models\ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort();
-                if ($classes->isEmpty()) {
-                    $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
-                }
-                
-                $sections = \App\Models\Section::whereNotNull('name')->distinct()->pluck('name')->sort();
-                if ($sections->isEmpty()) {
-                    $sections = collect(['A', 'B', 'C', 'D', 'E']);
-                }
-            @endphp
-
             <form id="feeIncrementPercentageForm" method="POST" action="{{ route('accounting.fee-increment.percentage.store') }}">
                 @csrf
                 
@@ -59,7 +40,7 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
                                     <option value="">Select Campus</option>
-                                    @foreach($allCampuses as $campus)
+                                    @foreach($campuses as $campus)
                                         <option value="{{ $campus }}">{{ $campus }}</option>
                                     @endforeach
                                 </select>
@@ -75,9 +56,6 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="class" id="class" style="height: 38px;">
                                     <option value="">Select Class</option>
-                                    @foreach($classes as $className)
-                                        <option value="{{ $className }}">{{ $className }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -91,9 +69,6 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="section" id="section" style="height: 38px;">
                                     <option value="">Select Section</option>
-                                    @foreach($sections as $sectionName)
-                                        <option value="{{ $sectionName }}">{{ $sectionName }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -201,6 +176,73 @@
         box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
+    const classSelect = document.getElementById('class');
+    const sectionSelect = document.getElementById('section');
+
+    function resetSelect(selectEl, placeholder) {
+        selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+    }
+
+    function loadClassesByCampus(campus) {
+        resetSelect(classSelect, 'Select Class');
+        resetSelect(sectionSelect, 'Select Section');
+
+        if (!campus) {
+            return;
+        }
+
+        fetch(`{{ route('accounting.fee-increment.percentage.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(classes => {
+                classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+            })
+            .catch(() => {});
+    }
+
+    function loadSectionsByClass(campus, className) {
+        resetSelect(sectionSelect, 'Select Section');
+
+        if (!className) {
+            return;
+        }
+
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
+        }
+        params.append('class', className);
+
+        fetch(`{{ route('accounting.fee-increment.percentage.get-sections-by-class') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(sections => {
+                sections.forEach(sectionName => {
+                    const option = document.createElement('option');
+                    option.value = sectionName;
+                    option.textContent = sectionName;
+                    sectionSelect.appendChild(option);
+                });
+            })
+            .catch(() => {});
+    }
+
+    campusSelect.addEventListener('change', function() {
+        loadClassesByCampus(this.value);
+    });
+
+    classSelect.addEventListener('change', function() {
+        loadSectionsByClass(campusSelect.value, this.value);
+    });
+});
+</script>
 
 <script>
 // Form is now connected to database, no need for preventDefault

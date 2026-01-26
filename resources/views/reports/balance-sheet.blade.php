@@ -11,7 +11,12 @@
             </div>
 
             <!-- Filter Form -->
-            <form action="{{ route('reports.balance-sheet') }}" method="GET" id="filterForm">
+            @php
+                $balanceSheetRoute = request()->route() && request()->route()->getName() === 'accounting.parent-wallet.print-balance-sheet'
+                    ? 'accounting.parent-wallet.print-balance-sheet'
+                    : 'reports.balance-sheet';
+            @endphp
+            <form action="{{ route($balanceSheetRoute) }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->
                     <div class="col-md-3">
@@ -186,6 +191,53 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const campusSelect = document.getElementById('filter_campus');
+    const userTypeSelect = document.getElementById('filter_user_type');
+    const userSelect = document.getElementById('filter_user');
+    const filterForm = document.getElementById('filterForm');
+
+    function resetUsers() {
+        userSelect.innerHTML = '<option value="">All Users</option>';
+    }
+
+    function loadUsers() {
+        resetUsers();
+        const params = new URLSearchParams();
+        if (campusSelect.value) {
+            params.append('campus', campusSelect.value);
+        }
+        if (userTypeSelect.value) {
+            params.append('user_type', userTypeSelect.value);
+        }
+
+        fetch(`{{ route('reports.balance-sheet.get-users-by-campus-and-type') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(users => {
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user;
+                    option.textContent = user;
+                    userSelect.appendChild(option);
+                });
+            })
+            .catch(() => {});
+    }
+
+    campusSelect.addEventListener('change', function () {
+        loadUsers();
+        if (filterForm) {
+            filterForm.submit();
+        }
+    });
+
+    userTypeSelect.addEventListener('change', function () {
+        loadUsers();
+    });
+});
+</script>
 
 <style>
 .filter-btn {

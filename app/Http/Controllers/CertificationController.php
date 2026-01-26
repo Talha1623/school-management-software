@@ -52,17 +52,16 @@ class CertificationController extends Controller
         }
 
         // Get classes from ClassModel (dynamic only, no static fallback)
-        $classes = ClassModel::whereNotNull('class_name')
-            ->distinct()
-            ->orderBy('class_name', 'asc')
-            ->pluck('class_name')
-            ->sort()
-            ->values();
+        $classes = $this->getClassesForCampus(null);
+        $filterClasses = $filterCampus ? $this->getClassesForCampus($filterCampus) : $classes;
 
         // Get sections (filtered by class if provided) - dynamic only, no static fallback
         $sectionsQuery = Section::whereNotNull('name');
         if ($filterClass) {
-            $sectionsQuery->where('class', $filterClass);
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+        }
+        if ($filterCampus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
         }
         $sections = $sectionsQuery->distinct()
             ->orderBy('name', 'asc')
@@ -71,7 +70,7 @@ class CertificationController extends Controller
             ->values();
 
         // Get certificate types
-        $certificateTypes = collect(['Character Certificate', 'School Leaving Certificate', 'Date of Birth Certificate']);
+        $certificateTypes = collect(['Character Certificate', 'School Leaving Certificate', 'Date of Birth Certificate', 'Provisional Certificate']);
 
         // Fetch students based on filters if certificate type is selected
         $students = collect();
@@ -105,6 +104,7 @@ class CertificationController extends Controller
         return view('certification.student', compact(
             'campuses',
             'classes',
+            'filterClasses',
             'sections',
             'certificateTypes',
             'filterCampus',
@@ -122,18 +122,9 @@ class CertificationController extends Controller
     public function getClasses(Request $request): JsonResponse
     {
         $campus = $request->get('campus');
-        
-        $classesQuery = ClassModel::whereNotNull('class_name');
-        if ($campus) {
-            $classesQuery->where('campus', $campus);
-        }
-        
-        $classes = $classesQuery->distinct()
-            ->orderBy('class_name', 'asc')
-            ->pluck('class_name')
-            ->sort()
-            ->values();
-        
+
+        $classes = $this->getClassesForCampus($campus);
+
         return response()->json($classes->isEmpty() ? [] : $classes);
     }
 
@@ -148,11 +139,11 @@ class CertificationController extends Controller
         $sectionsQuery = Section::whereNotNull('name');
         
         if ($class) {
-            $sectionsQuery->where('class', $class);
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
         }
         
         if ($campus) {
-            $sectionsQuery->where('campus', $campus);
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
         
         $sections = $sectionsQuery->distinct()
@@ -162,6 +153,26 @@ class CertificationController extends Controller
             ->values();
         
         return response()->json($sections->isEmpty() ? [] : $sections);
+    }
+
+    private function getClassesForCampus(?string $campus)
+    {
+        $campus = trim((string) $campus);
+        $campusLower = strtolower($campus);
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus !== '') {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+        }
+
+        return $classesQuery->distinct()
+            ->orderBy('class_name', 'asc')
+            ->pluck('class_name')
+            ->map(fn($class) => trim((string) $class))
+            ->filter(fn($class) => $class !== '')
+            ->unique()
+            ->sort()
+            ->values();
     }
 
     /**
@@ -210,10 +221,16 @@ class CertificationController extends Controller
         $certificateTypes = collect(['Experience Certificate', 'Appreciation Certificate']);
 
         // Get staff types from designation field (dynamic only, no static fallback)
-        $staffTypes = Staff::whereNotNull('designation')
-            ->distinct()
+        $staffTypesQuery = Staff::whereNotNull('designation');
+        if ($filterCampus) {
+            $staffTypesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+        $staffTypes = $staffTypesQuery->distinct()
             ->orderBy('designation', 'asc')
             ->pluck('designation')
+            ->map(fn($type) => trim((string) $type))
+            ->filter(fn($type) => $type !== '')
+            ->unique()
             ->sort()
             ->values();
 
@@ -258,6 +275,30 @@ class CertificationController extends Controller
     }
 
     /**
+     * Get staff types based on campus (AJAX).
+     */
+    public function getStaffTypes(Request $request): JsonResponse
+    {
+        $campus = trim((string) $request->get('campus'));
+
+        $staffTypesQuery = Staff::whereNotNull('designation');
+        if ($campus !== '') {
+            $staffTypesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+        }
+
+        $staffTypes = $staffTypesQuery->distinct()
+            ->orderBy('designation', 'asc')
+            ->pluck('designation')
+            ->map(fn($type) => trim((string) $type))
+            ->filter(fn($type) => $type !== '')
+            ->unique()
+            ->sort()
+            ->values();
+
+        return response()->json($staffTypes);
+    }
+
+    /**
      * Generate certificate for a student.
      */
     public function generateCertificate(Request $request, Student $student): View
@@ -265,7 +306,7 @@ class CertificationController extends Controller
         $certificateType = $request->get('type', 'Character Certificate');
         
         // Validate certificate type
-        $validTypes = ['Character Certificate', 'School Leaving Certificate', 'Date of Birth Certificate'];
+        $validTypes = ['Character Certificate', 'School Leaving Certificate', 'Date of Birth Certificate', 'Provisional Certificate'];
         if (!in_array($certificateType, $validTypes)) {
             abort(404, 'Invalid certificate type');
         }
@@ -320,6 +361,7 @@ class CertificationController extends Controller
             'Character Certificate' => 'character',
             'School Leaving Certificate' => 'school-leaving',
             'Date of Birth Certificate' => 'date-of-birth',
+            'Provisional Certificate' => 'provisional',
             default => 'character',
         };
     }

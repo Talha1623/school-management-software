@@ -79,6 +79,81 @@
                     </div>
                 </div>
             </form>
+            <!-- Results Table -->
+            @if($filterCampus && $filterClass && $filterSection && $filterExam)
+            <div class="mt-3">
+                <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                    <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">table_chart</span>
+                        <span>Tabulation Sheet</span>
+                    </h5>
+                </div>
+
+                <div class="default-table-area" style="margin-top: 0;">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Sr.</th>
+                                    <th>Student Code</th>
+                                    <th>Name</th>
+                                    <th>Parent</th>
+                                    <th>Seat No. | Subjects</th>
+                                    @foreach($subjects as $subject)
+                                        <th>{{ $subject }}</th>
+                                    @endforeach
+                                    <th>Total</th>
+                                    <th>Rank</th>
+                                    <th>Percentage</th>
+                                    <th>Grade</th>
+                                    <th>GPA</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($tabulationRows as $index => $row)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $row->student->student_code ?? 'N/A' }}</td>
+                                        <td><strong class="text-primary">{{ $row->student->student_name }}</strong></td>
+                                        <td>{{ $row->student->father_name ?? 'N/A' }}</td>
+                                        <td>{{ $row->student->gr_number ?? ($row->student->student_code ?? 'N/A') }}</td>
+                                        @foreach($subjects as $subject)
+                                            <td>{{ number_format($row->subject_scores[$subject] ?? 0, 0) }}</td>
+                                        @endforeach
+                                        <td>{{ number_format($row->obtained_marks, 0) }}</td>
+                                        <td>{{ $row->rank }}</td>
+                                        <td>{{ number_format($row->percentage, 2) }}%</td>
+                                        <td>{{ $row->grade }}</td>
+                                        <td>{{ $row->gpa }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="{{ 11 + $subjects->count() }}" class="text-center py-4">
+                                            <div class="d-flex flex-column align-items-center">
+                                                <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
+                                                <p class="text-muted mt-2 mb-0">No records found for selected filters.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="mt-3 text-end">
+                    <button type="button" class="btn btn-sm px-3 py-2 export-btn print-btn" onclick="printTable()">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                        <span>Print</span>
+                    </button>
+                </div>
+            </div>
+            @else
+            <div class="text-center py-5">
+                <span class="material-symbols-outlined text-muted" style="font-size: 64px;">filter_alt</span>
+                <p class="text-muted mt-3 mb-0">Please apply filters to view tabulation sheet</p>
+            </div>
+            @endif
         </div>
     </div>
 </div>
@@ -104,6 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const examSelect = document.getElementById('filter_exam');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const initialClass = "{{ $filterClass ?? '' }}";
 
     function loadExams() {
         const campus = campusSelect.value;
@@ -127,8 +203,13 @@ document.addEventListener('DOMContentLoaded', function() {
     function loadSections(selectedClass) {
         if (selectedClass) {
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
-            
-            fetch(`{{ route('exam.timetable.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            const campus = campusSelect ? campusSelect.value : '';
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (campus) {
+                params.append('campus', campus);
+            }
+            fetch(`{{ route('exam.timetable.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -145,10 +226,60 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    campusSelect.addEventListener('change', loadExams);
+    function loadClasses() {
+        const campus = campusSelect ? campusSelect.value : '';
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        classSelect.disabled = true;
+
+        fetch(`{{ route('exam.tabulation-sheet.get-classes') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        classSelect.innerHTML += `<option value="${className}">${className}</option>`;
+                    });
+                }
+                classSelect.disabled = false;
+                if (initialClass && data.classes && data.classes.includes(initialClass)) {
+                    classSelect.value = initialClass;
+                    loadSections(initialClass);
+                } else {
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+    }
+
+    campusSelect.addEventListener('change', function() {
+        loadExams();
+        loadClasses();
+    });
     classSelect.addEventListener('change', function() {
         loadSections(this.value);
     });
+
+    loadClasses();
 });
+
+function printTable() {
+    const printContents = document.querySelector('.default-table-area').innerHTML;
+    const originalContents = document.body.innerHTML;
+
+    document.body.innerHTML = `
+        <div style="padding: 20px;">
+            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Tabulation Sheet</h3>
+            ${printContents}
+        </div>
+    `;
+
+    window.print();
+    document.body.innerHTML = originalContents;
+    window.location.reload();
+}
 </script>
 @endsection

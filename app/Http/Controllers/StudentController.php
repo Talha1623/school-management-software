@@ -25,10 +25,11 @@ class StudentController extends Controller
     public function index(Request $request): View
     {
         $query = Student::query();
+        $filterCampus = $request->get('filter_campus');
         
         // Filter by Campus
-        if ($request->filled('filter_campus')) {
-            $query->where('campus', $request->filter_campus);
+        if ($filterCampus) {
+            $query->where('campus', $filterCampus);
         }
         
         // Filter by Class
@@ -46,6 +47,16 @@ class StudentController extends Controller
             $filterType = $request->filter_type;
             if (in_array($filterType, ['male', 'female', 'other'])) {
                 $query->where('gender', $filterType);
+            }
+        }
+
+        // Filter by Status (Active/Inactive)
+        if ($request->filled('filter_status')) {
+            $filterStatus = $request->filter_status;
+            if ($filterStatus === 'active') {
+                $query->whereNotNull('admission_date');
+            } elseif ($filterStatus === 'inactive') {
+                $query->whereNull('admission_date');
             }
         }
         
@@ -80,22 +91,38 @@ class StudentController extends Controller
             $campuses = $campusesFromStudents;
         }
         
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($filterCampus) {
+            $classesQuery->where('campus', $filterCampus);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         if ($classes->isEmpty()) {
-            $classesFromStudents = Student::whereNotNull('class')->distinct()->pluck('class')->sort();
+            $classesFromStudents = Student::whereNotNull('class');
+            if ($filterCampus) {
+                $classesFromStudents->where('campus', $filterCampus);
+            }
+            $classesFromStudents = $classesFromStudents->distinct()->pluck('class')->sort();
             $classes = $classesFromStudents;
         }
         
         $sections = collect();
         if ($request->filled('filter_class')) {
-            $sections = Section::where('class', $request->filter_class)
+            $sectionsQuery = Section::where('class', $request->filter_class);
+            if ($filterCampus) {
+                $sectionsQuery->where('campus', $filterCampus);
+            }
+            $sections = $sectionsQuery
                 ->whereNotNull('name')
                 ->distinct()
                 ->pluck('name')
                 ->sort()
                 ->values();
             if ($sections->isEmpty()) {
-                $sectionsFromStudents = Student::where('class', $request->filter_class)
+                $sectionsFromStudents = Student::where('class', $request->filter_class);
+                if ($filterCampus) {
+                    $sectionsFromStudents->where('campus', $filterCampus);
+                }
+                $sectionsFromStudents = $sectionsFromStudents
                     ->whereNotNull('section')
                     ->distinct()
                     ->pluck('section')
@@ -107,6 +134,73 @@ class StudentController extends Controller
         $types = collect(['male', 'female', 'other']);
         
         return view('student.information', compact('students', 'campuses', 'classes', 'sections', 'types'));
+    }
+
+    /**
+     * Get classes by campus (AJAX).
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+
+        if ($classes->isEmpty()) {
+            $classesFromStudents = Student::whereNotNull('class');
+            if ($campus) {
+                $classesFromStudents->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classes = $classesFromStudents->distinct()->pluck('class')->sort()->values();
+        }
+
+        $classes = $classes->map(function ($class) {
+            return trim((string) $class);
+        })->filter(function ($class) {
+            return $class !== '';
+        })->unique()->sort()->values();
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    /**
+     * Get sections by class (AJAX).
+     */
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        $campus = $request->get('campus');
+
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name');
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+
+        if ($sections->isEmpty()) {
+            $sectionsFromStudents = Student::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section');
+            if ($campus) {
+                $sectionsFromStudents->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $sectionsFromStudents->distinct()->pluck('section')->sort()->values();
+        }
+
+        $sections = $sections->map(function ($section) {
+            return trim((string) $section);
+        })->filter(function ($section) {
+            return $section !== '';
+        })->unique()->sort()->values();
+
+        return response()->json(['sections' => $sections]);
     }
 
     /**
@@ -284,7 +378,32 @@ class StudentController extends Controller
      */
     public function show(Student $student): View
     {
-        return view('student.view', compact('student'));
+        $transportFare = null;
+        if (!empty($student->transport_fare)) {
+            $transportFare = (float) $student->transport_fare;
+        } elseif (!empty($student->transport_route)) {
+            $transportQuery = Transport::where('route_name', $student->transport_route);
+            if (!empty($student->campus)) {
+                $transportQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))]);
+            }
+            $transportRecord = $transportQuery->first();
+            if ($transportRecord && $transportRecord->route_fare !== null) {
+                $transportFare = (float) $transportRecord->route_fare;
+            }
+        }
+
+        return view('student.view', compact('student', 'transportFare'));
+    }
+
+    /**
+     * Print student details
+     */
+    public function print(Student $student): View
+    {
+        return view('student.print', [
+            'student' => $student,
+            'printedAt' => now()->format('d-m-Y H:i'),
+        ]);
     }
 
     /**

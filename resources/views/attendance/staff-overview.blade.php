@@ -21,11 +21,10 @@
 
         .attendance-report {
             page-break-after: always;
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: white;
+            margin-bottom: 24px;
+            padding: 0;
+            border: none;
+            background: transparent;
         }
         
         .attendance-report:last-child {
@@ -34,7 +33,7 @@
         
         .report-header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
         
         .report-title {
@@ -46,8 +45,8 @@
         .teacher-info {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 20px;
-            font-size: 14px;
+            margin-bottom: 16px;
+            font-size: 13px;
             flex-wrap: wrap;
             gap: 10px;
         }
@@ -55,8 +54,9 @@
         .attendance-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             font-size: 11px;
+            background: white;
         }
         
         .attendance-table th,
@@ -75,6 +75,7 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
+            background: white;
         }
         
         .summary-table th,
@@ -90,10 +91,43 @@
         }
         
         .no-print {
-            margin-bottom: 20px;
-            padding: 15px;
+            margin-bottom: 16px;
+            padding: 12px 16px;
             background: #f8f9fa;
             border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .card {
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+            color: white;
+            border-bottom: none;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .info-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 8px 12px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #003471;
+            margin-bottom: 10px;
         }
         
         @media print {
@@ -103,6 +137,11 @@
             
             body {
                 padding: 0;
+            }
+
+            .card {
+                box-shadow: none;
+                border: 1px solid #ddd;
             }
         }
     </style>
@@ -130,84 +169,91 @@
 
         @foreach($staffReports as $report)
         <div class="attendance-report">
-            <div class="report-header">
-                <div class="report-title">Teacher Attendance History | {{ $report['staff']->name }} | {{ $year }}</div>
-            </div>
-            
-            <div class="teacher-info">
-                <div>
-                    <strong>Campus:</strong> {{ $report['staff']->campus ?? 'N/A' }}
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <h5 class="card-title">Staff Attendance Overview | {{ $report['staff']->name }} | {{ $year }}</h5>
+                        <span class="small">EMP Code: {{ $report['staff']->emp_id ?? 'N/A' }}</span>
+                    </div>
                 </div>
-                <div>
-                    <strong>Name:</strong> {{ $report['staff']->name }}
-                </div>
-                <div>
-                    <strong>Father/Husband:</strong> {{ $report['staff']->father_husband_name ?? 'N/A' }}
-                </div>
-                <div>
-                    <strong>EMP Code:</strong> {{ $report['staff']->emp_id ?? 'N/A' }}
-                </div>
-            </div>
+                <div class="card-body">
+                    <div class="teacher-info">
+                        <div class="info-card">
+                            <strong>Campus:</strong> {{ $report['staff']->campus ?? 'N/A' }}
+                        </div>
+                        <div class="info-card">
+                            <strong>Name:</strong> {{ $report['staff']->name }}
+                        </div>
+                        <div class="info-card">
+                            <strong>Father/Husband:</strong> {{ $report['staff']->father_husband_name ?? 'N/A' }}
+                        </div>
+                        <div class="info-card">
+                            <strong>EMP Code:</strong> {{ $report['staff']->emp_id ?? 'N/A' }}
+                        </div>
+                    </div>
 
-            <!-- Daily Attendance Table -->
-            <table class="attendance-table">
-                <thead>
-                    <tr>
-                        <th>Month</th>
-                        @for($day = 1; $day <= 31; $day++)
-                        <th style="min-width: 25px;">{{ $day }}</th>
-                        @endfor
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($monthNames as $monthNum => $monthName)
-                    <tr>
-                        <td><strong>{{ $monthName }}</strong></td>
-                        @php
-                            $daysInMonth = cal_days_in_month(CAL_GREGORIAN, (int)$monthNum, (int)$year);
-                            $monthData = $report['daily_attendance'][$monthNum]['days'] ?? [];
-                        @endphp
-                        @for($day = 1; $day <= 31; $day++)
-                        <td>
-                            @if($day <= $daysInMonth)
-                                {{ $monthData[$day] ?? '--' }}
-                            @else
-                                --
-                            @endif
-                        </td>
-                        @endfor
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
+                    <div class="section-title">Daily Attendance</div>
+                    <div class="table-responsive">
+                        <table class="attendance-table">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    @for($day = 1; $day <= 31; $day++)
+                                    <th style="min-width: 25px;">{{ $day }}</th>
+                                    @endfor
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($monthNames as $monthNum => $monthName)
+                                <tr>
+                                    <td><strong>{{ $monthName }}</strong></td>
+                                    @php
+                                        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, (int)$monthNum, (int)$year);
+                                        $monthData = $report['daily_attendance'][$monthNum]['days'] ?? [];
+                                    @endphp
+                                    @for($day = 1; $day <= 31; $day++)
+                                    <td>
+                                        @if($day <= $daysInMonth)
+                                            {{ $monthData[$day] ?? '--' }}
+                                        @else
+                                            --
+                                        @endif
+                                    </td>
+                                    @endfor
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
 
-            <!-- Summarized Attendance Report -->
-            <div style="margin-top: 30px;">
-                <h5 class="mb-3"><strong>Summarized Attendance Report - {{ $year }}</strong></h5>
-                <table class="summary-table">
-                    <thead>
-                        <tr>
-                            <th>Month</th>
-                            <th>Presents</th>
-                            <th>Absentes</th>
-                            <th>Leaves</th>
-                            <th>Holidays</th>
-                            <th>Sundays</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($report['monthly_summary'] as $summary)
-                        <tr>
-                            <td><strong>{{ $summary['month_name'] }}</strong></td>
-                            <td>{{ $summary['present'] }}</td>
-                            <td>{{ $summary['absent'] }}</td>
-                            <td>{{ $summary['leave'] }}</td>
-                            <td>{{ $summary['holiday'] }}</td>
-                            <td>{{ $summary['sunday'] }}</td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+                    <div class="section-title mt-4">Summarized Attendance Report - {{ $year }}</div>
+                    <div class="table-responsive">
+                        <table class="summary-table">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Presents</th>
+                                    <th>Absentes</th>
+                                    <th>Leaves</th>
+                                    <th>Holidays</th>
+                                    <th>Sundays</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($report['monthly_summary'] as $summary)
+                                <tr>
+                                    <td><strong>{{ $summary['month_name'] }}</strong></td>
+                                    <td>{{ $summary['present'] }}</td>
+                                    <td>{{ $summary['absent'] }}</td>
+                                    <td>{{ $summary['leave'] }}</td>
+                                    <td>{{ $summary['holiday'] }}</td>
+                                    <td>{{ $summary['sunday'] }}</td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
         @endforeach

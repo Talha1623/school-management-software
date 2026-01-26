@@ -30,6 +30,21 @@
                     <form action="#" method="POST" id="studentCardForm">
                         @csrf
                         <div class="row g-3 align-items-end">
+                            <!-- Campus -->
+                            <div class="col-md-3">
+                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
+                                    Campus
+                                </label>
+                                <select class="form-select form-select-sm" name="campus" id="campus">
+                                    <option value="">All Campuses</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}" {{ request('campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                            {{ $campus->campus_name ?? $campus }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
                             <!-- Type -->
                             <div class="col-md-3">
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
@@ -160,8 +175,52 @@
 </style>
 
 <script>
+function loadClassesByCampus(campusValue, selectedClass = '') {
+    const classSelect = document.getElementById('class');
+    const sectionSelect = document.getElementById('section');
+    if (!classSelect) return;
+
+    classSelect.innerHTML = '<option value="">Loading...</option>';
+    classSelect.disabled = true;
+    if (sectionSelect) {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+    }
+
+    const params = new URLSearchParams();
+    if (campusValue) {
+        params.append('campus', campusValue);
+    }
+
+    fetch(`{{ route('student.information.classes-by-campus') }}?${params.toString()}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const classes = Array.isArray(data.classes) ? data.classes : [];
+        classSelect.innerHTML = '<option value="">All Classes</option>';
+        classes.forEach(className => {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            if (selectedClass && className.toLowerCase().trim() === selectedClass.toLowerCase().trim()) {
+                option.selected = true;
+            }
+            classSelect.appendChild(option);
+        });
+        classSelect.disabled = classes.length === 0;
+    })
+    .catch(error => {
+        console.error('Error loading classes:', error);
+        classSelect.innerHTML = '<option value="">Error loading classes</option>';
+        classSelect.disabled = true;
+    });
+}
+
 // Function to load sections for a class
-function loadSectionsForClass(classValue) {
+function loadSectionsForClass(classValue, campusValue = '') {
     const sectionSelect = document.getElementById('section');
     const currentSection = sectionSelect.value; // Preserve current selection
     
@@ -170,7 +229,12 @@ function loadSectionsForClass(classValue) {
     
     if (classValue) {
         // Fetch sections for selected class
-        fetch(`{{ route('id-card.print-student') }}?class=${classValue}`, {
+        const params = new URLSearchParams();
+        params.append('class', classValue);
+        if (campusValue) {
+            params.append('campus', campusValue);
+        }
+        fetch(`{{ route('student.information.sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -195,7 +259,11 @@ function loadSectionsForClass(classValue) {
         });
     } else {
         // If no class selected, load all sections
-        fetch(`{{ route('id-card.print-student') }}`, {
+        const params = new URLSearchParams();
+        if (campusValue) {
+            params.append('campus', campusValue);
+        }
+        fetch(`{{ route('student.information.sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -223,14 +291,26 @@ function loadSectionsForClass(classValue) {
 
 // Load sections when class changes
 document.getElementById('class').addEventListener('change', function() {
-    loadSectionsForClass(this.value);
+    const campusValue = document.getElementById('campus')?.value || '';
+    loadSectionsForClass(this.value, campusValue);
 });
 
-// Load sections on page load if class is already selected
+// Load classes/sections on page load
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
-    if (classSelect.value) {
-        loadSectionsForClass(classSelect.value);
+    const selectedCampus = campusSelect ? campusSelect.value : '';
+    const selectedClass = classSelect ? classSelect.value : '';
+
+    loadClassesByCampus(selectedCampus, selectedClass);
+    if (selectedClass) {
+        loadSectionsForClass(selectedClass, selectedCampus);
+    }
+
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClassesByCampus(this.value);
+        });
     }
 });
 

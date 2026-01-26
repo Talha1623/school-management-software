@@ -38,8 +38,8 @@
                     </div>
                     <div class="col-md-2">
                         <label for="from_class" class="form-label mb-0 fs-13 fw-medium">Promotion From Class <span class="text-danger">*</span></label>
-                        <select class="form-select form-select-sm" id="from_class" name="from_class" style="height: 32px;" onchange="loadSectionsForFilter(this.value)">
-                            <option value="">Select Class</option>
+                        <select class="form-select form-select-sm" id="from_class" name="from_class" style="height: 32px;" onchange="loadSectionsForFilter(this.value)" {{ request('campus') ? '' : 'disabled' }}>
+                            <option value="">{{ request('campus') ? 'Select Class' : 'Select Campus First' }}</option>
                             @foreach($classes as $class)
                                 <option value="{{ $class }}" {{ request('from_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
                             @endforeach
@@ -56,8 +56,8 @@
                     </div>
                     <div class="col-md-2">
                         <label for="to_class" class="form-label mb-0 fs-13 fw-medium">Promotion To Class <span class="text-danger">*</span></label>
-                        <select class="form-select form-select-sm" id="to_class" name="to_class" style="height: 32px;" onchange="loadSectionsForToClass(this.value)">
-                            <option value="">Select Class</option>
+                        <select class="form-select form-select-sm" id="to_class" name="to_class" style="height: 32px;" onchange="loadSectionsForToClass(this.value)" {{ request('campus') ? '' : 'disabled' }}>
+                            <option value="">{{ request('campus') ? 'Select Class' : 'Select Campus First' }}</option>
                             @foreach($classes as $class)
                                 <option value="{{ $class }}" {{ request('to_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
                             @endforeach
@@ -116,6 +116,9 @@
                     <table class="table table-sm table-hover" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
+                                <th style="padding: 8px 12px; font-size: 13px; text-align: center;">
+                                    <input type="checkbox" id="select_all_students" style="transform: scale(1.1);">
+                                </th>
                                 <th style="padding: 8px 12px; font-size: 13px;">#</th>
                                 <th style="padding: 8px 12px; font-size: 13px;">Student Name</th>
                                 <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
@@ -132,6 +135,9 @@
                         <tbody>
                             @forelse($students as $student)
                                 <tr>
+                                    <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
+                                        <input type="checkbox" class="student-checkbox" value="{{ $student->id }}" style="transform: scale(1.1);">
+                                    </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">{{ $loop->iteration + (($students->currentPage() - 1) * $students->perPage()) }}</td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
                                         <strong class="text-primary">{{ $student->student_name }}</strong>
@@ -195,7 +201,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="11" class="text-center text-muted py-5">
+                                    <td colspan="12" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">school</span>
                                         <p class="mt-2 mb-0">No students found.</p>
                                     </td>
@@ -230,8 +236,8 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Promotion To Class <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select form-select-sm" name="to_class" id="promotion_to_class" required style="height: 32px;" onchange="loadSectionsForPromotionForm(this.value)">
-                                    <option value="">Select Class</option>
+                                <select class="form-select form-select-sm" name="to_class" id="promotion_to_class" required style="height: 32px;" onchange="loadSectionsForPromotionForm(this.value)" {{ request('campus') ? '' : 'disabled' }}>
+                                    <option value="">{{ request('campus') ? 'Select Class' : 'Select Campus First' }}</option>
                                     @foreach($classes as $class)
                                         <option value="{{ $class }}" {{ request('to_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
                                     @endforeach
@@ -286,6 +292,7 @@ function loadSectionsForFilter(selectedClass) {
     
     if (!selectedClass) {
         sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        sectionSelect.disabled = false;
         return;
     }
     
@@ -293,7 +300,13 @@ function loadSectionsForFilter(selectedClass) {
     sectionSelect.innerHTML = '<option value="">Loading...</option>';
     
     // Fetch sections for the selected class
-    fetch(`{{ route('student.promotion.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+    const params = new URLSearchParams();
+    params.append('class', selectedClass);
+    const campusValue = document.getElementById('campus')?.value;
+    if (campusValue) {
+        params.append('campus', campusValue);
+    }
+    fetch(`{{ route('student.promotion.get-sections') }}?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -311,10 +324,12 @@ function loadSectionsForFilter(selectedClass) {
                     sectionSelect.appendChild(option);
                 });
             }
+            sectionSelect.disabled = false;
         })
         .catch(error => {
             console.error('Error loading sections:', error);
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            sectionSelect.disabled = false;
         });
 }
 
@@ -324,6 +339,7 @@ function loadSectionsForToClass(selectedClass) {
     
     if (!selectedClass) {
         sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        sectionSelect.disabled = false;
         return;
     }
     
@@ -331,7 +347,13 @@ function loadSectionsForToClass(selectedClass) {
     sectionSelect.innerHTML = '<option value="">Loading...</option>';
     
     // Fetch sections for the selected class
-    fetch(`{{ route('student.promotion.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+    const params = new URLSearchParams();
+    params.append('class', selectedClass);
+    const campusValue = document.getElementById('campus')?.value;
+    if (campusValue) {
+        params.append('campus', campusValue);
+    }
+    fetch(`{{ route('student.promotion.get-sections') }}?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -349,10 +371,12 @@ function loadSectionsForToClass(selectedClass) {
                     sectionSelect.appendChild(option);
                 });
             }
+            sectionSelect.disabled = false;
         })
         .catch(error => {
             console.error('Error loading sections:', error);
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            sectionSelect.disabled = false;
         });
 }
 
@@ -361,7 +385,29 @@ function viewStudent(studentId) {
     window.location.href = '{{ route("student.view", ":id") }}'.replace(':id', studentId);
 }
 
-// Form validation for promotion
+// Handle select all
+const selectAllCheckbox = document.getElementById('select_all_students');
+const studentCheckboxes = () => Array.from(document.querySelectorAll('.student-checkbox'));
+
+selectAllCheckbox?.addEventListener('change', function() {
+    studentCheckboxes().forEach(cb => {
+        cb.checked = selectAllCheckbox.checked;
+    });
+});
+
+// Keep select-all in sync when individual checkbox changes
+document.addEventListener('change', function(e) {
+    if (!e.target.classList.contains('student-checkbox')) {
+        return;
+    }
+    const checkboxes = studentCheckboxes();
+    const allChecked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = allChecked;
+    }
+});
+
+// Form validation for promotion + attach selected students
 document.getElementById('promotionForm')?.addEventListener('submit', function(e) {
     const fromClass = '{{ request('from_class') }}';
     const toClass = document.getElementById('promotion_to_class').value;
@@ -377,9 +423,27 @@ document.getElementById('promotionForm')?.addEventListener('submit', function(e)
         alert('Promotion From Class and Promotion To Class cannot be the same');
         return false;
     }
+
+    const selectedStudents = studentCheckboxes().filter(cb => cb.checked).map(cb => cb.value);
+    if (selectedStudents.length === 0) {
+        e.preventDefault();
+        alert('Please select at least one student to promote');
+        return false;
+    }
+
+    // Remove any previous hidden inputs
+    document.querySelectorAll('#promotionForm input[name="student_ids[]"]').forEach(el => el.remove());
     
-    const studentCount = {{ $students->count() ?? 0 }};
-    if (!confirm('Are you sure you want to promote ' + studentCount + ' student(s)? This action cannot be undone.')) {
+    // Add selected student ids
+    selectedStudents.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'student_ids[]';
+        input.value = id;
+        document.getElementById('promotionForm').appendChild(input);
+    });
+    
+    if (!confirm('Are you sure you want to promote ' + selectedStudents.length + ' student(s)? This action cannot be undone.')) {
         e.preventDefault();
         return false;
     }
@@ -391,6 +455,7 @@ function loadSectionsForPromotionForm(selectedClass) {
     
     if (!selectedClass) {
         sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        sectionSelect.disabled = false;
         return;
     }
     
@@ -398,7 +463,13 @@ function loadSectionsForPromotionForm(selectedClass) {
     sectionSelect.innerHTML = '<option value="">Loading...</option>';
     
     // Fetch sections for the selected class
-    fetch(`{{ route('student.promotion.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+    const params = new URLSearchParams();
+    params.append('class', selectedClass);
+    const campusValue = document.getElementById('campus')?.value;
+    if (campusValue) {
+        params.append('campus', campusValue);
+    }
+    fetch(`{{ route('student.promotion.get-sections') }}?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -411,29 +482,97 @@ function loadSectionsForPromotionForm(selectedClass) {
                     sectionSelect.appendChild(option);
                 });
             }
+            sectionSelect.disabled = false;
         })
         .catch(error => {
             console.error('Error loading sections:', error);
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            sectionSelect.disabled = false;
         });
 }
 
 // Load sections on page load if class is already selected
 document.addEventListener('DOMContentLoaded', function() {
-    const selectedFromClass = document.getElementById('from_class').value;
-    if (selectedFromClass) {
-        loadSectionsForFilter(selectedFromClass);
-    }
-    
-    const selectedToClass = document.getElementById('to_class').value;
-    if (selectedToClass) {
-        loadSectionsForToClass(selectedToClass);
-    }
-    
+    const campusSelect = document.getElementById('campus');
+    const fromClassSelect = document.getElementById('from_class');
+    const toClassSelect = document.getElementById('to_class');
+    const promotionToClassSelect = document.getElementById('promotion_to_class');
+
+    const selectedFromClass = '{{ request('from_class') }}';
+    const selectedToClass = '{{ request('to_class') }}';
     const selectedPromotionToClass = document.getElementById('promotion_to_class')?.value;
-    if (selectedPromotionToClass) {
-        loadSectionsForPromotionForm(selectedPromotionToClass);
+
+    function setSelectDisabled(selectEl, placeholder) {
+        if (!selectEl) return;
+        selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+        selectEl.disabled = true;
     }
+
+    function populateClassSelect(selectEl, classes, selectedValue) {
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">Select Class</option>';
+        classes.forEach(className => {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            if (selectedValue && selectedValue === className) {
+                option.selected = true;
+            }
+            selectEl.appendChild(option);
+        });
+        selectEl.disabled = classes.length === 0;
+    }
+
+    function loadClassesForCampus(campusValue) {
+        if (!campusValue) {
+            setSelectDisabled(fromClassSelect, 'Select Campus First');
+            setSelectDisabled(toClassSelect, 'Select Campus First');
+            setSelectDisabled(promotionToClassSelect, 'Select Campus First');
+            setSelectDisabled(document.getElementById('from_section'), 'All Sections');
+            setSelectDisabled(document.getElementById('to_section'), 'All Sections');
+            setSelectDisabled(document.getElementById('promotion_to_section'), 'All Sections');
+            return Promise.resolve();
+        }
+
+        return fetch(`{{ route('student.promotion.get-classes-by-campus') }}?campus=${encodeURIComponent(campusValue)}`)
+            .then(response => response.json())
+            .then(data => {
+                const classes = Array.isArray(data.classes) ? data.classes : [];
+                populateClassSelect(fromClassSelect, classes, selectedFromClass);
+                populateClassSelect(toClassSelect, classes, selectedToClass);
+                populateClassSelect(promotionToClassSelect, classes, selectedPromotionToClass);
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                setSelectDisabled(fromClassSelect, 'Error loading classes');
+                setSelectDisabled(toClassSelect, 'Error loading classes');
+                setSelectDisabled(promotionToClassSelect, 'Error loading classes');
+            });
+    }
+
+    loadClassesForCampus(campusSelect?.value).then(() => {
+        if (selectedFromClass) {
+            loadSectionsForFilter(selectedFromClass);
+        }
+        if (selectedToClass) {
+            loadSectionsForToClass(selectedToClass);
+        }
+        if (selectedPromotionToClass) {
+            loadSectionsForPromotionForm(selectedPromotionToClass);
+        }
+    });
+
+    campusSelect?.addEventListener('change', function() {
+        loadClassesForCampus(this.value).then(() => {
+            const fromSection = document.getElementById('from_section');
+            const toSection = document.getElementById('to_section');
+            const promotionToSection = document.getElementById('promotion_to_section');
+            if (fromSection) fromSection.innerHTML = '<option value="">All Sections</option>';
+            if (toSection) toSection.innerHTML = '<option value="">All Sections</option>';
+            if (promotionToSection) promotionToSection.innerHTML = '<option value="">All Sections</option>';
+        });
+    });
+
 });
 </script>
 

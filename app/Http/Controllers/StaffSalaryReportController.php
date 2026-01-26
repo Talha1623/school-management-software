@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Salary;
 use App\Models\Staff;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -18,12 +19,12 @@ class StaffSalaryReportController extends Controller
         $filterCampus = $request->get('filter_campus');
         $filterMonth = $request->get('filter_month');
         $filterYear = $request->get('filter_year');
+        $filterStaffId = $request->get('staff_id');
 
-        // Get campuses from staff
-        $campuses = Staff::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
-        
+        // Get campuses from Campus model first, then fallback to staff
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campuses = Staff::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
         }
 
         // Month options
@@ -57,6 +58,9 @@ class StaffSalaryReportController extends Controller
         }
         if ($filterYear) {
             $query->where('year', $filterYear);
+        }
+        if ($filterStaffId) {
+            $query->where('staff_id', $filterStaffId);
         }
 
         $salaries = $query->orderBy('year', 'desc')
@@ -101,7 +105,8 @@ class StaffSalaryReportController extends Controller
             'salaryRecords',
             'filterCampus',
             'filterMonth',
-            'filterYear'
+            'filterYear',
+            'filterStaffId'
         ));
     }
 

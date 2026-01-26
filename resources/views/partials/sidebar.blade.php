@@ -140,12 +140,12 @@
                             <ul class="menu-sub">
                                 <li class="menu-item">
                                     <a href="{{ route('exam.teacher-remarks.particular') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.particular') ? 'active' : '' }}">
-                                        For Particular Test
+                                        For Particular Exam
                                     </a>
                                 </li>
                                 <li class="menu-item">
                                     <a href="{{ route('exam.teacher-remarks.final') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.final') ? 'active' : '' }}">
-                                        For Combine Test
+                                        For Final Result
                                     </a>
                                 </li>
                             </ul>
@@ -446,11 +446,11 @@
                                             Fee Installments
                                         </a>
                                     </li>
-                                    <li class="menu-item">
+                                    {{-- <li class="menu-item">
                                         <a href="{{ route('accounting.parent-wallet.sms-fee-duration') }}" class="menu-link {{ request()->routeIs('accounting.parent-wallet.sms-fee-duration') ? 'active' : '' }}">
                                             SMS To Fee Duration
                                         </a>
-                                    </li>
+                                    </li> --}}
                                     <li class="menu-item">
                                         <a href="{{ route('accounting.parent-wallet.print-balance-sheet') }}" class="menu-link {{ request()->routeIs('accounting.parent-wallet.print-balance-sheet') ? 'active' : '' }}">
                                             Print Balance Sheet
@@ -624,13 +624,8 @@
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('attendance.report') }}" class="menu-link {{ request()->routeIs('attendance.report') ? 'active' : '' }}">
-                                    Attendance Report
-                                </a>
-                            </li>
-                            <li class="menu-item">
-                                <a href="{{ route('attendance.staff-report') }}" class="menu-link {{ request()->routeIs('attendance.staff-report') ? 'active' : '' }}">
-                                    Staff Attendance Report
+                                <a href="{{ route('attendance.all-reports') }}" class="menu-link {{ request()->routeIs('attendance.all-reports') ? 'active' : '' }}">
+                                    All Attendance
                                 </a>
                             </li>
                         </ul>
@@ -1077,12 +1072,12 @@
                                 <ul class="menu-sub">
                                     <li class="menu-item">
                                         <a href="{{ route('exam.teacher-remarks.particular') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.particular') ? 'active' : '' }}">
-                                            For Particular Test
+                                            For Particular Exam
                                         </a>
                                     </li>
                                     <li class="menu-item">
                                         <a href="{{ route('exam.teacher-remarks.final') }}" class="menu-link {{ request()->routeIs('exam.teacher-remarks.final') ? 'active' : '' }}">
-                                            For Combine Test
+                                            For Final Result
                                         </a>
                                     </li>
                                 </ul>
@@ -1204,6 +1199,11 @@
                                         </a>
                                     </li>
                                 </ul>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('exam.report') }}" class="menu-link {{ request()->routeIs('exam.report') ? 'active' : '' }}">
+                                    Exam Report
+                                </a>
                             </li>
                         </ul>
                     </li>

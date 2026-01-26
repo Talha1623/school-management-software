@@ -15,6 +15,7 @@ class StaffAttendance extends Model
         'status',
         'start_time',
         'end_time',
+        'conducted_lectures',
         'campus',
         'designation',
         'class',

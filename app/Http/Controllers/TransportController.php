@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Transport;
 use App\Models\Campus;
+use App\Models\Student;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -66,6 +67,9 @@ class TransportController extends Controller
      */
     public function update(Request $request, Transport $transport): RedirectResponse
     {
+        $originalRouteName = $transport->route_name;
+        $originalCampus = $transport->campus;
+
         $validated = $request->validate([
             'campus' => ['nullable', 'string', 'max:255'],
             'route_name' => ['required', 'string', 'max:255'],
@@ -75,6 +79,15 @@ class TransportController extends Controller
         ]);
 
         $transport->update($validated);
+
+        $studentQuery = Student::whereRaw('LOWER(TRIM(transport_route)) = ?', [strtolower(trim($originalRouteName))]);
+        if (!empty($originalCampus)) {
+            $studentQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($originalCampus))]);
+        }
+        $studentQuery->update([
+            'transport_route' => $transport->route_name,
+            'transport_fare' => $transport->route_fare,
+        ]);
 
         return redirect()
             ->route('transport.manage')

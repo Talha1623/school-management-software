@@ -27,7 +27,7 @@
                     <!-- Class -->
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" data-selected-class="{{ $filterClass }}" style="height: 32px;">
                             <option value="">All Classes</option>
                             @foreach($classes as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
@@ -38,7 +38,7 @@
                     <!-- Section -->
                     <div class="col-md-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" data-selected-section="{{ $filterSection }}" style="height: 32px;">
                             <option value="">All Sections</option>
                             @foreach($sections as $sectionName)
                                 <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
@@ -248,4 +248,114 @@
     padding: 4px 8px;
 }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+
+    function resetSections() {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        sectionSelect.disabled = true;
+    }
+
+    function populateClasses(classes, selectedClass = '') {
+        classSelect.innerHTML = '<option value="">All Classes</option>';
+        if (classes && classes.length > 0) {
+            classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                if (selectedClass && selectedClass === className) {
+                    option.selected = true;
+                }
+                classSelect.appendChild(option);
+            });
+        }
+        classSelect.disabled = false;
+    }
+
+    function populateSections(sections, selectedSection = '') {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        if (sections && sections.length > 0) {
+            sections.forEach(sectionName => {
+                const option = document.createElement('option');
+                option.value = sectionName;
+                option.textContent = sectionName;
+                if (selectedSection && selectedSection === sectionName) {
+                    option.selected = true;
+                }
+                sectionSelect.appendChild(option);
+            });
+        }
+        sectionSelect.disabled = false;
+    }
+
+    function loadClassesByCampus(campus, selectedClass = '', selectedSection = '') {
+        classSelect.disabled = true;
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        resetSections();
+
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
+        }
+
+        fetch(`{{ route('reports.debit-credit.get-classes-by-campus') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateClasses(data.classes || [], selectedClass);
+                if (selectedClass) {
+                    loadSections(selectedClass, selectedSection);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                classSelect.disabled = false;
+            });
+    }
+
+    function loadSections(selectedClass, selectedSection = '') {
+        const campus = campusSelect.value;
+        if (!selectedClass) {
+            resetSections();
+            return;
+        }
+
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+
+        const params = new URLSearchParams();
+        params.append('class', selectedClass);
+        if (campus) {
+            params.append('campus', campus);
+        }
+
+        fetch(`{{ route('reports.debit-credit.get-sections-by-class') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateSections(data.sections || [], selectedSection);
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                sectionSelect.disabled = false;
+            });
+    }
+
+    campusSelect.addEventListener('change', function() {
+        loadClassesByCampus(this.value);
+    });
+
+    classSelect.addEventListener('change', function() {
+        loadSections(this.value);
+    });
+
+    const selectedClass = classSelect.dataset.selectedClass || '';
+    const selectedSection = sectionSelect.dataset.selectedSection || '';
+    loadClassesByCampus(campusSelect.value, selectedClass, selectedSection);
+});
+</script>
 @endsection

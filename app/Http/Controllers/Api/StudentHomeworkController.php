@@ -408,5 +408,168 @@ class StudentHomeworkController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get Previous Date Homework Diary by Subject and Date
+     * Returns homework for a specific subject and date
+     * 
+     * GET /api/student/homework/previous?subject={subject_name}&date={date}
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function previousDate(Request $request): JsonResponse
+    {
+        try {
+            $student = $request->user();
+
+            if (!$student) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'token' => null,
+                ], 404);
+            }
+
+            // Check if student has complete information
+            if (!$student->campus || !$student->class || !$student->section) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student information incomplete. Cannot fetch homework.',
+                    'token' => null,
+                ], 400);
+            }
+
+            // Validate required parameters
+            if (!$request->filled('subject')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject name is required',
+                    'token' => null,
+                ], 400);
+            }
+
+            if (!$request->filled('date')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Date is required (format: YYYY-MM-DD)',
+                    'token' => null,
+                ], 400);
+            }
+
+            $subjectName = trim($request->subject);
+            $date = trim($request->date);
+
+            // Validate date format
+            try {
+                $dateObj = \Carbon\Carbon::parse($date);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid date format. Please use YYYY-MM-DD format.',
+                    'token' => null,
+                ], 422);
+            }
+
+            // Find subject by name (case-insensitive, partial match)
+            $subject = Subject::whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . strtolower($subjectName) . '%'])
+                ->first();
+
+            if (!$subject) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject not found: ' . $subjectName,
+                    'token' => null,
+                ], 404);
+            }
+
+            // Get homework for specific subject and date
+            $homework = HomeworkDiary::whereNotNull('homework_content')
+                ->where('homework_content', '!=', '')
+                ->whereRaw('TRIM(homework_content) != ?', [''])
+                ->where('subject_id', $subject->id)
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))])
+                ->whereDate('date', $date)
+                ->with('subject')
+                ->first();
+
+            if (!$homework) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No homework found for the specified subject and date',
+                    'data' => [
+                        'student' => [
+                            'id' => $student->id,
+                            'name' => $student->student_name,
+                            'student_code' => $student->student_code,
+                            'class' => $student->class,
+                            'section' => $student->section,
+                            'campus' => $student->campus,
+                        ],
+                        'subject' => [
+                            'id' => $subject->id,
+                            'subject_name' => $subject->subject_name,
+                        ],
+                        'date' => $date,
+                        'date_formatted' => $dateObj->format('d M Y'),
+                        'date_formatted_full' => $dateObj->format('l, d F Y'),
+                        'homework' => null,
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
+            }
+
+            // Format homework data
+            $homeworkData = [
+                'id' => $homework->id,
+                'subject_id' => $homework->subject_id,
+                'subject_name' => $homework->subject->subject_name ?? null,
+                'campus' => $homework->campus,
+                'class' => $homework->class,
+                'section' => $homework->section,
+                'date' => $homework->date->format('Y-m-d'),
+                'date_formatted' => $homework->date->format('d M Y'),
+                'date_formatted_full' => $homework->date->format('l, d F Y'),
+                'day_name' => $homework->date->format('l'),
+                'day_short' => $homework->date->format('D'),
+                'homework_content' => $homework->homework_content,
+                'created_at' => $homework->created_at->format('Y-m-d H:i:s'),
+                'created_at_formatted' => $homework->created_at->format('d M Y, h:i A'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Homework retrieved successfully',
+                'data' => [
+                    'student' => [
+                        'id' => $student->id,
+                        'name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                        'campus' => $student->campus,
+                    ],
+                    'subject' => [
+                        'id' => $subject->id,
+                        'subject_name' => $subject->subject_name,
+                    ],
+                    'date' => $date,
+                    'date_formatted' => $dateObj->format('d M Y'),
+                    'date_formatted_full' => $dateObj->format('l, d F Y'),
+                    'homework' => $homeworkData,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving homework: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
 }
 

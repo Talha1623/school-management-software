@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Staff;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class StaffBirthdayController extends Controller
@@ -12,8 +15,7 @@ class StaffBirthdayController extends Controller
      */
     public function index(): View
     {
-        // Empty array - no static data
-        $staff = [];
+        $staff = $this->getStaffData();
 
         return view('staff.birthday', compact('staff'));
     }
@@ -43,7 +45,39 @@ class StaffBirthdayController extends Controller
      */
     private function getStaffData()
     {
-        return [];
+        $today = Carbon::today();
+
+        $staffMembers = Staff::whereNotNull('birthday')
+            ->orderByRaw("DATE_FORMAT(birthday, '%m-%d') asc")
+            ->get();
+
+        return $staffMembers->map(function (Staff $member) use ($today) {
+            $birthday = $member->birthday ? Carbon::parse($member->birthday) : null;
+            $status = 'N/A';
+            $wish = 'Pending';
+
+            if ($birthday) {
+                $birthdayThisYear = $birthday->copy()->year($today->year);
+                if ($birthdayThisYear->isSameDay($today)) {
+                    $status = 'Today';
+                    $wish = 'Sent';
+                } elseif ($birthdayThisYear->isAfter($today)) {
+                    $status = 'Upcoming';
+                } else {
+                    $status = 'Past';
+                }
+            }
+
+            return [
+                'emp_code' => $member->emp_id ?? 'N/A',
+                'name' => $member->name ?? 'N/A',
+                'father_husband' => $member->father_husband_name ?? 'N/A',
+                'birthday' => $member->birthday ? $member->birthday->format('Y-m-d') : null,
+                'status' => $status,
+                'wish' => $wish,
+                'picture' => $member->photo ? Storage::url($member->photo) : null,
+            ];
+        })->values();
     }
 
     /**

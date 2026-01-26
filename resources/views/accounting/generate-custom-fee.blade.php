@@ -199,6 +199,57 @@ document.addEventListener('DOMContentLoaded', function() {
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
     const campusSelect = document.getElementById('campus');
+
+    function resetClassAndSection() {
+        if (classSelect) {
+            classSelect.innerHTML = '<option value="">Select Campus First</option>';
+            classSelect.disabled = true;
+        }
+        if (sectionSelect) {
+            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+            sectionSelect.disabled = true;
+        }
+    }
+
+    function loadClassesForCampus() {
+        const campus = campusSelect ? campusSelect.value : '';
+
+        resetClassAndSection();
+        loadStudents();
+
+        if (!campus || !classSelect) {
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading classes...</option>';
+
+        fetch(`{{ route('accounting.custom-fee.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+
+            if (data.classes && data.classes.length > 0) {
+                data.classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+                classSelect.disabled = false;
+            } else {
+                classSelect.innerHTML = '<option value="">No classes found</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+        });
+    }
     
     // Function to load students
     function loadStudents() {
@@ -288,6 +339,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Initialize class/section state on load
+    if (campusSelect && !campusSelect.value) {
+        resetClassAndSection();
+    }
+
     // Event listeners
     if (classSelect) {
         classSelect.addEventListener('change', function() {
@@ -306,7 +362,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         
         // Fetch sections for selected class
-        fetch(`{{ route('accounting.custom-fee.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`, {
+        const campus = campusSelect ? campusSelect.value : '';
+        fetch(`{{ route('accounting.custom-fee.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}&campus=${encodeURIComponent(campus)}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -345,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     if (campusSelect) {
-        campusSelect.addEventListener('change', loadStudents);
+        campusSelect.addEventListener('change', loadClassesForCampus);
     }
     
     // Load students on page load if all fields are already filled
@@ -362,8 +419,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Also handle form reset event
     document.getElementById('custom-fee-form').addEventListener('reset', function() {
         setTimeout(function() {
-            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
-            sectionSelect.disabled = true;
+            resetClassAndSection();
             document.getElementById('student-selection-section').style.display = 'none';
             document.getElementById('students-list').innerHTML = '';
         }, 10);
@@ -373,9 +429,14 @@ document.addEventListener('DOMContentLoaded', function() {
 // Global functions
 function resetForm() {
     const sectionSelect = document.getElementById('section');
+    const classSelect = document.getElementById('class');
     if (sectionSelect) {
         sectionSelect.innerHTML = '<option value="">Select Class First</option>';
         sectionSelect.disabled = true;
+    }
+    if (classSelect) {
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        classSelect.disabled = true;
     }
     document.getElementById('student-selection-section').style.display = 'none';
     document.getElementById('students-list').innerHTML = '';

@@ -145,10 +145,10 @@
                                         </td>
                                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                                         <td>
-                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->finalTotal) && $student->finalTotal !== null ? number_format($student->finalTotal, 2) : '0' }}" readonly>
+                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->finalTotal) && $student->finalTotal !== null ? number_format($student->finalTotal, 0) : '0' }}" readonly>
                                         </td>
                                         <td>
-                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->finalObtained) && $student->finalObtained !== null ? number_format($student->finalObtained, 2) : '0' }}" readonly>
+                                            <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->finalObtained) && $student->finalObtained !== null ? number_format($student->finalObtained, 0) : '0' }}" readonly>
                                         </td>
                                         <td>
                                             <textarea name="remarks[{{ $student->id }}]" class="form-control form-control-sm remarks-input" placeholder="Type Teacher Remarks for {{ $student->student_name }}" rows="2" style="min-width: 300px;">{{ isset($student->finalRemark) && $student->finalRemark ? ($student->finalRemark->teacher_remarks ?? '') : '' }}</textarea>
@@ -276,15 +276,55 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const initialClass = "{{ $filterClass ?? '' }}";
+
+    function loadClasses() {
+        if (!classSelect) return;
+
+        const campus = campusSelect ? campusSelect.value : '';
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        classSelect.disabled = true;
+
+        fetch(`{{ route('exam.teacher-remarks.get-classes') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        classSelect.innerHTML += `<option value="${className}">${className}</option>`;
+                    });
+                }
+                classSelect.disabled = false;
+                if (initialClass && data.classes && data.classes.includes(initialClass)) {
+                    classSelect.value = initialClass;
+                    loadSections(initialClass);
+                } else {
+                    sectionSelect.disabled = true;
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+    }
 
     function loadSections(selectedClass) {
         if (selectedClass) {
             sectionSelect.disabled = false;
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
             
-            fetch(`{{ route('exam.teacher-remarks.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            const campus = campusSelect ? campusSelect.value : '';
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (campus) {
+                params.append('campus', campus);
+            }
+            fetch(`{{ route('exam.teacher-remarks.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -306,10 +346,14 @@ document.addEventListener('DOMContentLoaded', function() {
         loadSections(this.value);
     });
 
-    // Initial load if class is already selected
-    if (classSelect.value) {
-        loadSections(classSelect.value);
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses();
+        });
     }
+
+    // Initial load if class is already selected
+    loadClasses();
 
     // Search functionality
     const searchInput = document.getElementById('searchInput');

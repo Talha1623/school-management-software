@@ -20,11 +20,10 @@
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">category</span>
                                 </span>
                                 <select class="form-select form-select-sm" name="type" id="type" style="height: 38px;">
-                                    <option value="">All Types</option>
-                                    <option value="Monthly Fee" {{ request('type') == 'Monthly Fee' ? 'selected' : '' }}>Monthly Fee</option>
-                                    <option value="Transport Fee" {{ request('type') == 'Transport Fee' ? 'selected' : '' }}>Transport Fee</option>
-                                    <option value="Custom Fee" {{ request('type') == 'Custom Fee' ? 'selected' : '' }}>Custom Fee</option>
-                                    <option value="Other" {{ request('type') == 'Other' ? 'selected' : '' }}>Other</option>
+                                    <option value="">Select Type</option>
+                                    <option value="three_copies" {{ request('type') == 'three_copies' ? 'selected' : '' }}>Three Copies</option>
+                                    <option value="two_copies" {{ request('type') == 'two_copies' ? 'selected' : '' }}>Two Copies</option>
+                                    <option value="thermal_copies" {{ request('type') == 'thermal_copies' ? 'selected' : '' }}>Thermal Copies</option>
                                 </select>
                             </div>
                         </div>
@@ -151,6 +150,8 @@
 </style>
 
 <script>
+const typeSelect = document.getElementById('type');
+
 // Load sections when class is selected
 document.getElementById('class').addEventListener('change', function() {
     const classValue = this.value;
@@ -190,6 +191,14 @@ document.getElementById('class').addEventListener('change', function() {
         sectionSelect.disabled = false;
     }
 });
+
+if (typeSelect) {
+    typeSelect.addEventListener('change', function() {
+        if (this.value) {
+            document.getElementById('filterForm').submit();
+        }
+    });
+}
 
 function generateVoucher(studentId) {
     // Add voucher generation logic here

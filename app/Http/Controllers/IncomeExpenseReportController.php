@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\StudentPayment;
 use App\Models\CustomPayment;
 use App\Models\ManagementExpense;
+use App\Models\AdminRole;
+use App\Models\Accountant;
+use App\Models\Campus;
 use App\Models\Student;
-use App\Models\Staff;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -19,40 +21,37 @@ class IncomeExpenseReportController extends Controller
     {
         // Get filter values
         $filterCampus = $request->get('filter_campus');
-        $filterUserType = $request->get('filter_user_type'); // Income or Expense
+        $filterUserType = $request->get('filter_user_type'); // Accountant or Admin
         $filterUser = $request->get('filter_user'); // Student code, accountant name, etc.
         $filterFromDate = $request->get('filter_from_date');
         $filterToDate = $request->get('filter_to_date');
 
-        // Get campuses
-        $campusesFromPayments = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromCustom = CustomPayment::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromExpenses = ManagementExpense::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromPayments->merge($campusesFromCustom)->merge($campusesFromExpenses)->unique()->sort()->values();
-        
+        // Get campuses from Campus model first, then fallback to existing data
+        $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromPayments = StudentPayment::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromCustom = CustomPayment::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromExpenses = ManagementExpense::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromPayments->merge($campusesFromCustom)->merge($campusesFromExpenses)->unique()->sort()->values();
         }
 
         // User Type options
-        $userTypeOptions = collect(['Income', 'Expense']);
+        $userTypeOptions = collect(['Accountant', 'Admin']);
 
-        // Get users (students and staff/accountants)
-        $students = Student::whereNotNull('student_code')->distinct()->pluck('student_code')->sort()->values();
-        $accountants = Staff::whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        $users = $students->merge($accountants)->unique()->sort()->values();
+        // Get users based on type and campus
+        $users = $this->getUsersForType($filterUserType, $filterCampus);
 
         // Prepare income records
         $incomeRecords = collect();
         
         // Student Payments (Income)
-        if (!$filterUserType || $filterUserType == 'Income') {
+        if (!$filterUserType || $filterUserType == 'Accountant' || $filterUserType == 'Admin') {
             $studentPaymentsQuery = StudentPayment::query();
             
             if ($filterCampus) {
                 $studentPaymentsQuery->where('campus', $filterCampus);
             }
-            if ($filterUser) {
+            if ($filterUser && empty($filterUserType)) {
                 $studentPaymentsQuery->where('student_code', $filterUser);
             }
             if ($filterFromDate) {
@@ -78,7 +77,7 @@ class IncomeExpenseReportController extends Controller
         }
 
         // Custom Payments (Income)
-        if (!$filterUserType || $filterUserType == 'Income') {
+        if (!$filterUserType || $filterUserType == 'Accountant' || $filterUserType == 'Admin') {
             $customPaymentsQuery = CustomPayment::query();
             
             if ($filterCampus) {
@@ -110,13 +109,13 @@ class IncomeExpenseReportController extends Controller
         }
 
         // Management Expenses (Expense)
-        if (!$filterUserType || $filterUserType == 'Expense') {
+        if (!$filterUserType || $filterUserType == 'Accountant' || $filterUserType == 'Admin') {
             $expensesQuery = ManagementExpense::query();
             
             if ($filterCampus) {
                 $expensesQuery->where('campus', $filterCampus);
             }
-            if ($filterUser) {
+            if ($filterUser && empty($filterUserType)) {
                 $expensesQuery->where(function($q) use ($filterUser) {
                     $q->where('category', 'like', '%' . $filterUser . '%')
                       ->orWhere('title', 'like', '%' . $filterUser . '%');
@@ -158,6 +157,43 @@ class IncomeExpenseReportController extends Controller
             'filterFromDate',
             'filterToDate'
         ));
+    }
+
+    public function getUsersByType(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $userType = $request->get('user_type');
+        $campus = $request->get('campus');
+
+        return response()->json([
+            'users' => $this->getUsersForType($userType, $campus),
+        ]);
+    }
+
+    private function getUsersForType(?string $userType, ?string $campus)
+    {
+        $users = collect();
+
+        if (!$userType || $userType === 'Accountant') {
+            $accountantsQuery = Accountant::whereNotNull('name');
+            if ($campus) {
+                $accountantsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $users = $users->merge($accountantsQuery->distinct()->pluck('name'));
+        }
+
+        if (!$userType || $userType === 'Admin') {
+            $adminsQuery = AdminRole::whereNotNull('name');
+            if ($campus) {
+                $adminsQuery->whereRaw('LOWER(TRIM(admin_of)) = ?', [strtolower(trim($campus))]);
+            }
+            $users = $users->merge($adminsQuery->distinct()->pluck('name'));
+        }
+
+        return $users->map(function($name) {
+            return trim((string) $name);
+        })->filter(function($name) {
+            return $name !== '';
+        })->unique()->sort()->values();
     }
 }
 

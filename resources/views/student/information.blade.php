@@ -3,9 +3,10 @@
 @section('title', 'Student Information')
 
 @section('content')
-<div class="row">
-    <div class="col-12">
-        <div class="card bg-white border border-white rounded-10 p-3 mb-4">
+<div id="student-info-content">
+    <div class="row">
+        <div class="col-12">
+            <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Student Information</h4>
             </div>
@@ -18,7 +19,7 @@
             @endif
 
             <!-- Filter Form -->
-            <form method="GET" action="{{ route('student.information') }}" class="mb-3">
+            <form method="GET" action="{{ route('student.information') }}" class="mb-3" id="student-filter-form">
                 <div class="row g-2 align-items-end">
                     <div class="col-md-2">
                         <label for="filter_campus" class="form-label mb-0 fs-13 fw-medium">Campus</label>
@@ -57,12 +58,20 @@
                         </select>
                     </div>
                     <div class="col-md-2">
+                        <label for="filter_status" class="form-label mb-0 fs-13 fw-medium">Status</label>
+                        <select class="form-select form-select-sm" id="filter_status" name="filter_status" style="height: 32px;">
+                            <option value="">All Status</option>
+                            <option value="active" {{ request('filter_status') == 'active' ? 'selected' : '' }}>Active</option>
+                            <option value="inactive" {{ request('filter_status') == 'inactive' ? 'selected' : '' }}>Inactive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
                         <button type="submit" class="btn btn-sm w-100" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; height: 32px; border: none;">
                             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">filter_list</span>
                             Filter
                         </button>
                     </div>
-                    @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type'))
+                    @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type') || request('filter_status'))
                     <div class="col-md-2">
                         <a href="{{ route('student.information') }}" class="btn btn-sm btn-outline-secondary w-100" style="height: 32px;">
                             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">clear</span>
@@ -98,7 +107,7 @@
                 <!-- Right Side -->
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <!-- Export Buttons - Only show when filters are applied -->
-                    @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type'))
+                    @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type') || request('filter_status'))
                     <div class="d-flex gap-2">
                         <a href="{{ route('student.information.export', ['format' => 'excel']) }}?{{ http_build_query(request()->except(['page', 'per_page'])) }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
@@ -108,7 +117,7 @@
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
                             <span>PDF</span>
                         </a>
-                        <form action="{{ route('student.information.delete-all') }}?{{ http_build_query(request()->except(['page', 'per_page'])) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete ALL filtered students? This action cannot be undone!');">
+                        <form action="{{ route('student.information.delete-all') }}?{{ http_build_query(request()->except(['page', 'per_page'])) }}" method="POST" class="d-inline delete-all-form" onsubmit="return confirm('Are you sure you want to delete ALL filtered students? This action cannot be undone!');">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="btn btn-sm px-2 py-1 export-btn delete-all-btn">
@@ -141,7 +150,7 @@
             </div>
 
             <!-- Table Header and Table - Only show when filters are applied -->
-            @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type'))
+            @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_type') || request('filter_status'))
             <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                 <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
                     <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
@@ -252,6 +261,58 @@
                                             <button type="button" class="btn btn-sm btn-danger px-2 py-1" onclick="deleteStudent({{ $student->id }}, '{{ $student->student_name }}', '{{ $student->student_code }}')" title="Delete Student">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                             </button>
+                                            <div class="dropdown student-action-dropdown">
+                                                <button class="btn btn-sm btn-secondary px-2 py-1 no-caret" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More Actions">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">pie_chart</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end student-action-menu">
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('student.print', $student) }}?auto_print=1" target="_blank">
+                                                            Print Admission Form
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('id-card.print-student.print') }}?student_id={{ $student->id }}" target="_blank">
+                                                            Generate ID Card
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('certification.student.generate', $student) }}?type=Date%20of%20Birth%20Certificate" target="_blank">
+                                                            Date of Birth Certificate
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('certification.student.generate', $student) }}?type=Provisional%20Certificate" target="_blank">
+                                                            Provisional Certificate
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('certification.student.generate', $student) }}?type=Character%20Certificate" target="_blank">
+                                                            Character Certificate
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('certification.student.generate', $student) }}?type=School%20Leaving%20Certificate" target="_blank">
+                                                            School Leaving Certificate
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('student-behavior.progress-tracking', ['search' => $student->student_code, 'auto_print' => 1]) }}" target="_blank">
+                                                            Monthly Behavior Report
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('accounting.fee-voucher.print', ['student_code' => $student->student_code]) }}" target="_blank">
+                                                            Print Fee Voucher
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('attendance.student-summary.print', ['student_id' => $student->id, 'auto_print' => 1]) }}" target="_blank">
+                                                            Attendance Report
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -282,6 +343,7 @@
                 <p class="text-muted mb-0">Please select Campus, Class, Section, or Type and click Filter to view students list.</p>
             </div>
             @endif
+            </div>
         </div>
     </div>
 </div>
@@ -448,6 +510,151 @@
 </style>
 
 <script>
+let studentActionDropdownBound = false;
+
+function setupStudentActionDropdowns() {
+    if (studentActionDropdownBound) return;
+    studentActionDropdownBound = true;
+
+    document.addEventListener('shown.bs.dropdown', function(event) {
+        const dropdown = event.target?.classList?.contains('student-action-dropdown')
+            ? event.target
+            : event.target?.closest?.('.student-action-dropdown');
+        if (!dropdown) return;
+
+        const menu = dropdown.querySelector('.student-action-menu');
+        const toggle = dropdown.querySelector('button');
+        if (!menu || !toggle) return;
+
+        dropdown._movedMenu = menu;
+        dropdown._movedMenuOriginalParent = menu.parentElement;
+
+        const rect = toggle.getBoundingClientRect();
+        const menuWidth = menu.offsetWidth || 220;
+        const left = Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8));
+        const top = rect.bottom + 6;
+
+        menu.style.position = 'fixed';
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+        menu.style.zIndex = '2000';
+        document.body.appendChild(menu);
+    });
+
+    document.addEventListener('hidden.bs.dropdown', function(event) {
+        const dropdown = event.target?.classList?.contains('student-action-dropdown')
+            ? event.target
+            : event.target?.closest?.('.student-action-dropdown');
+        if (!dropdown || !dropdown._movedMenu) return;
+
+        const menu = dropdown._movedMenu;
+        const originalParent = dropdown._movedMenuOriginalParent;
+        if (originalParent) {
+            originalParent.appendChild(menu);
+        }
+        menu.style.position = '';
+        menu.style.top = '';
+        menu.style.left = '';
+        menu.style.zIndex = '';
+        dropdown._movedMenu = null;
+        dropdown._movedMenuOriginalParent = null;
+    });
+}
+
+function loadStudentInfo(url, options = {}) {
+    const target = document.getElementById('student-info-content');
+    if (!target) {
+        window.location.href = url;
+        return;
+    }
+
+    const shouldPushState = options.pushState !== false;
+
+    fetch(url, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const newContent = doc.getElementById('student-info-content');
+        if (!newContent) {
+            window.location.href = url;
+            return;
+        }
+        target.innerHTML = newContent.innerHTML;
+        if (shouldPushState) {
+            window.history.pushState({}, '', url);
+        }
+        initializeStudentInfo();
+    })
+    .catch(() => {
+        window.location.href = url;
+    });
+}
+
+function initializeStudentInfo() {
+    const filterForm = document.getElementById('student-filter-form');
+    if (filterForm) {
+        filterForm.onsubmit = function(event) {
+            event.preventDefault();
+            const formData = new FormData(filterForm);
+            const params = new URLSearchParams(formData);
+            const url = `${filterForm.action}?${params.toString()}`;
+            loadStudentInfo(url);
+        };
+    }
+
+    const campusSelect = document.getElementById('filter_campus');
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+
+    if (classSelect) {
+        classSelect.onchange = function() {
+            loadSectionsForFilter(this.value);
+        };
+    }
+
+    if (campusSelect) {
+        campusSelect.onchange = function() {
+            loadClassesForFilter(this.value);
+            if (sectionSelect) {
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            }
+        };
+    }
+
+    setupStudentActionDropdowns();
+
+    if (campusSelect) {
+        const selectedCampus = campusSelect.value;
+        const selectedClass = classSelect ? classSelect.value : '';
+        const selectedSection = '{{ request('filter_section') }}';
+        loadClassesForFilter(selectedCampus, selectedClass);
+        if (selectedClass) {
+            loadSectionsForFilter(selectedClass, selectedSection);
+        }
+    }
+}
+
+const studentInfoContainer = document.getElementById('student-info-content');
+if (studentInfoContainer && !studentInfoContainer.dataset.bound) {
+    studentInfoContainer.dataset.bound = 'true';
+    studentInfoContainer.addEventListener('click', function(event) {
+        const link = event.target.closest('a');
+        if (link && link.closest('.pagination')) {
+            event.preventDefault();
+            loadStudentInfo(link.href);
+        }
+    });
+}
+
+window.addEventListener('popstate', function() {
+    loadStudentInfo(window.location.href, { pushState: false });
+});
+
 // Search functionality
 function performSearch() {
     const searchInput = document.getElementById('searchInput');
@@ -471,7 +678,7 @@ function performSearch() {
         searchBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
     }
     
-    window.location.href = url.toString();
+    loadStudentInfo(url.toString());
 }
 
 function handleSearchKeyPress(event) {
@@ -495,7 +702,7 @@ function clearSearch() {
     const searchInput = document.getElementById('searchInput');
     searchInput.disabled = true;
     
-    window.location.href = url.toString();
+    loadStudentInfo(url.toString());
 }
 
 // Update entries per page
@@ -503,7 +710,31 @@ function updateEntriesPerPage(value) {
     const url = new URL(window.location.href);
     url.searchParams.set('per_page', value);
     url.searchParams.set('page', '1'); // Reset to first page
-    window.location.href = url.toString();
+    loadStudentInfo(url.toString());
+}
+
+function loadClassesForFilter(selectedCampus, selectedClass = null) {
+    const classSelect = document.getElementById('filter_class');
+    classSelect.innerHTML = '<option value="">All Classes</option>';
+
+    fetch(`{{ route('student.information.classes-by-campus') }}?campus=${encodeURIComponent(selectedCampus || '')}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.classes && data.classes.length > 0) {
+                data.classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    if (selectedClass && selectedClass === className) {
+                        option.selected = true;
+                    }
+                    classSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+        });
 }
 
 // Function to load sections based on class
@@ -514,8 +745,9 @@ function loadSectionsForFilter(selectedClass, selectedSection = null) {
     sectionSelect.innerHTML = '<option value="">All Sections</option>';
     
     if (selectedClass) {
+        const selectedCampus = document.getElementById('filter_campus').value;
         // Fetch sections via AJAX
-        fetch(`{{ route('admission.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+        fetch(`{{ route('student.information.sections-by-class') }}?class=${encodeURIComponent(selectedClass)}&campus=${encodeURIComponent(selectedCampus || '')}`)
             .then(response => response.json())
             .then(data => {
                 if (data.sections && data.sections.length > 0) {
@@ -537,18 +769,8 @@ function loadSectionsForFilter(selectedClass, selectedSection = null) {
     }
 }
 
-// Load sections based on class selection in filter
-document.getElementById('filter_class').addEventListener('change', function() {
-    loadSectionsForFilter(this.value);
-});
-
-// Load sections on page load if class is already selected
 document.addEventListener('DOMContentLoaded', function() {
-    const selectedClass = document.getElementById('filter_class').value;
-    const selectedSection = '{{ request('filter_section') }}';
-    if (selectedClass) {
-        loadSectionsForFilter(selectedClass, selectedSection);
-    }
+    initializeStudentInfo();
 });
 
 // View student details
@@ -571,7 +793,7 @@ function deleteStudent(studentId, studentName, studentCode) {
         .then(data => {
             if (data.success) {
                 alert(data.message);
-                location.reload();
+                loadStudentInfo(window.location.href, { pushState: false });
             } else {
                 alert('Error: ' + data.message);
             }
@@ -582,6 +804,31 @@ function deleteStudent(studentId, studentName, studentCode) {
         });
     }
 }
+
+document.addEventListener('submit', function(event) {
+    const form = event.target.closest('.delete-all-form');
+    if (!form) return;
+    event.preventDefault();
+    if (!confirm('Are you sure you want to delete ALL filtered students? This action cannot be undone!')) {
+        return;
+    }
+    const formData = new FormData(form);
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        },
+        body: formData
+    })
+    .then(() => {
+        loadStudentInfo(window.location.href, { pushState: false });
+    })
+    .catch(() => {
+        window.location.href = form.action;
+    });
+});
 </script>
 
 <style>
@@ -636,6 +883,26 @@ function deleteStudent(studentId, studentName, studentCode) {
         color: white;
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+    }
+
+    .student-action-dropdown .no-caret::after {
+        display: none !important;
+    }
+
+    .student-action-dropdown {
+        position: relative;
+    }
+
+    .student-action-menu {
+        min-width: 220px;
+        margin-top: 6px;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+        right: 0;
+        left: auto;
+        transform: translateX(0);
+        z-index: 1050;
     }
 </style>
 @endsection

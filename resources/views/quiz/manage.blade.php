@@ -236,7 +236,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">class</span>
                                 </span>
-                                <select class="form-control quiz-input" name="for_class" id="for_class" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                <select class="form-control quiz-input" name="for_class" id="for_class" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;" disabled>
                                     <option value="">Select Class</option>
                                     @foreach($classes as $className)
                                         <option value="{{ $className }}">{{ $className }}</option>
@@ -660,6 +660,11 @@ function resetForm() {
     document.getElementById('quizForm').reset();
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('quizModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">quiz</span><span style="color: white;">Add New Quiz</span>';
+    const classSelect = document.getElementById('for_class');
+    if (classSelect) {
+        classSelect.innerHTML = '<option value="">Select Class</option>';
+        classSelect.disabled = true;
+    }
     // Reset section dropdown
     const sectionSelect = document.getElementById('section');
     if (sectionSelect) {
@@ -675,15 +680,10 @@ function editQuiz(id, campus, quizName, description, forClass, section, totalQue
     document.getElementById('campus').value = campus;
     document.getElementById('quiz_name').value = quizName;
     document.getElementById('description').value = description;
-    document.getElementById('for_class').value = forClass;
     document.getElementById('total_questions').value = totalQuestions;
     document.getElementById('start_date_time').value = startDateTime;
     document.getElementById('quizModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span><span style="color: white;">Edit Quiz</span>';
-    
-    // Load sections for the selected class
-    if (forClass) {
-        loadSections(forClass, section);
-    }
+    loadClassesForCampus(campus, forClass, section);
     
     new bootstrap.Modal(document.getElementById('quizModal')).show();
 }
@@ -731,14 +731,22 @@ function printTable() {
 
 // Dynamic section loading based on class
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('for_class');
     const sectionSelect = document.getElementById('section');
     
+    if (campusSelect && classSelect) {
+        campusSelect.addEventListener('change', function() {
+            const selectedCampus = this.value;
+            loadClassesForCampus(selectedCampus);
+        });
+    }
+
     if (classSelect && sectionSelect) {
         classSelect.addEventListener('change', function() {
             const selectedClass = this.value;
             if (selectedClass) {
-                loadSections(selectedClass);
+                loadSections(selectedClass, null, campusSelect ? campusSelect.value : '');
             } else {
                 sectionSelect.innerHTML = '<option value="">Select Section</option>';
                 sectionSelect.disabled = true;
@@ -747,14 +755,67 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-function loadSections(selectedClass, selectedSection = null) {
+function loadClassesForCampus(selectedCampus, selectedClass = null, selectedSection = null) {
+    const classSelect = document.getElementById('for_class');
+    const sectionSelect = document.getElementById('section');
+    if (!classSelect) return;
+
+    if (!selectedCampus) {
+        classSelect.innerHTML = '<option value="">Select Class</option>';
+        classSelect.disabled = true;
+        if (sectionSelect) {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            sectionSelect.disabled = true;
+        }
+        return;
+    }
+
+    classSelect.innerHTML = '<option value="">Loading...</option>';
+    classSelect.disabled = true;
+
+    fetch(`{{ route('quiz.manage.get-classes-by-campus') }}?campus=${encodeURIComponent(selectedCampus)}`)
+        .then(response => response.json())
+        .then(data => {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            if (data.classes && data.classes.length > 0) {
+                data.classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+            }
+            classSelect.disabled = false;
+
+            if (selectedClass) {
+                classSelect.value = selectedClass;
+                loadSections(selectedClass, selectedSection, selectedCampus);
+            } else if (sectionSelect) {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                sectionSelect.disabled = true;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            classSelect.disabled = false;
+        });
+}
+
+function loadSections(selectedClass, selectedSection = null, selectedCampus = null) {
     const sectionSelect = document.getElementById('section');
     if (!sectionSelect) return;
     
     sectionSelect.innerHTML = '<option value="">Loading...</option>';
     sectionSelect.disabled = true;
     
-    fetch(`{{ route('quiz.manage.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`)
+    const params = new URLSearchParams();
+    params.append('class', selectedClass);
+    if (selectedCampus) {
+        params.append('campus', selectedCampus);
+    }
+
+    fetch(`{{ route('quiz.manage.get-sections-by-class') }}?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             sectionSelect.innerHTML = '<option value="">Select Section</option>';

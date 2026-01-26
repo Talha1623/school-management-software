@@ -10,6 +10,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Carbon\Carbon;
 
 class TeacherHomeworkDiaryController extends Controller
 {
@@ -1208,6 +1209,356 @@ class TeacherHomeworkDiaryController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving subjects with homework: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Previous Date Homework Diary by Subject and Date
+     * Returns homework for a specific subject and date (for teachers)
+     * 
+     * GET /api/teacher/homework-diary/previous?subject={subject_name}&date={date}
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function previousDate(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access homework diary.',
+                ], 403);
+            }
+
+            // Validate required parameters
+            if (!$request->filled('subject')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject name is required',
+                ], 400);
+            }
+
+            if (!$request->filled('date')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Date is required (format: YYYY-MM-DD)',
+                ], 400);
+            }
+
+            $subjectName = trim($request->subject);
+            $date = trim($request->date);
+
+            // Validate date format
+            try {
+                $dateObj = Carbon::parse($date);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid date format. Please use YYYY-MM-DD format.',
+                ], 422);
+            }
+
+            // Get teacher's assigned subject IDs first
+            $teacherSubjectIds = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($teacherSubjectIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No subjects assigned to you. Please contact administrator.',
+                ], 403);
+            }
+
+            // Find subject by name (case-insensitive, partial match) - must be assigned to teacher
+            $subject = Subject::whereIn('id', $teacherSubjectIds)
+                ->whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . strtolower($subjectName) . '%'])
+                ->first();
+
+            if (!$subject) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject not found or not assigned to you: ' . $subjectName,
+                ], 404);
+            }
+
+            // Optional filters (campus, class, section)
+            $campus = $request->get('campus');
+            $class = $request->get('class');
+            $section = $request->get('section');
+
+            // Build query for homework
+            $homeworkQuery = HomeworkDiary::where('subject_id', $subject->id)
+                ->whereDate('date', $date);
+
+            // Apply optional filters
+            if ($campus) {
+                $homeworkQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+
+            if ($class) {
+                $homeworkQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            }
+
+            if ($section) {
+                $homeworkQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            }
+
+            // Get homework entries
+            $homeworkList = $homeworkQuery->with('subject')
+                ->orderBy('campus', 'asc')
+                ->orderBy('class', 'asc')
+                ->orderBy('section', 'asc')
+                ->get();
+
+            // Format homework data
+            $homeworkData = $homeworkList->map(function($homework) {
+                return [
+                    'id' => $homework->id,
+                    'subject_id' => $homework->subject_id,
+                    'subject_name' => $homework->subject->subject_name ?? null,
+                    'campus' => $homework->campus,
+                    'class' => $homework->class,
+                    'section' => $homework->section,
+                    'date' => $homework->date->format('Y-m-d'),
+                    'date_formatted' => $homework->date->format('d M Y'),
+                    'date_formatted_full' => $homework->date->format('l, d F Y'),
+                    'day_name' => $homework->date->format('l'),
+                    'day_short' => $homework->date->format('D'),
+                    'homework_content' => $homework->homework_content,
+                    'created_at' => $homework->created_at->format('Y-m-d H:i:s'),
+                    'created_at_formatted' => $homework->created_at->format('d M Y, h:i A'),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Homework retrieved successfully',
+                'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id ?? null,
+                        'designation' => $teacher->designation,
+                    ],
+                    'subject' => [
+                        'id' => $subject->id,
+                        'subject_name' => $subject->subject_name,
+                        'class' => $subject->class,
+                        'section' => $subject->section,
+                    ],
+                    'date' => $date,
+                    'date_formatted' => $dateObj->format('d M Y'),
+                    'date_formatted_full' => $dateObj->format('l, d F Y'),
+                    'filters' => [
+                        'campus' => $campus,
+                        'class' => $class,
+                        'section' => $section,
+                    ],
+                    'total_homework' => $homeworkList->count(),
+                    'homework' => $homeworkData,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving homework: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update Homework by Subject and Date
+     * Updates homework for a specific subject and date (for teachers)
+     * 
+     * POST /api/teacher/homework-diary/update?subject={subject_name}&date={date}
+     * If date is not provided, current date will be used
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function updateBySubjectDate(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+            
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can update homework.',
+                ], 403);
+            }
+
+            // Validate required parameters
+            if (!$request->filled('subject')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject name is required',
+                ], 400);
+            }
+
+            // If date is not provided, use current date
+            $subjectName = trim($request->subject);
+            $date = $request->filled('date') ? trim($request->date) : Carbon::today()->format('Y-m-d');
+
+            // Validate date format
+            try {
+                $dateObj = Carbon::parse($date);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid date format. Please use YYYY-MM-DD format.',
+                ], 422);
+            }
+
+            // Get teacher's assigned subject IDs first
+            $teacherSubjectIds = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($teacherSubjectIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No subjects assigned to you. Please contact administrator.',
+                ], 403);
+            }
+
+            // Find subject by name (case-insensitive, partial match) - must be assigned to teacher
+            $subject = Subject::whereIn('id', $teacherSubjectIds)
+                ->whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . strtolower($subjectName) . '%'])
+                ->first();
+
+            if (!$subject) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject not found or not assigned to you: ' . $subjectName,
+                ], 404);
+            }
+
+            // Validate required fields for update
+            $validated = $request->validate([
+                'campus' => ['required', 'string'],
+                'class' => ['required', 'string'],
+                'section' => ['required', 'string'],
+                'homework_content' => ['nullable', 'string'],
+            ]);
+
+            // Find homework entry
+            $homework = HomeworkDiary::where('subject_id', $subject->id)
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))])
+                ->whereDate('date', $date)
+                ->first();
+
+            // If homework content is empty or not provided, delete the entry if it exists
+            if (empty($validated['homework_content']) || !$request->filled('homework_content')) {
+                if ($homework) {
+                    $homework->delete();
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Homework entry deleted (empty content)',
+                        'data' => [
+                            'subject' => [
+                                'id' => $subject->id,
+                                'subject_name' => $subject->subject_name,
+                            ],
+                            'date' => $date,
+                            'date_formatted' => $dateObj->format('d M Y'),
+                            'campus' => $validated['campus'],
+                            'class' => $validated['class'],
+                            'section' => $validated['section'],
+                            'homework' => null,
+                        ],
+                        'token' => $request->user()->currentAccessToken()->token ?? null,
+                    ], 200);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Homework entry not found to delete',
+                    ], 404);
+                }
+            }
+
+            // Update or create homework entry
+            if ($homework) {
+                // Update existing entry
+                $homework->update([
+                    'homework_content' => $validated['homework_content'],
+                ]);
+                $homework->refresh();
+            } else {
+                // Create new entry
+                $homework = HomeworkDiary::create([
+                    'subject_id' => $subject->id,
+                    'campus' => $validated['campus'],
+                    'class' => $validated['class'],
+                    'section' => $validated['section'],
+                    'date' => $date,
+                    'homework_content' => $validated['homework_content'],
+                ]);
+            }
+
+            // Load subject relationship
+            $homework->load('subject');
+
+            return response()->json([
+                'success' => true,
+                'message' => $homework->wasRecentlyCreated ? 'Homework created successfully' : 'Homework updated successfully',
+                'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id ?? null,
+                        'designation' => $teacher->designation,
+                    ],
+                    'subject' => [
+                        'id' => $subject->id,
+                        'subject_name' => $subject->subject_name,
+                        'class' => $subject->class,
+                        'section' => $subject->section,
+                    ],
+                    'date' => $date,
+                    'date_formatted' => $dateObj->format('d M Y'),
+                    'date_formatted_full' => $dateObj->format('l, d F Y'),
+                    'homework' => [
+                        'id' => $homework->id,
+                        'subject_id' => $homework->subject_id,
+                        'subject_name' => $homework->subject->subject_name ?? null,
+                        'campus' => $homework->campus,
+                        'class' => $homework->class,
+                        'section' => $homework->section,
+                        'date' => $homework->date->format('Y-m-d'),
+                        'date_formatted' => $homework->date->format('d M Y'),
+                        'date_formatted_full' => $homework->date->format('l, d F Y'),
+                        'day_name' => $homework->date->format('l'),
+                        'day_short' => $homework->date->format('D'),
+                        'homework_content' => $homework->homework_content,
+                        'created_at' => $homework->created_at->format('Y-m-d H:i:s'),
+                        'created_at_formatted' => $homework->created_at->format('d M Y, h:i A'),
+                        'updated_at' => $homework->updated_at->format('Y-m-d H:i:s'),
+                        'updated_at_formatted' => $homework->updated_at->format('d M Y, h:i A'),
+                    ],
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating homework: ' . $e->getMessage(),
             ], 500);
         }
     }

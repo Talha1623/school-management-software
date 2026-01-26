@@ -14,7 +14,7 @@
             <form action="{{ route('reports.unpaid-invoices') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
@@ -25,9 +25,9 @@
                     </div>
 
                     <!-- Class -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" data-selected-class="{{ $filterClass }}" style="height: 32px;">
                             <option value="">All Classes</option>
                             @foreach($classes as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
@@ -36,9 +36,9 @@
                     </div>
 
                     <!-- Section -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" data-selected-section="{{ $filterSection }}" style="height: 32px;">
                             <option value="">All Sections</option>
                             @foreach($sections as $sectionName)
                                 <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
@@ -47,18 +47,17 @@
                     </div>
 
                     <!-- Type -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <label for="filter_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Type</label>
-                        <select class="form-select form-select-sm" id="filter_type" name="filter_type" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_type" name="filter_student_status" style="height: 32px;">
                             <option value="">All Types</option>
-                            @foreach($feeTypes as $feeType)
-                                <option value="{{ $feeType }}" {{ $filterType == $feeType ? 'selected' : '' }}>{{ $feeType }}</option>
-                            @endforeach
+                            <option value="Active" {{ ($filterStudentStatus ?? '') === 'Active' ? 'selected' : '' }}>Active</option>
+                            <option value="Deactive" {{ ($filterStudentStatus ?? '') === 'Deactive' ? 'selected' : '' }}>Deactive</option>
                         </select>
                     </div>
 
                     <!-- Filter Button -->
-                    <div class="col-md-2">
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn w-100" style="height: 32px;">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_alt</span>
                             <span style="font-size: 12px;">Filter</span>
@@ -68,7 +67,7 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_type']))
+            @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_student_status']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
@@ -203,4 +202,114 @@
     padding: 4px 8px;
 }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
+    const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
+
+    function resetSections() {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        sectionSelect.disabled = true;
+    }
+
+    function populateClasses(classes, selectedClass = '') {
+        classSelect.innerHTML = '<option value="">All Classes</option>';
+        if (classes && classes.length > 0) {
+            classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                if (selectedClass && selectedClass === className) {
+                    option.selected = true;
+                }
+                classSelect.appendChild(option);
+            });
+        }
+        classSelect.disabled = false;
+    }
+
+    function populateSections(sections, selectedSection = '') {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        if (sections && sections.length > 0) {
+            sections.forEach(sectionName => {
+                const option = document.createElement('option');
+                option.value = sectionName;
+                option.textContent = sectionName;
+                if (selectedSection && selectedSection === sectionName) {
+                    option.selected = true;
+                }
+                sectionSelect.appendChild(option);
+            });
+        }
+        sectionSelect.disabled = false;
+    }
+
+    function loadClassesByCampus(campus, selectedClass = '', selectedSection = '') {
+        classSelect.disabled = true;
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        resetSections();
+
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
+        }
+
+        fetch(`{{ route('reports.unpaid-invoices.get-classes-by-campus') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateClasses(data.classes || [], selectedClass);
+                if (selectedClass) {
+                    loadSections(selectedClass, selectedSection);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                classSelect.disabled = false;
+            });
+    }
+
+    function loadSections(selectedClass, selectedSection = '') {
+        const campus = campusSelect.value;
+        if (!selectedClass) {
+            resetSections();
+            return;
+        }
+
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.disabled = true;
+
+        const params = new URLSearchParams();
+        params.append('class', selectedClass);
+        if (campus) {
+            params.append('campus', campus);
+        }
+
+        fetch(`{{ route('reports.unpaid-invoices.get-sections-by-class') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateSections(data.sections || [], selectedSection);
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                sectionSelect.disabled = false;
+            });
+    }
+
+    campusSelect.addEventListener('change', function() {
+        loadClassesByCampus(this.value);
+    });
+
+    classSelect.addEventListener('change', function() {
+        loadSections(this.value);
+    });
+
+    const selectedClass = classSelect.dataset.selectedClass || '';
+    const selectedSection = sectionSelect.dataset.selectedSection || '';
+    loadClassesByCampus(campusSelect.value, selectedClass, selectedSection);
+});
+</script>
 @endsection

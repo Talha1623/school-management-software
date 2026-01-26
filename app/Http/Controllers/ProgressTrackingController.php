@@ -22,6 +22,8 @@ class ProgressTrackingController extends Controller
         $currentYearPoints = 0;
         $lastYearPoints = 0;
         $campus = null;
+        $contactPhone = config('app.phone', '+923316074246');
+        $contactEmail = config('app.email', 'arainabdurrehman3@gmail.com');
         
         // Search for student
         if ($request->filled('search')) {
@@ -69,6 +71,15 @@ class ProgressTrackingController extends Controller
                     if ($student->campus) {
                         $campus = Campus::where('campus_name', $student->campus)->first();
                     }
+
+                    // Prefer student contact details, then campus, then app config
+                    $contactPhone = $student->father_phone
+                        ?: $student->whatsapp_number
+                        ?: $student->mother_phone
+                        ?: ($campus->phone ?? $contactPhone);
+                    $contactEmail = $student->father_email
+                        ?: $student->email
+                        ?: ($campus->email ?? $contactEmail);
                 }
             }
         }
@@ -79,7 +90,9 @@ class ProgressTrackingController extends Controller
             'behaviorSummary',
             'currentYearPoints',
             'lastYearPoints',
-            'campus'
+            'campus',
+            'contactPhone',
+            'contactEmail'
         ));
     }
 }

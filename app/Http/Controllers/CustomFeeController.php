@@ -198,13 +198,18 @@ class CustomFeeController extends Controller
     public function getSectionsByClass(Request $request)
     {
         $className = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$className) {
             return response()->json(['sections' => []]);
         }
 
         // Get sections for the selected class
-        $sections = Section::where('class', $className)
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery
             ->orderBy('name', 'asc')
             ->get(['id', 'name'])
             ->map(function($section) {

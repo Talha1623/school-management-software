@@ -8,57 +8,57 @@
     <!-- Top Action Buttons Bar -->
     <div class="mb-3">
         <div class="bg-primary p-2 rounded-10 d-flex align-items-center justify-content-center gap-2 flex-wrap" style="background-color: #1a237e !important;">
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px;">
+            <a href="{{ route('admission.admit-student') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px; text-decoration: none;" title="Admit Student">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">add</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #f44336; border-radius: 8px;">
+            </a>
+            <a href="{{ route('student.information') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #f44336; border-radius: 8px; text-decoration: none;" title="Student Information">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">person</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px;">
+            </a>
+            <a href="{{ route('attendance.student') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px; text-decoration: none;" title="Student Attendance">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">check</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px;">
+            </a>
+            <a href="{{ route('attendance.staff') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px; text-decoration: none;" title="Staff Attendance">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">groups</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px;">
+            </a>
+            <a href="{{ route('fee-payment') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px; text-decoration: none;" title="Fee Payment">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">payments</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #9e9e9e; border-radius: 8px;">
+            </a>
+            <a href="{{ route('accounting.generate-monthly-fee') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #9e9e9e; border-radius: 8px; text-decoration: none;" title="Generate Monthly Fee">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">attach_money</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px;">
+            </a>
+            <!-- <a href="#" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px; text-decoration: none;" title="Add Management Expense">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">thumb_up</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px;">
+            </a> -->
+            <a href="{{ route('expense-management.add') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px; text-decoration: none;" title="Add Management Expense">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">work</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #f44336; border-radius: 8px;">
+            </a>
+            <!-- <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #f44336; border-radius: 8px;">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">pie_chart</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px;">
+            </button> -->
+            <a href="{{ route('staff.management') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px; text-decoration: none;" title="Staff Management">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">groups</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px;">
+            </a>
+            <!-- <a href="{{ route('parent.manage-access') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px; text-decoration: none;" title="Parent Manage Access">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">group</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #9e9e9e; border-radius: 8px;">
+            </a> -->
+            <!-- <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #9e9e9e; border-radius: 8px;">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">forum</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px;">
+            </button> -->
+            <!-- <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px;">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">chat_bubble</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px;">
+            </button> -->
+            <!-- <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px;">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">refresh</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px;">
+            </button> -->
+            <a href="{{ route('school.noticeboard') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #4caf50; border-radius: 8px; text-decoration: none;" title="School Noticeboard">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">notifications</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px;">
+            </a>
+            <a href="{{ route('settings.general') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #2196f3; border-radius: 8px; text-decoration: none;" title="General Settings">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">settings</span>
-            </button>
-            <button class="btn p-0 border-0" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px;">
+            </a>
+            <a href="{{ route('homework-diary.manage') }}" class="btn p-0 border-0 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background-color: #ff9800; border-radius: 8px; text-decoration: none;" title="Add & Manage Diaries">
                 <span class="material-symbols-outlined text-white" style="font-size: 20px;">menu_book</span>
-            </button>
+            </a>
         </div>
     </div>
 
@@ -230,7 +230,7 @@
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $unpaidInvoicesCount ?? 0 }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Unpaid Invoices</h6>
                     <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">Amount: {{ number_format($unpaidInvoicesAmount ?? 0, 2) }}</p>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('reports.unpaid-invoices') }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
 
@@ -242,7 +242,7 @@
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($incomeToday ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Income Today</h6>
                     <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($incomeThisMonth ?? 0, 2) }}</p>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('reports.detailed-income', ['filter_date' => \Carbon\Carbon::now()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
 
@@ -254,7 +254,7 @@
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($expenseToday ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Expense Today</h6>
                     <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($expenseThisMonth ?? 0, 2) }}</p>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('reports.detailed-expense', ['filter_date' => \Carbon\Carbon::now()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
 
@@ -266,7 +266,7 @@
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($profitToday ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Profit Today</h6>
                     <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($profitThisMonth ?? 0, 2) }}</p>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
 
@@ -278,7 +278,7 @@
                     </div>
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">1000</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Yearly Income</h6>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
 
@@ -289,7 +289,7 @@
                     </div>
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">0</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Yearly Expenses</h6>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
 
@@ -300,7 +300,7 @@
                     </div>
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">1000</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Profit This Year</h6>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
 
@@ -311,7 +311,7 @@
                     </div>
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 26px;">2025-2026</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Current Session</h6>
-                    <button class="btn btn-sm text-white p-0 border-0" style="font-size: 12px;">Change Session <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></button>
+                    <a href="{{ route('settings.general') }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">Change Session <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
         </div>
@@ -373,9 +373,10 @@
             <div class="card border-0 rounded-10 p-3" style="background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);">
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="flex-grow-1">
-                        <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.active_students') }}</h6>
+            <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.active_students') }}</h6>
                         <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $activeStudentsCount ?? 0 }}</h2>
                         <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Boys: {{ $boysCount ?? 0 }} Girls: {{ $girlsCount ?? 0 }}@if(($noGenderSetCount ?? 0) > 0) (No Gender Set: {{ $noGenderSetCount ?? 0 }})@endif</p>
+            <a href="{{ route('student.info-report.print', ['type' => 'all-active', 'auto_print' => 1]) }}" target="_blank" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                     </div>
                     <div class="flex-shrink-0">
                         <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">person</span>
@@ -390,6 +391,7 @@
                         <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.parents') }}</h6>
                         <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $totalParents ?? 0 }}</h2>
                         <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Total Registered Parents</p>
+                        <a href="{{ route('parent.manage-access.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                     </div>
                     <div class="flex-shrink-0">
                         <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">group</span>
@@ -404,6 +406,7 @@
                         <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.staff') }}</h6>
                         <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $totalStaff ?? 0 }}</h2>
                         <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Male: {{ $maleStaff ?? 0 }} Female: {{ $femaleStaff ?? 0 }}</p>
+                        <a href="{{ route('staff.management.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                     </div>
                     <div class="flex-shrink-0">
                         <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">groups</span>
@@ -418,6 +421,7 @@
                         <h6 class="text-white mb-2 fw-bold" style="font-size: 12px; letter-spacing: 0.5px;">{{ __('dashboard.present_students_today') }}</h6>
                         <h2 class="text-white mb-1 fw-bold" style="font-size: 42px;">{{ $presentStudentsToday ?? 0 }}</h2>
                         <p class="text-white mb-0" style="font-size: 11px; opacity: 0.9;">Attendance Percentage: {{ number_format($attendancePercentage ?? 0, 1) }}%</p>
+                        <a href="{{ route('attendance.present-today.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                     </div>
                     <div class="flex-shrink-0">
                         <span class="material-symbols-outlined text-white" style="font-size: 48px; opacity: 0.3;">thumb_up</span>
@@ -437,20 +441,22 @@
             <div class="row g-2 mt-2">
                 @forelse($latestAdmissions ?? [] as $student)
                 <div class="col-6">
-                    <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
-                        <div class="d-flex flex-column align-items-center text-center">
-                            <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
-                                <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                    <a href="{{ route('student.print', $student) }}" target="_blank" style="text-decoration: none; display: block;">
+                        <div class="card border-0 rounded-10 p-2" style="background-color: #f5f5f5;">
+                            <div class="d-flex flex-column align-items-center text-center">
+                                <div class="bg-primary rounded-circle p-2 mb-2" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background-color: #2196F3 !important;">
+                                    <span class="material-symbols-outlined text-white" style="font-size: 24px;">person</span>
+                                </div>
+                                <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">{{ $student->student_name ?? 'N/A' }}</h6>
+                                <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">{{ $student->student_code ?? 'N/A' }}</p>
+                                @php
+                                    $admissionDate = $student->admission_date ?? $student->created_at;
+                                    $formattedDate = $admissionDate ? \Carbon\Carbon::parse($admissionDate)->format('d M - Y') : 'N/A';
+                                @endphp
+                                <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">{{ $formattedDate }}</span>
                             </div>
-                            <h6 class="mb-1 fw-bold text-dark" style="font-size: 12px;">{{ $student->student_name ?? 'N/A' }}</h6>
-                            <p class="mb-1 text-dark" style="font-size: 10px; opacity: 0.7;">{{ $student->student_code ?? 'N/A' }}</p>
-                            @php
-                                $admissionDate = $student->admission_date ?? $student->created_at;
-                                $formattedDate = $admissionDate ? \Carbon\Carbon::parse($admissionDate)->format('d M - Y') : 'N/A';
-                            @endphp
-                            <span class="badge bg-danger text-white" style="font-size: 9px; padding: 4px 8px;">{{ $formattedDate }}</span>
                         </div>
-                    </div>
+                    </a>
                 </div>
                 @empty
                 <div class="col-12">
@@ -466,9 +472,7 @@
     <div class="col-lg-4 col-md-12 mb-3">
         <div class="card bg-white p-3 rounded-10 border border-white h-100">
             <h4 class="mb-0 fw-bold" style="background: linear-gradient(135deg, #1a237e 0%, #003471 100%); color: #ffffff; padding: 6px 12px; margin: -12px -12px 12px -12px; border-radius: 8px 8px 0 0; font-size: 16px;">{{ __('dashboard.staff_attendance_chart') }}</h4>
-            <div id="staff_attendance_chart" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
-                <p class="text-muted mb-0" style="font-size: 14px;">No attendance data available.</p>
-            </div>
+            <div id="staff_attendance_chart" style="min-height: 400px;"></div>
         </div>
     </div>
 
@@ -652,6 +656,12 @@ document.addEventListener('DOMContentLoaded', function() {
     $weeklyExpenseData = $weeklyExpense ?? [0, 0, 0, 0, 0, 0, 0];
     $weeklyLabelsData = $weeklyLabels ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     
+    // Staff attendance chart data (last 7 days)
+    $staffAttendanceLabels = $staffAttendanceLabels ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    $staffPresentData = $staffPresentData ?? [0, 0, 0, 0, 0, 0, 0];
+    $staffAbsentData = $staffAbsentData ?? [0, 0, 0, 0, 0, 0, 0];
+    $staffLeaveData = $staffLeaveData ?? [0, 0, 0, 0, 0, 0, 0];
+    
     // Monthly income/expense data
     $monthlyIncomeData = $monthlyIncome ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     $monthlyExpenseData = $monthlyExpense ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -663,6 +673,10 @@ var monthLabelsData = @json($labelsData);
 var weeklyIncomeData = @json($weeklyIncomeData);
 var weeklyExpenseData = @json($weeklyExpenseData);
 var weeklyLabelsData = @json($weeklyLabelsData);
+var staffAttendanceLabels = @json($staffAttendanceLabels);
+var staffPresentData = @json($staffPresentData);
+var staffAbsentData = @json($staffAbsentData);
+var staffLeaveData = @json($staffLeaveData);
 var monthlyIncomeData = @json($monthlyIncomeData);
 var monthlyExpenseData = @json($monthlyExpenseData);
 var monthlyLabelsData = @json($monthlyLabelsData);
@@ -763,6 +777,61 @@ function initializeCharts() {
         };
         var chart = new ApexCharts(document.querySelector("#daily_income_expense_chart"), options);
         chart.render();
+    }
+
+    // Staff Attendance Chart (Last 7 Days)
+    const staffChartId = document.getElementById('staff_attendance_chart');
+    if (staffChartId) {
+        const totalStaffAttendance = [...staffPresentData, ...staffAbsentData, ...staffLeaveData]
+            .reduce((sum, val) => sum + Number(val || 0), 0);
+        if (totalStaffAttendance === 0) {
+            staffChartId.innerHTML = '<p class="text-muted mb-0" style="font-size: 14px; text-align: center; padding-top: 150px;">No attendance data available.</p>';
+        } else {
+            var options = {
+                series: [
+                    { name: 'Present', data: staffPresentData },
+                    { name: 'Absent', data: staffAbsentData },
+                    { name: 'Leave', data: staffLeaveData }
+                ],
+                chart: {
+                    type: 'bar',
+                    height: 300,
+                    stacked: true,
+                    toolbar: { show: false }
+                },
+                colors: ['#4CAF50', '#F44336', '#FF9800'],
+                plotOptions: {
+                    bar: {
+                        horizontal: false,
+                        columnWidth: '55%',
+                        endingShape: 'rounded'
+                    }
+                },
+                dataLabels: { enabled: false },
+                xaxis: {
+                    categories: staffAttendanceLabels,
+                    labels: { style: { fontSize: '11px', colors: '#666' } }
+                },
+                yaxis: {
+                    labels: { style: { fontSize: '11px', colors: '#666' } }
+                },
+                legend: {
+                    show: true,
+                    position: 'top',
+                    fontSize: '11px',
+                    offsetY: -5
+                },
+                grid: {
+                    strokeDashArray: 3,
+                    borderColor: '#e0e0e0'
+                },
+                tooltip: {
+                    y: { formatter: function(val) { return val; } }
+                }
+            };
+            var chart = new ApexCharts(document.querySelector("#staff_attendance_chart"), options);
+            chart.render();
+        }
     }
 
     // Monthly Income & Expense Chart (Last 12 Months)

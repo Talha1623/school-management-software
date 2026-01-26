@@ -50,7 +50,7 @@
                                 <select class="form-select form-select-sm" name="filter_class" id="filter_class">
                                     <option value="">Select Class</option>
                                     @foreach($classes as $class)
-                                        <option value="{{ $class->class_name ?? $class }}" {{ request('filter_class') == ($class->class_name ?? $class) ? 'selected' : '' }}>{{ $class->class_name ?? $class }}</option>
+                                        <option value="{{ $class->class_name ?? $class }}" data-campus="{{ $class->campus ?? '' }}" {{ request('filter_class') == ($class->class_name ?? $class) ? 'selected' : '' }}>{{ $class->class_name ?? $class }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -145,7 +145,7 @@
                         <tbody>
                             @if(isset($timetables) && $timetables->count() > 0)
                                 @forelse($timetables as $timetable)
-                                    <tr>
+                                    <tr data-timetable-id="{{ $timetable->id }}">
                                         <td>{{ $loop->iteration + (($timetables->currentPage() - 1) * $timetables->perPage()) }}</td>
                                         <td>
                                             <span class="badge bg-info text-white" style="font-size: 12px; padding: 4px 8px;">{{ $timetable->campus }}</span>
@@ -173,7 +173,7 @@
                                                 <a href="{{ route('timetable.edit', $timetable) }}" class="btn btn-sm btn-primary" title="Edit">
                                                     <span class="material-symbols-outlined" style="font-size: 16px; color: white;">edit</span>
                                                 </a>
-                                                <form action="{{ route('timetable.destroy', $timetable) }}" method="POST" class="d-inline" onsubmit="return confirmDelete(event)">
+                                                <form action="{{ route('timetable.destroy', $timetable) }}" method="POST" class="d-inline timetable-delete-form" data-timetable-id="{{ $timetable->id }}">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" class="btn btn-sm btn-danger" title="Delete">
@@ -414,16 +414,36 @@
         window.print();
     }
 
-    function confirmDelete(event) {
-        event.preventDefault();
-        if (confirm('Are you sure you want to delete this timetable? This action cannot be undone.')) {
-            event.target.closest('form').submit();
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+
+    function filterClassOptionsByCampus(campusValue) {
+        const classSelect = document.getElementById('filter_class');
+        if (!classSelect) return;
+        const campusLower = (campusValue || '').toLowerCase().trim();
+        Array.from(classSelect.options).forEach((option, index) => {
+            if (index === 0) {
+                option.hidden = false;
+                option.disabled = false;
+                return;
+            }
+            const optionCampus = (option.dataset.campus || '').toLowerCase().trim();
+            const shouldShow = !campusLower || optionCampus === campusLower;
+            option.hidden = !shouldShow;
+            option.disabled = !shouldShow;
+        });
+
+        if (!classSelect.value || classSelect.selectedOptions[0]?.disabled) {
+            classSelect.value = '';
         }
-        return false;
     }
 
     // Dynamic section loading based on class selection
     document.addEventListener('DOMContentLoaded', function() {
+        const tbody = document.querySelector('.default-table-area tbody');
+        const campusSelect = document.getElementById('filter_campus');
         const classSelect = document.getElementById('filter_class');
         const sectionSelect = document.getElementById('filter_section');
         
@@ -440,7 +460,12 @@
             sectionSelect.disabled = true;
             
             // Make AJAX request
-            fetch(`{{ route('timetable.get-sections-by-class') }}?class=${encodeURIComponent(className)}`, {
+            const params = new URLSearchParams();
+            params.append('class', className);
+            if (campusSelect && campusSelect.value) {
+                params.append('campus', campusSelect.value);
+            }
+            fetch(`{{ route('timetable.get-sections-by-class') }}?${params.toString()}`, {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -470,12 +495,66 @@
                 sectionSelect.disabled = true;
             });
         }
+
+        document.addEventListener('submit', async function (event) {
+            const form = event.target;
+            if (!form.classList.contains('timetable-delete-form')) return;
+            event.preventDefault();
+
+            if (!confirm('Are you sure you want to delete this timetable? This action cannot be undone.')) {
+                return;
+            }
+
+            const response = await fetch(form.action, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => '');
+                alert(errorText || 'Unable to delete timetable. Please try again.');
+                return;
+            }
+
+            const data = await response.json().catch(() => ({}));
+            const timetableId = data && data.id ? data.id : form.dataset.timetableId;
+            const row = tbody.querySelector(`tr[data-timetable-id="${timetableId}"]`);
+            if (row) {
+                row.remove();
+            }
+
+            if (tbody.querySelectorAll('tr').length === 0) {
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td colspan="9" class="text-center py-4">
+                            <div class="d-flex flex-column align-items-center gap-2">
+                                <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">schedule</span>
+                                <p class="text-muted mb-0">No timetables found.</p>
+                            </div>
+                        </td>
+                    </tr>
+                `);
+            }
+        });
         
         // Listen for class selection changes
         if (classSelect) {
             classSelect.addEventListener('change', function() {
                 loadSections(this.value);
                 // Clear section when class changes
+                sectionSelect.value = '';
+            });
+        }
+
+        if (campusSelect) {
+            campusSelect.addEventListener('change', function() {
+                filterClassOptionsByCampus(this.value);
+                loadSections('');
                 sectionSelect.value = '';
             });
         }
@@ -490,6 +569,8 @@
                 }, 500);
             @endif
         @endif
+
+        filterClassOptionsByCampus(document.getElementById('filter_campus')?.value || '');
     });
 </script>
 @endsection

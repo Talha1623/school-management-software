@@ -94,6 +94,41 @@ class PrintGatePassesController extends Controller
      */
     public function print(Request $request): View
     {
+        if ($request->filled('parent_id')) {
+            $parent = ParentAccount::find($request->parent_id);
+            $parents = collect();
+            if ($parent) {
+                $student = Student::where('parent_account_id', $parent->id)->first();
+                $parents = collect([[
+                    'id' => $parent->id,
+                    'name' => $parent->name,
+                    'email' => $parent->email,
+                    'phone' => $parent->phone,
+                    'campus' => $student ? ($student->campus ?? 'All campuses') : 'All campuses',
+                    'parent_type' => $request->get('parent_type', 'Father'),
+                    'pass_validity' => $request->get('pass_validity', '6 Months'),
+                    'card_type' => $request->get('card_type', 'Regular'),
+                    'issue_date' => now()->format('d-m-Y'),
+                ]]);
+            }
+
+            $designSettings = [
+                'accent_color' => $request->get('accent_color', '#003471'),
+                'secondary_color' => $request->get('secondary_color', '#F08080'),
+                'gradient_color1' => $request->get('gradient_color1', '#FFFFFF'),
+                'gradient_color2' => $request->get('gradient_color2', '#F8F9FA'),
+                'parent_name_color' => $request->get('parent_name_color', '#000000'),
+                'details_text_color' => $request->get('details_text_color', '#000000'),
+                'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
+                'orientation' => $request->get('orientation', 'landscape'),
+                'show_monogram' => $request->get('show_monogram', 'yes'),
+                'card_style' => $request->get('card_style', 'modern'),
+                'border_style' => $request->get('border_style', 'rounded'),
+            ];
+
+            return view('parent.print-gate-passes-print', compact('parents', 'designSettings'));
+        }
+
         // Get filtered parents
         $parents = collect();
         

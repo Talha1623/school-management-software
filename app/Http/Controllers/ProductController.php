@@ -38,8 +38,11 @@ class ProductController extends Controller
         
         $products = $query->orderBy('product_name')->paginate($perPage)->withQueryString();
 
-        // Get categories for dropdown
-        $categories = StockCategory::whereNotNull('category_name')->distinct()->pluck('category_name')->sort()->values();
+        // Get categories for dropdown (with campus for filtering)
+        $categories = StockCategory::whereNotNull('category_name')
+            ->whereNotNull('campus')
+            ->orderBy('category_name')
+            ->get(['category_name', 'campus']);
 
         // Get campuses from Campus model
         $campuses = Campus::orderBy('campus_name', 'asc')->get();

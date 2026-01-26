@@ -207,7 +207,9 @@
                                     <option value="">Select Campus</option>
                                     @if(isset($campuses) && $campuses->count() > 0)
                                         @foreach($campuses as $campus)
-                                            <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                            <option value="{{ $campus->campus_name ?? $campus }}" {{ ($defaultCampus ?? '') === ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                                {{ $campus->campus_name ?? $campus }}
+                                            </option>
                                         @endforeach
                                     @endif
                                 </select>

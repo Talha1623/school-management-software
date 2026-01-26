@@ -8,9 +8,9 @@
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Exam Grades - For Final Exam</h4>
-                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 grade-add-btn" data-bs-toggle="modal" data-bs-target="#gradeModal" onclick="resetForm()">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Grade</span>
+                <button type="button" class="btn btn-sm py-1 px-2 d-inline-flex align-items-center gap-1 rounded-8 grade-add-btn text-white" data-bs-toggle="modal" data-bs-target="#gradeModal" onclick="resetForm()">
+                    <span class="material-symbols-outlined text-white" style="font-size: 16px;">add</span>
+                    <span class="text-white">Add New Grade</span>
                 </button>
             </div>
 
@@ -273,6 +273,7 @@
         overflow: hidden;
         transition: all 0.3s ease;
         border: 1px solid #dee2e6;
+        height: 32px;
     }
     
     #gradeModal .grade-input-group:focus-within {
@@ -282,11 +283,12 @@
     
     #gradeModal .grade-input {
         font-size: 13px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.35rem 0.65rem;
         border: none;
         border-left: 1px solid #e0e7ff;
         border-radius: 0 8px 8px 0;
         transition: all 0.3s ease;
+        height: 32px;
     }
     
     #gradeModal .grade-input:focus {
@@ -296,13 +298,14 @@
     }
     
     #gradeModal .input-group-text {
-        padding: 0 0.75rem;
+        padding: 0 0.65rem;
         display: flex;
         align-items: center;
         border: none;
         border-right: 1px solid #e0e7ff;
         border-radius: 8px 0 0 8px;
         transition: all 0.3s ease;
+        height: 32px;
     }
     
     #gradeModal .grade-input-group:focus-within .input-group-text {

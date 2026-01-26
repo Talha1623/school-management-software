@@ -262,8 +262,8 @@
                                     <span class="material-symbols-outlined" style="font-size: 15px;">info</span>
                                 </span>
                                 <select class="form-control loan-input" name="status" id="status" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 36px;">
+                                    <option value="Approved" selected>Approved</option>
                                     <option value="Pending">Pending</option>
-                                    <option value="Approved">Approved</option>
                                     <option value="Rejected">Rejected</option>
                                     <option value="Completed">Completed</option>
                                 </select>
