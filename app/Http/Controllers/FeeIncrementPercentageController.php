@@ -7,7 +7,9 @@ use App\Models\Accountant;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\Student;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -63,6 +65,37 @@ class FeeIncrementPercentageController extends Controller
     }
 
     /**
+     * Get students by filters for fee increment percentage.
+     */
+    public function getStudents(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        $class = $request->get('class');
+        $section = $request->get('section');
+
+        $query = Student::query()
+            ->whereNotNull('student_code')
+            ->where('student_code', '!=', '');
+
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        if ($class) {
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        }
+        if ($section) {
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+        }
+
+        $students = $query->orderBy('student_name')
+            ->get(['id', 'student_name', 'student_code', 'father_name', 'class', 'section', 'campus', 'monthly_fee']);
+
+        return response()->json([
+            'students' => $students,
+        ]);
+    }
+
+    /**
      * Store a newly created fee increment percentage.
      */
     public function store(Request $request): RedirectResponse
@@ -74,13 +107,29 @@ class FeeIncrementPercentageController extends Controller
             'increase' => ['required', 'numeric', 'min:0'],
             'accountant' => ['nullable', 'string', 'max:255'],
             'date' => ['required', 'date'],
+            'selected_students' => ['required', 'array', 'min:1'],
+            'selected_students.*' => ['exists:students,id'],
         ]);
+
+        $increase = (float) $validated['increase'];
+        $selectedStudentIds = $validated['selected_students'];
+        $students = Student::whereIn('id', $selectedStudentIds)->get();
+        $updatedCount = 0;
+
+        foreach ($students as $student) {
+            $currentFee = (float) ($student->monthly_fee ?? 0);
+            $newFee = $currentFee + ($currentFee * ($increase / 100));
+            $student->update([
+                'monthly_fee' => round($newFee, 2),
+            ]);
+            $updatedCount++;
+        }
 
         FeeIncrementPercentage::create($validated);
 
         return redirect()
             ->route('accounting.fee-increment.percentage')
-            ->with('success', 'Fee increment by percentage recorded successfully!');
+            ->with('success', "Fee increment applied to {$updatedCount} student(s) successfully!");
     }
 }
 

@@ -24,8 +24,8 @@ class PrintGatePassesController extends Controller
         // Pass validity options
         $passValidities = ['1 Month', '3 Months', '6 Months', '1 Year'];
         
-        // Card types
-        $cardTypes = ['Regular', 'VIP', 'Premium'];
+        // Card types (only QR cards)
+        $cardTypes = ['With QR Code'];
         
         // Get filtered parents for gate passes
         $parents = collect();
@@ -107,7 +107,7 @@ class PrintGatePassesController extends Controller
                     'campus' => $student ? ($student->campus ?? 'All campuses') : 'All campuses',
                     'parent_type' => $request->get('parent_type', 'Father'),
                     'pass_validity' => $request->get('pass_validity', '6 Months'),
-                    'card_type' => $request->get('card_type', 'Regular'),
+                    'card_type' => 'With QR Code',
                     'issue_date' => now()->format('d-m-Y'),
                 ]]);
             }

@@ -36,10 +36,7 @@
                 <div class="col-md-3">
                     <label for="filter_fee_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Fee Type</label>
                     <select class="form-select form-select-sm" id="filter_fee_type" style="height: 32px;">
-                        <option value="">All Fee Types</option>
-                        @foreach($feeTypes as $feeType)
-                            <option value="{{ $feeType }}">{{ $feeType }}</option>
-                        @endforeach
+                        <option value="">All</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -183,13 +180,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     classSelect.addEventListener('change', function() {
         const selectedClass = this.value;
+        const selectedCampus = campusSelect.value;
         sectionSelect.innerHTML = '<option value="">Select Class First</option>';
         sectionSelect.disabled = true;
         if (!selectedClass) {
             return;
         }
 
-        fetch(`{{ route('accounting.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`, {
+        const params = new URLSearchParams({
+            class: selectedClass,
+            campus: selectedCampus || ''
+        });
+        fetch(`{{ route('accounting.get-sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'

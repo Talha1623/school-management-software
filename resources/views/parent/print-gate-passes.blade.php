@@ -75,9 +75,8 @@
                                     Card Type
                                 </label>
                                 <select class="form-select form-select-sm" name="card_type" id="card_type">
-                                    <option value="">All Types</option>
                                     @foreach($cardTypes as $cardType)
-                                        <option value="{{ $cardType }}" {{ request('card_type') == $cardType ? 'selected' : '' }}>{{ $cardType }}</option>
+                                        <option value="{{ $cardType }}" selected>{{ $cardType }}</option>
                                     @endforeach
                                 </select>
                             </div>

@@ -21,10 +21,9 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="type" id="type" style="height: 38px;">
                                     <option value="">All Types</option>
-                                    <option value="Monthly Fee" {{ request('type') == 'Monthly Fee' ? 'selected' : '' }}>Monthly Fee</option>
-                                    <option value="Transport Fee" {{ request('type') == 'Transport Fee' ? 'selected' : '' }}>Transport Fee</option>
-                                    <option value="Custom Fee" {{ request('type') == 'Custom Fee' ? 'selected' : '' }}>Custom Fee</option>
-                                    <option value="Other" {{ request('type') == 'Other' ? 'selected' : '' }}>Other</option>
+                                    @foreach($copyTypes as $copyTypeValue => $copyTypeLabel)
+                                        <option value="{{ $copyTypeValue }}" {{ request('type') == $copyTypeValue ? 'selected' : '' }}>{{ $copyTypeLabel }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -62,11 +61,9 @@
                                 </span>
                                 <select class="form-select form-select-sm" name="vouchers_for" id="vouchers_for" style="height: 38px;">
                                     <option value="">All</option>
-                                    <option value="Monthly" {{ request('vouchers_for') == 'Monthly' ? 'selected' : '' }}>Monthly</option>
-                                    <option value="Quarterly" {{ request('vouchers_for') == 'Quarterly' ? 'selected' : '' }}>Quarterly</option>
-                                    <option value="Half Yearly" {{ request('vouchers_for') == 'Half Yearly' ? 'selected' : '' }}>Half Yearly</option>
-                                    <option value="Yearly" {{ request('vouchers_for') == 'Yearly' ? 'selected' : '' }}>Yearly</option>
-                                    <option value="Custom" {{ request('vouchers_for') == 'Custom' ? 'selected' : '' }}>Custom</option>
+                                    @foreach($months as $month)
+                                        <option value="{{ $month }}" {{ request('vouchers_for') == $month ? 'selected' : '' }}>{{ $month }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                         </div>
@@ -196,9 +193,12 @@
 
 <script>
 function generateFamilyVoucher(parentName) {
-    // Add family voucher generation logic here
-    alert('Generate voucher for family: ' + parentName);
-    // You can redirect to a voucher generation page or open a modal
+    const params = new URLSearchParams(window.location.search);
+    if (parentName) {
+        params.set('parent_name', parentName);
+    }
+    const url = '{{ route('accounting.fee-voucher.family.print') }}' + '?' + params.toString();
+    window.open(url, '_blank');
 }
 </script>
 @endsection

@@ -69,8 +69,8 @@
                         <label for="filter_status" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Status</label>
                         <select class="form-select form-select-sm" id="filter_status" name="filter_status" style="height: 32px;">
                             <option value="">All Status</option>
-                            @foreach($statusOptions as $status)
-                                <option value="{{ $status }}" {{ $filterStatus == $status ? 'selected' : '' }}>{{ $status }}</option>
+                            @foreach($statusOptions as $statusValue => $statusLabel)
+                                <option value="{{ $statusValue }}" {{ $filterStatus == $statusValue ? 'selected' : '' }}>{{ $statusLabel }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -102,83 +102,50 @@
                                 <tr>
                                     <th>#</th>
                                     <th>Student Code</th>
-                                    <th>Student Name</th>
-                                    <th>Campus</th>
+                                    <th>Student</th>
+                                    <th>Parent</th>
                                     <th>Class</th>
-                                    <th>Section</th>
-                                    <th>Fee Type</th>
-                                    <th>Amount</th>
-                                    <th>Status</th>
+                                    <th>Last Payment</th>
+                                    <th>Due Invoices</th>
+                                    <th>Total</th>
+                                    <th>Paid</th>
+                                    <th>Late</th>
+                                    <th>Remaining</th>
+                                    <th>Phone</th>
+                                    <th>Whatsapp</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @if(isset($students) && $students->count() > 0)
-                                    @forelse($students as $student)
+                                @if(isset($reportRows) && $reportRows->count() > 0)
+                                    @forelse($reportRows as $row)
                                         <tr>
                                             <td>{{ $loop->iteration }}</td>
+                                            <td><strong class="text-primary">{{ $row['student_code'] ?? 'N/A' }}</strong></td>
+                                            <td><strong>{{ $row['student_name'] ?? 'N/A' }}</strong></td>
+                                            <td>{{ $row['parent_name'] ?? 'N/A' }}</td>
+                                            <td>{{ $row['class'] ?? 'N/A' }}</td>
+                                            <td>{{ $row['last_payment'] ? \Carbon\Carbon::parse($row['last_payment'])->format('d-m-Y') : 'N/A' }}</td>
+                                            <td>{{ $row['due_invoices'] ?? 0 }}</td>
+                                            <td>{{ number_format($row['total'] ?? 0, 2) }}</td>
+                                            <td>{{ number_format($row['paid'] ?? 0, 2) }}</td>
+                                            <td>{{ number_format($row['late'] ?? 0, 2) }}</td>
+                                            <td>{{ number_format($row['remaining'] ?? 0, 2) }}</td>
+                                            <td>{{ $row['phone'] ?? 'N/A' }}</td>
+                                            <td>{{ $row['whatsapp'] ?? 'N/A' }}</td>
                                             <td>
-                                                <strong class="text-primary">{{ $student->student_code ?? 'N/A' }}</strong>
-                                            </td>
-                                            <td>
-                                                <strong>{{ $student->student_name ?? 'N/A' }}</strong>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-info text-white">{{ $student->campus ?? 'N/A' }}</span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-secondary text-white">{{ $student->class ?? 'N/A' }}</span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-primary text-white">{{ $student->section ?? 'N/A' }}</span>
-                                            </td>
-                                            <td>
-                                                @if(isset($typeOptions) && $filterType && isset($typeOptions[$filterType]))
-                                                    <span class="text-muted">{{ $typeOptions[$filterType] }}</span>
-                                                @elseif($filterType)
-                                                    <span class="text-muted">{{ ucfirst(str_replace('_', ' ', $filterType)) }}</span>
+                                                @if(!empty($row['student_code']))
+                                                    <a class="btn btn-sm btn-primary" href="{{ route('accounting.particular-receipt') }}?student_code={{ urlencode($row['student_code']) }}" target="_blank">
+                                                        View
+                                                    </a>
                                                 @else
                                                     <span class="text-muted">N/A</span>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @php
-                                                    $amount = 0;
-                                                    if ($filterType == 'admission_fee_only') {
-                                                        $amount = $student->admission_fee_amount ?? 0;
-                                                    } elseif ($filterType == 'transport_fee_only') {
-                                                        $amount = $student->transport_fare ?? 0;
-                                                    } elseif ($filterType == 'card_fee_only') {
-                                                        // Assuming card fee is stored in other_fee_amount when fee_type is 'Card Fee'
-                                                        $amount = ($student->fee_type == 'Card Fee' || $student->fee_type == 'Card') ? ($student->other_fee_amount ?? 0) : 0;
-                                                    } elseif ($filterType == 'all_detailed' || !$filterType) {
-                                                        // Show total of all fees for detailed view
-                                                        $amount = ($student->monthly_fee ?? 0) + 
-                                                                  ($student->admission_fee_amount ?? 0) + 
-                                                                  ($student->transport_fare ?? 0) + 
-                                                                  (($student->fee_type == 'Card Fee' || $student->fee_type == 'Card') ? ($student->other_fee_amount ?? 0) : 0);
-                                                    } else {
-                                                        $amount = $student->monthly_fee ?? 0;
-                                                    }
-                                                @endphp
-                                                <strong class="text-success">₹{{ number_format($amount, 2) }}</strong>
-                                            </td>
-                                            <td>
-                                                @if($filterStatus == 'Paid' || !$filterStatus)
-                                                    <span class="badge bg-success text-white">Paid</span>
-                                                @elseif($filterStatus == 'Pending')
-                                                    <span class="badge bg-warning text-dark">Pending</span>
-                                                @elseif($filterStatus == 'Default')
-                                                    <span class="badge bg-danger text-white">Default</span>
-                                                @elseif($filterStatus == 'Partial')
-                                                    <span class="badge bg-info text-white">Partial</span>
-                                                @else
-                                                    <span class="badge bg-secondary text-white">{{ $filterStatus ?? 'N/A' }}</span>
                                                 @endif
                                             </td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="9" class="text-center text-muted py-5">
+                                            <td colspan="13" class="text-center text-muted py-5">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                                 <p class="mt-2 mb-0">No records found.</p>
                                             </td>
@@ -186,7 +153,7 @@
                                     @endforelse
                                 @else
                                     <tr>
-                                        <td colspan="9" class="text-center text-muted py-5">
+                                        <td colspan="13" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No records found. Please apply filters to see results.</p>
                                         </td>

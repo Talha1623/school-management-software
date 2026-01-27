@@ -19,16 +19,44 @@ class StudentVoucherController extends Controller
      */
     public function index(Request $request): View
     {
-        // Get classes
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
-        if ($classes->isEmpty()) {
-            $classes = collect();
+        // Get campuses
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+
+        $filterCampus = $request->get('campus');
+
+        // Get classes (campus-wise)
+        $classes = collect();
+        if (!empty($filterCampus)) {
+            $classes = ClassModel::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                ->orderBy('class_name', 'asc')
+                ->get();
         }
         
         // Get sections (will be filtered by class via AJAX)
         $sections = collect();
         if ($request->filled('class')) {
-            $sections = Section::where('class', $request->class)
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
+            if (!empty($filterCampus)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $sections = $sectionsQuery
                 ->orderBy('name', 'asc')
                 ->get();
         }
@@ -56,6 +84,10 @@ class StudentVoucherController extends Controller
         }
         
         // Apply filters
+        if (!empty($filterCampus)) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+
         if ($request->filled('class')) {
             $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
         }
@@ -69,7 +101,7 @@ class StudentVoucherController extends Controller
         
         $students = $query->orderBy('student_name')->paginate(20)->withQueryString();
         
-        return view('accounting.fee-voucher.student', compact('students', 'classes', 'sections'));
+        return view('accounting.fee-voucher.student', compact('students', 'classes', 'sections', 'campuses', 'filterCampus'));
     }
     
     /**
@@ -78,14 +110,18 @@ class StudentVoucherController extends Controller
     public function getSectionsByClass(Request $request): JsonResponse
     {
         $className = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$className) {
             return response()->json(['sections' => []]);
         }
 
         // Get sections for the selected class
-        $sections = Section::where('class', $className)
-            ->orderBy('name', 'asc')
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery->orderBy('name', 'asc')
             ->get(['id', 'name'])
             ->map(function($section) {
                 return [
@@ -112,6 +148,10 @@ class StudentVoucherController extends Controller
         }
         
         // Apply filters
+        if ($request->filled('campus')) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+        }
+
         if ($request->filled('class')) {
             $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
         }
@@ -198,6 +238,37 @@ class StudentVoucherController extends Controller
             $lateFee = $pendingPayments->sum(function($payment) {
                 return (float) ($payment->late_fee ?? 0);
             });
+
+            // Add late fee dynamically for overdue monthly fees if not already applied
+            $dynamicLateFee = 0;
+            foreach ($pendingPayments as $payment) {
+                if ((float) ($payment->late_fee ?? 0) > 0) {
+                    continue;
+                }
+                if (!preg_match('/Monthly Fee - (\w+) (\d{4})/i', $payment->payment_title ?? '', $matches)) {
+                    continue;
+                }
+                $feeMonth = $matches[1];
+                $feeYear = $matches[2];
+                $dueDateForPayment = $payment->payment_date ? Carbon::parse($payment->payment_date) : null;
+                if (!$dueDateForPayment || !$dueDateForPayment->lt(Carbon::today())) {
+                    continue;
+                }
+
+                $monthlyFeeRecord = MonthlyFee::where('fee_month', $feeMonth)
+                    ->where('fee_year', $feeYear)
+                    ->where(function($q) use ($student) {
+                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus ?? ''))])
+                          ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class ?? ''))])
+                          ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section ?? ''))]);
+                    })
+                    ->first();
+
+                if ($monthlyFeeRecord && (float) $monthlyFeeRecord->late_fee > 0) {
+                    $dynamicLateFee += (float) $monthlyFeeRecord->late_fee;
+                }
+            }
+            $lateFee += $dynamicLateFee;
             
             // Get the latest due date from pending payments or use default
             $latestDueDate = null;

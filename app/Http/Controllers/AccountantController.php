@@ -1231,16 +1231,44 @@ class AccountantController extends Controller
      */
     public function studentVouchers(Request $request): View
     {
-        // Get classes
-        $classes = \App\Models\ClassModel::orderBy('class_name', 'asc')->get();
-        if ($classes->isEmpty()) {
-            $classes = collect();
+        // Get campuses
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+
+        $filterCampus = $request->get('campus');
+
+        // Get classes (campus-wise)
+        $classes = collect();
+        if (!empty($filterCampus)) {
+            $classes = \App\Models\ClassModel::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                ->orderBy('class_name', 'asc')
+                ->get();
         }
         
         // Get sections (will be filtered by class via AJAX)
         $sections = collect();
         if ($request->filled('class')) {
-            $sections = \App\Models\Section::where('class', $request->class)
+            $sectionsQuery = \App\Models\Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
+            if (!empty($filterCampus)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $sections = $sectionsQuery
                 ->orderBy('name', 'asc')
                 ->get();
         }
@@ -1263,6 +1291,10 @@ class AccountantController extends Controller
         }
         
         // Apply filters
+        if (!empty($filterCampus)) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+
         if ($request->filled('class')) {
             $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
         }
@@ -1273,7 +1305,7 @@ class AccountantController extends Controller
         
         $students = $query->orderBy('student_name')->paginate(20)->withQueryString();
         
-        return view('accountant.fee-voucher.student', compact('students', 'classes', 'sections'));
+        return view('accountant.fee-voucher.student', compact('students', 'classes', 'sections', 'campuses', 'filterCampus'));
     }
 
     /**
@@ -1281,6 +1313,15 @@ class AccountantController extends Controller
      */
     public function familyVouchers(Request $request): View
     {
+        $copyTypes = [
+            'three_copies' => 'Three Copy',
+            'two_copies' => 'Two Copy',
+            'one_copy' => 'One Copy',
+        ];
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ];
         $defaultCampus = null;
         if (auth()->guard('accountant')->check()) {
             $defaultCampus = auth()->guard('accountant')->user()->campus;
@@ -1342,7 +1383,7 @@ class AccountantController extends Controller
         
         $families = $query->orderBy('parent_name')->paginate(20)->withQueryString();
         
-        return view('accountant.fee-voucher.family', compact('families', 'campuses', 'filterCampus', 'defaultCampus'));
+        return view('accountant.fee-voucher.family', compact('families', 'campuses', 'filterCampus', 'defaultCampus', 'copyTypes', 'months'));
     }
 
     /**

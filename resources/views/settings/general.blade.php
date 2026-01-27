@@ -33,43 +33,44 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">School Name</label>
-                                    <input type="text" class="form-control" name="school_name" placeholder="Enter school name">
+                                    <input type="text" class="form-control" name="school_name" placeholder="Enter school name" value="{{ old('school_name', $settings->school_name ?? '') }}">
                                 </div>
                                 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">SMS Signature</label>
-                                    <input type="text" class="form-control" name="sms_signature" placeholder="Enter SMS signature">
+                                    <input type="text" class="form-control" name="sms_signature" placeholder="Enter SMS signature" value="{{ old('sms_signature', $settings->sms_signature ?? '') }}">
                                 </div>
                                 
                                 <div class="col-md-12 mb-3">
                                     <label class="form-label fw-medium">Address</label>
-                                    <textarea class="form-control" name="address" rows="2" placeholder="Enter school address"></textarea>
+                                    <textarea class="form-control" name="address" rows="2" placeholder="Enter school address">{{ old('address', $settings->address ?? '') }}</textarea>
                                 </div>
                                 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">School Phone</label>
-                                    <input type="text" class="form-control" name="school_phone" placeholder="Enter phone number">
+                                    <input type="text" class="form-control" name="school_phone" placeholder="Enter phone number" value="{{ old('school_phone', $settings->school_phone ?? '') }}">
                                 </div>
                                 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">School Email</label>
-                                    <input type="email" class="form-control" name="school_email" placeholder="Enter email">
+                                    <input type="email" class="form-control" name="school_email" placeholder="Enter email" value="{{ old('school_email', $settings->school_email ?? '') }}">
                                 </div>
                                 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">Currency</label>
                                     <select class="form-select" name="currency">
-                                        <option value="PKR">PKR (₨)</option>
-                                        <option value="USD">USD ($)</option>
-                                        <option value="EUR">EUR (€)</option>
+                                        @foreach($currencies as $currencyValue => $currencyLabel)
+                                            <option value="{{ $currencyValue }}" {{ old('currency', $settings->currency ?? 'PKR') === $currencyValue ? 'selected' : '' }}>{{ $currencyLabel }}</option>
+                                        @endforeach
                                     </select>
                                 </div>
                                 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">Timezone</label>
                                     <select class="form-select" name="timezone">
-                                        <option value="Asia/Karachi">Asia/Karachi (PKT)</option>
-                                        <option value="UTC">UTC</option>
+                                        @foreach($timezones as $timezone)
+                                            <option value="{{ $timezone }}" {{ old('timezone', $settings->timezone ?? 'Asia/Karachi') === $timezone ? 'selected' : '' }}>{{ $timezone }}</option>
+                                        @endforeach
                                     </select>
                                 </div>
                             </div>

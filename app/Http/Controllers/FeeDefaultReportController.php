@@ -93,8 +93,11 @@ class FeeDefaultReportController extends Controller
             $feeTypes = collect(['Monthly Fee', 'Transport Fee', 'Custom Fee', 'Advance Fee']);
         }
 
-        // Status options
-        $statusOptions = collect(['Paid', 'Pending', 'Default', 'Partial', 'Overdue']);
+        // Status options (active/deactive students only)
+        $statusOptions = collect([
+            'active' => 'Active Student',
+            'deactive' => 'Deactive Student',
+        ]);
 
         // Query students with fee default information
         $query = Student::query();
@@ -109,9 +112,86 @@ class FeeDefaultReportController extends Controller
         if ($filterSection) {
             $query->where('section', $filterSection);
         }
+        if ($filterStatus === 'active') {
+            $query->whereNotNull('admission_date');
+        } elseif ($filterStatus === 'deactive') {
+            $query->whereNull('admission_date');
+        }
 
         // Get students
         $students = $query->orderBy('student_name')->get();
+
+        $studentCodes = $students->pluck('student_code')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $generatedPayments = StudentPayment::whereIn('student_code', $studentCodes)
+            ->where('method', 'Generated')
+            ->get()
+            ->groupBy('student_code');
+        $paidPayments = StudentPayment::whereIn('student_code', $studentCodes)
+            ->where('method', '!=', 'Generated')
+            ->get()
+            ->groupBy('student_code');
+
+        $reportRows = $students->map(function ($student) use ($generatedPayments, $paidPayments) {
+            $code = $student->student_code;
+            $generated = $generatedPayments->get($code, collect());
+            $paid = $paidPayments->get($code, collect());
+
+            $generatedByTitle = $generated->groupBy('payment_title');
+            $paidByTitle = $paid->groupBy('payment_title');
+
+            $dueInvoices = 0;
+            $totalGenerated = 0;
+            $totalPaid = 0;
+            $totalLate = 0;
+
+            foreach ($generatedByTitle as $title => $items) {
+                $generatedAmount = $items->sum(function ($item) {
+                    return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
+                });
+                $generatedLate = $items->sum(function ($item) {
+                    return (float) ($item->late_fee ?? 0);
+                });
+                $paidAmount = $paidByTitle->get($title, collect())->sum(function ($item) {
+                    return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
+                });
+                $paidLate = $paidByTitle->get($title, collect())->sum(function ($item) {
+                    return (float) ($item->late_fee ?? 0);
+                });
+
+                $totalGenerated += $generatedAmount + $generatedLate;
+                $totalLate += $generatedLate;
+                $totalPaid += $paidAmount + $paidLate;
+
+                $remainingAmount = max(0, $generatedAmount - $paidAmount);
+                $remainingLate = max(0, $generatedLate - $paidLate);
+                if (($remainingAmount + $remainingLate) > 0) {
+                    $dueInvoices++;
+                }
+            }
+
+            $lastPayment = $paid->sortByDesc('payment_date')->first();
+            $remaining = max(0, $totalGenerated - $totalPaid);
+
+            return [
+                'student_code' => $student->student_code,
+                'student_name' => $student->student_name,
+                'parent_name' => $student->father_name,
+                'class' => $student->class,
+                'last_payment' => $lastPayment ? $lastPayment->payment_date : null,
+                'due_invoices' => $dueInvoices,
+                'total' => $totalGenerated,
+                'paid' => $totalPaid,
+                'late' => $totalLate,
+                'remaining' => $remaining,
+                'phone' => $student->father_phone,
+                'whatsapp' => $student->whatsapp_number,
+                'student_id' => $student->id,
+            ];
+        });
 
         // Filter by type and status if needed (this would require additional logic based on payment records)
         // For now, we'll return all students and let the view handle display
@@ -128,7 +208,8 @@ class FeeDefaultReportController extends Controller
             'filterClass',
             'filterSection',
             'filterType',
-            'filterStatus'
+            'filterStatus',
+            'reportRows'
         ));
     }
 

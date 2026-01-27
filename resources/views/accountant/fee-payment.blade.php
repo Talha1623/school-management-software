@@ -164,11 +164,14 @@
                             <thead>
                                 <tr>
                                     <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Student Name</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Father Name</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Class/Section</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Campus</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Monthly Fee</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Student</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Fee Title</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Total</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Dis</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Late Fee</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Paid</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Due</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Actions</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">More</th>
                                 </tr>
@@ -232,7 +235,7 @@
                                                 {{ $payment->payment_title }}
                                             </td>
                                             <td style="padding: 8px 12px; font-size: 13px;">
-                                                <strong style="color: #28a745;">{{ number_format($payment->payment_amount, 2) }}</strong>
+                                                <strong style="color: #28a745;">{{ number_format($payment->payment_amount ?? 0, 2) }}</strong>
                                             </td>
                                             <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
                                                 @if($payment->late_fee && $payment->late_fee > 0)
@@ -303,6 +306,7 @@
                                 </span>
                                 <input type="text" class="form-control" id="partial_student" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
                                 <input type="hidden" id="partial_student_code" name="student_code">
+                                <input type="hidden" id="partial_generated_id" name="generated_id">
                             </div>
                         </div>
 
@@ -402,6 +406,49 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Fee Breakdown Modal -->
+<div class="modal fade" id="feeBreakdownModal" tabindex="-1" aria-labelledby="feeBreakdownModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border-radius: 12px 12px 0 0; border: none; padding: 18px 20px;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="feeBreakdownModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">receipt_long</span>
+                    <span style="color: white !important;">Fee Breakdown</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" style="background-color: #f8f9fa;">
+                <div class="mb-3">
+                    <strong id="feeBreakdownStudent" style="color: #003471;"></strong>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Fee Title</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Late Fee</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="feeBreakdownBody">
+                            <tr><td colspan="5" class="text-center text-muted">No pending fees.</td></tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="3" class="text-end">Total Due</th>
+                                <th class="text-end" id="feeBreakdownTotal">0.00</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -554,12 +601,13 @@
 </style>
 
 <script>
-function searchByName() {
+function searchByName(onComplete) {
     const searchValue = document.getElementById('searchByName').value.trim();
     if (!searchValue) {
         alert('Please enter student name or code');
         return;
     }
+    window.lastFeeSearch = { type: 'name', value: searchValue };
 
     // Show loading state
     const searchResultsSection = document.getElementById('searchResultsSection');
@@ -583,106 +631,157 @@ function searchByName() {
         searchResultsBody.innerHTML = '';
         
         if (data.success && data.students && data.students.length > 0) {
-            data.students.forEach((student, index) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong>${student.student_code || 'N/A'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.student_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.father_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.class ? (student.class + (student.section ? '/' + student.section : '')) : 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.campus || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong style="color: #28a745;">${student.monthly_fee ? parseFloat(student.monthly_fee).toFixed(2) : '0.00'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap" style="position: relative;">
-                            ${student.has_unpaid ? `
-                                <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${student.student_code}', '${student.student_name}', ${student.unpaid_amount || 0})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${parseFloat(student.unpaid_amount || 0).toFixed(2)}">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
-                                    <span style="color: white;">Unpaid</span>
-                                </button>
-                            ` : `
-                                <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
-                                    <span style="color: white;">Paid</span>
-                                </button>
-                            `}
-                            <div class="btn-group" style="position: static;">
-                                <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
-                                    <span style="color: white;">Take Payment</span>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
-                                        Full Payment
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}}); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
-                                        Partial Payment
-                                    </a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
-                                        Pay without late fee
-                                    </a></li>
-                                </ul>
+            let totals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
+            data.students.forEach((student) => {
+                const feeRows = (student.fee_rows && student.fee_rows.length > 0) ? student.fee_rows : [{
+                    title: 'N/A',
+                    total: 0,
+                    discount: 0,
+                    late_fee: 0,
+                    paid: 0,
+                    due: 0,
+                    amount: 0,
+                    remaining_late: 0,
+                }];
+
+                feeRows.forEach((fee, index) => {
+                    const row = document.createElement('tr');
+                    const feeTitleSafe = (fee.title || '').replace(/'/g, "\\'");
+                    const studentNameSafe = (student.student_name || '').replace(/'/g, "\\'");
+                    const campusSafe = (student.campus || '').replace(/'/g, "\\'");
+                    const dueAmount = parseFloat(fee.due || 0);
+                    const feeAmount = parseFloat(fee.amount || 0);
+                    const generatedId = fee.generated_id || null;
+                    const generatedId = fee.generated_id || null;
+                    const lateAmount = parseFloat(fee.remaining_late || 0);
+                    totals.total += parseFloat(fee.total || 0);
+                    totals.discount += parseFloat(fee.discount || 0);
+                    totals.late += parseFloat(fee.late_fee || 0);
+                    totals.paid += parseFloat(fee.paid || 0);
+                    totals.due += dueAmount;
+                    row.innerHTML = `
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            <strong>${student.student_code || 'N/A'}</strong>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.student_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.father_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${fee.title || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.total || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.discount || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.late_fee || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.paid || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${dueAmount.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
+                            <div class="d-flex gap-2 flex-wrap" style="position: relative;">
+                                ${dueAmount > 0 ? `
+                                    <button class="btn btn-sm btn-danger" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'})" style="padding: 4px 12px; font-size: 12px; color: white !important;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
+                                        <span style="color: white;">Unpaid</span>
+                                    </button>
+                                ` : `
+                                    <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                                        <span style="color: white;">Paid</span>
+                                    </button>
+                                `}
+                                <div class="btn-group" style="position: static;">
+                                    <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
+                                        <span style="color: white;">Take Payment</span>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
+                                            Pay This Fee
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${feeAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
+                                            Pay without late fee
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${studentNameSafe}', 'full'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
+                                            Pay All
+                                        </a></li>
+                                    </ul>
+                                </div>
                             </div>
-                        </div>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
-                            <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Delete Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">delete</span>
-                            </button>
-                            <div class="btn-group" style="position: static;">
-                                <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
+                            <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
+                                <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${studentNameSafe}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                        Pay All
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
-                                        Print Voucher
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">schedule</span>
-                                        Make Installment
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
-                                        Particular Receipt
-                                    </a></li>
-                                </ul>
+                                <div class="btn-group" style="position: static;">
+                                    <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                        <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
+                                            Pay All
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
+                                            Print Voucher
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">schedule</span>
+                                            Make Installment
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
+                                            Particular Receipt
+                                        </a></li>
+                                    </ul>
+                                </div>
                             </div>
-                        </div>
-                    </td>
-                `;
-                searchResultsBody.appendChild(row);
+                        </td>
+                    `;
+                    searchResultsBody.appendChild(row);
+                });
             });
+
+            const totalRow = document.createElement('tr');
+            totalRow.innerHTML = `
+                <td colspan="4" class="text-end fw-semibold">Total</td>
+                <td class="fw-semibold">${totals.total.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.discount.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.late.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.paid.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.due.toFixed(2)}</td>
+                <td colspan="2"></td>
+            `;
+            searchResultsBody.appendChild(totalRow);
         } else {
             searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No students found matching your search.</td></tr>';
+        }
+        if (typeof onComplete === 'function') {
+            onComplete();
         }
     })
     .catch(error => {
         console.error('Error:', error);
         searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
+        if (typeof onComplete === 'function') {
+            onComplete();
+        }
     });
 }
 
@@ -692,11 +791,117 @@ function closeSearchResults() {
     document.getElementById('searchByName').value = '';
 }
 
-function viewUnpaid(studentCode, studentName, unpaidAmount) {
-    // Show unpaid amount details
-    alert('Unpaid Amount for ' + studentName + ' (' + studentCode + '): Rs. ' + parseFloat(unpaidAmount).toFixed(2));
-    // You can redirect to unpaid invoices page or show modal
-    // window.location.href = '/accounting/unpaid-invoices?student_code=' + studentCode;
+let currentFeeStudent = null;
+
+function getFeeTypeLabel(title) {
+    const normalized = (title || '').toLowerCase();
+    if (normalized.includes('transport fee')) {
+        return 'Transport Fee';
+    }
+    if (normalized.includes('admission fee')) {
+        return 'Admission Fee';
+    }
+    if (normalized.includes('monthly fee')) {
+        return 'Monthly Fee';
+    }
+    return 'Title Fee';
+}
+
+function viewUnpaid(studentCode, studentName, encodedFees, unpaidAmount, campus) {
+    currentFeeStudent = {
+        student_code: studentCode,
+        student_name: studentName,
+        campus: campus || ''
+    };
+
+    let fees = [];
+    try {
+        fees = JSON.parse(decodeURIComponent(encodedFees || '')) || [];
+    } catch (e) {
+        fees = [];
+    }
+
+    const searchResultsBody = document.getElementById('searchResultsBody');
+    const existingRow = searchResultsBody.querySelector(`tr.fee-breakdown-row[data-student-code="${studentCode}"]`);
+    if (existingRow) {
+        existingRow.remove();
+        return;
+    }
+
+    // Remove any other open breakdown rows
+    searchResultsBody.querySelectorAll('tr.fee-breakdown-row').forEach(row => row.remove());
+
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'fee-breakdown-row';
+    detailRow.dataset.studentCode = studentCode;
+
+    let rowsHtml = '';
+    let totalDue = 0;
+    if (fees.length === 0) {
+        rowsHtml = '<tr><td colspan="5" class="text-center text-muted">No pending fees.</td></tr>';
+    } else {
+        rowsHtml = fees.map(fee => {
+            const amount = parseFloat(fee.amount || 0);
+            const lateFee = parseFloat(fee.late_fee || 0);
+            const total = parseFloat(fee.total || 0);
+            totalDue += total;
+            const safeTitle = (fee.title || '').replace(/'/g, "\\'");
+            return `
+                <tr>
+                    <td>${getFeeTypeLabel(fee.title)}</td>
+                    <td>${fee.title || 'N/A'}</td>
+                    <td class="text-end">${amount.toFixed(2)}</td>
+                    <td class="text-end">${lateFee.toFixed(2)}</td>
+                    <td class="text-end fw-semibold">${total.toFixed(2)}</td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-sm btn-primary" onclick="openPartialPaymentFromBreakdown('${safeTitle}', ${total.toFixed(2)})">
+                            Pay
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    detailRow.innerHTML = `
+        <td colspan="8" style="padding: 0;">
+            <div style="padding: 12px 16px; background: #f8f9fa; border: 1px solid #e9ecef;">
+                <div class="mb-2 fw-semibold" style="color: #003471;">${studentName} (${studentCode})</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Fee Title</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Late Fee</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="4" class="text-end">Total Due</th>
+                                <th class="text-end">${(fees.length ? totalDue : 0).toFixed(2)}</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </td>
+    `;
+
+    const targetRow = Array.from(searchResultsBody.querySelectorAll('tr')).find(row => {
+        const codeCell = row.querySelector('td:first-child strong');
+        return codeCell && codeCell.textContent.trim() === studentCode;
+    });
+    if (targetRow) {
+        targetRow.insertAdjacentElement('afterend', detailRow);
+    }
 }
 
 function takePayment(studentCode, studentName, paymentType = 'full', studentData = null) {
@@ -787,14 +992,16 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
     }
 }
 
-function openPartialPaymentModal(studentCode, studentName, studentData) {
+function openPartialPaymentModal(studentCode, studentName, studentData, feeTitle = '', feeAmount = null, generatedId = null) {
     // Populate modal fields
     document.getElementById('partial_campus').value = studentData.campus || 'N/A';
     document.getElementById('partial_student').value = studentName + ' (' + studentCode + ')';
     document.getElementById('partial_student_code').value = studentCode;
-    document.getElementById('partial_due_amount').value = 'Rs. ' + parseFloat(studentData.monthly_fee || 0).toFixed(2);
-    document.getElementById('partial_fee_title').value = '';
-    document.getElementById('partial_payment').value = '';
+    document.getElementById('partial_generated_id').value = generatedId || '';
+    const dueAmountValue = feeAmount !== null ? feeAmount : (studentData.monthly_fee || 0);
+    document.getElementById('partial_due_amount').value = 'Rs. ' + parseFloat(dueAmountValue || 0).toFixed(2);
+    document.getElementById('partial_fee_title').value = feeTitle || '';
+    document.getElementById('partial_payment').value = feeAmount !== null ? parseFloat(feeAmount).toFixed(2) : '';
     document.getElementById('partial_discount').value = '0';
     document.getElementById('partial_method').value = 'Cash Payment';
     document.getElementById('partial_date').value = new Date().toISOString().split('T')[0];
@@ -803,6 +1010,31 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('partialPaymentModal'));
     modal.show();
+}
+
+function openPartialPaymentFromBreakdown(feeTitle, feeAmount) {
+    if (!currentFeeStudent) {
+        return;
+    }
+    openPartialPaymentModal(
+        currentFeeStudent.student_code,
+        currentFeeStudent.student_name,
+        currentFeeStudent,
+        feeTitle,
+        feeAmount,
+        null
+    );
+}
+
+function openFeePaymentModal(studentCode, studentName, campus, feeTitle, feeAmount, generatedId = null) {
+    openPartialPaymentModal(
+        studentCode,
+        studentName,
+        { campus: campus || '' },
+        feeTitle,
+        feeAmount,
+        generatedId
+    );
 }
 
 function updatePaymentStatus(studentCode, hasUnpaid) {
@@ -937,35 +1169,13 @@ function handlePartialPaymentSubmit(event) {
             // Close modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('partialPaymentModal'));
             if (modal) modal.hide();
-            
-            // Fetch updated student data to check unpaid amount
-            fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(studentCode)}`, {
-                method: 'GET',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.students && data.students.length > 0) {
-                    const student = data.students[0];
-                    // Update payment status based on actual unpaid amount
-                    updatePaymentStatusWithData(studentCode, student.has_unpaid, student.unpaid_amount);
-                } else {
-                    // If can't fetch data, just update status
-                    updatePaymentStatus(studentCode, false);
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching updated data:', error);
-                // If error, just update status
-                updatePaymentStatus(studentCode, false);
-            });
-            
+
+            if (result.data && result.data.payment) {
+                prependPaymentHistoryRow(result.data.payment);
+            }
+
+            refreshSearchResults(() => renderStudentHistory(studentCode));
             alert('Payment recorded successfully!');
-            // Reload page to update history and unpaid status
-            window.location.reload();
         } else {
             const errorMsg = result.data.message || result.data.error || 'Error processing payment';
             alert(errorMsg);
@@ -989,12 +1199,146 @@ function handlePartialPaymentSubmit(event) {
     });
 }
 
-function searchByCNIC() {
+function refreshSearchResults(onComplete) {
+    if (!window.lastFeeSearch || !window.lastFeeSearch.value) {
+        return;
+    }
+    if (window.lastFeeSearch.type === 'name') {
+        document.getElementById('searchByName').value = window.lastFeeSearch.value;
+        searchByName(onComplete);
+    } else if (window.lastFeeSearch.type === 'cnic') {
+        document.getElementById('searchByCNIC').value = window.lastFeeSearch.value;
+        searchByCNIC(onComplete);
+    }
+}
+
+function prependPaymentHistoryRow(payment) {
+    const tbody = document.querySelector('#latestPaymentsSection table tbody');
+    if (!tbody || !payment) return;
+
+    const totalAmount = (parseFloat(payment.payment_amount || 0) + parseFloat(payment.late_fee || 0)).toFixed(2);
+    const discount = parseFloat(payment.discount || 0).toFixed(2);
+    const lateFee = parseFloat(payment.late_fee || 0).toFixed(2);
+    const paid = parseFloat(payment.payment_amount || 0).toFixed(2);
+    const due = '0.00';
+    const dateText = payment.payment_date || 'N/A';
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td style="padding: 8px 12px; font-size: 13px;"><strong>${payment.student_code || 'N/A'}</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px;">${payment.student_name || 'N/A'}</td>
+        <td style="padding: 8px 12px; font-size: 13px;">${payment.father_name || 'N/A'}</td>
+        <td style="padding: 8px 12px; font-size: 13px;">${payment.payment_title || 'N/A'}</td>
+        <td style="padding: 8px 12px; font-size: 13px;"><strong style="color: #28a745;">${totalAmount}</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px;">${discount}</td>
+        <td style="padding: 8px 12px; font-size: 13px;">${lateFee}</td>
+        <td style="padding: 8px 12px; font-size: 13px;"><strong style="color: #28a745;">${paid}</strong></td>
+        <td style="padding: 8px 12px; font-size: 13px;">${due}</td>
+        <td style="padding: 8px 12px; font-size: 13px;">${dateText}</td>
+        <td style="padding: 8px 12px; font-size: 13px;">${payment.accountant || 'N/A'}</td>
+    `;
+
+    const totalRow = Array.from(tbody.querySelectorAll('tr')).find(r => r.textContent.includes('Total'));
+    if (totalRow) {
+        tbody.insertBefore(row, totalRow);
+        const cells = totalRow.querySelectorAll('td');
+        if (cells.length >= 9) {
+            cells[1].textContent = (parseFloat(cells[1].textContent || 0) + parseFloat(totalAmount)).toFixed(2);
+            cells[2].textContent = (parseFloat(cells[2].textContent || 0) + parseFloat(discount)).toFixed(2);
+            cells[3].textContent = (parseFloat(cells[3].textContent || 0) + parseFloat(lateFee)).toFixed(2);
+            cells[4].textContent = (parseFloat(cells[4].textContent || 0) + parseFloat(paid)).toFixed(2);
+            cells[5].textContent = (parseFloat(cells[5].textContent || 0) + parseFloat(due)).toFixed(2);
+        }
+    } else {
+        tbody.prepend(row);
+    }
+}
+
+function renderStudentHistory(studentCode) {
+    if (!studentCode) return;
+    fetch(`{{ route('fee-payment.history') }}?student_code=${encodeURIComponent(studentCode)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) return;
+        const searchResultsBody = document.getElementById('searchResultsBody');
+        if (!searchResultsBody) return;
+
+        // Remove existing history row for this student
+        searchResultsBody.querySelectorAll(`tr.student-history-row[data-student-code="${studentCode}"]`).forEach(row => row.remove());
+
+        const rows = Array.from(searchResultsBody.querySelectorAll('tr'));
+        const studentRows = rows.filter(row => {
+            const codeCell = row.querySelector('td:first-child strong');
+            return codeCell && codeCell.textContent.trim() === studentCode;
+        });
+        if (studentRows.length === 0) return;
+
+        const lastRow = studentRows[studentRows.length - 1];
+        const historyRow = document.createElement('tr');
+        historyRow.className = 'student-history-row';
+        historyRow.dataset.studentCode = studentCode;
+
+        const paymentRows = (data.payments || []).map(payment => {
+            const totalAmount = (parseFloat(payment.payment_amount || 0) + parseFloat(payment.late_fee || 0)).toFixed(2);
+            return `
+                <tr>
+                    <td>${payment.payment_title || 'N/A'}</td>
+                    <td class="text-end">${totalAmount}</td>
+                    <td class="text-end">${parseFloat(payment.discount || 0).toFixed(2)}</td>
+                    <td class="text-end">${parseFloat(payment.late_fee || 0).toFixed(2)}</td>
+                    <td class="text-end">${parseFloat(payment.payment_amount || 0).toFixed(2)}</td>
+                    <td class="text-end">0.00</td>
+                    <td>${payment.payment_date || 'N/A'}</td>
+                    <td>${payment.accountant || 'N/A'}</td>
+                </tr>
+            `;
+        }).join('');
+
+        historyRow.innerHTML = `
+            <td colspan="11" style="padding: 0;">
+                <div style="padding: 12px 16px; background: #f8f9fa; border: 1px solid #e9ecef;">
+                    <div class="mb-2 fw-semibold" style="color: #003471;">Payment History</div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Fee Title</th>
+                                    <th class="text-end">Total</th>
+                                    <th class="text-end">Dis</th>
+                                    <th class="text-end">Late Fee</th>
+                                    <th class="text-end">Paid</th>
+                                    <th class="text-end">Due</th>
+                                    <th>Date</th>
+                                    <th>Accountant</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${paymentRows || '<tr><td colspan="8" class="text-center text-muted">No history found.</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </td>
+        `;
+
+        lastRow.insertAdjacentElement('afterend', historyRow);
+    })
+    .catch(() => {});
+}
+
+function searchByCNIC(onComplete) {
     const searchValue = document.getElementById('searchByCNIC').value.trim();
     if (!searchValue) {
         alert('Please enter Father\'s CNIC or Parent ID');
         return;
     }
+    window.lastFeeSearch = { type: 'cnic', value: searchValue };
 
     // Show loading state
     const searchResultsSection = document.getElementById('searchResultsSection');
@@ -1018,107 +1362,158 @@ function searchByCNIC() {
         searchResultsBody.innerHTML = '';
         
         if (data.success && data.students && data.students.length > 0) {
-            data.students.forEach((student, index) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong>${student.student_code || 'N/A'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.student_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.father_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.class ? (student.class + (student.section ? '/' + student.section : '')) : 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.campus || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong style="color: #28a745;">${student.monthly_fee ? parseFloat(student.monthly_fee).toFixed(2) : '0.00'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap" style="position: relative;">
-                            ${student.has_unpaid ? `
-                                <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${student.student_code}', '${student.student_name}', ${student.unpaid_amount || 0})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${parseFloat(student.unpaid_amount || 0).toFixed(2)}">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
-                                    <span style="color: white;">Unpaid</span>
-                                </button>
-                            ` : `
-                                <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
-                                    <span style="color: white;">Paid</span>
-                                </button>
-                            `}
-                            <div class="btn-group" style="position: static;">
-                                <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
-                                    <span style="color: white;">Take Payment</span>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
-                                        Full Payment
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}}); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
-                                        Partial Payment
-                                    </a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
-                                        Pay without late fee
-                                    </a></li>
-                                </ul>
+            let totals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
+            data.students.forEach((student) => {
+                const feeRows = (student.fee_rows && student.fee_rows.length > 0) ? student.fee_rows : [{
+                    title: 'N/A',
+                    total: 0,
+                    discount: 0,
+                    late_fee: 0,
+                    paid: 0,
+                    due: 0,
+                    amount: 0,
+                    remaining_late: 0,
+                }];
+
+                feeRows.forEach((fee) => {
+                    const row = document.createElement('tr');
+                    const feeTitleSafe = (fee.title || '').replace(/'/g, "\\'");
+                    const studentNameSafe = (student.student_name || '').replace(/'/g, "\\'");
+                    const campusSafe = (student.campus || '').replace(/'/g, "\\'");
+                    const dueAmount = parseFloat(fee.due || 0);
+                    const feeAmount = parseFloat(fee.amount || 0);
+                    totals.total += parseFloat(fee.total || 0);
+                    totals.discount += parseFloat(fee.discount || 0);
+                    totals.late += parseFloat(fee.late_fee || 0);
+                    totals.paid += parseFloat(fee.paid || 0);
+                    totals.due += dueAmount;
+                    row.innerHTML = `
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            <strong>${student.student_code || 'N/A'}</strong>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.student_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.father_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${fee.title || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.total || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.discount || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.late_fee || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${parseFloat(fee.paid || 0).toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${dueAmount.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
+                            <div class="d-flex gap-2 flex-wrap" style="position: relative;">
+                                ${dueAmount > 0 ? `
+                                    <button class="btn btn-sm btn-danger" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'})" style="padding: 4px 12px; font-size: 12px; color: white !important;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
+                                        <span style="color: white;">Unpaid</span>
+                                    </button>
+                                ` : `
+                                    <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                                        <span style="color: white;">Paid</span>
+                                    </button>
+                                `}
+                                <div class="btn-group" style="position: static;">
+                                    <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
+                                        <span style="color: white;">Take Payment</span>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
+                                            Pay This Fee
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${feeAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
+                                            Pay without late fee
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${studentNameSafe}', 'full'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
+                                            Pay All
+                                        </a></li>
+                                    </ul>
+                                </div>
                             </div>
-                        </div>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
-                            <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Delete Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">delete</span>
-                            </button>
-                            <div class="btn-group" style="position: static;">
-                                <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
+                            <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
+                                <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${studentNameSafe}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                        Pay All
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
-                                        Print Voucher
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">calendar_month</span>
-                                        Make Installment
-                                    </a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">description</span>
-                                        Particular Receipt
-                                    </a></li>
-                                </ul>
+                                <button class="btn btn-sm btn-danger" onclick="deleteStudent(${student.id}, '${student.student_code}', '${studentNameSafe}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Delete Student">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">delete</span>
+                                </button>
+                                <div class="btn-group" style="position: static;">
+                                    <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
+                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                        <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
+                                            Pay All
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
+                                            Print Voucher
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">calendar_month</span>
+                                            Make Installment
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${studentNameSafe}'); return false;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">description</span>
+                                            Particular Receipt
+                                        </a></li>
+                                    </ul>
+                                </div>
                             </div>
-                        </div>
-                    </td>
-                `;
-                searchResultsBody.appendChild(row);
+                        </td>
+                    `;
+                    searchResultsBody.appendChild(row);
+                });
             });
+
+            const totalRow = document.createElement('tr');
+            totalRow.innerHTML = `
+                <td colspan="4" class="text-end fw-semibold">Total sab se nechi</td>
+                <td class="fw-semibold">${totals.total.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.discount.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.late.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.paid.toFixed(2)}</td>
+                <td class="fw-semibold">${totals.due.toFixed(2)}</td>
+                <td colspan="2"></td>
+            `;
+            searchResultsBody.appendChild(totalRow);
         } else {
             searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No students found matching this CNIC / Parent ID.</td></tr>';
+        }
+        if (typeof onComplete === 'function') {
+            onComplete();
         }
     })
     .catch(error => {
         console.error('Error:', error);
         searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
+        if (typeof onComplete === 'function') {
+            onComplete();
+        }
     });
 }
 
@@ -1126,33 +1521,6 @@ function searchByCNIC() {
 function editStudent(studentId, studentCode, studentName) {
     // Redirect to student view page using student ID
     window.location.href = '{{ route("student.view", ":id") }}'.replace(':id', studentId);
-}
-
-function deleteStudent(studentId, studentCode, studentName) {
-    if (confirm(`Are you sure you want to delete student ${studentName} (${studentCode})? This action cannot be undone.`)) {
-        // Implement delete functionality
-        fetch('{{ route("student.delete", ":id") }}'.replace(':id', studentId), {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Student deleted successfully!');
-                location.reload();
-            } else {
-                alert('Error: ' + (data.message || 'Failed to delete student'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error deleting student. Please try again.');
-        });
-    }
 }
 
 function payAll(studentCode, studentName) {
@@ -1176,17 +1544,58 @@ function particularReceipt(studentCode, studentName) {
 }
 
 // Allow Enter key to trigger search
-document.getElementById('searchByName')?.addEventListener('keypress', function(e) {
+function setupAutoSearch(inputId, handler) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    let debounceTimer = null;
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handler();
+        }
+    });
+    input.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const value = input.value.trim();
+        if (!value) return;
+        debounceTimer = setTimeout(() => {
+            handler();
+        }, 400);
+    });
+}
+
+setupAutoSearch('searchByName', searchByName);
+setupAutoSearch('searchByCNIC', searchByCNIC);
+
+// Barcode/scan fallback: capture fast key bursts and trigger search
+let scanBuffer = '';
+let scanResetTimer = null;
+document.addEventListener('keydown', function(e) {
+    const active = document.activeElement;
+    const isTypingField = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
     if (e.key === 'Enter') {
-        searchByName();
+        if (!isTypingField && scanBuffer.trim()) {
+            const input = document.getElementById('searchByName');
+            if (input) {
+                input.value = scanBuffer.trim();
+            }
+            searchByName();
+        }
+        scanBuffer = '';
+        clearTimeout(scanResetTimer);
+        return;
+    }
+    if (!isTypingField && e.key.length === 1) {
+        scanBuffer += e.key;
+        clearTimeout(scanResetTimer);
+        scanResetTimer = setTimeout(() => {
+            scanBuffer = '';
+        }, 200);
     }
 });
 
-document.getElementById('searchByCNIC')?.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        searchByCNIC();
-    }
-});
+document.getElementById('searchByName')?.focus();
 </script>
 @endsection
 

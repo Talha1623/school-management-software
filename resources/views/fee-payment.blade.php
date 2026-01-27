@@ -164,11 +164,15 @@
                             <thead>
                                 <tr>
                                     <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Student Name</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Father Name</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Class/Section</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Campus</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Monthly Fee</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Student</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Fee Type</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Total</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Dis</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Late Fee</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Paid</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Due</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Status</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Actions</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">More</th>
                                 </tr>
@@ -190,77 +194,22 @@
                     </h5>
                 </div>
 
-                <div class="default-table-area" style="margin-top: 0;">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover">
-                            <thead>
-                                <tr>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Roll</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Student</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Class</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Title</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Paid</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Late</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Date</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Accountant</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if(isset($latestPayments) && $latestPayments->count() > 0)
-                                    @foreach($latestPayments as $payment)
-                                        <tr>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                <strong>{{ $payment->student_code }}</strong>
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->student_name ?? 'N/A' }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->father_name ?? 'N/A' }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                @if($payment->class && $payment->section)
-                                                    {{ $payment->class }}/{{ $payment->section }}
-                                                @elseif($payment->class)
-                                                    {{ $payment->class }}
-                                                @else
-                                                    N/A
-                                                @endif
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->payment_title }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                <strong style="color: #28a745;">{{ number_format($payment->payment_amount, 2) }}</strong>
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
-                                                @if($payment->late_fee && $payment->late_fee > 0)
-                                                    <span style="display: inline-block; width: 12px; height: 12px; background-color: #dc3545; border-radius: 50%;"></span>
-                                                @else
-                                                    <span style="color: #6c757d;">-</span>
-                                                @endif
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->payment_date ? $payment->payment_date->format('d-m-Y h:i:s A') : 'N/A' }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->accountant ?? 'N/A' }}
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                @else
+                <div id="latestPaymentsContainer">
+                    <div class="default-table-area" style="margin-top: 0;">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <tbody>
                                     <tr>
-                                        <td colspan="9" class="text-center py-4">
+                                        <td colspan="12" class="text-center py-4" id="latestPaymentsEmpty">
                                             <div class="d-flex flex-column align-items-center gap-2">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">payments</span>
                                                 <p class="text-muted mb-0">No payments found.</p>
                                             </div>
                                         </td>
                                     </tr>
-                                @endif
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -313,7 +262,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 16px;">receipt</span>
                                 </span>
-                                <input type="text" class="form-control" id="partial_fee_title" name="payment_title" placeholder="Enter Fee Title" required>
+                                <input type="text" class="form-control" id="partial_fee_title" name="payment_title" placeholder="Enter Fee Title" readonly style="background-color: #f8f9fa; cursor: not-allowed;" required>
                             </div>
                         </div>
 
@@ -386,7 +335,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">sms</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="sms_notification" id="partial_notify" required style="height: 38px;">
+                                <select class="form-select form-select-sm" name="sms_notification" id="partial_notify" required>
                                     <option value="Yes" selected>Yes</option>
                                     <option value="No">No</option>
                                 </select>
@@ -427,6 +376,12 @@
     
     .input-group {
         border-radius: 8px;
+    }
+
+    #partialPaymentModal .input-group-text,
+    #partialPaymentModal .form-control,
+    #partialPaymentModal .form-select {
+        height: 32px;
     }
     
     .input-group-text {
@@ -554,12 +509,37 @@
 </style>
 
 <script>
+function renderStatusCell(due, paidForStatus, studentCode, studentName) {
+    if (due <= 0) {
+        return `
+            <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                <span style="color: white;">Paid</span>
+            </button>
+        `;
+    }
+    if (paidForStatus > 0) {
+        return `
+            <button class="btn btn-sm btn-warning" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Partial payment">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">hourglass_top</span>
+                <span style="color: white;">Partial</span>
+            </button>
+        `;
+    }
+    return `
+        <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${studentCode}', '${studentName}', ${due})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${due.toFixed(2)}">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
+            <span style="color: white;">Unpaid</span>
+        </button>
+    `;
+}
 function searchByName() {
     const searchValue = document.getElementById('searchByName').value.trim();
     if (!searchValue) {
         alert('Please enter student name or code');
         return;
     }
+    window.lastFeeSearch = { type: 'name', value: searchValue };
 
     // Show loading state
     const searchResultsSection = document.getElementById('searchResultsSection');
@@ -567,8 +547,8 @@ function searchByName() {
     const latestPaymentsSection = document.getElementById('latestPaymentsSection');
     
     searchResultsSection.style.display = 'block';
-    latestPaymentsSection.style.display = 'none';
-    searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
+    latestPaymentsSection.style.display = 'block';
+    searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
 
     // Make AJAX call to search students
     fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(searchValue)}`, {
@@ -583,51 +563,79 @@ function searchByName() {
         searchResultsBody.innerHTML = '';
         
         if (data.success && data.students && data.students.length > 0) {
-            data.students.forEach((student, index) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong>${student.student_code || 'N/A'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.student_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.father_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.class ? (student.class + (student.section ? '/' + student.section : '')) : 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.campus || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong style="color: #28a745;">${student.monthly_fee ? parseFloat(student.monthly_fee).toFixed(2) : '0.00'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap" style="position: relative;">
-                            ${student.has_unpaid ? `
-                                <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${student.student_code}', '${student.student_name}', ${student.unpaid_amount || 0})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${parseFloat(student.unpaid_amount || 0).toFixed(2)}">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
-                                    <span style="color: white;">Unpaid</span>
-                                </button>
-                            ` : `
-                                <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
-                                    <span style="color: white;">Paid</span>
-                                </button>
-                            `}
+            const grandTotals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
+            data.students.forEach((student) => {
+                const feeRows = Array.isArray(student.fee_rows) && student.fee_rows.length > 0
+                    ? student.fee_rows
+                    : [{
+                        title: 'No Fee Generated',
+                        total: 0,
+                        discount: 0,
+                        late_fee: 0,
+                        paid: 0,
+                        due: 0,
+                        is_empty: true,
+                    }];
+
+                feeRows.forEach((fee) => {
+                    const feeTitleSafe = (fee.title || '').replace(/'/g, "\\'");
+                    const total = parseFloat(fee.total || 0);
+                    const discount = parseFloat(fee.discount || 0);
+                    const lateFee = parseFloat(fee.late_fee || 0);
+                    const paid = parseFloat(fee.paid || 0);
+                    const due = parseFloat(fee.due || 0);
+                    const isEmptyFee = !!fee.is_empty;
+                    const paidForStatus = paid;
+                    const paidDisplay = paid;
+                    grandTotals.total += total;
+                    grandTotals.discount += discount;
+                    grandTotals.late += lateFee;
+                    grandTotals.paid += paid;
+                    grandTotals.due += due;
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            <strong>${student.student_code || 'N/A'}</strong>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.student_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.father_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${fee.title || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${total.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${discount.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${lateFee.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${paidDisplay.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${due.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
+                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
                             <div class="btn-group" style="position: static;">
                                 <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
                                     <span style="color: white;">Take Payment</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full'); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
                                         Full Payment
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
                                         Partial Payment
                                     </a></li>
@@ -638,51 +646,48 @@ function searchByName() {
                                     </a></li>
                                 </ul>
                             </div>
-                        </div>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
-                            <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Delete Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">delete</span>
-                            </button>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
                             <div class="btn-group" style="position: static;">
-                                <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
+                                <button type="button" class="btn btn-sm" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 2px 6px; border: none; background: #000; color: #fff; border-radius: 4px;" title="More Options">
+                                    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                        Pay All
+                                    <li><a class="dropdown-item" href="#" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
+                                        Edit
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
-                                        Print Voucher
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">schedule</span>
-                                        Make Installment
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
-                                        Particular Receipt
+                                    <li><a class="dropdown-item" href="#" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">delete</span>
+                                        Delete
                                     </a></li>
                                 </ul>
                             </div>
-                        </div>
-                    </td>
-                `;
-                searchResultsBody.appendChild(row);
+                        </td>
+                    `;
+                    searchResultsBody.appendChild(row);
+                });
             });
+            const totalRow = document.createElement('tr');
+            totalRow.innerHTML = `
+                <td colspan="4" style="padding: 8px 12px; font-size: 13px;" class="text-end fw-semibold">Total</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.total.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.discount.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.late.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.paid.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.due.toFixed(2)}</td>
+                <td colspan="3"></td>
+            `;
+            searchResultsBody.appendChild(totalRow);
+            renderLatestPaymentsForStudents(data.students);
         } else {
-            searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No students found matching your search.</td></tr>';
+            searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">No students found matching your search.</td></tr>';
+            renderLatestPaymentsForStudents([]);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
+        searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
     });
 }
 
@@ -754,7 +759,9 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
                 'Accept': 'application/json',
             },
             body: JSON.stringify({
-                student_code: studentCode
+                student_code: studentCode,
+                payment_title: studentData && studentData.payment_title ? studentData.payment_title : null,
+                generated_id: studentData && studentData.generated_id ? studentData.generated_id : null
             })
         })
         .then(response => response.json())
@@ -764,9 +771,9 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
             if (data.success) {
                 // Update button status from Unpaid to Paid
                 updatePaymentStatus(studentCode, false);
+                refreshLatestPaymentsForStudent(studentCode);
+                refreshSearchResultsAfterPayment();
                 alert('Payment recorded successfully!');
-                // Reload page to update history
-                window.location.reload();
             } else {
                 alert(data.message || 'Error processing payment');
             }
@@ -792,8 +799,11 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
     document.getElementById('partial_campus').value = studentData.campus || 'N/A';
     document.getElementById('partial_student').value = studentName + ' (' + studentCode + ')';
     document.getElementById('partial_student_code').value = studentCode;
-    document.getElementById('partial_due_amount').value = 'Rs. ' + parseFloat(studentData.monthly_fee || 0).toFixed(2);
-    document.getElementById('partial_fee_title').value = '';
+    const dueAmount = (studentData.fee_due !== undefined && studentData.fee_due !== null)
+        ? parseFloat(studentData.fee_due || 0)
+        : parseFloat(studentData.monthly_fee || 0);
+    document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
+    document.getElementById('partial_fee_title').value = studentData.fee_title || '';
     document.getElementById('partial_payment').value = '';
     document.getElementById('partial_discount').value = '0';
     document.getElementById('partial_method').value = 'Cash Payment';
@@ -811,29 +821,20 @@ function updatePaymentStatus(studentCode, hasUnpaid) {
     rows.forEach(row => {
         const codeCell = row.querySelector('td:first-child strong');
         if (codeCell && codeCell.textContent.trim() === studentCode) {
-            const actionsCell = row.querySelector('td:last-child');
-            if (actionsCell) {
-                // Find either Unpaid (btn-danger) or Paid (btn-success) button
-                const statusButton = actionsCell.querySelector('.btn-danger, .btn-success');
+            const statusCell = row.querySelector('.status-cell');
+            if (statusCell) {
+                // Find existing status button
+                const statusButton = statusCell.querySelector('.btn-danger, .btn-success, .btn-warning');
                 if (statusButton) {
                     if (!hasUnpaid) {
-                        // Change Unpaid button to Paid button
+                        // Change to Paid button
                         statusButton.className = 'btn btn-sm btn-success';
                         statusButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span>';
                         statusButton.onclick = null;
                         statusButton.title = 'Payment completed';
                     }
                 } else {
-                    // If button doesn't exist, create Paid button
-                    const buttonContainer = actionsCell.querySelector('.d-flex');
-                    if (buttonContainer) {
-                        const paidButton = document.createElement('button');
-                        paidButton.className = 'btn btn-sm btn-success';
-                        paidButton.style.cssText = 'padding: 4px 12px; font-size: 12px; color: white !important;';
-                        paidButton.title = 'Payment completed';
-                        paidButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span>';
-                        buttonContainer.insertBefore(paidButton, buttonContainer.firstChild);
-                    }
+                    statusCell.innerHTML = '<button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span></button>';
                 }
             }
         }
@@ -846,10 +847,10 @@ function updatePaymentStatusWithData(studentCode, hasUnpaid, unpaidAmount) {
     rows.forEach(row => {
         const codeCell = row.querySelector('td:first-child strong');
         if (codeCell && codeCell.textContent.trim() === studentCode) {
-            const actionsCell = row.querySelector('td:last-child');
-            if (actionsCell) {
-                // Find either Unpaid (btn-danger) or Paid (btn-success) button
-                const statusButton = actionsCell.querySelector('.btn-danger, .btn-success');
+            const statusCell = row.querySelector('.status-cell');
+            if (statusCell) {
+                // Find existing status button
+                const statusButton = statusCell.querySelector('.btn-danger, .btn-success, .btn-warning');
                 if (statusButton) {
                     if (!hasUnpaid || unpaidAmount <= 0) {
                         // Change to Paid button
@@ -865,32 +866,339 @@ function updatePaymentStatusWithData(studentCode, hasUnpaid, unpaidAmount) {
                         statusButton.title = 'Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2);
                     }
                 } else {
-                    // If button doesn't exist, create appropriate button
-                    const buttonContainer = actionsCell.querySelector('.d-flex');
-                    if (buttonContainer) {
-                        if (!hasUnpaid || unpaidAmount <= 0) {
-                            // Create Paid button
-                            const paidButton = document.createElement('button');
-                            paidButton.className = 'btn btn-sm btn-success';
-                            paidButton.style.cssText = 'padding: 4px 12px; font-size: 12px; color: white !important;';
-                            paidButton.title = 'Payment completed';
-                            paidButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span>';
-                            buttonContainer.insertBefore(paidButton, buttonContainer.firstChild);
-                        } else {
-                            // Create Unpaid button
-                            const unpaidButton = document.createElement('button');
-                            unpaidButton.className = 'btn btn-sm btn-danger';
-                            unpaidButton.style.cssText = 'padding: 4px 12px; font-size: 12px; color: white !important;';
-                            unpaidButton.title = 'Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2);
-                            unpaidButton.onclick = function() { viewUnpaid(studentCode, '', unpaidAmount); };
-                            unpaidButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span><span style="color: white;">Unpaid</span>';
-                            buttonContainer.insertBefore(unpaidButton, buttonContainer.firstChild);
-                        }
+                    if (!hasUnpaid || unpaidAmount <= 0) {
+                        statusCell.innerHTML = '<button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span></button>';
+                    } else {
+                        statusCell.innerHTML = '<button class="btn btn-sm btn-danger" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2) + '"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span><span style="color: white;">Unpaid</span></button>';
                     }
                 }
             }
         }
     });
+}
+
+function parsePaymentDateTime(dateTime) {
+    if (!dateTime) {
+        return { date: 'N/A', time: 'N/A' };
+    }
+    const parts = String(dateTime).split(' ');
+    const date = parts[0] || 'N/A';
+    const time = parts.length > 1 ? parts.slice(1).join(' ') : 'N/A';
+    return { date, time };
+}
+
+function buildLatestPaymentActionDropdown(payment) {
+    const paymentId = payment.id || '';
+    const studentCode = payment.student_code || '';
+    const studentName = (payment.student_name || '').replace(/'/g, "\\'");
+    const feeTitle = (payment.payment_title || '').replace(/'/g, "\\'");
+    return `
+        <div class="btn-group" style="position: static;">
+            <button type="button" class="btn btn-sm" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 2px 6px; border: none; background: #000; color: #fff; border-radius: 4px;" title="Actions">
+                <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                <li><a class="dropdown-item" href="#" onclick="particularReceipt('${studentCode}', '${studentName}'); return false;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
+                    Print
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="editPayment('${studentCode}', '${feeTitle}'); return false;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
+                    Edit
+                </a></li>
+                <li><a class="dropdown-item text-danger" href="#" onclick="deletePayment('${paymentId}'); return false;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">delete</span>
+                    Delete
+                </a></li>
+            </ul>
+        </div>
+    `;
+}
+
+function addLatestPaymentRow(payment) {
+    const container = document.getElementById('latestPaymentsContainer');
+    if (!container) return;
+
+    const emptyRow = document.getElementById('latestPaymentsEmpty');
+    if (emptyRow) {
+        emptyRow.closest('.default-table-area')?.remove();
+    }
+
+    const studentCode = payment.student_code || 'N/A';
+    const key = [
+        payment.student_code,
+        payment.payment_title,
+        payment.payment_date,
+        payment.payment_amount,
+        payment.discount,
+        payment.late_fee,
+    ].join('|');
+
+    let tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
+    if (!tbody) {
+        const studentName = payment.student_name || 'N/A';
+        const fatherName = payment.father_name || 'N/A';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mb-3';
+        wrapper.id = `latestPaymentsStudent_${studentCode}`;
+        wrapper.innerHTML = `
+            <div class="fw-semibold mb-2" style="color: #003471;">
+                ${studentName} (${studentCode}) - ${fatherName}
+            </div>
+            <div class="default-table-area" style="margin-top: 0;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Title</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Amount Paid</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Late Fee</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Discount</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Date</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Time</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Received By</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Status</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="latestPaymentsBody_${studentCode}" data-student-code="${studentCode}"></tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="text-end fw-semibold">Total</td>
+                                <td class="fw-semibold" data-student-total="${studentCode}">0.00</td>
+                                <td colspan="7"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        `;
+        container.prepend(wrapper);
+        tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
+    }
+
+    if (!tbody || tbody.querySelector(`tr[data-key="${key}"]`)) {
+        return;
+    }
+
+    const { date, time } = parsePaymentDateTime(payment.payment_date);
+    const row = document.createElement('tr');
+    row.setAttribute('data-key', key);
+    row.setAttribute('data-payment-id', payment.id || '');
+    row.setAttribute('data-student-code', studentCode);
+    row.setAttribute('data-amount', parseFloat(payment.payment_amount || 0).toFixed(2));
+    row.innerHTML = `
+        <td style="padding: 8px 12px; font-size: 13px;">
+            <strong>${payment.student_code || 'N/A'}</strong>
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.student_name || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.father_name || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.payment_title || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            <strong style="color: #28a745;">${parseFloat(payment.payment_amount || 0).toFixed(2)}</strong>
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
+            ${parseFloat(payment.late_fee || 0) > 0 ? '<span style="display: inline-block; width: 12px; height: 12px; background-color: #dc3545; border-radius: 50%;"></span>' : '<span style="color: #6c757d;">-</span>'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${parseFloat(payment.discount || 0).toFixed(2)}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${date}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${time}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.accountant || payment.received_by || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            <span class="badge bg-success">Paid</span>
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${buildLatestPaymentActionDropdown(payment)}
+        </td>
+    `;
+    tbody.insertBefore(row, tbody.firstChild);
+
+    const totalCell = container.querySelector(`[data-student-total="${studentCode}"]`);
+    if (totalCell) {
+        const currentTotal = parseFloat(totalCell.textContent || '0') || 0;
+        const newTotal = currentTotal + parseFloat(payment.payment_amount || 0);
+        totalCell.textContent = newTotal.toFixed(2);
+    }
+}
+
+function refreshLatestPaymentsForStudent(studentCode) {
+    if (!studentCode) return;
+    fetch(`{{ route('fee-payment.history') }}?student_code=${encodeURIComponent(studentCode)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && Array.isArray(data.payments)) {
+            for (let i = data.payments.length - 1; i >= 0; i -= 1) {
+                addLatestPaymentRow(data.payments[i]);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error loading payment history:', error);
+    });
+}
+
+function renderLatestPaymentsForStudents(students) {
+    const container = document.getElementById('latestPaymentsContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const studentCodes = Array.from(new Set((students || [])
+        .map((student) => student.student_code)
+        .filter((code) => code)));
+
+    if (studentCodes.length === 0) {
+        container.innerHTML = `
+            <div class="default-table-area" style="margin-top: 0;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <tbody>
+                            <tr>
+                                <td colspan="12" class="text-center py-4" id="latestPaymentsEmpty">
+                                    <div class="d-flex flex-column align-items-center gap-2">
+                                        <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">payments</span>
+                                        <p class="text-muted mb-0">No payments found.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    Promise.all(studentCodes.map((code) => fetch(`{{ route('fee-payment.history') }}?student_code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    }).then(response => response.json()).catch(() => null)))
+    .then((results) => {
+        let hasPayments = false;
+        results.forEach((data) => {
+            if (data && data.success && Array.isArray(data.payments)) {
+                data.payments.forEach((payment) => {
+                    addLatestPaymentRow(payment);
+                    hasPayments = true;
+                });
+            }
+        });
+
+        if (!hasPayments) {
+            container.innerHTML = `
+                <div class="default-table-area" style="margin-top: 0;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <tbody>
+                                <tr>
+                                    <td colspan="12" class="text-center py-4" id="latestPaymentsEmpty">
+                                        <div class="d-flex flex-column align-items-center gap-2">
+                                            <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">payments</span>
+                                            <p class="text-muted mb-0">No payments found.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+    })
+    .catch((error) => {
+        console.error('Error loading payment history:', error);
+    });
+}
+
+function deletePayment(paymentId) {
+    if (!paymentId) return;
+    if (!confirm('Are you sure you want to delete this fee?')) {
+        return;
+    }
+    const deleteUrl = '{{ route("fee-payment.payment.delete", ":id") }}'.replace(':id', paymentId);
+    fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            alert(data.message || 'Failed to delete fee.');
+            return;
+        }
+        const row = document.querySelector(`tr[data-payment-id="${paymentId}"]`);
+        if (!row) return;
+        const studentCode = row.getAttribute('data-student-code');
+        const amount = parseFloat(row.getAttribute('data-amount') || '0') || 0;
+        row.remove();
+
+        const totalCell = document.querySelector(`[data-student-total="${studentCode}"]`);
+        if (totalCell) {
+            const currentTotal = parseFloat(totalCell.textContent || '0') || 0;
+            const newTotal = Math.max(0, currentTotal - amount);
+            totalCell.textContent = newTotal.toFixed(2);
+        }
+
+        const tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
+        if (tbody && tbody.children.length === 0) {
+            document.getElementById(`latestPaymentsStudent_${studentCode}`)?.remove();
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting fee:', error);
+        alert('Error deleting fee. Please try again.');
+    });
+}
+
+function editPayment(studentCode, paymentTitle) {
+    const url = '{{ route("accounting.direct-payment.student") }}'
+        + `?student_code=${encodeURIComponent(studentCode)}`
+        + `&payment_title=${encodeURIComponent(paymentTitle || '')}`;
+    window.location.href = url;
+}
+
+function refreshSearchResultsAfterPayment() {
+    if (!window.lastFeeSearch || !window.lastFeeSearch.value) {
+        return;
+    }
+    if (window.lastFeeSearch.type === 'name') {
+        const input = document.getElementById('searchByName');
+        if (input) input.value = window.lastFeeSearch.value;
+        searchByName();
+    } else if (window.lastFeeSearch.type === 'cnic') {
+        const input = document.getElementById('searchByCNIC');
+        if (input) input.value = window.lastFeeSearch.value;
+        searchByCNIC();
+    }
 }
 
 function handlePartialPaymentSubmit(event) {
@@ -937,6 +1245,16 @@ function handlePartialPaymentSubmit(event) {
             // Close modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('partialPaymentModal'));
             if (modal) modal.hide();
+
+            if (result.isJson && result.data && result.data.payment) {
+                addLatestPaymentRow(result.data.payment);
+                if (!result.data.payment.accountant) {
+                    refreshLatestPaymentsForStudent(studentCode);
+                }
+            } else {
+                refreshLatestPaymentsForStudent(studentCode);
+            }
+            refreshSearchResultsAfterPayment();
             
             // Fetch updated student data to check unpaid amount
             fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(studentCode)}`, {
@@ -964,8 +1282,8 @@ function handlePartialPaymentSubmit(event) {
             });
             
             alert('Payment recorded successfully!');
-            // Reload page to update history and unpaid status
-            window.location.reload();
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
         } else {
             const errorMsg = result.data.message || result.data.error || 'Error processing payment';
             alert(errorMsg);
@@ -995,6 +1313,7 @@ function searchByCNIC() {
         alert('Please enter Father\'s CNIC or Parent ID');
         return;
     }
+    window.lastFeeSearch = { type: 'cnic', value: searchValue };
 
     // Show loading state
     const searchResultsSection = document.getElementById('searchResultsSection');
@@ -1002,8 +1321,8 @@ function searchByCNIC() {
     const latestPaymentsSection = document.getElementById('latestPaymentsSection');
     
     searchResultsSection.style.display = 'block';
-    latestPaymentsSection.style.display = 'none';
-    searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
+    latestPaymentsSection.style.display = 'block';
+    searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
 
     // Make AJAX call to search students by CNIC
     fetch(`{{ route('fee-payment.search-by-cnic') }}?cnic=${encodeURIComponent(searchValue)}`, {
@@ -1018,51 +1337,79 @@ function searchByCNIC() {
         searchResultsBody.innerHTML = '';
         
         if (data.success && data.students && data.students.length > 0) {
-            data.students.forEach((student, index) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong>${student.student_code || 'N/A'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.student_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.father_name || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.class ? (student.class + (student.section ? '/' + student.section : '')) : 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        ${student.campus || 'N/A'}
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px;">
-                        <strong style="color: #28a745;">${student.monthly_fee ? parseFloat(student.monthly_fee).toFixed(2) : '0.00'}</strong>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap" style="position: relative;">
-                            ${student.has_unpaid ? `
-                                <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${student.student_code}', '${student.student_name}', ${student.unpaid_amount || 0})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${parseFloat(student.unpaid_amount || 0).toFixed(2)}">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
-                                    <span style="color: white;">Unpaid</span>
-                                </button>
-                            ` : `
-                                <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
-                                    <span style="color: white;">Paid</span>
-                                </button>
-                            `}
+            const grandTotals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
+            data.students.forEach((student) => {
+                const feeRows = Array.isArray(student.fee_rows) && student.fee_rows.length > 0
+                    ? student.fee_rows
+                    : [{
+                        title: 'No Fee Generated',
+                        total: 0,
+                        discount: 0,
+                        late_fee: 0,
+                        paid: 0,
+                        due: 0,
+                        is_empty: true,
+                    }];
+
+                feeRows.forEach((fee) => {
+                    const feeTitleSafe = (fee.title || '').replace(/'/g, "\\'");
+                    const total = parseFloat(fee.total || 0);
+                    const discount = parseFloat(fee.discount || 0);
+                    const lateFee = parseFloat(fee.late_fee || 0);
+                    const paid = parseFloat(fee.paid || 0);
+                    const due = parseFloat(fee.due || 0);
+                    const isEmptyFee = !!fee.is_empty;
+                    const paidForStatus = paid;
+                    const paidDisplay = paid;
+                    grandTotals.total += total;
+                    grandTotals.discount += discount;
+                    grandTotals.late += lateFee;
+                    grandTotals.paid += paid;
+                    grandTotals.due += due;
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            <strong>${student.student_code || 'N/A'}</strong>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.student_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${student.father_name || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${fee.title || 'N/A'}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${total.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${discount.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${lateFee.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${paidDisplay.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;">
+                            ${due.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
+                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
                             <div class="btn-group" style="position: static;">
                                 <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
                                     <span style="color: white;">Take Payment</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full'); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
                                         Full Payment
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
                                         Partial Payment
                                     </a></li>
@@ -1073,47 +1420,43 @@ function searchByCNIC() {
                                     </a></li>
                                 </ul>
                             </div>
-                        </div>
-                    </td>
-                    <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                        <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
-                            <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Delete Student">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">delete</span>
-                            </button>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
                             <div class="btn-group" style="position: static;">
-                                <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
+                                <button type="button" class="btn btn-sm" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 2px 6px; border: none; background: #000; color: #fff; border-radius: 4px;" title="More Options">
+                                    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                    <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                        Pay All
+                                    <li><a class="dropdown-item" href="#" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
+                                        Edit
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
-                                        Print Voucher
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">calendar_month</span>
-                                        Make Installment
-                                    </a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${student.student_name}'); return false;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">description</span>
-                                        Particular Receipt
+                                    <li><a class="dropdown-item" href="#" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">delete</span>
+                                        Delete
                                     </a></li>
                                 </ul>
                             </div>
-                        </div>
-                    </td>
-                `;
-                searchResultsBody.appendChild(row);
+                        </td>
+                    `;
+                    searchResultsBody.appendChild(row);
+                });
             });
+            const totalRow = document.createElement('tr');
+            totalRow.innerHTML = `
+                <td colspan="4" style="padding: 8px 12px; font-size: 13px;" class="text-end fw-semibold">Total</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.total.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.discount.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.late.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.paid.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.due.toFixed(2)}</td>
+                <td colspan="3"></td>
+            `;
+            searchResultsBody.appendChild(totalRow);
+            renderLatestPaymentsForStudents(data.students);
         } else {
-            searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No students found matching this CNIC / Parent ID.</td></tr>';
+            searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">No students found matching this CNIC / Parent ID.</td></tr>';
+            renderLatestPaymentsForStudents([]);
         }
     })
     .catch(error => {
@@ -1188,5 +1531,4 @@ document.getElementById('searchByCNIC')?.addEventListener('keypress', function(e
     }
 });
 </script>
-@endsection
-
+@endsection 

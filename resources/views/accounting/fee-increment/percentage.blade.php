@@ -113,6 +113,39 @@
                     </div>
                 </div>
 
+                <!-- Student Selection -->
+                <div class="payment-row mb-3 p-3 border rounded" style="background-color: #f8f9fa;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0 fw-semibold" style="color: #003471;">Select Students</h6>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStudentsForIncrement()">
+                            Load Students
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" id="select_all_students" onclick="toggleSelectAllStudents(this)">
+                                    </th>
+                                    <th>Code</th>
+                                    <th>Student</th>
+                                    <th>Parent</th>
+                                    <th>Class</th>
+                                    <th>Section</th>
+                                    <th>Current Fee</th>
+                                    <th>New Fee</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentSelectionBody">
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted">Select filters and click "Load Students".</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Submit Button -->
                 <div class="text-center mt-4">
                     <button type="submit" class="btn btn-success px-5 py-2" style="background-color: #28a745; border: none; color: white;">
@@ -182,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
+    const increaseInput = document.getElementById('increase');
 
     function resetSelect(selectEl, placeholder) {
         selectEl.innerHTML = `<option value="">${placeholder}</option>`;
@@ -241,7 +275,82 @@ document.addEventListener('DOMContentLoaded', function() {
     classSelect.addEventListener('change', function() {
         loadSectionsByClass(campusSelect.value, this.value);
     });
+
+    increaseInput.addEventListener('input', function() {
+        updateIncrementPreview();
+    });
 });
+</script>
+
+<script>
+function loadStudentsForIncrement() {
+    const campus = document.getElementById('campus').value || '';
+    const className = document.getElementById('class').value || '';
+    const section = document.getElementById('section').value || '';
+    const tbody = document.getElementById('studentSelectionBody');
+
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Loading...</td></tr>';
+
+    const params = new URLSearchParams({
+        campus,
+        class: className,
+        section
+    });
+
+    fetch(`{{ route('accounting.fee-increment.percentage.get-students') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            const students = data.students || [];
+            if (students.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No students found.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            students.forEach(student => {
+                const currentFee = parseFloat(student.monthly_fee || 0);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <input type="checkbox" name="selected_students[]" value="${student.id}" class="student-select" checked>
+                    </td>
+                    <td>${student.student_code || 'N/A'}</td>
+                    <td>${student.student_name || 'N/A'}</td>
+                    <td>${student.father_name || 'N/A'}</td>
+                    <td>${student.class || 'N/A'}</td>
+                    <td>${student.section || 'N/A'}</td>
+                    <td class="current-fee" data-fee="${currentFee}">${currentFee.toFixed(2)}</td>
+                    <td class="new-fee">0.00</td>
+                `;
+                tbody.appendChild(row);
+            });
+            updateIncrementPreview();
+        })
+        .catch(() => {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Error loading students.</td></tr>';
+        });
+}
+
+function updateIncrementPreview() {
+    const increaseValue = parseFloat(document.getElementById('increase').value || 0);
+    const rows = document.querySelectorAll('#studentSelectionBody tr');
+    rows.forEach(row => {
+        const currentFeeCell = row.querySelector('.current-fee');
+        const newFeeCell = row.querySelector('.new-fee');
+        if (!currentFeeCell || !newFeeCell) {
+            return;
+        }
+        const currentFee = parseFloat(currentFeeCell.dataset.fee || 0);
+        const newFee = currentFee + (currentFee * (increaseValue / 100));
+        newFeeCell.textContent = newFee.toFixed(2);
+    });
+}
+
+function toggleSelectAllStudents(source) {
+    const checkboxes = document.querySelectorAll('.student-select');
+    checkboxes.forEach(cb => {
+        cb.checked = source.checked;
+    });
+}
 </script>
 
 <script>
