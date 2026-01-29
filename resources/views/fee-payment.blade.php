@@ -1006,8 +1006,8 @@ function addLatestPaymentRow(payment) {
         <td style="padding: 8px 12px; font-size: 13px;">
             <strong style="color: #28a745;">${parseFloat(payment.payment_amount || 0).toFixed(2)}</strong>
         </td>
-        <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
-            ${parseFloat(payment.late_fee || 0) > 0 ? '<span style="display: inline-block; width: 12px; height: 12px; background-color: #dc3545; border-radius: 50%;"></span>' : '<span style="color: #6c757d;">-</span>'}
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${parseFloat(payment.late_fee || 0) > 0 ? `<span style="color: #dc3545; font-weight: 600;">${parseFloat(payment.late_fee || 0).toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
             ${parseFloat(payment.discount || 0).toFixed(2)}

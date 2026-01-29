@@ -14,6 +14,7 @@ class ClassToShow extends Model
     protected $fillable = [
         'campus',
         'class',
+        'section',
         'class_timing_from',
         'class_timing_to',
         'student_age_limit_from',

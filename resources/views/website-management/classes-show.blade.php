@@ -84,6 +84,7 @@
                                 <th style="padding: 12px 15px; font-size: 14px;">#</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Campus</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Class</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Section</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Timings</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Age Limit</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Tuition Fee</th>
@@ -100,6 +101,9 @@
                                     </td>
                                     <td style="padding: 12px 15px; font-size: 14px;">
                                         <strong class="text-primary">{{ $class->class ?? 'N/A' }}</strong>
+                                    </td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
+                                        {{ $class->section ?? 'N/A' }}
                                     </td>
                                     <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($class->class_timing_from || $class->class_timing_to)
@@ -136,7 +140,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-5">
+                                    <td colspan="9" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">school</span>
                                         <p class="mt-2 mb-0">No classes to show found.</p>
                                     </td>
@@ -197,13 +201,24 @@
                                     <span class="material-symbols-outlined" style="font-size: 15px;">school</span>
                                 </span>
                                 <select class="form-control class-input" name="class" id="class" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
-                                    <option value="">Select Class</option>
-                                    @foreach($allClasses as $className)
-                                        <option value="{{ $className }}">{{ $className }}</option>
-                                    @endforeach
+                                    <option value="">Select Campus First</option>
                                 </select>
                             </div>
                             <div class="text-danger error-message" id="class-error"></div>
+                        </div>
+
+                        <!-- Section -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
+                            <div class="input-group input-group-sm class-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">group</span>
+                                </span>
+                                <select class="form-control class-input" name="section" id="section" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                    <option value="">Select Class First</option>
+                                </select>
+                            </div>
+                            <div class="text-danger error-message" id="section-error"></div>
                         </div>
 
                         <!-- Class Timings From -->
@@ -488,6 +503,8 @@ window.resetForm = function() {
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('classModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">school</span><span>Add New Class</span>';
     document.getElementById('submitBtnText').textContent = 'Add Class';
+    document.getElementById('class').innerHTML = '<option value="">Select Campus First</option>';
+    document.getElementById('section').innerHTML = '<option value="">Select Class First</option>';
     clearErrors();
 };
 
@@ -577,13 +594,14 @@ window.editClass = function(id) {
             document.getElementById('submitBtnText').textContent = 'Update Class';
 
             document.getElementById('campus').value = classData.campus || '';
-            document.getElementById('class').value = classData.class || '';
+            loadClassesForCampus(classData.campus || '', classData.class || '');
             document.getElementById('class_timing_from').value = classData.class_timing_from || '';
             document.getElementById('class_timing_to').value = classData.class_timing_to || '';
             document.getElementById('student_age_limit_from').value = classData.student_age_limit_from || '';
             document.getElementById('student_age_limit_to').value = classData.student_age_limit_to || '';
             document.getElementById('class_tuition_fee').value = classData.class_tuition_fee || '';
             document.getElementById('show_on_website_main_page').value = classData.show_on_website_main_page || 'No';
+            loadSectionsForClass(classData.campus || '', classData.class || '', classData.section || '');
 
             new bootstrap.Modal(document.getElementById('classModal')).show();
         }
@@ -593,6 +611,75 @@ window.editClass = function(id) {
         showAlert('danger', 'Error loading class data. Please try again.');
     });
 };
+
+const campusSelect = document.getElementById('campus');
+const classSelect = document.getElementById('class');
+const sectionSelect = document.getElementById('section');
+
+function loadClassesForCampus(campus, selectedClass = '') {
+    classSelect.innerHTML = '<option value="">Loading classes...</option>';
+    sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+    if (!campus) {
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        return;
+    }
+
+    fetch(`{{ route('website-management.classes-show.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+        .then(response => response.json())
+        .then(data => {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            (data.classes || []).forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                if (selectedClass && selectedClass === className) {
+                    option.selected = true;
+                }
+                classSelect.appendChild(option);
+            });
+        })
+        .catch(() => {
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+        });
+}
+
+function loadSectionsForClass(campus, className, selectedSection = '') {
+    sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
+    if (!className) {
+        sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+        return;
+    }
+
+    const params = new URLSearchParams({
+        campus: campus || '',
+        class: className
+    });
+    fetch(`{{ route('website-management.classes-show.get-sections-by-class') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            (data.sections || []).forEach(sectionName => {
+                const option = document.createElement('option');
+                option.value = sectionName;
+                option.textContent = sectionName;
+                if (selectedSection && selectedSection === sectionName) {
+                    option.selected = true;
+                }
+                sectionSelect.appendChild(option);
+            });
+        })
+        .catch(() => {
+            sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+        });
+}
+
+campusSelect.addEventListener('change', function() {
+    loadClassesForCampus(this.value);
+});
+
+classSelect.addEventListener('change', function() {
+    loadSectionsForClass(campusSelect.value, this.value);
+});
 
 // Function to delete a class
 window.deleteClass = function(id) {
@@ -624,7 +711,7 @@ window.deleteClass = function(id) {
                 if (tbody.children.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-5">
+                            <td colspan="9" class="text-center text-muted py-5">
                                 <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">school</span>
                                 <p class="mt-2 mb-0">No classes to show found.</p>
                             </td>
@@ -659,6 +746,9 @@ function addTableRow(classData) {
         </td>
         <td style="padding: 12px 15px; font-size: 14px;">
             <strong class="text-primary">${classData.class || 'N/A'}</strong>
+        </td>
+        <td style="padding: 12px 15px; font-size: 14px;">
+            ${classData.section || 'N/A'}
         </td>
         <td style="padding: 12px 15px; font-size: 14px;">
             ${(classData.class_timing_from || classData.class_timing_to) ? 
@@ -702,6 +792,9 @@ function updateTableRow(classData) {
             </td>
             <td style="padding: 12px 15px; font-size: 14px;">
                 <strong class="text-primary">${classData.class || 'N/A'}</strong>
+            </td>
+            <td style="padding: 12px 15px; font-size: 14px;">
+                ${classData.section || 'N/A'}
             </td>
             <td style="padding: 12px 15px; font-size: 14px;">
                 ${(classData.class_timing_from || classData.class_timing_to) ? 

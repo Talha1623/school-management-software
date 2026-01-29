@@ -122,25 +122,6 @@
                     <input type="hidden" name="type" value="{{ $type }}">
 
                     @if(!isset($type) || $type !== 'Subject Attendance')
-                        <!-- Late Arrival Time - Single Input for All -->
-                        <div class="card border-0 shadow-sm mb-3" style="border-radius: 8px; overflow: hidden;">
-                            <div class="card-body p-3">
-                                <div class="row align-items-center">
-                                    <div class="col-md-3">
-                                        <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
-                                            Late Arrival Time
-                                        </label>
-                                        <input type="time" name="late_arrival_time" id="late_arrival_time" class="form-control form-control-sm" value="09:00" style="height: 32px;">
-                                    </div>
-                                    <div class="col-md-9">
-                                        <small class="text-muted">This time will be used to calculate late arrival for all staff members.</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    @endif
-
-                    @if(!isset($type) || $type !== 'Subject Attendance')
                         <div class="d-flex flex-wrap justify-content-center gap-2 mb-3">
                             <button type="button" class="btn btn-sm btn-success text-white px-2 py-1" onclick="markAllStaffStatus('Present')">
                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span>
@@ -180,6 +161,7 @@
                                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Arrival Timing</th>
                                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Exit Timing</th>
                                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Late Arrival</th>
+                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Early Exit</th>
                                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Leave Deduction</th>
                                             @endif
                                         </tr>
@@ -192,6 +174,7 @@
                                                 $startTime = $attendance['start_time'] ?? '';
                                                 $endTime = $attendance['end_time'] ?? '';
                                                 $lateArrival = $attendance['late_arrival'] ?? null;
+                                                $earlyExit = $attendance['early_exit'] ?? null;
                                                 $conductedLectures = $attendance['conducted_lectures'] ?? '';
                                                 $assignedSubjects = $assignedSubjectsByStaff[$staff->id] ?? [];
                                             @endphp
@@ -233,7 +216,21 @@
                                                         <input type="time" name="attendance[{{ $staff->id }}][start_time]" class="form-control form-control-sm arrival-time" value="{{ $startTime ? date('H:i', strtotime($startTime)) : '' }}" style="min-width: 100px;">
                                                     </td>
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                        <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $endTime ? date('H:i', strtotime($endTime)) : '' }}" style="min-width: 100px;">
+                                                        @php
+                                                            $exitTimeValue = '';
+                                                            if ($endTime) {
+                                                                if (is_object($endTime) && method_exists($endTime, 'format')) {
+                                                                    $exitTimeValue = $endTime->format('H:i');
+                                                                } elseif (is_string($endTime)) {
+                                                                    try {
+                                                                        $exitTimeValue = date('H:i', strtotime($endTime));
+                                                                    } catch (\Exception $e) {
+                                                                        $exitTimeValue = $endTime;
+                                                                    }
+                                                                }
+                                                            }
+                                                        @endphp
+                                                        <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $exitTimeValue }}" style="min-width: 100px;" placeholder="HH:MM" data-early-exit-time="{{ !empty($earlyExitTime) ? $earlyExitTime : '' }}">
                                                     </td>
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
                                                         <div class="d-flex flex-column gap-2">
@@ -245,6 +242,22 @@
                                                             <div class="late-arrival-display" style="min-height: 20px;">
                                                                 @if($lateArrival)
                                                                     <span class="badge bg-warning text-dark">{{ $lateArrival }}</span>
+                                                                @else
+                                                                    <span class="text-muted">-</span>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                        <div class="d-flex flex-column gap-2">
+                                                            <select name="attendance[{{ $staff->id }}][auto_early_exit]" class="form-select form-select-sm auto-early-exit" style="min-width: 80px;">
+                                                                <option value="Auto" selected>Auto</option>
+                                                                <option value="Yes">Yes</option>
+                                                                <option value="No">No</option>
+                                                            </select>
+                                                            <div class="early-exit-display" style="min-height: 20px;">
+                                                                @if($earlyExit)
+                                                                    <span class="badge bg-danger text-white">{{ $earlyExit }}</span>
                                                                 @else
                                                                     <span class="text-muted">-</span>
                                                                 @endif
@@ -432,9 +445,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const time = input.value;
         if (time) {
-            // Get late arrival time from the input field at the top
-            const lateArrivalTimeInput = document.getElementById('late_arrival_time');
-            const standardTime = lateArrivalTimeInput ? lateArrivalTimeInput.value : '09:00';
+            // Get late arrival time from Salary Setting (passed from controller)
+            const standardTime = '{{ $lateArrivalTime ?? "09:00" }}';
             const [hours, minutes] = time.split(':');
             const [stdHours, stdMinutes] = standardTime.split(':');
             
@@ -460,6 +472,215 @@ document.addEventListener('DOMContentLoaded', function() {
     arrivalTimeInputs.forEach(input => {
         input.addEventListener('change', function() {
             calculateLateArrival(this);
+        });
+    });
+    
+    // Calculate early exit when exit time changes
+    function calculateEarlyExit(input) {
+        if (!input) {
+            return;
+        }
+        
+        const row = input.closest('tr');
+        if (!row) {
+            return;
+        }
+        
+        const autoSelect = row.querySelector('.auto-early-exit');
+        const earlyExitDisplay = row.querySelector('.early-exit-display');
+        
+        if (!earlyExitDisplay) {
+            return;
+        }
+        
+        // If Auto dropdown exists and is set to No, don't calculate
+        if (autoSelect && autoSelect.value === 'No') {
+            earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+            return;
+        }
+        
+        // If Auto dropdown exists, check if it's Auto or Yes
+        if (autoSelect && autoSelect.value !== 'Auto' && autoSelect.value !== 'Yes') {
+            earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+            return;
+        }
+        
+        const time = input.value;
+        // Get early exit time from data attribute first
+        let earlyExitTimeSetting = input.getAttribute('data-early-exit-time');
+        
+        // If data attribute is empty or invalid, use the global variable from controller
+        if (!earlyExitTimeSetting || earlyExitTimeSetting === '' || earlyExitTimeSetting === 'null' || earlyExitTimeSetting.trim() === '') {
+            // Get from blade variable (formatted time from controller)
+            const bladeEarlyExitTime = '{{ !empty($earlyExitTime) ? $earlyExitTime : "" }}';
+            if (bladeEarlyExitTime && bladeEarlyExitTime !== '') {
+                earlyExitTimeSetting = bladeEarlyExitTime;
+            }
+        }
+        
+        // Trim whitespace
+        if (earlyExitTimeSetting) {
+            earlyExitTimeSetting = earlyExitTimeSetting.trim();
+        }
+        
+        // Check if exit time is provided (time input returns HH:MM format)
+        if (!time || time === '' || time === '--:--' || time.length < 5) {
+            earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+            return;
+        }
+        
+        // Check if early exit time is set in salary settings
+        if (!earlyExitTimeSetting || earlyExitTimeSetting === '' || earlyExitTimeSetting === 'null' || earlyExitTimeSetting === 'undefined') {
+            // Early exit time not set in salary settings
+            earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+            return;
+        }
+        
+        // Debug: Log for troubleshooting (can be removed later)
+        console.log('Early Exit Calculation:', {
+            exitTime: time,
+            earlyExitTimeSetting: earlyExitTimeSetting,
+            hasSetting: earlyExitTimeSetting && earlyExitTimeSetting !== ''
+        });
+        
+        try {
+            // Parse exit time (format: HH:MM from time input)
+            const timeParts = time.split(':');
+            if (timeParts.length < 2) {
+                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                return;
+            }
+            
+            const hours = parseInt(timeParts[0], 10);
+            const minutes = parseInt(timeParts[1], 10);
+            
+            if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                return;
+            }
+            
+            // Parse early exit time setting (format: HH:MM in 24-hour format)
+            const settingParts = earlyExitTimeSetting.split(':');
+            if (settingParts.length < 2) {
+                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                return;
+            }
+            
+            let stdHours = parseInt(settingParts[0], 10);
+            const stdMinutes = parseInt(settingParts[1], 10);
+            
+            // Handle 12-hour format if needed (should already be converted by controller, but double-check)
+            // If hours is 1-12 and no indication of 24-hour format, check if it might be PM
+            // But since controller already converts, this should be 24-hour format (0-23)
+            
+            if (isNaN(stdHours) || isNaN(stdMinutes) || stdHours < 0 || stdHours > 23 || stdMinutes < 0 || stdMinutes > 59) {
+                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                return;
+            }
+            
+            // Convert to minutes for comparison
+            const timeInMinutes = hours * 60 + minutes;
+            const stdTimeInMinutes = stdHours * 60 + stdMinutes;
+            
+            // Check if exit time is before early exit time setting
+            // Both times are now in 24-hour format (0-23 hours)
+            console.log('Time Comparison:', {
+                exitTime: time,
+                exitTimeHours: hours,
+                exitTimeMinutes: timeInMinutes,
+                earlyExitTimeSetting: earlyExitTimeSetting,
+                earlyExitTimeHours: stdHours,
+                earlyExitTimeMinutes: stdTimeInMinutes,
+                isEarly: timeInMinutes < stdTimeInMinutes,
+                difference: stdTimeInMinutes - timeInMinutes
+            });
+            
+            if (timeInMinutes < stdTimeInMinutes) {
+                const diff = stdTimeInMinutes - timeInMinutes;
+                const earlyHours = Math.floor(diff / 60);
+                const earlyMinutes = diff % 60;
+                const earlyExit = String(earlyHours).padStart(2, '0') + ':' + String(earlyMinutes).padStart(2, '0');
+                
+                console.log('Early Exit Calculated:', earlyExit);
+                
+                // Update early exit display immediately
+                earlyExitDisplay.innerHTML = '<span class="badge bg-danger text-white">' + earlyExit + '</span>';
+            } else {
+                // Exit time is on or after the early exit time, so no early exit
+                console.log('No early exit - exit time is on or after early exit time');
+                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+            }
+        } catch (e) {
+            earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+        }
+    }
+    
+    // Also calculate when Exit Time changes (recalculate late arrival and early exit)
+    const exitTimeInputs = document.querySelectorAll('.exit-time');
+    
+    // Calculate early exit on page load for existing values (with delay to ensure DOM is ready)
+    setTimeout(function() {
+        exitTimeInputs.forEach(input => {
+            if (input && input.value && input.value.length >= 5) {
+                calculateEarlyExit(input);
+            }
+        });
+    }, 500);
+    
+    exitTimeInputs.forEach(input => {
+        // Calculate on change event - immediate calculation
+        input.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const arrivalInput = row.querySelector('.arrival-time');
+            if (arrivalInput && arrivalInput.value) {
+                calculateLateArrival(arrivalInput);
+            }
+            // Immediately calculate early exit when exit time changes
+            calculateEarlyExit(this);
+        });
+        
+        // Also calculate on input event for real-time updates - immediate
+        input.addEventListener('input', function() {
+            calculateEarlyExit(this);
+        });
+        
+        // Calculate when field gets focus (if value exists)
+        input.addEventListener('focus', function() {
+            if (this.value) {
+                calculateEarlyExit(this);
+            }
+        });
+        
+        // Calculate when field loses focus - immediate
+        input.addEventListener('blur', function() {
+            calculateEarlyExit(this);
+        });
+        
+        // Also listen for keyup to catch manual time entry
+        input.addEventListener('keyup', function() {
+            if (this.value && this.value.length >= 5) {
+                calculateEarlyExit(this);
+            }
+        });
+    });
+    
+    // Also calculate when Auto dropdown changes for early exit
+    const autoEarlyExitSelects = document.querySelectorAll('.auto-early-exit');
+    autoEarlyExitSelects.forEach(select => {
+        // Calculate on page load if exit time exists
+        setTimeout(() => {
+            const row = select.closest('tr');
+            const exitInput = row ? row.querySelector('.exit-time') : null;
+            if (exitInput && exitInput.value) {
+                calculateEarlyExit(exitInput);
+            }
+        }, 350);
+        
+        select.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const exitInput = row ? row.querySelector('.exit-time') : null;
+            // Immediately calculate when dropdown changes
+            calculateEarlyExit(exitInput);
         });
     });
     

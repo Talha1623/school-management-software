@@ -117,7 +117,7 @@
                 <div class="payment-row mb-3 p-3 border rounded" style="background-color: #f8f9fa;">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="mb-0 fw-semibold" style="color: #003471;">Select Students</h6>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStudentsForIncrement()">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="loadStudentsBtn" onclick="loadStudentsForIncrement()" disabled>
                             Load Students
                         </button>
                     </div>
@@ -126,7 +126,7 @@
                             <thead>
                                 <tr>
                                     <th style="width: 40px;">
-                                        <input type="checkbox" id="select_all_students" onclick="toggleSelectAllStudents(this)">
+                                        <input type="checkbox" id="select_all_students" onclick="toggleSelectAllStudents(this)" disabled>
                                     </th>
                                     <th>Code</th>
                                     <th>Student</th>
@@ -139,7 +139,7 @@
                             </thead>
                             <tbody id="studentSelectionBody">
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted">Select filters and click "Load Students".</td>
+                                    <td colspan="8" class="text-center text-muted">Select Campus, Class, Section to load students.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -268,12 +268,29 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(() => {});
     }
 
+    function updateLoadState() {
+        const campus = campusSelect.value || '';
+        const className = classSelect.value || '';
+        const section = sectionSelect.value || '';
+        const loadBtn = document.getElementById('loadStudentsBtn');
+        const selectAll = document.getElementById('select_all_students');
+        const enable = !!(campus && className && section);
+        if (loadBtn) loadBtn.disabled = !enable;
+        if (!enable && selectAll) selectAll.checked = false;
+    }
+
     campusSelect.addEventListener('change', function() {
         loadClassesByCampus(this.value);
+        updateLoadState();
     });
 
     classSelect.addEventListener('change', function() {
         loadSectionsByClass(campusSelect.value, this.value);
+        updateLoadState();
+    });
+
+    sectionSelect.addEventListener('change', function() {
+        updateLoadState();
     });
 
     increaseInput.addEventListener('input', function() {
@@ -288,6 +305,16 @@ function loadStudentsForIncrement() {
     const className = document.getElementById('class').value || '';
     const section = document.getElementById('section').value || '';
     const tbody = document.getElementById('studentSelectionBody');
+    const selectAll = document.getElementById('select_all_students');
+
+    if (!campus || !className || !section) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Select Campus, Class, Section first.</td></tr>';
+        if (selectAll) {
+            selectAll.checked = false;
+            selectAll.disabled = true;
+        }
+        return;
+    }
 
     tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Loading...</td></tr>';
 
@@ -303,6 +330,10 @@ function loadStudentsForIncrement() {
             const students = data.students || [];
             if (students.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No students found.</td></tr>';
+                if (selectAll) {
+                    selectAll.checked = false;
+                    selectAll.disabled = true;
+                }
                 return;
             }
             tbody.innerHTML = '';
@@ -323,10 +354,18 @@ function loadStudentsForIncrement() {
                 `;
                 tbody.appendChild(row);
             });
+            if (selectAll) {
+                selectAll.disabled = false;
+                selectAll.checked = true;
+            }
             updateIncrementPreview();
         })
         .catch(() => {
             tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Error loading students.</td></tr>';
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.disabled = true;
+            }
         });
 }
 

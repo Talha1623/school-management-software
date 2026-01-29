@@ -43,11 +43,68 @@ class ManageSalariesController extends Controller
         // If request wants JSON (for modal), return JSON
         if ($request->wantsJson() || $request->ajax()) {
             $salary->load('staff');
-            return response()->json($salary);
+            
+            // Calculate fees deductions
+            $staff = $salary->staff;
+            $lateCount = $salary->late ?? 0;
+            $earlyExitCount = $salary->early_exit ?? 0;
+            
+            // Get staff individual fees or defaults
+            $lateFeePerLate = $staff->late_fees ?? 500;
+            $earlyExitFeePerExit = $staff->early_exit_fees ?? 1000;
+            
+            // Calculate total fees
+            $lateFeesTotal = $lateFeePerLate * $lateCount;
+            $earlyExitFeesTotal = $earlyExitFeePerExit * $earlyExitCount;
+            
+            // For absent fees, we need to calculate from attendance summary
+            // Since we don't have deductible absents count directly, we'll calculate it
+            $absentCount = $salary->absent ?? 0;
+            $staffFreeAbsents = $staff->free_absent ?? 0;
+            $deductibleAbsents = max(0, $absentCount - $staffFreeAbsents);
+            
+            $absentFeePerAbsent = $staff->absent_fees ?? null;
+            if ($absentFeePerAbsent !== null && $absentFeePerAbsent >= 0) {
+                $absentFeesTotal = $absentFeePerAbsent * $deductibleAbsents;
+            } else {
+                // Use daily rate calculation
+                $daysInMonth = 30;
+                try {
+                    $monthNumber = $this->getMonthNumber($salary->salary_month);
+                    $daysInMonth = \Carbon\Carbon::createFromDate($salary->year, $monthNumber, 1)->daysInMonth;
+                } catch (\Exception $e) {
+                    $daysInMonth = 30;
+                }
+                $dailyRate = $daysInMonth > 0 ? (($salary->basic ?? 0) / $daysInMonth) : 0;
+                $absentFeesTotal = $dailyRate * $deductibleAbsents;
+            }
+            
+            // Add fees data to response
+            $salaryData = $salary->toArray();
+            $salaryData['fees'] = [
+                'late_fees' => $lateFeesTotal,
+                'absent_fees' => $absentFeesTotal,
+                'early_exit_fees' => $earlyExitFeesTotal,
+            ];
+            
+            return response()->json($salaryData);
         }
         
         // Otherwise return view (if needed in future)
         return view('salary-loan.manage-salaries', compact('salary'));
+    }
+    
+    /**
+     * Get month number from month name
+     */
+    private function getMonthNumber($monthName)
+    {
+        $monthNames = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
+        ];
+        return $monthNames[$monthName] ?? date('m');
     }
 
     /**

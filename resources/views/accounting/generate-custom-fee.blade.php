@@ -68,8 +68,8 @@
                             <h5 class="mb-1 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -8px -8px 8px -8px; background-color: #003471;">Section</h5>
                             
                             <div class="mb-1">
-                                <label for="section" class="form-label mb-0 fs-13 fw-medium">Section <span class="text-danger">*</span></label>
-                                <select class="form-select form-select-sm py-1" id="section" name="section" required style="height: 32px;" disabled>
+                                <label for="section" class="form-label mb-0 fs-13 fw-medium">Section (Optional)</label>
+                                <select class="form-select form-select-sm py-1" id="section" name="section" style="height: 32px;" disabled>
                                     <option value="">Select Class First</option>
                                 </select>
                             </div>
@@ -268,7 +268,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Hide student section if required fields are not filled
-        if (!campus || !classValue || !section) {
+        if (!campus || !classValue) {
             if (studentSection) studentSection.style.display = 'none';
             if (studentsList) studentsList.innerHTML = '';
             return;
@@ -282,9 +282,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Build query parameters
         const params = new URLSearchParams({
             campus: campus,
-            class: classValue,
-            section: section
+            class: classValue
         });
+        if (section) {
+            params.append('section', section);
+        }
         
         // Fetch students
         const url = `{{ route('accounting.custom-fee.get-students') }}?${params.toString()}`;
@@ -371,7 +373,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
-            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
             
             if (data.sections && data.sections.length > 0) {
                 data.sections.forEach(section => {
@@ -382,7 +384,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 sectionSelect.disabled = false;
             } else {
-                sectionSelect.innerHTML = '<option value="">No sections found</option>';
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                sectionSelect.disabled = false;
             }
             
             loadStudents();
@@ -411,7 +414,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const classValue = classSelect ? classSelect.value : '';
         const section = sectionSelect ? sectionSelect.value : '';
         
-        if (campus && classValue && section) {
+        if (campus && classValue) {
             loadStudents();
         }
     }, 500);

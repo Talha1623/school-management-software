@@ -8,6 +8,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\StudentPayment;
+use App\Models\AdvanceFee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -200,6 +201,35 @@ class MonthlyFeeController extends Controller
                 'late_fee' => $isLateFeeApplicable ? $lateFeeAmount : 0,
                 'accountant' => $accountantName,
             ]);
+
+            $advanceFee = null;
+            if (!empty($student->parent_account_id)) {
+                $advanceFee = AdvanceFee::where('parent_id', (string) $student->parent_account_id)->first();
+            }
+            if (!$advanceFee && !empty($student->father_id_card)) {
+                $advanceFee = AdvanceFee::where('id_card_number', $student->father_id_card)->first();
+            }
+            if ($advanceFee && (float) $advanceFee->available_credit > 0) {
+                $applyAmount = min((float) $advanceFee->available_credit, (float) $student->monthly_fee);
+                if ($applyAmount > 0) {
+                    StudentPayment::create([
+                        'campus' => $student->campus ?? $validated['campus'],
+                        'student_code' => $student->student_code,
+                        'payment_title' => $paymentTitle,
+                        'payment_amount' => $applyAmount,
+                        'discount' => 0,
+                        'method' => 'Advance Fee',
+                        'payment_date' => Carbon::now()->format('Y-m-d'),
+                        'sms_notification' => 'Yes',
+                        'late_fee' => 0,
+                        'accountant' => $accountantName,
+                    ]);
+
+                    $advanceFee->available_credit = max(0, (float) $advanceFee->available_credit - $applyAmount);
+                    $advanceFee->decrease = (float) ($advanceFee->decrease ?? 0) + $applyAmount;
+                    $advanceFee->save();
+                }
+            }
             
             $generatedCount++;
         }

@@ -67,7 +67,7 @@ use Illuminate\Support\Facades\Auth;
                         <span class="material-symbols-outlined" style="font-size: 16px;">calendar_month</span>
                         <span>Staff Attendance Overview</span>
                     </a>
-                    <a href="{{ route('reports.staff-salary') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
+                    <a href="{{ route('reports.staff-salary-summarized') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
                         <span class="material-symbols-outlined" style="font-size: 16px;">receipt_long</span>
                         <span>Staff Salary Report</span>
                     </a>
@@ -558,6 +558,58 @@ use Illuminate\Support\Facades\Auth;
                             </div>
                         </div>
 
+                        <!-- Absent Fees -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Absent Fees</label>
+                            <div class="input-group input-group-sm staff-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">money_off</span>
+                                </span>
+                                <input type="number" step="0.01" class="form-control staff-input" name="absent_fees" id="absent_fees" placeholder="Enter absent fees" min="0">
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Deduction per absent day</small>
+                        </div>
+
+                        <!-- Late Fees -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Late Fees</label>
+                            <div class="input-group input-group-sm staff-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">schedule</span>
+                                </span>
+                                <input type="number" step="0.01" class="form-control staff-input" name="late_fees" id="late_fees" placeholder="Enter late fees" min="0">
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Deduction per late arrival</small>
+                        </div>
+
+                        <!-- Early Exit Fees -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Early Exit Fees</label>
+                            <div class="input-group input-group-sm staff-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">exit_to_app</span>
+                                </span>
+                                <input type="number" step="0.01" class="form-control staff-input" name="early_exit_fees" id="early_exit_fees" placeholder="Enter early exit fees" min="0">
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Deduction per early exit</small>
+                        </div>
+
+                        <!-- Free Absent -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Free Absent</label>
+                            <div class="input-group input-group-sm staff-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">event_busy</span>
+                                </span>
+                                <select class="form-control staff-input" name="free_absent" id="free_absent" style="font-size: 12px;">
+                                    @for($i = 0; $i <= 30; $i++)
+                                        <option value="{{ $i }}" {{ $i == 0 ? 'selected' : '' }}>{{ $i }}</option>
+                                    @endfor
+                                </select>
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Number of free absents allowed</small>
+                        </div>
+
                         <!-- Email -->
                         <div class="col-md-6">
                             <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Email</label>
@@ -632,23 +684,6 @@ use Illuminate\Support\Facades\Auth;
     </div>
 </div>
 
-<!-- Staff View Modal -->
-<div class="modal fade" id="staffViewModal" tabindex="-1" aria-labelledby="staffViewModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fw-semibold mb-0 d-flex align-items-center gap-2" id="staffViewModalLabel" style="font-size: 14px; color: white;">
-                    <span class="material-symbols-outlined" style="font-size: 18px; color: white;">visibility</span>
-                    <span style="color: white;">Staff Details</span>
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
-            </div>
-            <div class="modal-body p-3">
-                <div class="d-flex flex-column gap-2" id="staffViewContent"></div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <style>
     /* Staff Form Styling */
@@ -775,6 +810,24 @@ use Illuminate\Support\Facades\Auth;
         background: linear-gradient(135deg, #0dcaf0 0%, #17a2b8 100%);
         transform: translateY(-1px);
         box-shadow: 0 4px 10px rgba(23, 162, 184, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+
+    .staff-performance-report-btn {
+        background: linear-gradient(135deg, #6f42c1 0%, #9c27b0 100%);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 6px rgba(111, 66, 193, 0.2);
+        text-decoration: none;
+    }
+
+    .staff-performance-report-btn:hover {
+        background: linear-gradient(135deg, #9c27b0 0%, #6f42c1 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(111, 66, 193, 0.3);
         color: white;
         text-decoration: none;
     }
@@ -975,6 +1028,10 @@ function resetForm() {
     document.getElementById('photo').value = '';
     document.getElementById('cv_resume').value = '';
     document.getElementById('campus').value = '';
+            document.getElementById('absent_fees').value = '';
+            document.getElementById('late_fees').value = '';
+            document.getElementById('early_exit_fees').value = '';
+            document.getElementById('free_absent').value = '0';
     
     // Make Emp. ID readonly and fetch next Employee ID
     const empIdField = document.getElementById('emp_id');
@@ -1041,6 +1098,10 @@ function editStaff(id) {
             document.getElementById('marital_status').value = data.marital_status || '';
             document.getElementById('salary_type').value = data.salary_type || '';
             document.getElementById('salary').value = data.salary || '';
+            document.getElementById('absent_fees').value = data.absent_fees || '';
+            document.getElementById('late_fees').value = data.late_fees || '';
+            document.getElementById('early_exit_fees').value = data.early_exit_fees || '';
+            document.getElementById('free_absent').value = data.free_absent || '0';
             document.getElementById('email').value = data.email || '';
             document.getElementById('home_address').value = data.home_address || '';
             document.getElementById('password').value = '';
@@ -1057,29 +1118,8 @@ function editStaff(id) {
 }
 
 function viewStaff(id) {
-    fetch(`{{ url('/staff/management') }}/${id}`, {
-        headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-        .then(response => response.json())
-        .then(data => {
-            const content = document.getElementById('staffViewContent');
-            content.innerHTML = `
-                <div><strong>Name:</strong> ${escapeHtml(data.name)}</div>
-                <div><strong>Emp. ID:</strong> ${escapeHtml(data.emp_id || 'N/A')}</div>
-                <div><strong>Campus:</strong> ${escapeHtml(data.campus || 'N/A')}</div>
-                <div><strong>Designation:</strong> ${escapeHtml(data.designation || 'N/A')}</div>
-                <div><strong>Email:</strong> ${escapeHtml(data.email || 'N/A')}</div>
-                <div><strong>Phone:</strong> ${escapeHtml(data.phone || 'N/A')}</div>
-                <div><strong>WhatsApp:</strong> ${escapeHtml(data.whatsapp || 'N/A')}</div>
-                <div><strong>CNIC:</strong> ${escapeHtml(data.cnic || 'N/A')}</div>
-                <div><strong>Gender:</strong> ${escapeHtml(data.gender || 'N/A')}</div>
-            `;
-            new bootstrap.Modal(document.getElementById('staffViewModal')).show();
-        })
-        .catch(() => alert('Error loading staff data'));
+    // Redirect to staff details page instead of showing modal
+    window.location.href = `{{ url('/staff/management') }}/${id}`;
 }
 
 function escapeHtml(text) {

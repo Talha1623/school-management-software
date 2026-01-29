@@ -306,6 +306,74 @@ use Illuminate\Support\Facades\Storage;
                             </div>
                         </div>
                     </div>
+
+                    <!-- Salary & Deduction Settings -->
+                    <div class="card staff-detail-card mb-3">
+                        <div class="section-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                            <h5>
+                                <span class="material-symbols-outlined" style="font-size: 18px;">money_off</span>
+                                Salary Deduction Settings
+                            </h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">schedule</span>
+                                            Late Fees (per late arrival)
+                                        </div>
+                                        <div class="info-value">
+                                            <strong style="color: #dc3545;">Rs. {{ number_format($staff->late_fees ?? 0, 2) }}</strong>
+                                            @if(!$staff->late_fees)
+                                                <span class="badge bg-secondary text-white badge-custom ms-2">Default: 500</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">money_off</span>
+                                            Absent Fees (per absent day)
+                                        </div>
+                                        <div class="info-value">
+                                            <strong style="color: #dc3545;">Rs. {{ number_format($staff->absent_fees ?? 0, 2) }}</strong>
+                                            @if(!$staff->absent_fees)
+                                                <span class="badge bg-secondary text-white badge-custom ms-2">Daily Rate</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">exit_to_app</span>
+                                            Early Exit Fees (per early exit)
+                                        </div>
+                                        <div class="info-value">
+                                            <strong style="color: #dc3545;">Rs. {{ number_format($staff->early_exit_fees ?? 0, 2) }}</strong>
+                                            @if(!$staff->early_exit_fees)
+                                                <span class="badge bg-secondary text-white badge-custom ms-2">Default: 1000</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event_busy</span>
+                                            Free Absent Days
+                                        </div>
+                                        <div class="info-value">
+                                            <strong style="color: #28a745;">{{ $staff->free_absent ?? 0 }}</strong>
+                                            <span class="text-muted ms-2" style="font-size: 12px;">days allowed</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

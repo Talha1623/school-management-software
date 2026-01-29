@@ -66,7 +66,92 @@ class StaffAttendanceController extends Controller
                     'end_time' => $attendance ? $attendance->end_time : null,
                     'conducted_lectures' => $attendance ? $attendance->conducted_lectures : null,
                     'late_arrival' => $this->calculateLateArrival($attendance ? $attendance->start_time : null),
+                    'early_exit' => $this->calculateEarlyExit($attendance ? $attendance->end_time : null),
                 ];
+            }
+        }
+
+        // Get late arrival time and early exit time from Salary Setting
+        $settings = SalarySetting::getSettings();
+        $lateArrivalTime = $settings->late_arrival_time ?? '08:00:00';
+        $earlyExitTime = $settings->early_exit_time ?? null;
+        
+        // Convert late arrival time to HH:MM format for JavaScript
+        // Handle different time formats
+        if (preg_match('/^(\d{2}):(\d{2}):(\d{2})$/', $lateArrivalTime, $matches)) {
+            // Format: HH:MM:SS
+            $lateArrivalTimeFormatted = $matches[1] . ':' . $matches[2];
+        } elseif (preg_match('/^(\d{2}):(\d{2})$/', $lateArrivalTime, $matches)) {
+            // Format: HH:MM
+            $lateArrivalTimeFormatted = $lateArrivalTime;
+        } elseif (preg_match('/(\d{1,2}):(\d{2})\s*(AM|PM)/i', $lateArrivalTime, $matches)) {
+            // Format: hh:mm AM/PM
+            $hours = (int)$matches[1];
+            $minutes = $matches[2];
+            $ampm = strtoupper($matches[3]);
+            
+            if ($ampm === 'PM' && $hours != 12) {
+                $hours += 12;
+            } elseif ($ampm === 'AM' && $hours == 12) {
+                $hours = 0;
+            }
+            
+            $lateArrivalTimeFormatted = str_pad($hours, 2, '0', STR_PAD_LEFT) . ':' . $minutes;
+        } else {
+            // Default fallback
+            $lateArrivalTimeFormatted = '08:00';
+        }
+        
+        // Convert early exit time to HH:MM format for JavaScript (24-hour format)
+        $earlyExitTimeFormatted = null;
+        if ($earlyExitTime) {
+            // Try to parse different time formats
+            if (preg_match('/^(\d{2}):(\d{2}):(\d{2})$/', $earlyExitTime, $matches)) {
+                // Format: HH:MM:SS (already 24-hour)
+                $hours = (int)$matches[1];
+                $minutes = $matches[2];
+                $earlyExitTimeFormatted = str_pad($hours, 2, '0', STR_PAD_LEFT) . ':' . $minutes;
+            } elseif (preg_match('/^(\d{2}):(\d{2})$/', $earlyExitTime, $matches)) {
+                // Format: HH:MM (already 24-hour)
+                $hours = (int)$matches[1];
+                $minutes = $matches[2];
+                // If hours > 12, it's already 24-hour format
+                if ($hours > 12) {
+                    $earlyExitTimeFormatted = $earlyExitTime;
+                } else {
+                    // Assume it's 24-hour format
+                    $earlyExitTimeFormatted = $earlyExitTime;
+                }
+            } elseif (preg_match('/(\d{1,2}):(\d{2})\s*(AM|PM)/i', $earlyExitTime, $matches)) {
+                // Format: hh:mm AM/PM (12-hour format) - convert to 24-hour
+                $hours = (int)$matches[1];
+                $minutes = $matches[2];
+                $ampm = strtoupper($matches[3]);
+                
+                // Convert 12-hour to 24-hour format
+                if ($ampm === 'PM' && $hours != 12) {
+                    $hours += 12; // 1 PM = 13:00, 2 PM = 14:00, etc.
+                } elseif ($ampm === 'AM' && $hours == 12) {
+                    $hours = 0; // 12 AM = 00:00
+                }
+                // Hours remain same for AM (except 12 AM)
+                
+                $earlyExitTimeFormatted = str_pad($hours, 2, '0', STR_PAD_LEFT) . ':' . $minutes;
+            } else {
+                // Try Carbon to parse the time
+                try {
+                    $parsedTime = \Carbon\Carbon::createFromFormat('h:i A', $earlyExitTime);
+                    $earlyExitTimeFormatted = $parsedTime->format('H:i');
+                } catch (\Exception $e) {
+                    // If parsing fails, try other formats
+                    try {
+                        $parsedTime = \Carbon\Carbon::createFromFormat('H:i:s', $earlyExitTime);
+                        $earlyExitTimeFormatted = $parsedTime->format('H:i');
+                    } catch (\Exception $e2) {
+                        // Keep as is if all parsing fails
+                        $earlyExitTimeFormatted = $earlyExitTime;
+                    }
+                }
             }
         }
 
@@ -111,6 +196,8 @@ class StaffAttendanceController extends Controller
             'staffList' => $staffList,
             'attendanceData' => $attendanceData,
             'campuses' => $campuses,
+            'lateArrivalTime' => $lateArrivalTimeFormatted,
+            'earlyExitTime' => $earlyExitTimeFormatted ?? '',
             'campus' => $campus,
             'staffCategory' => $staffCategory,
             'type' => $type,
@@ -135,6 +222,8 @@ class StaffAttendanceController extends Controller
             'attendance.*.leave_deduction' => 'nullable|in:Yes,No',
             'attendance.*.conducted_lectures' => 'nullable|integer|min:0',
             'attendance.*.late_arrival' => 'nullable|in:Auto,Yes,No',
+            'attendance.*.auto_late_arrival' => 'nullable|in:Auto,Yes,No',
+            'attendance.*.auto_early_exit' => 'nullable|in:Auto,Yes,No',
         ]);
 
         $date = $request->input('date');
@@ -209,6 +298,15 @@ class StaffAttendanceController extends Controller
                 if ($isSubjectAttendance && $lateArrival) {
                     $remarks = trim(($remarks ? $remarks . ' | ' : '') . 'Late Arrival: ' . $lateArrival);
                 }
+                
+                // Calculate and add early exit to remarks if applicable
+                $earlyExit = null;
+                if (isset($data['end_time']) && $data['end_time']) {
+                    $earlyExit = $this->calculateEarlyExit($data['end_time']);
+                    if ($earlyExit) {
+                        $remarks = trim(($remarks ? $remarks . ' | ' : '') . 'Early Exit: ' . $earlyExit);
+                    }
+                }
 
                 StaffAttendance::updateOrCreate(
                     [
@@ -262,6 +360,41 @@ class StaffAttendanceController extends Controller
 
             if ($start && $standard && $start > $standard) {
                 $diff = $start - $standard;
+                $hours = floor($diff / 3600);
+                $minutes = floor(($diff % 3600) / 60);
+                return sprintf('%02d:%02d', $hours, $minutes);
+            }
+        } catch (\Exception $e) {
+            // If time parsing fails, return null
+        }
+
+        return null;
+    }
+
+    /**
+     * Calculate early exit based on early exit time from salary settings.
+     */
+    private function calculateEarlyExit($endTime)
+    {
+        if (!$endTime) {
+            return null;
+        }
+
+        try {
+            // Handle different time formats
+            $time = is_string($endTime) ? $endTime : $endTime->format('H:i:s');
+            $settings = SalarySetting::getSettings();
+            $earlyExitTimeSetting = $settings->early_exit_time;
+            
+            if (!$earlyExitTimeSetting) {
+                return null;
+            }
+            
+            $end = strtotime($time);
+            $standard = strtotime($earlyExitTimeSetting);
+
+            if ($end && $standard && $end < $standard) {
+                $diff = $standard - $end;
                 $hours = floor($diff / 3600);
                 $minutes = floor(($diff % 3600) / 60);
                 return sprintf('%02d:%02d', $hours, $minutes);

@@ -30,6 +30,10 @@ class Staff extends Authenticatable
         'marital_status',
         'salary_type',
         'salary',
+        'absent_fees',
+        'late_fees',
+        'early_exit_fees',
+        'free_absent',
         'email',
         'password',
         'home_address',
@@ -48,6 +52,10 @@ class Staff extends Authenticatable
     protected $casts = [
         'birthday' => 'date',
         'joining_date' => 'date',
+        'absent_fees' => 'decimal:2',
+        'late_fees' => 'decimal:2',
+        'early_exit_fees' => 'decimal:2',
+        'free_absent' => 'integer',
     ];
 
     /**

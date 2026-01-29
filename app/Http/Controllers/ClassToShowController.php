@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ClassToShow;
 use App\Models\Campus;
 use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -23,7 +24,8 @@ class ClassToShowController extends Controller
             $search = trim($request->search);
             $query->where(function($q) use ($search) {
                 $q->where('campus', 'like', "%{$search}%")
-                  ->orWhere('class', 'like', "%{$search}%");
+                  ->orWhere('class', 'like', "%{$search}%")
+                  ->orWhere('section', 'like', "%{$search}%");
             });
         }
         
@@ -42,16 +44,7 @@ class ClassToShowController extends Controller
             });
         }
         
-        // Get classes for dropdown
-        $allClasses = ClassModel::whereNotNull('class_name')
-            ->where('class_name', '!=', '')
-            ->orderBy('class_name', 'asc')
-            ->distinct()
-            ->pluck('class_name')
-            ->unique()
-            ->values();
-        
-        return view('website-management.classes-show', compact('classes', 'campuses', 'allClasses'));
+        return view('website-management.classes-show', compact('classes', 'campuses'));
     }
 
     /**
@@ -63,6 +56,7 @@ class ClassToShowController extends Controller
             $validated = $request->validate([
                 'campus' => ['nullable', 'string', 'max:255'],
                 'class' => ['nullable', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
                 'class_timing_from' => ['nullable', 'string', 'max:255'],
                 'class_timing_to' => ['nullable', 'string', 'max:255'],
                 'student_age_limit_from' => ['nullable', 'string', 'max:255'],
@@ -83,6 +77,11 @@ class ClassToShowController extends Controller
                 'success' => false,
                 'errors' => $e->errors()
             ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to add class: ' . $e->getMessage(),
+            ], 500);
         }
     }
 
@@ -95,6 +94,7 @@ class ClassToShowController extends Controller
             $validated = $request->validate([
                 'campus' => ['nullable', 'string', 'max:255'],
                 'class' => ['nullable', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
                 'class_timing_from' => ['nullable', 'string', 'max:255'],
                 'class_timing_to' => ['nullable', 'string', 'max:255'],
                 'student_age_limit_from' => ['nullable', 'string', 'max:255'],
@@ -115,6 +115,11 @@ class ClassToShowController extends Controller
                 'success' => false,
                 'errors' => $e->errors()
             ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update class: ' . $e->getMessage(),
+            ], 500);
         }
     }
 
@@ -140,5 +145,36 @@ class ClassToShowController extends Controller
             'success' => true,
             'class' => $classToShow
         ]);
+    }
+
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        $query = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '');
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classes = $query->distinct()->orderBy('class_name')->pluck('class_name')->values();
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        $class = $request->get('class');
+
+        $query = Section::whereNotNull('name');
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        if ($class) {
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        }
+
+        $sections = $query->distinct()->orderBy('name')->pluck('name')->values();
+
+        return response()->json(['sections' => $sections]);
     }
 }

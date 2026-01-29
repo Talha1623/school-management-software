@@ -948,11 +948,22 @@ class AccountantController extends Controller
             'discount' => ['nullable', 'numeric', 'min:0'],
             'method' => ['required', 'string', 'max:255'],
             'payment_date' => ['nullable', 'date'],
+            'generated_id' => ['nullable', 'integer'],
         ]);
 
         // Set payment date to today if not provided
         if (!isset($validated['payment_date'])) {
             $validated['payment_date'] = now()->toDateString();
+        }
+
+        if (!empty($validated['generated_id'])) {
+            $generatedFee = \App\Models\StudentPayment::where('id', $validated['generated_id'])
+                ->where('student_code', $validated['student_code'])
+                ->where('method', 'Generated')
+                ->first();
+            if ($generatedFee && $generatedFee->payment_title) {
+                $validated['payment_title'] = $generatedFee->payment_title;
+            }
         }
 
         // Add default values

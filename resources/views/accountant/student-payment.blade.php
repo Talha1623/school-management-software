@@ -31,6 +31,7 @@
             
             <form action="{{ route('accountant.direct-payment.student.store') }}" method="POST" id="studentPaymentForm" class="compact-form">
                 @csrf
+                <input type="hidden" name="generated_id" id="generated_id">
                 
                 <!-- First Row: Campus, Student Code -->
                 <div class="row mb-2 g-2">
@@ -68,9 +69,9 @@
                                     <small class="text-success" id="studentName"></small>
                                 </div>
                                 <div class="mt-2">
-                                    <!-- <select class="form-select form-select-sm" id="generated_fee_select" style="height: 30px;" disabled>
+                                    <select class="form-select form-select-sm" id="generated_fee_select" style="height: 30px;" disabled>
                                         <option value="">Generated fees will appear here</option>
-                                    </select> -->
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -275,6 +276,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const generatedFeeSelect = document.getElementById('generated_fee_select');
     const paymentTitleInput = document.getElementById('payment_title');
     const paymentAmountInput = document.getElementById('payment_amount');
+    const generatedIdInput = document.getElementById('generated_id');
     let searchTimer = null;
 
     studentCodeInput.addEventListener('input', function() {
@@ -290,10 +292,16 @@ document.addEventListener('DOMContentLoaded', function() {
     generatedFeeSelect.addEventListener('change', function() {
         const selectedOption = this.options[this.selectedIndex];
         if (!selectedOption || !selectedOption.dataset.title) {
+            if (generatedIdInput) {
+                generatedIdInput.value = '';
+            }
             return;
         }
         paymentTitleInput.value = selectedOption.dataset.title;
         paymentAmountInput.value = selectedOption.dataset.amount || '';
+        if (generatedIdInput) {
+            generatedIdInput.value = selectedOption.value || '';
+        }
     });
 });
 

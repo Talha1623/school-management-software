@@ -71,12 +71,6 @@
                                     <option value="">Select Section</option>
                                 </select>
                             </div>
-                            <div class="form-check mt-2">
-                                <input class="form-check-input" type="checkbox" id="section_select_all">
-                                <label class="form-check-label" for="section_select_all" style="font-size: 12px;">
-                                    Select All Sections
-                                </label>
-                            </div>
                         </div>
 
                         <!-- Decrement -->
@@ -113,6 +107,39 @@
                                 <input type="date" class="form-control form-control-sm" name="date" id="date" value="{{ date('Y-m-d') }}" required style="height: 38px;">
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Student Selection -->
+                <div class="payment-row mb-3 p-3 border rounded" style="background-color: #f8f9fa;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0 fw-semibold" style="color: #003471;">Select Students</h6>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="loadStudentsBtn" onclick="loadStudentsForDecrement()" disabled>
+                            Load Students
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" id="select_all_students" onclick="toggleSelectAllStudents(this)" disabled>
+                                    </th>
+                                    <th>Code</th>
+                                    <th>Student</th>
+                                    <th>Parent</th>
+                                    <th>Class</th>
+                                    <th>Section</th>
+                                    <th>Current Fee</th>
+                                    <th>New Fee</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentSelectionBody">
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted">Select Campus, Class, Section to load students.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
@@ -185,8 +212,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
-    const sectionSelectAll = document.getElementById('section_select_all');
     const accountantSelect = document.getElementById('accountant');
+    const decrementInput = document.getElementById('decrement');
 
     function resetSelect(selectEl, placeholder) {
         selectEl.innerHTML = `<option value="">${placeholder}</option>`;
@@ -195,10 +222,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function loadClassesByCampus(campus) {
         resetSelect(classSelect, 'Select Class');
         resetSelect(sectionSelect, 'Select Section');
-        if (sectionSelectAll) {
-            sectionSelectAll.checked = false;
-            sectionSelect.disabled = false;
-        }
 
         if (!campus) {
             return;
@@ -219,10 +242,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadSectionsByClass(campus, className) {
         resetSelect(sectionSelect, 'Select Section');
-        if (sectionSelectAll) {
-            sectionSelectAll.checked = false;
-            sectionSelect.disabled = false;
-        }
 
         if (!className) {
             return;
@@ -264,6 +283,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     const option = document.createElement('option');
                     option.value = accountant.name;
                     option.textContent = accountant.name;
+                    if (`{{ $defaultAccountant ?? '' }}` && accountant.name === `{{ $defaultAccountant ?? '' }}`) {
+                        option.selected = true;
+                    }
                     accountantSelect.appendChild(option);
                 });
             })
@@ -273,24 +295,126 @@ document.addEventListener('DOMContentLoaded', function() {
     campusSelect.addEventListener('change', function() {
         loadClassesByCampus(this.value);
         loadAccountantsByCampus(this.value);
+        updateLoadState();
     });
 
     classSelect.addEventListener('change', function() {
         loadSectionsByClass(campusSelect.value, this.value);
+        updateLoadState();
+    });
+
+    sectionSelect.addEventListener('change', function() {
+        updateLoadState();
+    });
+
+    decrementInput.addEventListener('input', function() {
+        updateDecrementPreview();
     });
 
     loadAccountantsByCampus(campusSelect.value);
+});
+</script>
+<script>
+function updateLoadState() {
+    const campus = document.getElementById('campus').value || '';
+    const className = document.getElementById('class').value || '';
+    const section = document.getElementById('section').value || '';
+    const loadBtn = document.getElementById('loadStudentsBtn');
+    const selectAll = document.getElementById('select_all_students');
+    const enable = !!(campus && className && section);
+    if (loadBtn) loadBtn.disabled = !enable;
+    if (!enable && selectAll) selectAll.checked = false;
+}
 
-    if (sectionSelectAll) {
-        sectionSelectAll.addEventListener('change', function() {
-            if (this.checked) {
-                sectionSelect.value = '';
-                sectionSelect.disabled = true;
-            } else {
-                sectionSelect.disabled = false;
+function loadStudentsForDecrement() {
+    const campus = document.getElementById('campus').value || '';
+    const className = document.getElementById('class').value || '';
+    const section = document.getElementById('section').value || '';
+    const tbody = document.getElementById('studentSelectionBody');
+    const selectAll = document.getElementById('select_all_students');
+
+    if (!campus || !className || !section) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Select Campus, Class, Section first.</td></tr>';
+        if (selectAll) {
+            selectAll.checked = false;
+            selectAll.disabled = true;
+        }
+        return;
+    }
+
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Loading...</td></tr>';
+
+    const params = new URLSearchParams({
+        campus,
+        class: className,
+        section
+    });
+
+    fetch(`{{ route('accounting.fee-document.decrement-percentage.get-students') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            const students = data.students || [];
+            if (students.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No students found.</td></tr>';
+                if (selectAll) {
+                    selectAll.checked = false;
+                    selectAll.disabled = true;
+                }
+                return;
+            }
+            tbody.innerHTML = '';
+            students.forEach(student => {
+                const currentFee = parseFloat(student.monthly_fee || 0);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <input type="checkbox" name="selected_students[]" value="${student.id}" class="student-select">
+                    </td>
+                    <td>${student.student_code || 'N/A'}</td>
+                    <td>${student.student_name || 'N/A'}</td>
+                    <td>${student.father_name || 'N/A'}</td>
+                    <td>${student.class || 'N/A'}</td>
+                    <td>${student.section || 'N/A'}</td>
+                    <td class="current-fee" data-fee="${currentFee}">${currentFee.toFixed(2)}</td>
+                    <td class="new-fee">0.00</td>
+                `;
+                tbody.appendChild(row);
+            });
+            if (selectAll) {
+                selectAll.disabled = false;
+                selectAll.checked = false;
+            }
+            updateDecrementPreview();
+        })
+        .catch(() => {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Error loading students.</td></tr>';
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.disabled = true;
             }
         });
-    }
-});
+}
+
+function updateDecrementPreview() {
+    const decrementValue = parseFloat(document.getElementById('decrement').value || 0);
+    const rows = document.querySelectorAll('#studentSelectionBody tr');
+    rows.forEach(row => {
+        const currentFeeCell = row.querySelector('.current-fee');
+        const newFeeCell = row.querySelector('.new-fee');
+        if (!currentFeeCell || !newFeeCell) {
+            return;
+        }
+        const currentFee = parseFloat(currentFeeCell.dataset.fee || 0);
+        const newFee = Math.max(currentFee - (currentFee * (decrementValue / 100)), 0);
+        newFeeCell.textContent = newFee.toFixed(2);
+    });
+}
+
+function toggleSelectAllStudents(source) {
+    const checkboxes = document.querySelectorAll('.student-select');
+    checkboxes.forEach(cb => {
+        cb.checked = source.checked;
+    });
+}
 </script>
 @endsection

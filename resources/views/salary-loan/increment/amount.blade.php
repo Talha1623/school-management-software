@@ -24,7 +24,7 @@
                 </div>
             @endif
 
-            <form action="{{ route('salary-loan.increment.amount.store') }}" method="POST" id="incrementAmountForm">
+            <form action="{{ route('salary-loan.increment.amount.store') }}" method="POST" id="incrementAmountForm" onsubmit="return validateForm()">
                 @csrf
                 
                 <div class="row g-3">
@@ -38,7 +38,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">location_on</span>
                                 </span>
-                                <select class="form-control increment-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 36px;">
+                                <select class="form-control increment-input" name="campus" id="campus" required onchange="loadStaffByCampus()" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 36px;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
                                         <option value="{{ $campus }}">{{ $campus }}</option>
@@ -73,14 +73,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">person</span>
                                 </span>
-                                <select class="form-control increment-input" name="accountant" id="accountant" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 36px;">
-                                    <option value="">Select Accountant</option>
-                                    @if(isset($accountants) && $accountants->count() > 0)
-                                        @foreach($accountants as $accountant)
-                                            <option value="{{ $accountant->name }}">{{ $accountant->name }} {{ $accountant->campus ? '(' . $accountant->campus . ')' : '' }}</option>
-                                        @endforeach
-                                    @endif
-                                </select>
+                                <input type="text" class="form-control increment-input" name="accountant" id="accountant" value="{{ $loggedInUserName }}" required readonly style="background-color: #f8f9fa; cursor: not-allowed; border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 36px;">
                             </div>
                         </div>
                     </div>
@@ -96,6 +89,35 @@
                                     <span class="material-symbols-outlined" style="font-size: 15px;">calendar_today</span>
                                 </span>
                                 <input type="date" class="form-control increment-input" name="date" id="date" value="{{ $currentDate }}" required style="height: 36px;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Staff Selection -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card bg-light border-0 rounded-10 p-3 mb-2">
+                            <h5 class="mb-2 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -12px -12px 12px -12px; background-color: #003471;">Select Staff</h5>
+                            
+                            <div id="staffListContainer" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-check-label d-flex align-items-center gap-2" style="cursor: pointer;">
+                                        <input type="checkbox" id="selectAllStaff" class="form-check-input" onchange="toggleSelectAll()" style="width: 18px; height: 18px; cursor: pointer;">
+                                        <strong style="color: #003471; font-size: 14px;">Select All Staff</strong>
+                                    </label>
+                                </div>
+                                <div id="staffList" style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px;">
+                                    <!-- Staff list will be loaded here -->
+                                </div>
+                                <div id="noStaffMessage" class="text-muted text-center py-4" style="display: none;">
+                                    <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">people</span>
+                                    <p class="mt-2 mb-0">No staff found for this campus.</p>
+                                </div>
+                            </div>
+                            <div id="selectCampusMessage" class="text-muted text-center py-4">
+                                <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">location_on</span>
+                                <p class="mt-2 mb-0">Please select a campus to view staff list.</p>
                             </div>
                         </div>
                     </div>
@@ -218,6 +240,151 @@ function resetForm() {
     // Set current date as default
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('date').value = today;
+    // Set logged in user name
+    document.getElementById('accountant').value = '{{ $loggedInUserName }}';
+    // Clear staff list
+    document.getElementById('staffListContainer').style.display = 'none';
+    document.getElementById('selectCampusMessage').style.display = 'block';
+    document.getElementById('staffList').innerHTML = '';
+    document.getElementById('selectAllStaff').checked = false;
+}
+
+// Load staff by campus
+function loadStaffByCampus() {
+    const campus = document.getElementById('campus').value;
+    const staffListContainer = document.getElementById('staffListContainer');
+    const selectCampusMessage = document.getElementById('selectCampusMessage');
+    const staffList = document.getElementById('staffList');
+    const noStaffMessage = document.getElementById('noStaffMessage');
+    
+    if (!campus) {
+        staffListContainer.style.display = 'none';
+        selectCampusMessage.style.display = 'block';
+        staffList.innerHTML = '';
+        document.getElementById('selectAllStaff').checked = false;
+        return;
+    }
+    
+    // Show loading
+    staffList.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+    staffListContainer.style.display = 'block';
+    selectCampusMessage.style.display = 'none';
+    noStaffMessage.style.display = 'none';
+    
+    fetch(`{{ route('salary-loan.increment.amount.get-staff-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.staff && data.staff.length > 0) {
+            let html = '<div class="row g-2">';
+            data.staff.forEach(staff => {
+                const currentSalary = parseFloat(staff.salary || 0);
+                html += `
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card border p-2 mb-2" style="border-radius: 8px;">
+                            <div class="form-check">
+                                <input class="form-check-input staff-checkbox" type="checkbox" name="selected_staff[]" value="${staff.id}" id="staff_${staff.id}" onchange="updateSelectAllState()" style="width: 18px; height: 18px; cursor: pointer;">
+                                <label class="form-check-label w-100" for="staff_${staff.id}" style="cursor: pointer;">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <strong style="color: #003471; font-size: 13px;">${escapeHtml(staff.name)}</strong>
+                                            ${staff.emp_id ? `<br><small class="text-muted" style="font-size: 11px;">ID: ${escapeHtml(staff.emp_id)}</small>` : ''}
+                                            ${staff.designation ? `<br><small class="text-muted" style="font-size: 11px;">${escapeHtml(staff.designation)}</small>` : ''}
+                                        </div>
+                                        <div class="text-end">
+                                            <small class="text-success fw-bold" style="font-size: 12px;">₹${currentSalary.toFixed(2)}</small>
+                                            <div id="new_salary_${staff.id}" class="text-primary fw-bold" style="font-size: 11px; display: none;"></div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            staffList.innerHTML = html;
+            noStaffMessage.style.display = 'none';
+        } else {
+            staffList.innerHTML = '';
+            noStaffMessage.style.display = 'block';
+        }
+        document.getElementById('selectAllStaff').checked = false;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        staffList.innerHTML = '<div class="alert alert-danger">Error loading staff. Please try again.</div>';
+    });
+}
+
+// Toggle select all
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAllStaff').checked;
+    const checkboxes = document.querySelectorAll('.staff-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+    });
+    updateSalaryPreview();
+}
+
+// Update select all state
+function updateSelectAllState() {
+    const checkboxes = document.querySelectorAll('.staff-checkbox');
+    const checkedBoxes = document.querySelectorAll('.staff-checkbox:checked');
+    const selectAll = document.getElementById('selectAllStaff');
+    selectAll.checked = checkboxes.length > 0 && checkedBoxes.length === checkboxes.length;
+    updateSalaryPreview();
+}
+
+// Update salary preview when amount changes
+document.getElementById('increase').addEventListener('input', function() {
+    updateSalaryPreview();
+});
+
+// Update salary preview
+function updateSalaryPreview() {
+    const amount = parseFloat(document.getElementById('increase').value || 0);
+    const checkboxes = document.querySelectorAll('.staff-checkbox:checked');
+    
+    if (amount > 0) {
+        checkboxes.forEach(checkbox => {
+            const staffId = checkbox.value;
+            const staffCard = checkbox.closest('.card');
+            const currentSalaryText = staffCard.querySelector('.text-success');
+            const currentSalary = parseFloat(currentSalaryText.textContent.replace('₹', '').replace(',', ''));
+            const newSalary = currentSalary + amount;
+            const previewDiv = document.getElementById(`new_salary_${staffId}`);
+            if (previewDiv) {
+                previewDiv.textContent = `→ ₹${newSalary.toFixed(2)}`;
+                previewDiv.style.display = 'block';
+            }
+        });
+    } else {
+        document.querySelectorAll('[id^="new_salary_"]').forEach(div => {
+            div.style.display = 'none';
+        });
+    }
+}
+
+// Escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Validate form before submit
+function validateForm() {
+    const selectedStaff = document.querySelectorAll('.staff-checkbox:checked');
+    if (selectedStaff.length === 0) {
+        alert('Please select at least one staff member.');
+        return false;
+    }
+    return true;
 }
 </script>
 @endsection

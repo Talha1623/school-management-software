@@ -16,6 +16,24 @@ class AdvanceFeeController extends Controller
      */
     public function index(Request $request): View
     {
+        // Ensure every parent account has an advance fee record
+        $parents = ParentAccount::select('id', 'name', 'email', 'phone', 'id_card_number')->get();
+        foreach ($parents as $parent) {
+            AdvanceFee::firstOrCreate(
+                ['parent_id' => (string) $parent->id],
+                [
+                    'name' => $parent->name,
+                    'email' => $parent->email,
+                    'phone' => $parent->phone,
+                    'id_card_number' => $parent->id_card_number,
+                    'available_credit' => 0,
+                    'increase' => 0,
+                    'decrease' => 0,
+                    'childs' => 0,
+                ]
+            );
+        }
+
         $query = AdvanceFee::query();
         
         // Search functionality

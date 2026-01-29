@@ -21,6 +21,7 @@ class AccountsSummaryController extends Controller
     public function index(Request $request): View
     {
         // Get filter values
+        $filterType = $request->get('filter_type', 'day_by_day');
         $filterCampus = $request->get('filter_campus');
         $filterMonth = $request->get('filter_month');
         $filterYear = $request->get('filter_year');
@@ -129,20 +130,57 @@ class AccountsSummaryController extends Controller
             return $expenseGroup->sum('amount');
         });
 
-        $allDates = $incomeByDate->keys()->merge($expenseByDate->keys())->unique()->sortDesc()->values();
-        foreach ($allDates as $date) {
-            $dateObj = \Carbon\Carbon::parse($date);
-            $totalIncome = $incomeByDate[$date] ?? 0;
-            $totalExpense = $expenseByDate[$date] ?? 0;
-            $summaryRecords->push([
-                'campus' => $filterCampus ?: 'All Campuses',
-                'month' => $dateObj->format('F'),
-                'date' => $dateObj->format('d M Y'),
-                'total_income' => $totalIncome,
-                'total_expense' => $totalExpense,
-                'profit_loss' => $totalIncome - $totalExpense,
-                'year' => $dateObj->format('Y'),
-            ]);
+        if ($filterType === 'month_by_month') {
+            // Group by month
+            $incomeByMonth = collect();
+            $expenseByMonth = collect();
+            
+            // Group income by month
+            $incomeByDate->each(function($amount, $date) use (&$incomeByMonth) {
+                $dateObj = \Carbon\Carbon::parse($date);
+                $monthKey = $dateObj->format('Y-m');
+                $incomeByMonth[$monthKey] = ($incomeByMonth[$monthKey] ?? 0) + $amount;
+            });
+            
+            // Group expense by month
+            $expenseByDate->each(function($amount, $date) use (&$expenseByMonth) {
+                $dateObj = \Carbon\Carbon::parse($date);
+                $monthKey = $dateObj->format('Y-m');
+                $expenseByMonth[$monthKey] = ($expenseByMonth[$monthKey] ?? 0) + $amount;
+            });
+            
+            $allMonths = $incomeByMonth->keys()->merge($expenseByMonth->keys())->unique()->sortDesc()->values();
+            foreach ($allMonths as $monthKey) {
+                $dateObj = \Carbon\Carbon::createFromFormat('Y-m', $monthKey);
+                $totalIncome = $incomeByMonth[$monthKey] ?? 0;
+                $totalExpense = $expenseByMonth[$monthKey] ?? 0;
+                $summaryRecords->push([
+                    'campus' => $filterCampus ?: 'All Campuses',
+                    'month' => $dateObj->format('F'),
+                    'date' => null, // No specific date for month view
+                    'total_income' => $totalIncome,
+                    'total_expense' => $totalExpense,
+                    'profit_loss' => $totalIncome - $totalExpense,
+                    'year' => $dateObj->format('Y'),
+                ]);
+            }
+        } else {
+            // Day by day (default)
+            $allDates = $incomeByDate->keys()->merge($expenseByDate->keys())->unique()->sortDesc()->values();
+            foreach ($allDates as $date) {
+                $dateObj = \Carbon\Carbon::parse($date);
+                $totalIncome = $incomeByDate[$date] ?? 0;
+                $totalExpense = $expenseByDate[$date] ?? 0;
+                $summaryRecords->push([
+                    'campus' => $filterCampus ?: 'All Campuses',
+                    'month' => $dateObj->format('F'),
+                    'date' => $dateObj->format('d M Y'),
+                    'total_income' => $totalIncome,
+                    'total_expense' => $totalExpense,
+                    'profit_loss' => $totalIncome - $totalExpense,
+                    'year' => $dateObj->format('Y'),
+                ]);
+            }
         }
 
         return view('reports.accounts-summary', compact(
@@ -150,6 +188,7 @@ class AccountsSummaryController extends Controller
             'months',
             'years',
             'summaryRecords',
+            'filterType',
             'filterCampus',
             'filterMonth',
             'filterYear'

@@ -281,10 +281,14 @@ function hasFeeFlag(value) {
 }
 
 function computeStudentTotal(student) {
-    const monthlyFee = toNumber(student.monthly_fee);
-    const transportFee = toNumber(student.transport_fare);
-    const admissionFee = hasFeeFlag(student.generate_admission_fee) ? toNumber(student.admission_fee_amount) : 0;
-    const otherFee = hasFeeFlag(student.generate_other_fee) ? toNumber(student.other_fee_amount) : 0;
+    const monthlyFee = toNumber(student.due_monthly_fee ?? student.monthly_fee);
+    const transportFee = toNumber(student.due_transport_fare ?? student.transport_fare);
+    const admissionFee = hasFeeFlag(student.generate_admission_fee)
+        ? toNumber(student.due_admission_fee ?? student.admission_fee_amount)
+        : 0;
+    const otherFee = hasFeeFlag(student.generate_other_fee)
+        ? toNumber(student.due_other_fee ?? student.other_fee_amount)
+        : 0;
     return {
         monthlyFee,
         transportFee,
@@ -439,6 +443,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                                 <div style="font-size: 9px; color: rgba(255,255,255,0.8); margin-left: 12px; margin-top: 2px;">
                                     ${student.student_code || ''} | ${student.class || ''}/${student.section || ''} | ${student.campus || ''} | M:${feeBreakdown.monthlyFee.toFixed(2)} T:${feeBreakdown.transportFee.toFixed(2)} A:${feeBreakdown.admissionFee.toFixed(2)} O:${feeBreakdown.otherFee.toFixed(2)}
+                                    ${student.monthly_fee_status ? ` | ${student.monthly_fee_status}` : ''}
                                 </div>
                             `;
                             receiptStudentsList.appendChild(receiptItem);
@@ -553,6 +558,13 @@ document.addEventListener('DOMContentLoaded', function() {
             performSearch(fatherIdCard, { showEmptyError: false });
         }
     });
+
+    window.refreshFeeCalculator = function() {
+        const currentId = fatherIdCardInput?.value?.trim() || window.feeCalculatorData?.father?.id_card_number || '';
+        if (currentId) {
+            performSearch(currentId, { showEmptyError: false });
+        }
+    };
 });
 
 // Print Receipt Function (Terminal Print Style) - Global function
@@ -729,6 +741,9 @@ function printReceipt() {
             }
 
             printPaidReceipt(data);
+            if (typeof window.refreshFeeCalculator === 'function') {
+                window.refreshFeeCalculator();
+            }
         })
         .catch(() => {
             alert('Payment failed. Please try again.');

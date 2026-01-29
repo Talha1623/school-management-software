@@ -82,7 +82,7 @@ class CustomFeeController extends Controller
         $validated = $request->validate([
             'campus' => ['required', 'string', 'max:255'],
             'class' => ['required', 'string', 'max:255'],
-            'section' => ['required', 'string', 'max:255'],
+            'section' => ['nullable', 'string', 'max:255'],
             'fee_type' => ['required', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'min:0'],
             'selected_students' => ['nullable', 'array'],
@@ -91,30 +91,45 @@ class CustomFeeController extends Controller
 
         // Check if students are selected
         $selectedStudentIds = $request->input('selected_students', []);
-        
+
         // Determine redirect route based on which route was used (accountant or accounting)
         $redirectRoute = request()->route()->getName() === 'accountant.generate-custom-fee.store' 
             ? 'accountant.generate-custom-fee' 
             : 'accounting.generate-custom-fee';
         
-        if (empty($selectedStudentIds)) {
-            return redirect()
-                ->route($redirectRoute)
-                ->with('error', 'Please select at least one student to generate fees.');
+        $sectionValue = trim((string) ($validated['section'] ?? ''));
+        $sectionValue = $sectionValue !== '' ? $sectionValue : null;
+
+        $studentsQuery = Student::query()
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))]);
+
+        if ($sectionValue !== null) {
+            $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionValue)]);
+        }
+
+        if (!empty($selectedStudentIds)) {
+            $studentsQuery->whereIn('id', $selectedStudentIds);
         }
 
         // Create the custom fee configuration (if it doesn't exist)
         $customFee = CustomFee::firstOrCreate([
             'campus' => $validated['campus'],
             'class' => $validated['class'],
-            'section' => $validated['section'],
+            'section' => $sectionValue,
             'fee_type' => $validated['fee_type'],
         ], [
             'amount' => $validated['amount'],
         ]);
 
-        // Get selected students
-        $students = Student::whereIn('id', $selectedStudentIds)->get();
+        // Get selected students or whole class/section if none selected
+        $students = $studentsQuery->get();
+
+        if ($students->isEmpty()) {
+            return redirect()
+                ->route($redirectRoute)
+                ->with('error', 'No students found for the selected campus, class, and section.');
+        }
         
         // Generate fee for each selected student
         $paymentTitle = $validated['fee_type'];
@@ -231,7 +246,7 @@ class CustomFeeController extends Controller
         $class = $request->get('class');
         $section = $request->get('section');
 
-        if (!$campus || !$class || !$section) {
+        if (!$campus || !$class) {
             return response()->json(['students' => []]);
         }
 

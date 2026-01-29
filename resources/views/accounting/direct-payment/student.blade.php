@@ -28,6 +28,7 @@
 
             <form id="studentPaymentForm" method="POST" action="{{ route('accounting.direct-payment.student.store') }}" class="compact-form">
                 @csrf
+                <input type="hidden" name="generated_id" id="generated_id">
                 
                 <div class="payment-row mb-2 p-2 border rounded" style="background-color: #f8f9fa;">
                     <div class="row g-2">
@@ -225,6 +226,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const generatedFeeSelect = document.getElementById('generated_fee_select');
     const paymentTitleInput = document.getElementById('payment_title');
     const paymentAmountInput = document.getElementById('payment_amount');
+    const generatedIdInput = document.getElementById('generated_id');
     let searchTimer = null;
 
     function resetGeneratedFees() {
@@ -315,10 +317,16 @@ document.addEventListener('DOMContentLoaded', function() {
     generatedFeeSelect.addEventListener('change', function() {
         const selectedOption = this.options[this.selectedIndex];
         if (!selectedOption || !selectedOption.dataset.title) {
+            if (generatedIdInput) {
+                generatedIdInput.value = '';
+            }
             return;
         }
         paymentTitleInput.value = selectedOption.dataset.title;
         paymentAmountInput.value = selectedOption.dataset.amount || '';
+        if (generatedIdInput) {
+            generatedIdInput.value = selectedOption.value || '';
+        }
     });
 });
 </script>

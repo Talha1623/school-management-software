@@ -24,6 +24,15 @@
                         </select>
                     </div>
 
+                    <!-- Type -->
+                    <div class="col-md-2">
+                        <label for="filter_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Type</label>
+                        <select class="form-select form-select-sm" id="filter_type" name="filter_type" style="height: 32px;">
+                            <option value="day_by_day" {{ ($filterType ?? 'day_by_day') == 'day_by_day' ? 'selected' : '' }}>Day By Day</option>
+                            <option value="month_by_month" {{ ($filterType ?? '') == 'month_by_month' ? 'selected' : '' }}>Month By Month</option>
+                        </select>
+                    </div>
+
                     <!-- Month -->
                     <div class="col-md-2">
                         <label for="filter_month" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Month</label>
@@ -57,7 +66,7 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_campus', 'filter_month', 'filter_year']))
+            @if(request()->hasAny(['filter_campus', 'filter_month', 'filter_year', 'filter_type']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
@@ -74,7 +83,9 @@
                                     <th>#</th>
                                     <th>Campus</th>
                                     <th>Month</th>
+                                    @if(($filterType ?? 'day_by_day') == 'day_by_day')
                                     <th>Date</th>
+                                    @endif
                                     <th>Total Income</th>
                                     <th>Total Expense</th>
                                     <th>Profit/Lose</th>
@@ -86,9 +97,10 @@
                                 <tr>
                                     <td>{{ $index + 1 }}</td>
                                     <td>{{ $record['campus'] }}</td>
-                                    <td>{{ $record['date'] ?? 'N/A' }}</td>
                                     <td>{{ $record['month'] }}</td>
-                                    <td>{{ $record['year'] }}</td>
+                                    @if(($filterType ?? 'day_by_day') == 'day_by_day')
+                                    <td>{{ $record['date'] ?? 'N/A' }}</td>
+                                    @endif
                                     <td>{{ number_format($record['total_income'], 2) }}</td>
                                     <td>{{ number_format($record['total_expense'], 2) }}</td>
                                     <td class="fw-semibold">
@@ -98,10 +110,11 @@
                                             <span class="text-danger">{{ number_format($record['profit_loss'], 2) }}</span>
                                         @endif
                                     </td>
+                                    <td>{{ $record['year'] }}</td>
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="8" class="text-center py-4">
+                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '8' : '7' }}" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center">
                                             <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
                                             <p class="text-muted mt-2 mb-0">No records found</p>
@@ -113,17 +126,17 @@
                             @if($summaryRecords->count() > 0)
                             <tfoot>
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="4" class="text-end">Total Income:</td>
+                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '4' : '3' }}" class="text-end">Total Income:</td>
                                     <td>{{ number_format($summaryRecords->sum('total_income'), 2) }}</td>
                                     <td colspan="2"></td>
                                 </tr>
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="4" class="text-end">Total Expense:</td>
+                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '4' : '3' }}" class="text-end">Total Expense:</td>
                                     <td>{{ number_format($summaryRecords->sum('total_expense'), 2) }}</td>
                                     <td colspan="2"></td>
                                 </tr>
                                 <tr class="fw-bold" style="background-color: #e3f2fd;">
-                                    <td colspan="4" class="text-end">Profit/Lose:</td>
+                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '4' : '3' }}" class="text-end">Profit/Lose:</td>
                                     @php
                                         $totalIncome = $summaryRecords->sum('total_income');
                                         $totalExpense = $summaryRecords->sum('total_expense');

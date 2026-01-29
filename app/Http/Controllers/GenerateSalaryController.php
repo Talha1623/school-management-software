@@ -189,6 +189,7 @@ class GenerateSalaryController extends Controller
                     $presentCount = $attendanceSummary['present'];
                     $absentCount = $attendanceSummary['absent'];
                     $lateCount = $attendanceSummary['late'];
+                    $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
                     $basicRate = (float) ($salary->staff->salary ?? 0);
                     $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
 
@@ -196,10 +197,11 @@ class GenerateSalaryController extends Controller
                     if ($salary->loan_repayment != $loanRepayment) {
                         $updates['loan_repayment'] = $loanRepayment;
                     }
-                    if ($salary->present != $presentCount || $salary->absent != $absentCount || $salary->late != $lateCount) {
+                    if ($salary->present != $presentCount || $salary->absent != $absentCount || $salary->late != $lateCount || $salary->early_exit != $earlyExitCount) {
                         $updates['present'] = $presentCount;
                         $updates['absent'] = $absentCount;
                         $updates['late'] = $lateCount;
+                        $updates['early_exit'] = $earlyExitCount;
                     }
                     if ($salary->basic != $basicRate) {
                         $updates['basic'] = $basicRate;
@@ -265,6 +267,7 @@ class GenerateSalaryController extends Controller
                 $presentCount = $attendanceSummary['present'];
                 $absentCount = $attendanceSummary['absent'];
                 $lateCount = $attendanceSummary['late'];
+                $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
                 $basicRate = (float) ($staff->salary ?? 0);
                 $salaryGenerated = $this->calculateSalaryGenerated($staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
 
@@ -276,6 +279,7 @@ class GenerateSalaryController extends Controller
                     'present' => $presentCount,
                     'absent' => $absentCount,
                     'late' => $lateCount,
+                    'early_exit' => $earlyExitCount,
                     'basic' => $basicRate,
                     'salary_generated' => $salaryGenerated,
                     'amount_paid' => 0,
@@ -305,16 +309,18 @@ class GenerateSalaryController extends Controller
                 $presentCount = $attendanceSummary['present'];
                 $absentCount = $attendanceSummary['absent'];
                 $lateCount = $attendanceSummary['late'];
+                $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
                 $basicRate = (float) ($salary->staff->salary ?? 0);
                 $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
                 if ($salary->loan_repayment != $loanRepayment) {
                     $salary->update(['loan_repayment' => $loanRepayment]);
                 }
-                if ($salary->present != $presentCount || $salary->absent != $absentCount || $salary->late != $lateCount) {
+                if ($salary->present != $presentCount || $salary->absent != $absentCount || $salary->late != $lateCount || $salary->early_exit != $earlyExitCount) {
                     $salary->update([
                         'present' => $presentCount,
                         'absent' => $absentCount,
                         'late' => $lateCount,
+                        'early_exit' => $earlyExitCount,
                     ]);
                 }
                 if ($salary->basic != $basicRate) {
@@ -464,11 +470,13 @@ class GenerateSalaryController extends Controller
 
         $settings = SalarySetting::getSettings();
         $lateArrivalTime = $settings->late_arrival_time ?? '09:00:00';
+        $earlyExitTime = $settings->early_exit_time ?? null;
 
         $present = 0;
         $absent = 0;
         $leave = 0;
         $late = 0;
+        $earlyExit = 0;
         $totalLectures = 0;
         $totalMinutes = 0;
 
@@ -503,6 +511,30 @@ class GenerateSalaryController extends Controller
                 $late++;
             }
 
+            // Check for early exit
+            $earlyExitFlag = false;
+            if (!empty($record->end_time) && $earlyExitTime) {
+                try {
+                    $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                    $endTime = Carbon::parse($date . ' ' . $record->end_time);
+                    $standardExitTime = Carbon::parse($date . ' ' . $earlyExitTime);
+                    if ($endTime->lessThan($standardExitTime)) {
+                        $earlyExitFlag = true;
+                    }
+                } catch (\Exception $e) {
+                    // Skip invalid times
+                }
+            }
+
+            // Also check remarks for early exit
+            if (!$earlyExitFlag && !empty($record->remarks) && stripos($record->remarks, 'Early Exit') !== false) {
+                $earlyExitFlag = true;
+            }
+
+            if ($earlyExitFlag) {
+                $earlyExit++;
+            }
+
             $totalLectures += (int) ($record->conducted_lectures ?? 0);
 
             if (!empty($record->start_time) && !empty($record->end_time)) {
@@ -523,6 +555,7 @@ class GenerateSalaryController extends Controller
             'present' => $present,
             'absent' => $absent,
             'late' => $late,
+            'early_exit' => $earlyExit,
             'leave' => $leave,
             'total_lectures' => $totalLectures,
             'total_minutes' => $totalMinutes,
@@ -549,11 +582,16 @@ class GenerateSalaryController extends Controller
         }
 
         $settings = SalarySetting::getSettings();
-        $freeAbsents = (int) ($settings->free_absents ?? 0);
+        
+        // Use staff's individual free_absent if set, otherwise use SalarySetting's free_absents
+        $staffFreeAbsents = (int) ($staff->free_absent ?? null);
+        $freeAbsents = $staffFreeAbsents !== null && $staffFreeAbsents >= 0 ? $staffFreeAbsents : (int) ($settings->free_absents ?? 0);
+        
         $leaveDeduction = strtolower(trim($settings->leave_deduction ?? 'no')) === 'yes';
         $absentCount = (int) ($attendanceSummary['absent'] ?? 0);
         $leaveCount = (int) ($attendanceSummary['leave'] ?? 0);
         $lateCount = (int) ($attendanceSummary['late'] ?? 0);
+        $earlyExitCount = (int) ($attendanceSummary['early_exit'] ?? 0);
 
         $deductibleAbsents = $absentCount + ($leaveDeduction ? $leaveCount : 0);
         $deductibleAbsents = max(0, $deductibleAbsents - $freeAbsents);
@@ -567,10 +605,28 @@ class GenerateSalaryController extends Controller
             }
         }
         $dailyRate = $daysInMonth > 0 ? ($rate / $daysInMonth) : 0;
-        $lateDeduction = max(0, $deductionPerLateArrival) * $lateCount;
-        $absentDeduction = $dailyRate * $deductibleAbsents;
+        
+        // Late arrival deduction: Use staff's individual late_fees if set, otherwise default 500
+        $staffLateFees = (float) ($staff->late_fees ?? null);
+        $lateFeePerLate = $staffLateFees !== null && $staffLateFees >= 0 ? $staffLateFees : 500;
+        $lateDeduction = $lateFeePerLate * $lateCount;
+        
+        // Early exit deduction: Use staff's individual early_exit_fees if set, otherwise default 1000
+        $staffEarlyExitFees = (float) ($staff->early_exit_fees ?? null);
+        $earlyExitFeePerExit = $staffEarlyExitFees !== null && $staffEarlyExitFees >= 0 ? $staffEarlyExitFees : 1000;
+        $earlyExitDeduction = $earlyExitFeePerExit * $earlyExitCount;
+        
+        // Absent deduction: Use staff's individual absent_fees if set, otherwise use daily rate
+        $staffAbsentFees = (float) ($staff->absent_fees ?? null);
+        if ($staffAbsentFees !== null && $staffAbsentFees >= 0) {
+            // Use fixed absent fees per absent day
+            $absentDeduction = $staffAbsentFees * $deductibleAbsents;
+        } else {
+            // Use daily rate calculation
+            $absentDeduction = $dailyRate * $deductibleAbsents;
+        }
 
-        return round(max(0, $rate - $absentDeduction - $lateDeduction), 2);
+        return round(max(0, $rate - $absentDeduction - $lateDeduction - $earlyExitDeduction), 2);
     }
 
     /**

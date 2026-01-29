@@ -521,8 +521,8 @@
                             </li>
                             <li class="menu-item">
                                 <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('accounting.fee-document*') ? 'active' : '' }}">
-                                    <span class="material-symbols-outlined menu-icon">description</span>
-                                    <span class="title">Generate Fee Document</span>
+                                    <span class="material-symbols-outlined menu-icon">trending_down</span>
+                                    <span class="title">Generate Fee Decrement</span>
                                 </a>
                                 <ul class="menu-sub">
                                     <li class="menu-item">

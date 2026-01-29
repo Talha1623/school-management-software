@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Carbon\Carbon;
+use App\Models\AdvanceFee;
 
 class ParentAccountController extends Controller
 {
@@ -119,6 +120,20 @@ class ParentAccountController extends Controller
 
         // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
         $parent = ParentAccount::create($validated);
+
+        AdvanceFee::firstOrCreate(
+            ['parent_id' => (string) $parent->id],
+            [
+                'name' => $parent->name,
+                'email' => $parent->email,
+                'phone' => $parent->phone,
+                'id_card_number' => $parent->id_card_number,
+                'available_credit' => 0,
+                'increase' => 0,
+                'decrease' => 0,
+                'childs' => 0,
+            ]
+        );
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json([

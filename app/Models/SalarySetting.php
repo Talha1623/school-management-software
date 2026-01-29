@@ -11,6 +11,7 @@ class SalarySetting extends Model
 
     protected $fillable = [
         'late_arrival_time',
+        'early_exit_time',
         'free_absents',
         'leave_deduction',
     ];

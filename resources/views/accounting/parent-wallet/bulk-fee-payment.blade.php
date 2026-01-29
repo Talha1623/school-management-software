@@ -73,6 +73,13 @@
                     </table>
                 </div>
             </div>
+
+            <div class="d-flex justify-content-end mt-3">
+                <button type="button" class="btn btn-sm px-4 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;" onclick="saveBulkPayments()">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+                    Save Payments
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -254,6 +261,7 @@ function renderBulkFees(items) {
 
     items.forEach(item => {
         const row = document.createElement('tr');
+        row.dataset.generatedId = item.generated_id || '';
         row.innerHTML = `
             <td>${escapeHtml(item.student_code)}</td>
             <td class="text-danger fw-semibold">${escapeHtml(item.student_name)}</td>
@@ -323,6 +331,77 @@ document.addEventListener('input', function(event) {
         fullyPaidSelect.value = totalDue <= 0 ? 'Yes' : 'No';
     }
 });
+
+document.addEventListener('change', function(event) {
+    if (!event.target.classList.contains('fully-paid-select')) {
+        return;
+    }
+    const row = event.target.closest('tr');
+    if (!row) {
+        return;
+    }
+    const amountInput = row.querySelector('input[disabled]');
+    const lateFeeInput = row.querySelector('td:nth-child(6) input');
+    const paymentInput = row.querySelector('.payment-input');
+    const discountInput = row.querySelector('.discount-input');
+    const totalDueInput = row.querySelector('.total-due-input');
+
+    const amount = parseFloat(amountInput?.value || 0) || 0;
+    const lateFee = parseFloat(lateFeeInput?.value || 0) || 0;
+    const discount = parseFloat(discountInput?.value || 0) || 0;
+
+    if (event.target.value === 'Yes') {
+        const fullPayment = Math.max(amount + lateFee - discount, 0);
+        paymentInput.value = fullPayment.toFixed(2);
+        totalDueInput.value = '0.00';
+    }
+});
+
+function saveBulkPayments() {
+    const rows = Array.from(document.querySelectorAll('#bulkFeeBody tr'));
+    const items = rows.map(row => {
+        const amountInput = row.querySelector('input[disabled]');
+        const lateFeeInput = row.querySelector('td:nth-child(6) input');
+        const paymentInput = row.querySelector('.payment-input');
+        const discountInput = row.querySelector('.discount-input');
+        const dateInput = row.querySelector('input[type="date"]');
+
+        return {
+            generated_id: row.dataset.generatedId || null,
+            payment: parseFloat(paymentInput?.value || 0) || 0,
+            discount: parseFloat(discountInput?.value || 0) || 0,
+            late_fee: parseFloat(lateFeeInput?.value || 0) || 0,
+            payment_date: dateInput?.value || ''
+        };
+    }).filter(item => item.generated_id);
+
+    if (!items.length) {
+        alert('No rows to save.');
+        return;
+    }
+
+    fetch(`{{ route('accounting.parent-wallet.bulk-fee-payment.store') }}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ items })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Payments saved: ${data.saved || 0}`);
+            loadBulkFees();
+        } else {
+            alert(data.message || 'Failed to save payments.');
+        }
+    })
+    .catch(() => {
+        alert('Failed to save payments.');
+    });
+}
 </script>
 @endsection
 

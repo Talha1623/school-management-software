@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\SalaryDecrementPercentage;
-use App\Models\ClassModel;
-use App\Models\Section;
-use App\Models\Accountant;
+use App\Models\Staff;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 
 class SalaryDecrementPercentageController extends Controller
 {
@@ -17,23 +18,44 @@ class SalaryDecrementPercentageController extends Controller
      */
     public function index(): View
     {
-        // Get campuses from classes or sections
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        // Get campuses
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
         
-        // If no data exists, provide defaults
+        // If no campuses found, get from staff
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromStaff = Staff::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromStaff;
+        } else {
+            // Convert to array format for view compatibility
+            $campuses = $campuses->pluck('campus_name');
         }
 
-        // Get accountants
-        $accountants = Accountant::orderBy('name')->get();
+        // Get logged in user name
+        $loggedInUser = Auth::guard('admin')->user() ?? Auth::user();
+        $loggedInUserName = $loggedInUser ? ($loggedInUser->name ?? 'Admin') : 'Admin';
 
         // Get current date as default
         $currentDate = date('Y-m-d');
 
-        return view('salary-loan.decrement.percentage', compact('campuses', 'accountants', 'currentDate'));
+        return view('salary-loan.decrement.percentage', compact('campuses', 'loggedInUserName', 'currentDate'));
+    }
+
+    /**
+     * Get staff by campus.
+     */
+    public function getStaffByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        
+        if (!$campus) {
+            return response()->json(['staff' => []]);
+        }
+
+        $staff = Staff::where('campus', $campus)
+            ->orderBy('name')
+            ->get(['id', 'name', 'emp_id', 'designation', 'salary']);
+
+        return response()->json(['staff' => $staff]);
     }
 
     /**
@@ -46,13 +68,40 @@ class SalaryDecrementPercentageController extends Controller
             'decrease' => ['required', 'numeric', 'min:0', 'max:100'],
             'accountant' => ['required', 'string', 'max:255'],
             'date' => ['required', 'date'],
+            'selected_staff' => ['required', 'array', 'min:1'],
+            'selected_staff.*' => ['exists:staff,id'],
         ]);
 
-        SalaryDecrementPercentage::create($validated);
+        $decreasePercentage = (float) $validated['decrease'];
+        $selectedStaffIds = $validated['selected_staff'];
+        $staff = Staff::whereIn('id', $selectedStaffIds)->get();
+        $updatedCount = 0;
+
+        foreach ($staff as $member) {
+            $currentSalary = (float) ($member->salary ?? 0);
+            if ($currentSalary > 0) {
+                // Decrease salary by percentage
+                $newSalary = $currentSalary - ($currentSalary * ($decreasePercentage / 100));
+                // Ensure salary doesn't go below 0
+                $newSalary = max(0, $newSalary);
+                $member->update([
+                    'salary' => round($newSalary, 2),
+                ]);
+                $updatedCount++;
+            }
+        }
+
+        // Save decrement record
+        SalaryDecrementPercentage::create([
+            'campus' => $validated['campus'],
+            'decrease' => $validated['decrease'],
+            'accountant' => $validated['accountant'],
+            'date' => $validated['date'],
+        ]);
 
         return redirect()
             ->route('salary-loan.decrement.percentage')
-            ->with('success', 'Salary decrement by percentage created successfully!');
+            ->with('success', "Salary decrement applied to {$updatedCount} staff member(s) successfully!");
     }
 }
 

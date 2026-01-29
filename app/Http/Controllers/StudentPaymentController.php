@@ -162,9 +162,9 @@ class StudentPaymentController extends Controller
             $totalPaidSoFar = StudentPayment::where('student_code', $validated['student_code'])
                 ->where('payment_title', $validated['payment_title'])
                 ->where('method', '!=', 'Generated')
-                ->sum(\DB::raw('COALESCE(payment_amount,0) - COALESCE(discount,0) + COALESCE(late_fee,0)'));
+                ->sum(\DB::raw('COALESCE(payment_amount,0) + COALESCE(discount,0) + COALESCE(late_fee,0)'));
             $totalPaidNow = (float) ($validated['payment_amount'] ?? 0)
-                - (float) ($validated['discount'] ?? 0)
+                + (float) ($validated['discount'] ?? 0)
                 + (float) $lateFee;
 
             if ($totalGenerated > 0 && ($totalPaidSoFar + $totalPaidNow) < $totalGenerated) {

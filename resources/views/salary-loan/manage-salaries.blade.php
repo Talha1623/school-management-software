@@ -113,6 +113,7 @@
                                 <th>Present</th>
                                 <th>Absent</th>
                                 <th>Late</th>
+                                <th>Early Exit</th>
                                 <th>Basic</th>
                                 <th>Salary Generated</th>
                                 <th>Amount Paid</th>
@@ -150,6 +151,9 @@
                                             <span class="badge bg-warning text-dark">{{ $salary->late }}</span>
                                         </td>
                                         <td>
+                                            <span class="badge bg-danger text-white">{{ $salary->early_exit ?? 0 }}</span>
+                                        </td>
+                                        <td>
                                             <strong class="text-primary">{{ number_format($salary->basic, 2) }}</strong>
                                             <div>
                                                 <span class="badge bg-light text-dark" style="font-size: 10px;">
@@ -171,37 +175,18 @@
                                                 <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Make Payment" onclick="openPaymentModal({{ $salary->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">payments</span>
                                                 </button>
-                                                <div class="dropdown">
-                                                    <button class="btn btn-sm btn-secondary px-2 py-0 dropdown-toggle" type="button" id="statusDropdown{{ $salary->id }}" data-bs-toggle="dropdown" aria-expanded="false" title="Status">
-                                                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">more_vert</span>
+                                                <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
+                                                    @csrf
+                                                    @method('PUT')
+                                                    <input type="hidden" name="status" value="{{ $salary->status == 'Paid' ? 'Pending' : 'Paid' }}">
+                                                    <button type="submit" class="btn btn-sm px-2 py-0 {{ $salary->status == 'Paid' ? 'btn-success' : 'btn-warning' }}" title="Click to toggle status">
+                                                        @if($salary->status == 'Paid')
+                                                            <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px;">Paid</span>
+                                                        @else
+                                                            <span class="badge bg-warning text-dark" style="font-size: 11px; padding: 4px 8px;">Pending</span>
+                                                        @endif
                                                     </button>
-                                                    <ul class="dropdown-menu" aria-labelledby="statusDropdown{{ $salary->id }}">
-                                                        <li>
-                                                            <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
-                                                                @csrf
-                                                                @method('PUT')
-                                                                <input type="hidden" name="status" value="Pending">
-                                                                <button type="submit" class="dropdown-item {{ $salary->status == 'Pending' ? 'active' : '' }}">Pending</button>
-                                                            </form>
-                                                        </li>
-                                                        <li>
-                                                            <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
-                                                                @csrf
-                                                                @method('PUT')
-                                                                <input type="hidden" name="status" value="Paid">
-                                                                <button type="submit" class="dropdown-item {{ $salary->status == 'Paid' ? 'active' : '' }}">Paid</button>
-                                                            </form>
-                                                        </li>
-                                                        <li>
-                                                            <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
-                                                                @csrf
-                                                                @method('PUT')
-                                                                <input type="hidden" name="status" value="Issued">
-                                                                <button type="submit" class="dropdown-item {{ $salary->status == 'Issued' ? 'active' : '' }}">Issued</button>
-                                                            </form>
-                                                        </li>
-                                                    </ul>
-                                                </div>
+                                                </form>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this salary record?')) { document.getElementById('delete-form-{{ $salary->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
@@ -214,7 +199,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="12" class="text-center text-muted py-5">
+                                        <td colspan="13" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No salaries found.</p>
                                         </td>
@@ -222,7 +207,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="12" class="text-center text-muted py-5">
+                                    <td colspan="13" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No salaries found.</p>
                                     </td>
@@ -265,7 +250,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">location_on</span>
                                 </span>
-                                <input type="text" class="form-control" id="payment_campus" name="campus" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                                <input type="text" class="form-control" id="payment_campus" name="campus" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
                             </div>
                         </div>
 
@@ -276,7 +261,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">person</span>
                                 </span>
-                                <input type="text" class="form-control" id="payment_employee" name="employee" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                                <input type="text" class="form-control" id="payment_employee" name="employee" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
                             </div>
                         </div>
 
@@ -287,7 +272,18 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">calendar_month</span>
                                 </span>
-                                <input type="text" class="form-control" id="payment_month" name="month" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                                <input type="text" class="form-control" id="payment_month" name="month" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
+                            </div>
+                        </div>
+
+                        <!-- Basic -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Basic</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_basic" name="basic" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;" data-basic="0">
                             </div>
                         </div>
 
@@ -298,7 +294,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
                                 </span>
-                                <input type="text" class="form-control" id="payment_generated_salary" name="generated_salary" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                                <input type="text" class="form-control" id="payment_generated_salary" name="generated_salary" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
                             </div>
                         </div>
 
@@ -309,7 +305,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">payments</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_amount_paid" name="amount_paid" step="0.01" min="0" required>
+                                <input type="number" class="form-control" id="payment_amount_paid" name="amount_paid" step="0.01" min="0" required style="height: 38px;">
                             </div>
                         </div>
 
@@ -320,7 +316,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">account_balance</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_loan_repayment" name="loan_repayment" step="0.01" min="0" value="0">
+                                <input type="number" class="form-control" id="payment_loan_repayment" name="loan_repayment" step="0.01" min="0" value="0" style="height: 38px;">
                             </div>
                         </div>
 
@@ -331,7 +327,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">stars</span>
                                 </span>
-                                <input type="text" class="form-control" id="payment_bonus_title" name="bonus_title" placeholder="Enter bonus title">
+                                <input type="text" class="form-control" id="payment_bonus_title" name="bonus_title" placeholder="Enter bonus title" style="height: 38px;">
                             </div>
                         </div>
 
@@ -342,7 +338,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_bonus_amount" name="bonus_amount" step="0.01" min="0" value="0">
+                                <input type="number" class="form-control" id="payment_bonus_amount" name="bonus_amount" step="0.01" min="0" value="0" style="height: 38px;" oninput="calculateGeneratedSalary()">
                             </div>
                         </div>
 
@@ -353,7 +349,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">remove_circle</span>
                                 </span>
-                                <input type="text" class="form-control" id="payment_deduction_title" name="deduction_title" placeholder="Enter deduction title">
+                                <input type="text" class="form-control" id="payment_deduction_title" name="deduction_title" placeholder="Enter deduction title" style="height: 38px;">
                             </div>
                         </div>
 
@@ -364,7 +360,40 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_deduction_amount" name="deduction_amount" step="0.01" min="0" value="0">
+                                <input type="number" class="form-control" id="payment_deduction_amount" name="deduction_amount" step="0.01" min="0" value="0" style="height: 38px;" oninput="calculateGeneratedSalary()">
+                            </div>
+                        </div>
+
+                        <!-- Late Fees Deduction -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Late Fees Deduction</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">schedule</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_late_fees" name="late_fees" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
+                            </div>
+                        </div>
+
+                        <!-- Absent Fees Deduction -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Absent Fees Deduction</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">money_off</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_absent_fees" name="absent_fees" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
+                            </div>
+                        </div>
+
+                        <!-- Early Exit Fees Deduction -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Early Exit Fees Deduction</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">exit_to_app</span>
+                                </span>
+                                <input type="text" class="form-control" id="payment_early_exit_fees" name="early_exit_fees" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
                             </div>
                         </div>
 
@@ -375,7 +404,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">payment</span>
                                 </span>
-                                <select class="form-control" id="payment_method" name="payment_method" required>
+                                <select class="form-control" id="payment_method" name="payment_method" required style="height: 38px;">
                                     <option value="">Select Payment Method</option>
                                     <option value="Bank">Bank</option>
                                     <option value="Wallet">Wallet</option>
@@ -395,7 +424,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
                                 </span>
-                                <select class="form-control" id="payment_fully_paid" name="fully_paid">
+                                <select class="form-control" id="payment_fully_paid" name="fully_paid" style="height: 38px;">
                                     <option value="0">No</option>
                                     <option value="1">Yes</option>
                                 </select>
@@ -409,7 +438,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">calendar_today</span>
                                 </span>
-                                <input type="date" class="form-control" id="payment_date" name="payment_date" required value="{{ date('Y-m-d') }}">
+                                <input type="date" class="form-control" id="payment_date" name="payment_date" required value="{{ date('Y-m-d') }}" style="height: 38px;">
                             </div>
                         </div>
 
@@ -420,7 +449,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">notifications</span>
                                 </span>
-                                <select class="form-control" id="payment_notify_employee" name="notify_employee">
+                                <select class="form-control" id="payment_notify_employee" name="notify_employee" style="height: 38px;">
                                     <option value="0">No</option>
                                     <option value="1">Yes</option>
                                 </select>
@@ -754,6 +783,19 @@ function printTable() {
     window.location.reload();
 }
 
+// Calculate Generated Salary dynamically
+function calculateGeneratedSalary() {
+    const generatedSalaryInput = document.getElementById('payment_generated_salary');
+    // Get the base generated salary (already includes fees deductions)
+    const baseGeneratedSalary = parseFloat(generatedSalaryInput.getAttribute('data-generated') || 0);
+    const bonusAmount = parseFloat(document.getElementById('payment_bonus_amount').value || 0);
+    const deductionAmount = parseFloat(document.getElementById('payment_deduction_amount').value || 0);
+    
+    // New generated salary = base + bonus - additional deduction
+    const newGeneratedSalary = baseGeneratedSalary + bonusAmount - deductionAmount;
+    generatedSalaryInput.value = `₹${Math.max(0, newGeneratedSalary).toFixed(2)}`;
+}
+
 // Open Payment Modal
 function openPaymentModal(salaryId) {
     // Fetch salary data
@@ -772,7 +814,19 @@ function openPaymentModal(salaryId) {
         document.getElementById('payment_campus').value = data.staff?.campus || 'N/A';
         document.getElementById('payment_employee').value = data.staff?.name || 'N/A';
         document.getElementById('payment_month').value = `${data.salary_month} ${data.year}`;
-        document.getElementById('payment_generated_salary').value = `₹${parseFloat(data.salary_generated || 0).toFixed(2)}`;
+        
+        // Store basic salary and set initial values
+        const basic = parseFloat(data.basic || 0);
+        const basicInput = document.getElementById('payment_basic');
+        basicInput.setAttribute('data-basic', basic);
+        basicInput.value = `₹${basic.toFixed(2)}`;
+        
+        // Set generated salary from data and store as base
+        const generatedSalary = parseFloat(data.salary_generated || 0);
+        const generatedSalaryInput = document.getElementById('payment_generated_salary');
+        generatedSalaryInput.setAttribute('data-generated', generatedSalary);
+        generatedSalaryInput.value = `₹${generatedSalary.toFixed(2)}`;
+        
         document.getElementById('payment_amount_paid').value = data.amount_paid || 0;
         document.getElementById('payment_loan_repayment').value = data.loan_repayment || 0;
         document.getElementById('payment_bonus_title').value = '';
@@ -783,6 +837,24 @@ function openPaymentModal(salaryId) {
         document.getElementById('payment_fully_paid').value = data.status === 'Paid' ? '1' : '0';
         document.getElementById('payment_date').value = new Date().toISOString().split('T')[0];
         document.getElementById('payment_notify_employee').value = '0';
+        
+        // Populate fees fields dynamically
+        if (data.fees) {
+            const lateFees = parseFloat(data.fees.late_fees || 0);
+            const absentFees = parseFloat(data.fees.absent_fees || 0);
+            const earlyExitFees = parseFloat(data.fees.early_exit_fees || 0);
+            
+            document.getElementById('payment_late_fees').value = `₹${lateFees.toFixed(2)}`;
+            document.getElementById('payment_absent_fees').value = `₹${absentFees.toFixed(2)}`;
+            document.getElementById('payment_early_exit_fees').value = `₹${earlyExitFees.toFixed(2)}`;
+        } else {
+            document.getElementById('payment_late_fees').value = '₹0.00';
+            document.getElementById('payment_absent_fees').value = '₹0.00';
+            document.getElementById('payment_early_exit_fees').value = '₹0.00';
+        }
+        
+        // Calculate initial generated salary (Basic + Bonus - Deduction)
+        calculateGeneratedSalary();
         
         // Show modal
         new bootstrap.Modal(document.getElementById('paymentModal')).show();

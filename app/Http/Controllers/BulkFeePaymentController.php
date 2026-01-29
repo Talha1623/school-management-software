@@ -6,6 +6,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\StudentPayment;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -74,23 +75,106 @@ class BulkFeePaymentController extends Controller
             $student = $payment->student;
             $amount = (float) $payment->payment_amount;
             $lateFee = (float) ($payment->late_fee ?? 0);
-            $totalDue = $amount + $lateFee;
+
+            $paidBase = StudentPayment::where('student_code', $payment->student_code)
+                ->where('payment_title', $payment->payment_title)
+                ->where('method', '!=', 'Generated')
+                ->sum(\DB::raw('COALESCE(payment_amount,0) + COALESCE(discount,0)'));
+            $paidLate = StudentPayment::where('student_code', $payment->student_code)
+                ->where('payment_title', $payment->payment_title)
+                ->where('method', '!=', 'Generated')
+                ->sum(\DB::raw('COALESCE(late_fee,0)'));
+
+            $remainingAmount = max($amount - (float) $paidBase, 0);
+            $remainingLate = max($lateFee - (float) $paidLate, 0);
+            $totalDue = $remainingAmount + $remainingLate;
+
+            if ($totalDue <= 0) {
+                return null;
+            }
 
             return [
+                'generated_id' => $payment->id,
                 'student_code' => $payment->student_code,
                 'student_name' => $student->student_name ?? 'N/A',
                 'parent_name' => $student->father_name ?? 'N/A',
                 'payment_title' => $payment->payment_title ?? 'N/A',
-                'amount' => $amount,
-                'late_fee' => $lateFee,
+                'amount' => $remainingAmount,
+                'late_fee' => $remainingLate,
                 'total_due' => $totalDue,
                 'payment' => 0,
                 'discount' => 0,
                 'payment_date' => now()->format('Y-m-d'),
-                'fully_paid' => $totalDue <= 0 ? 'Yes' : 'No',
+                'fully_paid' => 'No',
             ];
-        })->values();
+        })->filter()->values();
 
         return response()->json(['items' => $items]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $items = $request->input('items', []);
+        if (!is_array($items) || empty($items)) {
+            return response()->json(['success' => false, 'message' => 'No payment data found.'], 422);
+        }
+
+        $accountantName = auth()->check() ? (auth()->user()->name ?? null) : null;
+        $saved = 0;
+
+        foreach ($items as $item) {
+            $generatedId = (int) ($item['generated_id'] ?? 0);
+            $paymentAmount = (float) ($item['payment'] ?? 0);
+            $discount = (float) ($item['discount'] ?? 0);
+            $lateFee = (float) ($item['late_fee'] ?? 0);
+            $paymentDate = !empty($item['payment_date'])
+                ? $item['payment_date']
+                : now()->format('Y-m-d');
+
+            if ($generatedId <= 0) {
+                continue;
+            }
+
+            $generatedFee = StudentPayment::where('id', $generatedId)
+                ->where('method', 'Generated')
+                ->first();
+            if (!$generatedFee) {
+                continue;
+            }
+
+            if ($lateFee >= 0) {
+                $generatedFee->late_fee = $lateFee;
+                $generatedFee->save();
+            }
+
+            $totalGenerated = (float) ($generatedFee->payment_amount ?? 0) + (float) ($generatedFee->late_fee ?? 0);
+            $paidBaseNow = $paymentAmount + $discount;
+            $paidLateNow = ($paidBaseNow >= $totalGenerated) ? (float) ($generatedFee->late_fee ?? 0) : 0;
+            $totalPaidNow = $paidBaseNow + $paidLateNow;
+
+            if ($totalPaidNow <= 0) {
+                continue;
+            }
+
+            StudentPayment::create([
+                'campus' => $generatedFee->campus,
+                'student_code' => $generatedFee->student_code,
+                'payment_title' => $generatedFee->payment_title,
+                'payment_amount' => $paymentAmount,
+                'discount' => $discount,
+                'method' => 'Bulk Payment',
+                'payment_date' => $paymentDate,
+                'sms_notification' => 'Yes',
+                'late_fee' => $paidLateNow,
+                'accountant' => $accountantName,
+            ]);
+
+            $saved++;
+        }
+
+        return response()->json([
+            'success' => true,
+            'saved' => $saved,
+        ]);
     }
 }
