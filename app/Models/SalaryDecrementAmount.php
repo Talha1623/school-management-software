@@ -14,6 +14,7 @@ class SalaryDecrementAmount extends Model
         'decrease',
         'accountant',
         'date',
+        'salary_type',
     ];
 
     protected $casts = [

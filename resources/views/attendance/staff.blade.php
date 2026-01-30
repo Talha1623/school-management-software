@@ -180,7 +180,25 @@
                                             @endphp
                                             <tr style="height: 60px;">
                                                 <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">{{ $staff->emp_id ?? 'N/A' }}</td>
-                                                <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;"><strong>{{ $staff->name }}</strong></td>
+                                                <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
+                                                    <strong>{{ $staff->name }}</strong>
+                                                    @php
+                                                        $salaryType = strtolower(trim($staff->salary_type ?? ''));
+                                                        $salaryTypeLabel = '';
+                                                        if ($salaryType === 'per hour') {
+                                                            $salaryTypeLabel = 'per hour';
+                                                        } elseif ($salaryType === 'lecture') {
+                                                            $salaryTypeLabel = 'per lecture';
+                                                        } elseif ($salaryType === 'full time' || empty($salaryType)) {
+                                                            $salaryTypeLabel = 'full time';
+                                                        }
+                                                    @endphp
+                                                    @if($salaryTypeLabel)
+                                                        <div style="font-size: 10px; color: #6c757d; margin-top: 2px; font-weight: normal;">
+                                                            {{ $salaryTypeLabel }}
+                                                        </div>
+                                                    @endif
+                                                </td>
                                                 <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">{{ $staff->father_husband_name ?? 'N/A' }}</td>
                                                 <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">{{ $staff->designation ?? 'N/A' }}</td>
                                                 <input type="hidden" name="attendance[{{ $staff->id }}][staff_id]" value="{{ $staff->id }}">
@@ -213,7 +231,28 @@
                                                         </select>
                                                     </td>
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                        <input type="time" name="attendance[{{ $staff->id }}][start_time]" class="form-control form-control-sm arrival-time" value="{{ $startTime ? date('H:i', strtotime($startTime)) : '' }}" style="min-width: 100px;">
+                                                        @php
+                                                            $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
+                                                            $timetableTime = $timetableTimesByStaff[$staff->id] ?? null;
+                                                            $timetableStartTime = $timetableTime['start_time'] ?? null;
+                                                            $timetableEndTime = $timetableTime['end_time'] ?? null;
+                                                            
+                                                            // For per hour teacher, use timetable time if available, otherwise use saved time
+                                                            $displayStartTime = $startTime;
+                                                            if ($isPerHour && $timetableStartTime && empty($startTime)) {
+                                                                $displayStartTime = $timetableStartTime;
+                                                            }
+                                                        @endphp
+                                                        <input type="time" name="attendance[{{ $staff->id }}][start_time]" class="form-control form-control-sm arrival-time" value="{{ $displayStartTime ? date('H:i', strtotime($displayStartTime)) : '' }}" style="min-width: 100px;" 
+                                                            @if($isPerHour) 
+                                                                @if($timetableStartTime)
+                                                                    data-timetable-start="{{ $timetableStartTime }}" 
+                                                                @endif
+                                                                data-is-per-hour="true"
+                                                                data-staff-name="{{ $staff->name }}"
+                                                            @else
+                                                                data-is-per-hour="false"
+                                                            @endif>
                                                     </td>
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
                                                         @php
@@ -229,8 +268,20 @@
                                                                     }
                                                                 }
                                                             }
+                                                            
+                                                            // For per hour teacher, use timetable time if available, otherwise use saved time
+                                                            if ($isPerHour && $timetableEndTime && empty($exitTimeValue)) {
+                                                                $exitTimeValue = $timetableEndTime;
+                                                            }
                                                         @endphp
-                                                        <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $exitTimeValue }}" style="min-width: 100px;" placeholder="HH:MM" data-early-exit-time="{{ !empty($earlyExitTime) ? $earlyExitTime : '' }}">
+                                                        <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $exitTimeValue }}" style="min-width: 100px;" placeholder="HH:MM" 
+                                                            @if($isPerHour && $timetableEndTime)
+                                                                data-timetable-end="{{ $timetableEndTime }}"
+                                                                data-is-per-hour="true"
+                                                            @else
+                                                                data-is-per-hour="false"
+                                                                data-early-exit-time="{{ !empty($earlyExitTime) ? $earlyExitTime : '' }}"
+                                                            @endif>
                                                     </td>
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
                                                         <div class="d-flex flex-column gap-2">
@@ -445,13 +496,56 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const time = input.value;
         if (time) {
-            // Get late arrival time from Salary Setting (passed from controller)
-            const standardTime = '{{ $lateArrivalTime ?? "09:00" }}';
-            const [hours, minutes] = time.split(':');
-            const [stdHours, stdMinutes] = standardTime.split(':');
+            // Check if this is per hour teacher - use timetable time instead of salary setting
+            const isPerHour = input.getAttribute('data-is-per-hour') === 'true';
+            let standardTime;
             
-            const timeInMinutes = parseInt(hours) * 60 + parseInt(minutes);
-            const stdTimeInMinutes = parseInt(stdHours) * 60 + parseInt(stdMinutes);
+            if (isPerHour) {
+                // Use timetable start time for per hour teacher
+                standardTime = input.getAttribute('data-timetable-start');
+                console.log('Per hour teacher - Timetable time:', standardTime, 'Arrival time:', time);
+                if (!standardTime || standardTime === '' || standardTime === 'null') {
+                    // If timetable time not available, don't calculate (should not happen for per hour)
+                    lateArrivalDisplay.innerHTML = '<span class="text-muted">-</span>';
+                    console.log('Per hour teacher but no timetable time found for:', input.getAttribute('data-staff-name'));
+                    return;
+                }
+                // Ensure time is in HH:MM format (remove seconds if present)
+                if (standardTime.length > 5) {
+                    standardTime = standardTime.substring(0, 5);
+                }
+                console.log('Using timetable time for per hour teacher:', standardTime);
+            } else {
+                // Use salary setting for non-per-hour staff
+                standardTime = '{{ $lateArrivalTime ?? "09:00" }}';
+                // Ensure time is in HH:MM format
+                if (standardTime.length > 5) {
+                    standardTime = standardTime.substring(0, 5);
+                }
+                console.log('Using salary setting time for non-per-hour staff:', standardTime);
+            }
+            
+            // Parse time values (handle both HH:MM and HH:MM:SS formats)
+            const timeParts = time.split(':');
+            const stdParts = standardTime.split(':');
+            
+            if (timeParts.length < 2 || stdParts.length < 2) {
+                lateArrivalDisplay.innerHTML = '<span class="text-muted">-</span>';
+                return;
+            }
+            
+            const hours = parseInt(timeParts[0], 10);
+            const minutes = parseInt(timeParts[1], 10);
+            const stdHours = parseInt(stdParts[0], 10);
+            const stdMinutes = parseInt(stdParts[1], 10);
+            
+            if (isNaN(hours) || isNaN(minutes) || isNaN(stdHours) || isNaN(stdMinutes)) {
+                lateArrivalDisplay.innerHTML = '<span class="text-muted">-</span>';
+                return;
+            }
+            
+            const timeInMinutes = hours * 60 + minutes;
+            const stdTimeInMinutes = stdHours * 60 + stdMinutes;
             
             if (timeInMinutes > stdTimeInMinutes) {
                 const diff = timeInMinutes - stdTimeInMinutes;
@@ -469,7 +563,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Calculate late arrival on page load for existing values (with delay to ensure DOM is ready)
+    setTimeout(function() {
+        arrivalTimeInputs.forEach(input => {
+            if (input && input.value && input.value.length >= 5) {
+                calculateLateArrival(input);
+            }
+        });
+    }, 500);
+    
     arrivalTimeInputs.forEach(input => {
+        // Auto-populate timetable time for per hour teachers if field is empty
+        const isPerHour = input.getAttribute('data-is-per-hour') === 'true';
+        if (isPerHour && !input.value) {
+            const timetableStartTime = input.getAttribute('data-timetable-start');
+            if (timetableStartTime) {
+                input.value = timetableStartTime;
+                // Trigger calculation after setting value
+                setTimeout(() => {
+                    calculateLateArrival(input);
+                }, 100);
+            }
+        }
+        
         input.addEventListener('change', function() {
             calculateLateArrival(this);
         });
@@ -506,15 +622,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const time = input.value;
-        // Get early exit time from data attribute first
-        let earlyExitTimeSetting = input.getAttribute('data-early-exit-time');
         
-        // If data attribute is empty or invalid, use the global variable from controller
-        if (!earlyExitTimeSetting || earlyExitTimeSetting === '' || earlyExitTimeSetting === 'null' || earlyExitTimeSetting.trim() === '') {
-            // Get from blade variable (formatted time from controller)
-            const bladeEarlyExitTime = '{{ !empty($earlyExitTime) ? $earlyExitTime : "" }}';
-            if (bladeEarlyExitTime && bladeEarlyExitTime !== '') {
-                earlyExitTimeSetting = bladeEarlyExitTime;
+        // Check if this is per hour teacher - use timetable time instead of salary setting
+        const isPerHour = input.getAttribute('data-is-per-hour') === 'true';
+        let earlyExitTimeSetting;
+        
+        if (isPerHour) {
+            // Use timetable end time for per hour teacher
+            earlyExitTimeSetting = input.getAttribute('data-timetable-end');
+            if (!earlyExitTimeSetting) {
+                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                return;
+            }
+        } else {
+            // Get early exit time from data attribute first
+            earlyExitTimeSetting = input.getAttribute('data-early-exit-time');
+            
+            // If data attribute is empty or invalid, use the global variable from controller
+            if (!earlyExitTimeSetting || earlyExitTimeSetting === '' || earlyExitTimeSetting === 'null' || earlyExitTimeSetting.trim() === '') {
+                // Get from blade variable (formatted time from controller)
+                const bladeEarlyExitTime = '{{ !empty($earlyExitTime) ? $earlyExitTime : "" }}';
+                if (bladeEarlyExitTime && bladeEarlyExitTime !== '') {
+                    earlyExitTimeSetting = bladeEarlyExitTime;
+                }
             }
         }
         
@@ -529,8 +659,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Check if early exit time is set in salary settings
-        if (!earlyExitTimeSetting || earlyExitTimeSetting === '' || earlyExitTimeSetting === 'null' || earlyExitTimeSetting === 'undefined') {
+        // For per hour teacher, timetable time is required
+        if (isPerHour && (!earlyExitTimeSetting || earlyExitTimeSetting === '')) {
+            earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+            return;
+        }
+        
+        // For non-per-hour staff, check if early exit time is set in salary settings
+        if (!isPerHour && (!earlyExitTimeSetting || earlyExitTimeSetting === '' || earlyExitTimeSetting === 'null' || earlyExitTimeSetting === 'undefined')) {
             // Early exit time not set in salary settings
             earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
             return;
@@ -628,6 +764,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
     
     exitTimeInputs.forEach(input => {
+        // Auto-populate timetable time for per hour teachers if field is empty
+        const isPerHour = input.getAttribute('data-is-per-hour') === 'true';
+        if (isPerHour && !input.value) {
+            const timetableEndTime = input.getAttribute('data-timetable-end');
+            if (timetableEndTime) {
+                input.value = timetableEndTime;
+                // Trigger calculation after setting value
+                setTimeout(() => {
+                    calculateEarlyExit(input);
+                }, 100);
+            }
+        }
+        
         // Calculate on change event - immediate calculation
         input.addEventListener('change', function() {
             const row = this.closest('tr');

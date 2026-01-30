@@ -53,7 +53,7 @@
                         <div class="card bg-light border-0 rounded-10 p-3 mb-2">
                             <h5 class="mb-2 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -12px -12px 12px -12px; background-color: #003471;">Decrease</h5>
                             
-                            <label for="decrease" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Decrease (%) <span class="text-danger">*</span></label>
+                            <label for="decrease" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Salary Decrease (%) <span class="text-danger">*</span></label>
                             <div class="input-group input-group-sm decrement-input-group">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">trending_down</span>
@@ -61,6 +61,61 @@
                                 <input type="number" class="form-control decrement-input" name="decrease" id="decrease" placeholder="Enter percentage" step="0.01" min="0" max="100" required style="height: 36px;">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">%</span>
                             </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Salary Type -->
+                    <div class="col-md-6">
+                        <div class="card bg-light border-0 rounded-10 p-3 mb-2">
+                            <h5 class="mb-2 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -12px -12px 12px -12px; background-color: #003471;">Salary Type</h5>
+                            
+                            <label for="salary_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Salary Type <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm decrement-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">work</span>
+                                </span>
+                                <select class="form-control decrement-input" name="salary_type" id="salary_type" required onchange="toggleFeesDecrementFields(); loadStaffByCampus();" style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0; height: 36px;">
+                                    <option value="">Select Salary Type</option>
+                                    <option value="full time">Full Time</option>
+                                    <option value="per hour">Per Hour</option>
+                                    <option value="lecture">Per Lecture</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Fees Decrement (Optional - Only for Full Time) -->
+                    <div class="col-md-6" id="feesDecrementContainer" style="display: none;">
+                        <div class="card bg-light border-0 rounded-10 p-3 mb-2">
+                            <h5 class="mb-2 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -12px -12px 12px -12px; background-color: #003471;">Fees Decrement (Optional)</h5>
+                            
+                            <label for="absent_fees_decrement" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Absent Fees Decrement (%)</label>
+                            <div class="input-group input-group-sm decrement-input-group mb-2">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">trending_down</span>
+                                </span>
+                                <input type="number" class="form-control decrement-input" name="absent_fees_decrement" id="absent_fees_decrement" placeholder="Enter percentage (optional)" step="0.01" min="0" max="100" style="height: 36px;">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">%</span>
+                            </div>
+                            
+                            <label for="late_fees_decrement" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Late Fees Decrement (%)</label>
+                            <div class="input-group input-group-sm decrement-input-group mb-2">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">trending_down</span>
+                                </span>
+                                <input type="number" class="form-control decrement-input" name="late_fees_decrement" id="late_fees_decrement" placeholder="Enter percentage (optional)" step="0.01" min="0" max="100" style="height: 36px;">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">%</span>
+                            </div>
+                            
+                            <label for="early_exit_fees_decrement" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Early Exit Fees Decrement (%)</label>
+                            <div class="input-group input-group-sm decrement-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">trending_down</span>
+                                </span>
+                                <input type="number" class="form-control decrement-input" name="early_exit_fees_decrement" id="early_exit_fees_decrement" placeholder="Enter percentage (optional)" step="0.01" min="0" max="100" style="height: 36px;">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">%</span>
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Only apply if percentage is entered, otherwise fees will not be decremented</small>
                         </div>
                     </div>
 
@@ -118,7 +173,7 @@
                             </div>
                             <div id="selectCampusMessage" class="text-muted text-center py-4">
                                 <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">location_on</span>
-                                <p class="mt-2 mb-0">Please select a campus to view staff list.</p>
+                                <p class="mt-2 mb-0">Please select a campus and salary type to view staff list.</p>
                             </div>
                         </div>
                     </div>
@@ -235,6 +290,28 @@
 </style>
 
 <script>
+// Toggle fees decrement fields based on salary type
+function toggleFeesDecrementFields() {
+    const salaryType = document.getElementById('salary_type').value;
+    const feesContainer = document.getElementById('feesDecrementContainer');
+    
+    if (feesContainer) {
+        if (salaryType === 'full time') {
+            feesContainer.style.display = 'block';
+        } else {
+            feesContainer.style.display = 'none';
+            // Clear fees decrement fields when hidden
+            const absentField = document.getElementById('absent_fees_decrement');
+            const lateField = document.getElementById('late_fees_decrement');
+            const earlyExitField = document.getElementById('early_exit_fees_decrement');
+            if (absentField) absentField.value = '';
+            if (lateField) lateField.value = '';
+            if (earlyExitField) earlyExitField.value = '';
+            updateSalaryPreview();
+        }
+    }
+}
+
 // Reset form
 function resetForm() {
     document.getElementById('decrementPercentageForm').reset();
@@ -246,21 +323,33 @@ function resetForm() {
     // Clear staff list
     document.getElementById('staffListContainer').style.display = 'none';
     document.getElementById('selectCampusMessage').style.display = 'block';
+    document.getElementById('selectCampusMessage').innerHTML = '<span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">location_on</span><p class="mt-2 mb-0">Please select a campus and salary type to view staff list.</p>';
     document.getElementById('staffList').innerHTML = '';
     document.getElementById('selectAllStaff').checked = false;
+    // Hide fees decrement fields
+    toggleFeesDecrementFields();
 }
 
-// Load staff by campus
+// Load staff by campus and salary type
 function loadStaffByCampus() {
     const campus = document.getElementById('campus').value;
+    const salaryType = document.getElementById('salary_type').value;
     const staffListContainer = document.getElementById('staffListContainer');
     const selectCampusMessage = document.getElementById('selectCampusMessage');
     const staffList = document.getElementById('staffList');
     const noStaffMessage = document.getElementById('noStaffMessage');
     
-    if (!campus) {
+    // Toggle fees decrement fields
+    toggleFeesDecrementFields();
+    
+    if (!campus || !salaryType) {
         staffListContainer.style.display = 'none';
         selectCampusMessage.style.display = 'block';
+        if (!campus) {
+            selectCampusMessage.innerHTML = '<span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">location_on</span><p class="mt-2 mb-0">Please select a campus to view staff list.</p>';
+        } else {
+            selectCampusMessage.innerHTML = '<span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">work</span><p class="mt-2 mb-0">Please select a salary type to view staff list.</p>';
+        }
         staffList.innerHTML = '';
         document.getElementById('selectAllStaff').checked = false;
         return;
@@ -272,7 +361,7 @@ function loadStaffByCampus() {
     selectCampusMessage.style.display = 'none';
     noStaffMessage.style.display = 'none';
     
-    fetch(`{{ route('salary-loan.decrement.percentage.get-staff-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+    fetch(`{{ route('salary-loan.decrement.percentage.get-staff-by-campus') }}?campus=${encodeURIComponent(campus)}&salary_type=${encodeURIComponent(salaryType)}`, {
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
@@ -284,6 +373,25 @@ function loadStaffByCampus() {
             let html = '<div class="row g-2">';
             data.staff.forEach(staff => {
                 const currentSalary = parseFloat(staff.salary || 0);
+                const absentFees = parseFloat(staff.absent_fees || 0);
+                const lateFees = parseFloat(staff.late_fees || 0);
+                const earlyExitFees = parseFloat(staff.early_exit_fees || 0);
+                
+                let feesHtml = '';
+                if (absentFees > 0 || lateFees > 0 || earlyExitFees > 0) {
+                    feesHtml = '<div class="mt-2 pt-2" style="border-top: 1px solid #dee2e6;">';
+                    if (absentFees > 0) {
+                        feesHtml += `<small class="d-block text-muted" style="font-size: 10px;" data-original-absent="${absentFees}"><strong>Absent:</strong> ₹${absentFees.toFixed(2)}<span id="new_absent_${staff.id}" class="text-danger" style="display: none;"></span></small>`;
+                    }
+                    if (lateFees > 0) {
+                        feesHtml += `<small class="d-block text-muted" style="font-size: 10px;" data-original-late="${lateFees}"><strong>Late:</strong> ₹${lateFees.toFixed(2)}<span id="new_late_${staff.id}" class="text-danger" style="display: none;"></span></small>`;
+                    }
+                    if (earlyExitFees > 0) {
+                        feesHtml += `<small class="d-block text-muted" style="font-size: 10px;" data-original-early-exit="${earlyExitFees}"><strong>Early Exit:</strong> ₹${earlyExitFees.toFixed(2)}<span id="new_early_exit_${staff.id}" class="text-danger" style="display: none;"></span></small>`;
+                    }
+                    feesHtml += '</div>';
+                }
+                
                 html += `
                     <div class="col-md-6 col-lg-4">
                         <div class="card border p-2 mb-2" style="border-radius: 8px;">
@@ -291,12 +399,13 @@ function loadStaffByCampus() {
                                 <input class="form-check-input staff-checkbox" type="checkbox" name="selected_staff[]" value="${staff.id}" id="staff_${staff.id}" onchange="updateSelectAllState()" style="width: 18px; height: 18px; cursor: pointer;">
                                 <label class="form-check-label w-100" for="staff_${staff.id}" style="cursor: pointer;">
                                     <div class="d-flex justify-content-between align-items-start">
-                                        <div>
+                                        <div class="flex-grow-1">
                                             <strong style="color: #003471; font-size: 13px;">${escapeHtml(staff.name)}</strong>
                                             ${staff.emp_id ? `<br><small class="text-muted" style="font-size: 11px;">ID: ${escapeHtml(staff.emp_id)}</small>` : ''}
                                             ${staff.designation ? `<br><small class="text-muted" style="font-size: 11px;">${escapeHtml(staff.designation)}</small>` : ''}
+                                            ${feesHtml}
                                         </div>
-                                        <div class="text-end">
+                                        <div class="text-end ms-2">
                                             <small class="text-success fw-bold" style="font-size: 12px;">₹${currentSalary.toFixed(2)}</small>
                                             <div id="new_salary_${staff.id}" class="text-danger fw-bold" style="font-size: 11px; display: none;"></div>
                                         </div>
@@ -346,9 +455,38 @@ document.getElementById('decrease').addEventListener('input', function() {
     updateSalaryPreview();
 });
 
+// Update preview when fees decrement fields change
+const absentFeesDecrementField = document.getElementById('absent_fees_decrement');
+const lateFeesDecrementField = document.getElementById('late_fees_decrement');
+const earlyExitFeesDecrementField = document.getElementById('early_exit_fees_decrement');
+
+if (absentFeesDecrementField) {
+    absentFeesDecrementField.addEventListener('input', function() {
+        updateSalaryPreview();
+    });
+}
+if (lateFeesDecrementField) {
+    lateFeesDecrementField.addEventListener('input', function() {
+        updateSalaryPreview();
+    });
+}
+if (earlyExitFeesDecrementField) {
+    earlyExitFeesDecrementField.addEventListener('input', function() {
+        updateSalaryPreview();
+    });
+}
+
 // Update salary preview
 function updateSalaryPreview() {
     const percentage = parseFloat(document.getElementById('decrease').value || 0);
+    const absentFeesDecrementInput = document.getElementById('absent_fees_decrement');
+    const lateFeesDecrementInput = document.getElementById('late_fees_decrement');
+    const earlyExitFeesDecrementInput = document.getElementById('early_exit_fees_decrement');
+    
+    const absentFeesDecrement = absentFeesDecrementInput && absentFeesDecrementInput.value ? parseFloat(absentFeesDecrementInput.value) : null;
+    const lateFeesDecrement = lateFeesDecrementInput && lateFeesDecrementInput.value ? parseFloat(lateFeesDecrementInput.value) : null;
+    const earlyExitFeesDecrement = earlyExitFeesDecrementInput && earlyExitFeesDecrementInput.value ? parseFloat(earlyExitFeesDecrementInput.value) : null;
+    
     const checkboxes = document.querySelectorAll('.staff-checkbox:checked');
     
     if (percentage > 0) {
@@ -363,10 +501,57 @@ function updateSalaryPreview() {
                 previewDiv.textContent = `→ ₹${newSalary.toFixed(2)}`;
                 previewDiv.style.display = 'block';
             }
+            
+            // Update fees preview - only show if manual decrement percentage is provided
+            const absentFeesSpan = document.getElementById(`new_absent_${staffId}`);
+            if (absentFeesSpan && absentFeesDecrement !== null && absentFeesDecrement > 0) {
+                const absentParent = absentFeesSpan.parentElement;
+                const originalAbsent = parseFloat(absentParent.getAttribute('data-original-absent') || 0);
+                if (originalAbsent > 0) {
+                    const newAbsent = Math.max(0, originalAbsent - (originalAbsent * (absentFeesDecrement / 100)));
+                    absentFeesSpan.textContent = ` → ₹${newAbsent.toFixed(2)}`;
+                    absentFeesSpan.style.display = 'inline';
+                }
+            } else if (absentFeesSpan) {
+                absentFeesSpan.style.display = 'none';
+                absentFeesSpan.textContent = '';
+            }
+            
+            const lateFeesSpan = document.getElementById(`new_late_${staffId}`);
+            if (lateFeesSpan && lateFeesDecrement !== null && lateFeesDecrement > 0) {
+                const lateParent = lateFeesSpan.parentElement;
+                const originalLate = parseFloat(lateParent.getAttribute('data-original-late') || 0);
+                if (originalLate > 0) {
+                    const newLate = Math.max(0, originalLate - (originalLate * (lateFeesDecrement / 100)));
+                    lateFeesSpan.textContent = ` → ₹${newLate.toFixed(2)}`;
+                    lateFeesSpan.style.display = 'inline';
+                }
+            } else if (lateFeesSpan) {
+                lateFeesSpan.style.display = 'none';
+                lateFeesSpan.textContent = '';
+            }
+            
+            const earlyExitFeesSpan = document.getElementById(`new_early_exit_${staffId}`);
+            if (earlyExitFeesSpan && earlyExitFeesDecrement !== null && earlyExitFeesDecrement > 0) {
+                const earlyExitParent = earlyExitFeesSpan.parentElement;
+                const originalEarlyExit = parseFloat(earlyExitParent.getAttribute('data-original-early-exit') || 0);
+                if (originalEarlyExit > 0) {
+                    const newEarlyExit = Math.max(0, originalEarlyExit - (originalEarlyExit * (earlyExitFeesDecrement / 100)));
+                    earlyExitFeesSpan.textContent = ` → ₹${newEarlyExit.toFixed(2)}`;
+                    earlyExitFeesSpan.style.display = 'inline';
+                }
+            } else if (earlyExitFeesSpan) {
+                earlyExitFeesSpan.style.display = 'none';
+                earlyExitFeesSpan.textContent = '';
+            }
         });
     } else {
         document.querySelectorAll('[id^="new_salary_"]').forEach(div => {
             div.style.display = 'none';
+        });
+        document.querySelectorAll('[id^="new_absent_"], [id^="new_late_"], [id^="new_early_exit_"]').forEach(span => {
+            span.style.display = 'none';
+            span.textContent = '';
         });
     }
 }

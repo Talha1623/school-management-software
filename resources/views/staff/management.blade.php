@@ -1039,6 +1039,9 @@ function resetForm() {
     empIdField.style.backgroundColor = '#f8f9fa';
     empIdField.style.cursor = 'not-allowed';
     
+    // Update fields based on salary type (default will be empty, so fields will be enabled)
+    toggleFeesFields();
+    
     // Fetch next Employee ID
     fetch('{{ route('staff.management.next-emp-id') }}', {
         headers: {
@@ -1102,6 +1105,9 @@ function editStaff(id) {
             document.getElementById('late_fees').value = data.late_fees || '';
             document.getElementById('early_exit_fees').value = data.early_exit_fees || '';
             document.getElementById('free_absent').value = data.free_absent || '0';
+            
+            // Update fields based on salary type
+            toggleFeesFields();
             document.getElementById('email').value = data.email || '';
             document.getElementById('home_address').value = data.home_address || '';
             document.getElementById('password').value = '';
@@ -1481,6 +1487,55 @@ document.addEventListener('DOMContentLoaded', function() {
             `);
         }
     });
+});
+
+// Function to toggle fees fields based on salary type
+function toggleFeesFields() {
+    const salaryType = document.getElementById('salary_type').value;
+    const absentFees = document.getElementById('absent_fees');
+    const lateFees = document.getElementById('late_fees');
+    const earlyExitFees = document.getElementById('early_exit_fees');
+    
+    // Disable fields for per lecture and per hour
+    if (salaryType === 'lecture' || salaryType === 'per hour') {
+        absentFees.disabled = true;
+        absentFees.style.backgroundColor = '#f8f9fa';
+        absentFees.style.cursor = 'not-allowed';
+        absentFees.value = '';
+        
+        lateFees.disabled = true;
+        lateFees.style.backgroundColor = '#f8f9fa';
+        lateFees.style.cursor = 'not-allowed';
+        lateFees.value = '';
+        
+        earlyExitFees.disabled = true;
+        earlyExitFees.style.backgroundColor = '#f8f9fa';
+        earlyExitFees.style.cursor = 'not-allowed';
+        earlyExitFees.value = '';
+    } else {
+        // Enable fields for full time
+        absentFees.disabled = false;
+        absentFees.style.backgroundColor = '';
+        absentFees.style.cursor = '';
+        
+        lateFees.disabled = false;
+        lateFees.style.backgroundColor = '';
+        lateFees.style.cursor = '';
+        
+        earlyExitFees.disabled = false;
+        earlyExitFees.style.backgroundColor = '';
+        earlyExitFees.style.cursor = '';
+    }
+}
+
+// Add event listener for salary type change
+document.addEventListener('DOMContentLoaded', function() {
+    const salaryTypeSelect = document.getElementById('salary_type');
+    if (salaryTypeSelect) {
+        salaryTypeSelect.addEventListener('change', toggleFeesFields);
+        // Initialize on page load
+        toggleFeesFields();
+    }
 });
 </script>
 @endsection

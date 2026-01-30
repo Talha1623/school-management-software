@@ -1660,6 +1660,7 @@ Route::delete('/salary-loan/generate-salary/{salary}', [App\Http\Controllers\Gen
 
 Route::get('/salary-loan/manage-salaries', [App\Http\Controllers\ManageSalariesController::class, 'index'])->name('salary-loan.manage-salaries');
 Route::get('/salary-loan/manage-salaries/{salary}', [App\Http\Controllers\ManageSalariesController::class, 'show'])->name('salary-loan.manage-salaries.show');
+Route::get('/salary-loan/manage-salaries/{salary}/print-receipt', [App\Http\Controllers\ManageSalariesController::class, 'printReceipt'])->name('salary-loan.manage-salaries.print-receipt');
 Route::put('/salary-loan/manage-salaries/{salary}/payment', [App\Http\Controllers\ManageSalariesController::class, 'updatePayment'])->name('salary-loan.manage-salaries.payment');
 Route::put('/salary-loan/manage-salaries/{salary}/status', [App\Http\Controllers\ManageSalariesController::class, 'updateStatus'])->name('salary-loan.manage-salaries.status');
 Route::delete('/salary-loan/manage-salaries/{salary}', [App\Http\Controllers\ManageSalariesController::class, 'destroy'])->name('salary-loan.manage-salaries.destroy');

@@ -112,6 +112,13 @@ class ManageSalariesController extends Controller
      */
     public function updatePayment(Request $request, Salary $salary)
     {
+        // Check if amount_paid already exists and is greater than 0
+        if ($salary->amount_paid > 0) {
+            return redirect()
+                ->route('salary-loan.manage-salaries')
+                ->with('error', 'Amount Paid cannot be edited once payment has been made.');
+        }
+
         $validated = $request->validate([
             'amount_paid' => ['required', 'numeric', 'min:0'],
             'loan_repayment' => ['nullable', 'numeric', 'min:0'],
@@ -309,6 +316,16 @@ class ManageSalariesController extends Controller
         
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Print payment receipt
+     */
+    public function printReceipt(Salary $salary)
+    {
+        $salary->load('staff');
+        
+        return view('salary-loan.print-receipt', compact('salary'));
     }
 }
 

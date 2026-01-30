@@ -107,6 +107,15 @@ class AttendancePrintableController extends Controller
                     'total_lectures' => $total,
                 ];
             })
+            ->filter(function ($item) {
+                // Only show teachers (designation contains "teacher")
+                $staff = $item['staff'] ?? null;
+                if (!$staff) {
+                    return false;
+                }
+                $designation = strtolower(trim($staff->designation ?? ''));
+                return strpos($designation, 'teacher') !== false;
+            })
             ->values();
 
         return view('attendance.subject-lecture-summary-print', [

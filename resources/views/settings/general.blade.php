@@ -130,64 +130,8 @@
                         </div>
                     </div>
 
-                    <!-- Right Column: Theme Settings & Upload Logo -->
+                    <!-- Right Column: Upload Logo -->
                     <div class="col-md-4 mb-4">
-                        <!-- Theme Settings -->
-                        <div class="card border-0 shadow-sm rounded-10 p-4 mb-4">
-                            <h5 class="mb-4 fw-semibold" style="color: #003471;">
-                                <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">palette</span>
-                                Theme Settings
-                            </h5>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium mb-2">Primary Color</label>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <input type="color" class="form-control form-control-color" name="primary_color" value="#003471" title="Choose primary color">
-                                    <input type="text" class="form-control" value="#003471" readonly style="max-width: 100px;">
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium mb-2">Secondary Color</label>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <input type="color" class="form-control form-control-color" name="secondary_color" value="#004a9f" title="Choose secondary color">
-                                    <input type="text" class="form-control" value="#004a9f" readonly style="max-width: 100px;">
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium mb-2">Accent Color</label>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <input type="color" class="form-control form-control-color" name="accent_color" value="#2196F3" title="Choose accent color">
-                                    <input type="text" class="form-control" value="#2196F3" readonly style="max-width: 100px;">
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium mb-2">Success Color</label>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <input type="color" class="form-control form-control-color" name="success_color" value="#28a745" title="Choose success color">
-                                    <input type="text" class="form-control" value="#28a745" readonly style="max-width: 100px;">
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium mb-2">Warning Color</label>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <input type="color" class="form-control form-control-color" name="warning_color" value="#ffc107" title="Choose warning color">
-                                    <input type="text" class="form-control" value="#ffc107" readonly style="max-width: 100px;">
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium mb-2">Danger Color</label>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <input type="color" class="form-control form-control-color" name="danger_color" value="#dc3545" title="Choose danger color">
-                                    <input type="text" class="form-control" value="#dc3545" readonly style="max-width: 100px;">
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Upload Logo & System Name -->
                         <div class="card border-0 shadow-sm rounded-10 p-4">
                             <h5 class="mb-4 fw-semibold" style="color: #003471;">
@@ -312,19 +256,6 @@ function updateSystemName(name) {
     // Store in localStorage for persistence
     localStorage.setItem('systemName', name);
 }
-
-// Update color text inputs when color picker changes
-document.addEventListener('DOMContentLoaded', function() {
-    const colorInputs = document.querySelectorAll('input[type="color"]');
-    colorInputs.forEach(input => {
-        const textInput = input.nextElementSibling;
-        if (textInput && textInput.tagName === 'INPUT') {
-            input.addEventListener('input', function() {
-                textInput.value = this.value;
-            });
-        }
-    });
-});
 
 // Ensure sidebar stays open on General Settings page
 document.addEventListener('DOMContentLoaded', function() {

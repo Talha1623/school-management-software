@@ -14,6 +14,7 @@ class SalaryIncrementPercentage extends Model
         'increase',
         'accountant',
         'date',
+        'salary_type',
     ];
 
     protected $casts = [

@@ -6,6 +6,7 @@ use App\Models\Staff;
 use App\Models\StaffAttendance;
 use App\Models\Campus;
 use App\Models\Subject;
+use App\Models\Timetable;
 use App\Models\SalarySetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -58,15 +59,58 @@ class StaffAttendanceController extends Controller
                 ->get()
                 ->keyBy('staff_id');
 
+            $timetableTimesByStaff = []; // Store timetable times for per hour teachers
+            
             foreach ($staffList as $staff) {
                 $attendance = $attendances->get($staff->id);
+                $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
+                
+                // For per hour teacher, get time from timetable if not in attendance
+                $startTime = $attendance ? $attendance->start_time : null;
+                $endTime = $attendance ? $attendance->end_time : null;
+                $timetableTime = null;
+                
+                if ($isPerHour) {
+                    $timetableTime = $this->getTimeFromTimetable($staff, $date);
+                    if ($timetableTime) {
+                        // Store timetable time for JavaScript use
+                        $timetableTimesByStaff[$staff->id] = $timetableTime;
+                        
+                        if (empty($startTime)) {
+                            $startTime = $timetableTime['start_time'];
+                        }
+                        if (empty($endTime)) {
+                            $endTime = $timetableTime['end_time'];
+                        }
+                    }
+                }
+                
+                // For per hour teacher, calculate late arrival/early exit using timetable time
+                $lateArrival = null;
+                $earlyExit = null;
+                
+                if ($isPerHour && $timetableTime) {
+                    // Use timetable time for late arrival calculation
+                    if ($startTime) {
+                        $lateArrival = $this->calculateLateArrivalWithTimetable($startTime, $timetableTime['start_time']);
+                    }
+                    // Use timetable time for early exit calculation
+                    if ($endTime) {
+                        $earlyExit = $this->calculateEarlyExitWithTimetable($endTime, $timetableTime['end_time']);
+                    }
+                } else {
+                    // Use salary setting for non-per-hour staff
+                    $lateArrival = $this->calculateLateArrival($startTime);
+                    $earlyExit = $this->calculateEarlyExit($endTime);
+                }
+                
                 $attendanceData[$staff->id] = [
                     'status' => $attendance ? $attendance->status : null,
-                    'start_time' => $attendance ? $attendance->start_time : null,
-                    'end_time' => $attendance ? $attendance->end_time : null,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
                     'conducted_lectures' => $attendance ? $attendance->conducted_lectures : null,
-                    'late_arrival' => $this->calculateLateArrival($attendance ? $attendance->start_time : null),
-                    'early_exit' => $this->calculateEarlyExit($attendance ? $attendance->end_time : null),
+                    'late_arrival' => $lateArrival,
+                    'early_exit' => $earlyExit,
                 ];
             }
         }
@@ -204,6 +248,7 @@ class StaffAttendanceController extends Controller
             'date' => $date,
             'dateLabel' => $dateLabel,
             'assignedSubjectsByStaff' => $assignedSubjectsByStaff,
+            'timetableTimesByStaff' => $timetableTimesByStaff ?? [],
         ]);
     }
 
@@ -284,7 +329,6 @@ class StaffAttendanceController extends Controller
                 $conductedLectures = isset($data['conducted_lectures']) && $data['conducted_lectures'] !== ''
                     ? (int) $data['conducted_lectures']
                     : 0;
-                $lateArrival = $data['late_arrival'] ?? null;
                 $status = $data['status'] ?? null;
                 if ($isSubjectAttendance) {
                     if ($conductedLectures !== null) {
@@ -294,18 +338,60 @@ class StaffAttendanceController extends Controller
                     }
                 }
 
+                // For per hour teacher, get time from timetable if not provided
+                $startTime = $data['start_time'] ?? null;
+                $endTime = $data['end_time'] ?? null;
+                $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
+                $timetableTime = null;
+                
+                if ($isPerHour && $status === 'Present') {
+                    // Get time from timetable for per hour teacher
+                    $timetableTime = $this->getTimeFromTimetable($staff, $date);
+                    if ($timetableTime) {
+                        if (empty($startTime)) {
+                            $startTime = $timetableTime['start_time'];
+                        }
+                        if (empty($endTime)) {
+                            $endTime = $timetableTime['end_time'];
+                        }
+                    }
+                }
+
+                // Calculate late arrival and early exit
+                $lateArrival = null;
+                $earlyExit = null;
+                
+                if ($isPerHour && $timetableTime) {
+                    // For per hour teacher, use timetable time for calculation
+                    if ($startTime) {
+                        $lateArrival = $this->calculateLateArrivalWithTimetable($startTime, $timetableTime['start_time']);
+                    }
+                    if ($endTime) {
+                        $earlyExit = $this->calculateEarlyExitWithTimetable($endTime, $timetableTime['end_time']);
+                    }
+                } else {
+                    // For other staff, use salary setting time
+                    if ($startTime) {
+                        $lateArrival = $this->calculateLateArrival($startTime);
+                    }
+                    if ($endTime) {
+                        $earlyExit = $this->calculateEarlyExit($endTime);
+                    }
+                }
+
+                // If form has manual late_arrival value (not Auto), use it
+                if (isset($data['late_arrival']) && $data['late_arrival'] !== 'Auto' && $data['late_arrival'] !== null && $data['late_arrival'] !== '') {
+                    $lateArrival = $data['late_arrival'];
+                }
+
                 $remarks = $data['remarks'] ?? (isset($data['leave_deduction']) ? 'Leave Deduction: ' . $data['leave_deduction'] : null);
                 if ($isSubjectAttendance && $lateArrival) {
                     $remarks = trim(($remarks ? $remarks . ' | ' : '') . 'Late Arrival: ' . $lateArrival);
                 }
                 
-                // Calculate and add early exit to remarks if applicable
-                $earlyExit = null;
-                if (isset($data['end_time']) && $data['end_time']) {
-                    $earlyExit = $this->calculateEarlyExit($data['end_time']);
-                    if ($earlyExit) {
-                        $remarks = trim(($remarks ? $remarks . ' | ' : '') . 'Early Exit: ' . $earlyExit);
-                    }
+                // Add early exit to remarks if applicable
+                if ($earlyExit) {
+                    $remarks = trim(($remarks ? $remarks . ' | ' : '') . 'Early Exit: ' . $earlyExit);
                 }
 
                 StaffAttendance::updateOrCreate(
@@ -315,8 +401,8 @@ class StaffAttendanceController extends Controller
                     ],
                     [
                         'status' => $status,
-                        'start_time' => $data['start_time'] ?? null,
-                        'end_time' => $data['end_time'] ?? null,
+                        'start_time' => $startTime,
+                        'end_time' => $endTime,
                         'conducted_lectures' => $conductedLectures,
                         'campus' => $staff->campus,
                         'designation' => $staff->designation,
@@ -338,6 +424,206 @@ class StaffAttendanceController extends Controller
             DB::rollBack();
             return redirect()->back()->with('error', 'Error saving attendance: ' . $e->getMessage())->withInput();
         }
+    }
+
+    /**
+     * Get time from timetable for per hour teacher
+     */
+    private function getTimeFromTimetable(Staff $staff, string $date): ?array
+    {
+        $staffName = trim($staff->name ?? '');
+        if (empty($staffName)) {
+            return null;
+        }
+
+        // Get staff's assigned subjects from Subject table
+        $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
+            ->whereNotNull('subject_name')
+            ->whereNotNull('class')
+            ->whereNotNull('section')
+            ->get();
+
+        if ($assignedSubjects->isEmpty()) {
+            return null;
+        }
+
+        // Get day name from date
+        $dayName = Carbon::parse($date)->format('l'); // Monday, Tuesday, etc.
+        
+        $earliestStartTime = null;
+        $latestEndTime = null;
+
+        // Subject name mapping for flexible matching (Maths = Mathematics, etc.)
+        $subjectNameMap = [
+            'maths' => ['maths', 'mathematics', 'math'],
+            'mathematics' => ['maths', 'mathematics', 'math'],
+            'english' => ['english', 'eng'],
+            'urdu' => ['urdu'],
+            'science' => ['science', 'sci'],
+            'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
+            'social studies' => ['social studies', 'social', 'sst'],
+        ];
+
+        // Get all timetable entries for this staff's subjects on this day
+        foreach ($assignedSubjects as $subject) {
+            $subjectName = trim($subject->subject_name ?? '');
+            $subjectClass = trim($subject->class ?? '');
+            $subjectSection = trim($subject->section ?? '');
+            $subjectCampus = trim($subject->campus ?? '');
+            
+            if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+                continue;
+            }
+            
+            // Build timetable query with flexible subject name matching
+            $subjectNameLower = strtolower($subjectName);
+            $timetableQuery = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
+                // Exact match
+                $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                
+                // Flexible matching for common subject name variations
+                if (isset($subjectNameMap[$subjectNameLower])) {
+                    foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                        $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                    }
+                }
+            })
+            ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+            ->where(function($query) use ($subjectClass) {
+                // Match class name (handle variations like "Four" = "4" = "four")
+                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
+                // Also try numeric matching if class is numeric
+                if (is_numeric($subjectClass)) {
+                    $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
+                } else {
+                    $wordToNumber = $this->wordToNumber($subjectClass);
+                    if ($wordToNumber !== null) {
+                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
+                    }
+                }
+            })
+            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
+            
+            if (!empty($subjectCampus)) {
+                $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)]);
+            }
+            
+            $timetableEntries = $timetableQuery->get();
+            
+            // Find earliest start time and latest end time
+            foreach ($timetableEntries as $entry) {
+                if (!empty($entry->starting_time) && !empty($entry->ending_time)) {
+                    try {
+                        $startTime = Carbon::parse($entry->starting_time);
+                        $endTime = Carbon::parse($entry->ending_time);
+                        
+                        if ($earliestStartTime === null || $startTime->lt($earliestStartTime)) {
+                            $earliestStartTime = $startTime;
+                        }
+                        
+                        if ($latestEndTime === null || $endTime->gt($latestEndTime)) {
+                            $latestEndTime = $endTime;
+                        }
+                    } catch (\Exception $e) {
+                        // Skip invalid times
+                    }
+                }
+            }
+        }
+
+        if ($earliestStartTime && $latestEndTime) {
+            return [
+                'start_time' => $earliestStartTime->format('H:i'),
+                'end_time' => $latestEndTime->format('H:i'),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert number to word (e.g., 4 -> "four")
+     */
+    private function numberToWord($number): string
+    {
+        $words = [
+            1 => 'one', 2 => 'two', 3 => 'three', 4 => 'four', 5 => 'five',
+            6 => 'six', 7 => 'seven', 8 => 'eight', 9 => 'nine', 10 => 'ten',
+            11 => 'eleven', 12 => 'twelve'
+        ];
+        return $words[(int)$number] ?? (string)$number;
+    }
+
+    /**
+     * Convert word to number (e.g., "four" -> 4)
+     */
+    private function wordToNumber($word): ?int
+    {
+        $words = [
+            'one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5,
+            'six' => 6, 'seven' => 7, 'eight' => 8, 'nine' => 9, 'ten' => 10,
+            'eleven' => 11, 'twelve' => 12
+        ];
+        $wordLower = strtolower(trim($word));
+        return $words[$wordLower] ?? null;
+    }
+
+    /**
+     * Calculate late arrival using timetable time for per hour teacher
+     */
+    private function calculateLateArrivalWithTimetable($startTime, $timetableStartTime): ?string
+    {
+        if (!$startTime || !$timetableStartTime) {
+            return null;
+        }
+
+        try {
+            $time = is_string($startTime) ? $startTime : $startTime->format('H:i:s');
+            $standardTime = is_string($timetableStartTime) ? $timetableStartTime : $timetableStartTime->format('H:i:s');
+            
+            $start = strtotime($time);
+            $standard = strtotime($standardTime);
+
+            if ($start && $standard && $start > $standard) {
+                $diff = $start - $standard;
+                $hours = floor($diff / 3600);
+                $minutes = floor(($diff % 3600) / 60);
+                return sprintf('%02d:%02d', $hours, $minutes);
+            }
+        } catch (\Exception $e) {
+            // If time parsing fails, return null
+        }
+
+        return null;
+    }
+
+    /**
+     * Calculate early exit using timetable time for per hour teacher
+     */
+    private function calculateEarlyExitWithTimetable($endTime, $timetableEndTime): ?string
+    {
+        if (!$endTime || !$timetableEndTime) {
+            return null;
+        }
+
+        try {
+            $time = is_string($endTime) ? $endTime : $endTime->format('H:i:s');
+            $standardTime = is_string($timetableEndTime) ? $timetableEndTime : $timetableEndTime->format('H:i:s');
+            
+            $end = strtotime($time);
+            $standard = strtotime($standardTime);
+
+            if ($end && $standard && $end < $standard) {
+                $diff = $standard - $end;
+                $hours = floor($diff / 3600);
+                $minutes = floor(($diff % 3600) / 60);
+                return sprintf('%02d:%02d', $hours, $minutes);
+            }
+        } catch (\Exception $e) {
+            // If time parsing fails, return null
+        }
+
+        return null;
     }
 
     /**

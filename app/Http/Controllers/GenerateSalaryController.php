@@ -10,6 +10,8 @@ use App\Models\Salary;
 use App\Models\Loan;
 use App\Models\StaffAttendance;
 use App\Models\SalarySetting;
+use App\Models\Timetable;
+use App\Models\Subject;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -265,10 +267,20 @@ class GenerateSalaryController extends Controller
                 // Calculate attendance counts for selected month/year
                 $attendanceSummary = $this->calculateAttendanceSummary($staff->id, $year, $month);
                 $presentCount = $attendanceSummary['present'];
-                $absentCount = $attendanceSummary['absent'];
-                $lateCount = $attendanceSummary['late'];
-                $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
                 $basicRate = (float) ($staff->salary ?? 0);
+                $salaryType = strtolower(trim($staff->salary_type ?? ''));
+                
+                // For per lecture salary type, don't count absent/late/early exit
+                if ($salaryType === 'lecture') {
+                    $absentCount = 0;
+                    $lateCount = 0;
+                    $earlyExitCount = 0;
+                } else {
+                    $absentCount = $attendanceSummary['absent'];
+                    $lateCount = $attendanceSummary['late'];
+                    $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
+                }
+                
                 $salaryGenerated = $this->calculateSalaryGenerated($staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
 
                 // Create salary record
@@ -307,10 +319,20 @@ class GenerateSalaryController extends Controller
                 $loanRepayment = $this->calculateLoanRepayment($salary->staff_id);
                 $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, $year, $month);
                 $presentCount = $attendanceSummary['present'];
-                $absentCount = $attendanceSummary['absent'];
-                $lateCount = $attendanceSummary['late'];
-                $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
                 $basicRate = (float) ($salary->staff->salary ?? 0);
+                $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
+                
+                // For per lecture salary type, don't count absent/late/early exit
+                if ($salaryType === 'lecture') {
+                    $absentCount = 0;
+                    $lateCount = 0;
+                    $earlyExitCount = 0;
+                } else {
+                    $absentCount = $attendanceSummary['absent'];
+                    $lateCount = $attendanceSummary['late'];
+                    $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
+                }
+                
                 $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
                 if ($salary->loan_repayment != $loanRepayment) {
                     $salary->update(['loan_repayment' => $loanRepayment]);
@@ -480,64 +502,216 @@ class GenerateSalaryController extends Controller
         $totalLectures = 0;
         $totalMinutes = 0;
 
+        // Get staff member to check salary type
+        $staff = Staff::find($staffId);
+        $isPerLecture = $staff && strtolower(trim($staff->salary_type ?? '')) === 'lecture';
+        $isPerHour = $staff && strtolower(trim($staff->salary_type ?? '')) === 'per hour';
+
+        // For per hour salary type, don't count leave
+        if ($isPerHour) {
+            $leave = 0; // Reset leave count for per hour type
+        }
+
+        // For per lecture salary type, calculate lectures based on assigned subjects and present days
+        if ($isPerLecture && $staff) {
+            $staffName = trim($staff->name ?? '');
+            if (!empty($staffName)) {
+                // Get staff's assigned subjects from Subject table
+                // Count unique subjects (subject_name + class + section combination)
+                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
+                    ->whereNotNull('subject_name')
+                    ->whereNotNull('class')
+                    ->whereNotNull('section')
+                    ->get();
+
+                if ($assignedSubjects->isNotEmpty()) {
+                    // Count unique subject assignments (each subject-class-section is one assignment)
+                    // Group by subject_name, class, section to get unique assignments
+                    $uniqueSubjectAssignments = $assignedSubjects->unique(function ($subject) {
+                        return strtolower(trim($subject->subject_name ?? '')) . '|' . 
+                               strtolower(trim($subject->class ?? '')) . '|' . 
+                               strtolower(trim($subject->section ?? ''));
+                    });
+                    
+                    $totalSubjectCount = $uniqueSubjectAssignments->count();
+
+                    // Get all present days in the month
+                    $presentDaysCount = 0;
+                    foreach ($records as $record) {
+                        if ($record->status === 'Present' && $record->attendance_date) {
+                            $presentDaysCount++;
+                        }
+                    }
+
+                    // Calculate total lectures: Number of subjects × Number of present days
+                    // Each subject is counted once per present day
+                    $totalLectures = $totalSubjectCount * $presentDaysCount;
+                }
+            }
+        }
+
         foreach ($records as $record) {
             if ($record->status === 'Present') {
                 $present++;
             } elseif ($record->status === 'Absent') {
                 $absent++;
-            } elseif ($record->status === 'Leave') {
+            } elseif ($record->status === 'Leave' && !$isPerHour) {
+                // Don't count leave for per hour salary type
                 $leave++;
             }
 
-            $lateFlag = false;
-            if (!empty($record->start_time)) {
-                try {
-                    $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
-                    $startTime = Carbon::parse($date . ' ' . $record->start_time);
-                    $standardTime = Carbon::parse($date . ' ' . $lateArrivalTime);
-                    if ($startTime->greaterThan($standardTime)) {
-                        $lateFlag = true;
+            // For per hour staff, don't count late/early exit (as per requirements)
+            // For other staff, check late arrival and early exit
+            if (!$isPerHour) {
+                $lateFlag = false;
+                if (!empty($record->start_time)) {
+                    try {
+                        $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                        $startTime = Carbon::parse($date . ' ' . $record->start_time);
+                        $standardTime = Carbon::parse($date . ' ' . $lateArrivalTime);
+                        if ($startTime->greaterThan($standardTime)) {
+                            $lateFlag = true;
+                        }
+                    } catch (\Exception $e) {
+                        // Skip invalid times
                     }
-                } catch (\Exception $e) {
-                    // Skip invalid times
+                }
+
+                if (!$lateFlag && !empty($record->remarks) && stripos($record->remarks, 'Late Arrival') !== false) {
+                    $lateFlag = true;
+                }
+
+                if ($lateFlag) {
+                    $late++;
+                }
+
+                // Check for early exit
+                $earlyExitFlag = false;
+                if (!empty($record->end_time) && $earlyExitTime) {
+                    try {
+                        $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                        $endTime = Carbon::parse($date . ' ' . $record->end_time);
+                        $standardExitTime = Carbon::parse($date . ' ' . $earlyExitTime);
+                        if ($endTime->lessThan($standardExitTime)) {
+                            $earlyExitFlag = true;
+                        }
+                    } catch (\Exception $e) {
+                        // Skip invalid times
+                    }
+                }
+
+                // Also check remarks for early exit
+                if (!$earlyExitFlag && !empty($record->remarks) && stripos($record->remarks, 'Early Exit') !== false) {
+                    $earlyExitFlag = true;
+                }
+
+                if ($earlyExitFlag) {
+                    $earlyExit++;
                 }
             }
 
-            if (!$lateFlag && !empty($record->remarks) && stripos($record->remarks, 'Late Arrival') !== false) {
-                $lateFlag = true;
+            // For non-per-lecture salary types, use conducted_lectures from attendance
+            if (!$isPerLecture) {
+                $totalLectures += (int) ($record->conducted_lectures ?? 0);
             }
 
-            if ($lateFlag) {
-                $late++;
-            }
+            // Calculate total minutes for per hour salary calculation
+            // For per hour staff, ALWAYS use timetable time, not attendance time
+            if ($isPerHour && $record->status === 'Present') {
+                $staffName = trim($staff->name ?? '');
+                if (!empty($staffName)) {
+                    // Get staff's assigned subjects from Subject table
+                    $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
+                        ->whereNotNull('subject_name')
+                        ->whereNotNull('class')
+                        ->whereNotNull('section')
+                        ->get();
 
-            // Check for early exit
-            $earlyExitFlag = false;
-            if (!empty($record->end_time) && $earlyExitTime) {
-                try {
-                    $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
-                    $endTime = Carbon::parse($date . ' ' . $record->end_time);
-                    $standardExitTime = Carbon::parse($date . ' ' . $earlyExitTime);
-                    if ($endTime->lessThan($standardExitTime)) {
-                        $earlyExitFlag = true;
+                    if ($assignedSubjects->isNotEmpty()) {
+                        $dayName = Carbon::parse($record->attendance_date)->format('l'); // Monday, Tuesday, etc.
+                        
+                        // Calculate expected hours from timetable for this day
+                        $dayMinutes = 0;
+                        foreach ($assignedSubjects as $subject) {
+                            $subjectName = trim($subject->subject_name ?? '');
+                            $subjectClass = trim($subject->class ?? '');
+                            $subjectSection = trim($subject->section ?? '');
+                            $subjectCampus = trim($subject->campus ?? '');
+                            
+                            if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+                                continue;
+                            }
+                            
+                            // Use flexible matching for subject and class names
+                            $subjectNameLower = strtolower($subjectName);
+                            $timetableQuery = Timetable::where(function($query) use ($subjectNameLower) {
+                                $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                                // Flexible matching for common subject name variations
+                                $subjectNameMap = [
+                                    'maths' => ['maths', 'mathematics', 'math'],
+                                    'mathematics' => ['maths', 'mathematics', 'math'],
+                                    'english' => ['english', 'eng'],
+                                    'urdu' => ['urdu'],
+                                    'science' => ['science', 'sci'],
+                                    'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
+                                    'social studies' => ['social studies', 'social', 'sst'],
+                                ];
+                                if (isset($subjectNameMap[$subjectNameLower])) {
+                                    foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                                        $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                                    }
+                                }
+                            })
+                            ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+                            ->where(function($query) use ($subjectClass) {
+                                // Match class name (handle variations like "Four" = "4" = "four")
+                                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
+                                // Also try numeric matching if class is numeric
+                                if (is_numeric($subjectClass)) {
+                                    $wordMap = [1 => 'one', 2 => 'two', 3 => 'three', 4 => 'four', 5 => 'five',
+                                                6 => 'six', 7 => 'seven', 8 => 'eight', 9 => 'nine', 10 => 'ten'];
+                                    if (isset($wordMap[(int)$subjectClass])) {
+                                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($wordMap[(int)$subjectClass])]);
+                                    }
+                                } else {
+                                    $wordToNumber = ['one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5,
+                                                     'six' => 6, 'seven' => 7, 'eight' => 8, 'nine' => 9, 'ten' => 10];
+                                    $classLower = strtolower(trim($subjectClass));
+                                    if (isset($wordToNumber[$classLower])) {
+                                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber[$classLower])]);
+                                    }
+                                }
+                            })
+                            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
+                            
+                            if (!empty($subjectCampus)) {
+                                $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)]);
+                            }
+                            
+                            $timetableEntries = $timetableQuery->get();
+                            
+                            // Calculate minutes from timetable entries
+                            foreach ($timetableEntries as $entry) {
+                                if (!empty($entry->starting_time) && !empty($entry->ending_time)) {
+                                    try {
+                                        $startTime = Carbon::parse($entry->starting_time);
+                                        $endTime = Carbon::parse($entry->ending_time);
+                                        if ($endTime->greaterThan($startTime)) {
+                                            $dayMinutes += $startTime->diffInMinutes($endTime);
+                                        }
+                                    } catch (\Exception $e) {
+                                        // Skip invalid times
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Add day minutes to total (from timetable, not attendance)
+                        $totalMinutes += $dayMinutes;
                     }
-                } catch (\Exception $e) {
-                    // Skip invalid times
                 }
-            }
-
-            // Also check remarks for early exit
-            if (!$earlyExitFlag && !empty($record->remarks) && stripos($record->remarks, 'Early Exit') !== false) {
-                $earlyExitFlag = true;
-            }
-
-            if ($earlyExitFlag) {
-                $earlyExit++;
-            }
-
-            $totalLectures += (int) ($record->conducted_lectures ?? 0);
-
-            if (!empty($record->start_time) && !empty($record->end_time)) {
+            } elseif (!$isPerHour && !empty($record->start_time) && !empty($record->end_time)) {
+                // For non-per-hour staff, use attendance time
                 try {
                     $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
                     $startTime = Carbon::parse($date . ' ' . $record->start_time);

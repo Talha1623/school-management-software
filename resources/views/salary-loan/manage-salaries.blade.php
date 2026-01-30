@@ -175,18 +175,20 @@
                                                 <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Make Payment" onclick="openPaymentModal({{ $salary->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">payments</span>
                                                 </button>
-                                                <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
-                                                    @csrf
-                                                    @method('PUT')
-                                                    <input type="hidden" name="status" value="{{ $salary->status == 'Paid' ? 'Pending' : 'Paid' }}">
-                                                    <button type="submit" class="btn btn-sm px-2 py-0 {{ $salary->status == 'Paid' ? 'btn-success' : 'btn-warning' }}" title="Click to toggle status">
-                                                        @if($salary->status == 'Paid')
-                                                            <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px;">Paid</span>
-                                                        @else
-                                                            <span class="badge bg-warning text-dark" style="font-size: 11px; padding: 4px 8px;">Pending</span>
-                                                        @endif
+                                                @if($salary->status == 'Paid' && $salary->amount_paid > 0)
+                                                    <button type="button" class="btn btn-sm px-2 py-0 btn-success" title="Print Receipt" onclick="printPaymentReceipt({{ $salary->id }})">
+                                                        <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; cursor: pointer;">Paid</span>
                                                     </button>
-                                                </form>
+                                                @else
+                                                    <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
+                                                        @csrf
+                                                        @method('PUT')
+                                                        <input type="hidden" name="status" value="Paid">
+                                                        <button type="submit" class="btn btn-sm px-2 py-0 btn-warning" title="Click to mark as Paid">
+                                                            <span class="badge bg-warning text-dark" style="font-size: 11px; padding: 4px 8px;">Pending</span>
+                                                        </button>
+                                                    </form>
+                                                @endif
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this salary record?')) { document.getElementById('delete-form-{{ $salary->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
@@ -307,6 +309,7 @@
                                 </span>
                                 <input type="number" class="form-control" id="payment_amount_paid" name="amount_paid" step="0.01" min="0" required style="height: 38px;">
                             </div>
+                            <small id="amount_paid_note" class="text-muted" style="font-size: 10px; display: none;">Amount Paid cannot be edited once payment is made</small>
                         </div>
 
                         <!-- Loan Repayment -->
@@ -827,7 +830,25 @@ function openPaymentModal(salaryId) {
         generatedSalaryInput.setAttribute('data-generated', generatedSalary);
         generatedSalaryInput.value = `₹${generatedSalary.toFixed(2)}`;
         
-        document.getElementById('payment_amount_paid').value = data.amount_paid || 0;
+        const amountPaid = parseFloat(data.amount_paid || 0);
+        const amountPaidInput = document.getElementById('payment_amount_paid');
+        const amountPaidNote = document.getElementById('amount_paid_note');
+        
+        // If amount_paid > 0, make it readonly/disabled
+        if (amountPaid > 0) {
+            amountPaidInput.value = amountPaid;
+            amountPaidInput.setAttribute('readonly', 'readonly');
+            amountPaidInput.style.backgroundColor = '#f8f9fa';
+            amountPaidInput.style.cursor = 'not-allowed';
+            amountPaidNote.style.display = 'block';
+        } else {
+            amountPaidInput.value = 0;
+            amountPaidInput.removeAttribute('readonly');
+            amountPaidInput.style.backgroundColor = '';
+            amountPaidInput.style.cursor = '';
+            amountPaidNote.style.display = 'none';
+        }
+        
         document.getElementById('payment_loan_repayment').value = data.loan_repayment || 0;
         document.getElementById('payment_bonus_title').value = '';
         document.getElementById('payment_bonus_amount').value = 0;
@@ -857,12 +878,29 @@ function openPaymentModal(salaryId) {
         calculateGeneratedSalary();
         
         // Show modal
-        new bootstrap.Modal(document.getElementById('paymentModal')).show();
+        const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+        paymentModal.show();
+        
+        // Reset readonly state when modal is hidden (for next time)
+        document.getElementById('paymentModal').addEventListener('hidden.bs.modal', function() {
+            const amountPaidInput = document.getElementById('payment_amount_paid');
+            const amountPaidNote = document.getElementById('amount_paid_note');
+            amountPaidInput.removeAttribute('readonly');
+            amountPaidInput.style.backgroundColor = '';
+            amountPaidInput.style.cursor = '';
+            amountPaidNote.style.display = 'none';
+        }, { once: true });
     })
     .catch(error => {
         console.error('Error:', error);
         alert('Error loading salary data');
     });
+}
+
+// Print Payment Receipt
+function printPaymentReceipt(salaryId) {
+    // Open print receipt in new window
+    window.open(`{{ url('/salary-loan/manage-salaries') }}/${salaryId}/print-receipt`, '_blank');
 }
 </script>
 @endsection
