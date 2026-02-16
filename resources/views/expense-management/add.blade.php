@@ -118,12 +118,11 @@
                                 <th>Campus</th>
                                 <th>Category</th>
                                 <th>Title</th>
-                                <th>Description</th>
                                 <th>Amount</th>
                                 <th>Method</th>
                                 <th>Invoice/Receipt</th>
                                 <th>Date</th>
-                                <th>Notify Admin</th>
+                                <th>Created By</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
@@ -142,9 +141,6 @@
                                             <strong class="text-primary">{{ $expense->title }}</strong>
                                         </td>
                                         <td>
-                                            <span class="text-muted" style="font-size: 11px;">{{ Str::limit($expense->description ?? 'N/A', 30) }}</span>
-                                        </td>
-                                        <td>
                                             <strong class="text-success">₹{{ number_format($expense->amount, 2) }}</strong>
                                         </td>
                                         <td>
@@ -161,18 +157,14 @@
                                             <span class="text-muted">{{ $expense->date->format('d M Y') }}</span>
                                         </td>
                                         <td>
-                                            @if($expense->notify_admin)
-                                                <span class="badge bg-danger text-white">Yes</span>
-                                            @else
-                                                <span class="badge bg-light text-dark">No</span>
-                                            @endif
+                                            <span class="badge bg-dark text-white">{{ $expense->created_by ?? 'N/A' }}</span>
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
                                                 <a href="{{ route('expense-management.add.show', $expense->id) }}" class="btn btn-sm btn-info px-2 py-1" title="View">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
                                                 </a>
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editExpense({{ $expense->id }}, '{{ addslashes($expense->campus) }}', '{{ addslashes($expense->category) }}', '{{ addslashes($expense->title) }}', '{{ addslashes($expense->description ?? '') }}', {{ $expense->amount }}, '{{ addslashes($expense->method) }}', '{{ $expense->invoice_receipt ? Storage::url($expense->invoice_receipt) : '' }}', '{{ $expense->date->format('Y-m-d') }}', {{ $expense->notify_admin ? 'true' : 'false' }})">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editExpense({{ $expense->id }}, '{{ addslashes($expense->campus) }}', '{{ addslashes($expense->category) }}', '{{ addslashes($expense->title) }}', {{ $expense->amount }}, '{{ addslashes($expense->method) }}', '{{ $expense->invoice_receipt ? Storage::url($expense->invoice_receipt) : '' }}', '{{ $expense->date->format('Y-m-d') }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
                                                 <a href="{{ route('expense-management.add.print', $expense->id) }}" target="_blank" class="btn btn-sm btn-dark px-2 py-1" title="Print">
@@ -198,7 +190,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="11" class="text-center text-muted py-5">
+                                    <td colspan="9" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No expenses found.</p>
                                     </td>
@@ -275,15 +267,6 @@
                                 <input type="text" class="form-control expense-input" name="title" id="title" placeholder="Enter title" required>
                             </div>
                         </div>
-                        <div class="col-md-12">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Description</label>
-                            <div class="input-group input-group-sm expense-input-group">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                    <span class="material-symbols-outlined" style="font-size: 15px;">description</span>
-                                </span>
-                                <textarea class="form-control expense-input" name="description" id="description" placeholder="Enter description" rows="3" style="resize: none;"></textarea>
-                            </div>
-                        </div>
                         <div class="col-md-6">
                             <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Amount <span class="text-danger">*</span></label>
                             <div class="input-group input-group-sm expense-input-group">
@@ -301,6 +284,7 @@
                                 </span>
                                 <select class="form-control expense-input" name="method" id="method" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Payment Method</option>
+                                    <option value="Cash">Cash</option>
                                     <option value="Bank">Bank</option>
                                     <option value="Wallet">Wallet</option>
                                     <option value="Transfer">Transfer</option>
@@ -767,15 +751,13 @@ window.addEventListener('beforeunload', saveExpensePageState);
 window.addEventListener('pageshow', restoreExpensePageState);
 
 // Edit expense function
-function editExpense(id, campus, category, title, description, amount, method, invoiceReceiptUrl, date, notifyAdmin) {
+function editExpense(id, campus, category, title, amount, method, invoiceReceiptUrl, date) {
     document.getElementById('campus').value = campus;
     document.getElementById('category').value = category;
     document.getElementById('title').value = title;
-    document.getElementById('description').value = description;
     document.getElementById('amount').value = amount;
     document.getElementById('method').value = method;
     document.getElementById('date').value = date;
-    document.getElementById('notify_admin').checked = notifyAdmin;
     
     // Handle image display
     const existingImage = document.getElementById('existingImage');

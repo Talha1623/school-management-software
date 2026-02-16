@@ -114,7 +114,18 @@
                                 <tr>
                                     <td>{{ \Carbon\Carbon::parse($item->exam_date)->format('d M Y') }}</td>
                                     <td>{{ \Carbon\Carbon::parse($item->exam_date)->format('l') }}</td>
-                                    <td>{{ $item->subject }}</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-primary edit-timetable-btn" 
+                                                data-id="{{ $item->id }}"
+                                                data-date="{{ \Carbon\Carbon::parse($item->exam_date)->format('Y-m-d') }}"
+                                                data-starting-time="{{ \Carbon\Carbon::createFromFormat('H:i:s', $item->starting_time)->format('H:i') }}"
+                                                data-ending-time="{{ \Carbon\Carbon::createFromFormat('H:i:s', $item->ending_time)->format('H:i') }}"
+                                                data-room-block="{{ $item->room_block ?? '' }}"
+                                                style="font-size: 12px; padding: 4px 12px;">
+                                            {{ $item->subject }}
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">arrow_drop_down</span>
+                                        </button>
+                                    </td>
                                     <td>{{ \Carbon\Carbon::createFromFormat('H:i:s', $item->starting_time)->format('H:i') }}</td>
                                     <td>{{ \Carbon\Carbon::createFromFormat('H:i:s', $item->ending_time)->format('H:i') }}</td>
                                     <td>{{ $totalTime }}</td>
@@ -133,6 +144,44 @@
     </div>
 </div>
 @endif
+
+<!-- Edit Timetable Modal -->
+<div class="modal fade" id="editTimetableModal" tabindex="-1" aria-labelledby="editTimetableModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                <h5 class="modal-title text-white" id="editTimetableModalLabel">Edit Timetable</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editTimetableForm" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Date</label>
+                        <input type="date" class="form-control form-control-sm" id="edit_date" name="date" required style="height: 32px;">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_starting_time" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Starting Time</label>
+                        <input type="time" class="form-control form-control-sm" id="edit_starting_time" name="starting_time" required style="height: 32px;">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_ending_time" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Ending Time</label>
+                        <input type="time" class="form-control form-control-sm" id="edit_ending_time" name="ending_time" required style="height: 32px;">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_room_block" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Room/Block</label>
+                        <input type="text" class="form-control form-control-sm" id="edit_room_block" name="room_block" style="height: 32px;">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <style>
 .no-print {
@@ -287,6 +336,61 @@ document.addEventListener('DOMContentLoaded', function() {
         loadExams();
         loadClasses();
     }
+
+    // Edit Timetable functionality
+    const editModal = new bootstrap.Modal(document.getElementById('editTimetableModal'));
+    const editForm = document.getElementById('editTimetableForm');
+    let currentTimetableId = null;
+
+    document.querySelectorAll('.edit-timetable-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            currentTimetableId = this.getAttribute('data-id');
+            const date = this.getAttribute('data-date');
+            const startingTime = this.getAttribute('data-starting-time');
+            const endingTime = this.getAttribute('data-ending-time');
+            const roomBlock = this.getAttribute('data-room-block');
+
+            document.getElementById('edit_date').value = date;
+            document.getElementById('edit_starting_time').value = startingTime;
+            document.getElementById('edit_ending_time').value = endingTime;
+            document.getElementById('edit_room_block').value = roomBlock || '';
+
+            editForm.action = `/exam/timetable/${currentTimetableId}`;
+            editModal.show();
+        });
+    });
+
+    editForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
+                         document.querySelector('input[name="_token"]')?.value;
+
+        fetch(this.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            return response.json().then(err => Promise.reject(err));
+        })
+        .then(data => {
+            editModal.hide();
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            const errorMessage = error.message || 'Error updating timetable. Please try again.';
+            alert(errorMessage);
+        });
+    });
 });
 </script>
 @endsection

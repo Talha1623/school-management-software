@@ -45,6 +45,20 @@ class StaffManagementController extends Controller
             }
         }
         
+        // Filter by status (Active/Inactive)
+        if ($request->filled('status_filter')) {
+            $statusFilter = $request->status_filter;
+            if ($statusFilter === 'active') {
+                $query->where(function($q) {
+                    $q->where('status', 'Active')
+                      ->orWhereNull('status')
+                      ->orWhere('status', '');
+                });
+            } elseif ($statusFilter === 'inactive') {
+                $query->where('status', 'Inactive');
+            }
+        }
+        
         $perPage = $request->get('per_page', 10);
         $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
         
@@ -77,33 +91,78 @@ class StaffManagementController extends Controller
     }
 
     /**
-     * Generate unique Employee ID
+     * Generate unique Employee ID based on campus (using same campus number as Student Code)
      */
-    private function generateEmployeeId(): string
+    private function generateEmployeeId(?string $campus = null): string
     {
-        // Get the last employee ID
+        // Use the same logic as Student Code generation to get campus number
+        // This ensures Employee ID uses the same campus number as Student Code (ST1 → EMP1, ST2 → EMP2, etc.)
+        $campusNumber = '1'; // Default to 1 if no campus
+        
+        if ($campus) {
+            $campus = trim((string) $campus);
+            
+            // First, try to get code_prefix from Campus model (same as Student Code does)
+            $campusRecord = \App\Models\Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($campus)])->first();
+            
+            if ($campusRecord && !empty($campusRecord->code_prefix)) {
+                // Extract number from code_prefix (e.g., ST1 → 1, ST2 → 2)
+                if (preg_match('/ST(\d+)/i', $campusRecord->code_prefix, $matches)) {
+                    $campusNumber = $matches[1];
+                } elseif (preg_match('/(\d+)/', $campusRecord->code_prefix, $matches)) {
+                    $campusNumber = $matches[1];
+                }
+            } else {
+                // Fallback: Extract number from campus name (handles: campus1, Campus1, Campus 1, etc.)
+                if (preg_match('/(\d+)/', $campus, $matches)) {
+                    $campusNumber = $matches[1];
+                } else {
+                    // If no number found, use first letter or default to 1
+                    $campusLower = strtolower(trim($campus));
+                    if (strpos($campusLower, 'main') !== false || strpos($campusLower, 'primary') !== false) {
+                        $campusNumber = '1';
+                    } elseif (strpos($campusLower, 'secondary') !== false || strpos($campusLower, 'branch') !== false) {
+                        $campusNumber = '2';
+                    } else {
+                        // Use first character as number (A=1, B=2, etc.) or default to 1
+                        $firstChar = strtoupper(substr($campus, 0, 1));
+                        if (is_numeric($firstChar)) {
+                            $campusNumber = $firstChar;
+                        } else {
+                            $campusNumber = ord($firstChar) - ord('A') + 1;
+                            if ($campusNumber < 1 || $campusNumber > 9) {
+                                $campusNumber = '1';
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get the last employee ID for this campus
+        $prefix = 'EMP' . $campusNumber . '-';
         $lastStaff = Staff::whereNotNull('emp_id')
-            ->where('emp_id', 'like', 'EMP%')
-            ->orderByRaw('CAST(SUBSTRING(emp_id, 4) AS UNSIGNED) DESC')
+            ->where('emp_id', 'like', $prefix . '%')
+            ->orderByRaw('CAST(SUBSTRING(emp_id, ' . (strlen($prefix) + 1) . ') AS UNSIGNED) DESC')
             ->first();
 
         if ($lastStaff && $lastStaff->emp_id) {
-            // Extract the number part and increment
-            $lastNumber = (int) substr($lastStaff->emp_id, 3);
+            // Extract the number part after "EMP{campusNumber}-" and increment
+            $lastNumber = (int) substr($lastStaff->emp_id, strlen($prefix));
             $newNumber = $lastNumber + 1;
         } else {
-            // Start from 1 if no employee ID exists
+            // Start from 1 if no employee ID exists for this campus
             $newNumber = 1;
         }
 
-        // Format as EMP001, EMP002, etc.
-        return 'EMP' . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
+        // Format as EMP1-001, EMP2-001, etc. (matching Student Code format ST1-001, ST2-001, etc.)
+        return 'EMP' . $campusNumber . '-' . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
     }
 
     /**
      * Get next Employee ID (for AJAX request)
      */
-    public function getNextEmployeeId()
+    public function getNextEmployeeId(Request $request)
     {
         // Check if user is super admin
         if (!Auth::guard('admin')->check()) {
@@ -115,7 +174,8 @@ class StaffManagementController extends Controller
             return response()->json(['error' => 'Access denied. Super Admin access required.'], 403);
         }
 
-        return response()->json(['emp_id' => $this->generateEmployeeId()]);
+        $campus = $request->input('campus');
+        return response()->json(['emp_id' => $this->generateEmployeeId($campus)]);
     }
 
     /**
@@ -164,8 +224,9 @@ class StaffManagementController extends Controller
             'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
         ]);
 
-        // Auto-generate Employee ID if not provided
-        $empId = $validated['emp_id'] ?? $this->generateEmployeeId();
+        // Auto-generate Employee ID if not provided (based on campus)
+        $campus = $validated['campus'] ?? null;
+        $empId = $validated['emp_id'] ?? $this->generateEmployeeId($campus);
         $validated['emp_id'] = $empId;
 
         // Auto-generate email if not provided (for dashboard access)

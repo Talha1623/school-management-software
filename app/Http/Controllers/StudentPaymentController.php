@@ -42,17 +42,28 @@ class StudentPaymentController extends Controller
     public function getStudentByCode(Request $request)
     {
         $studentCode = $request->get('student_code');
+        $campus = $request->get('campus');
         
         if (!$studentCode) {
             return response()->json(['success' => false, 'message' => 'Student code is required']);
         }
 
-        $student = Student::where('student_code', $studentCode)->first();
+        $studentQuery = Student::where('student_code', $studentCode);
+        
+        // Filter by campus if provided
+        if ($campus && trim($campus) !== '') {
+            $studentQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        $student = $studentQuery->first();
         
         if (!$student) {
+            $message = $campus && trim($campus) !== '' 
+                ? 'Student not found with this code in the selected campus'
+                : 'Student not found with this code';
             return response()->json([
                 'success' => false,
-                'message' => 'Student not found with this code'
+                'message' => $message
             ]);
         }
 
@@ -80,28 +91,29 @@ class StudentPaymentController extends Controller
     public function store(Request $request)
     {
         try {
-            $validated = $request->validate([
-                'campus' => ['nullable', 'string', 'max:255'],
-                'student_code' => ['required', 'string', 'max:255'],
-                'payment_title' => ['required', 'string', 'max:255'],
-                'payment_amount' => ['required', 'numeric', 'min:0'],
-                'discount' => ['nullable', 'numeric', 'min:0'],
-                'method' => ['required', 'string', 'max:255'],
-                'payment_date' => ['required', 'date'],
-                'sms_notification' => ['required', 'string', 'in:Yes,No'],
-                'generated_id' => ['nullable', 'integer'],
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            // If request expects JSON, return JSON response with validation errors
-            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => $e->errors()
-                ], 422);
+            try {
+                $validated = $request->validate([
+                    'campus' => ['nullable', 'string', 'max:255'],
+                    'student_code' => ['required', 'string', 'max:255'],
+                    'payment_title' => ['required', 'string', 'max:255'],
+                    'payment_amount' => ['required', 'numeric', 'min:0'],
+                    'discount' => ['nullable', 'numeric', 'min:0'],
+                    'method' => ['required', 'string', 'max:255'],
+                    'payment_date' => ['required', 'date'],
+                    'sms_notification' => ['required', 'string', 'in:Yes,No'],
+                    'generated_id' => ['nullable', 'integer'],
+                ]);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                // If request expects JSON, return JSON response with validation errors
+                if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Validation failed',
+                        'errors' => $e->errors()
+                    ], 422);
+                }
+                throw $e;
             }
-            throw $e;
-        }
 
         // Initialize late_fee
         $lateFee = 0;
@@ -135,24 +147,31 @@ class StudentPaymentController extends Controller
             }
         }
 
+        // Check if this is an installment (payment_title contains /number pattern)
+        $isInstallment = preg_match('/\/\d+$/', $validated['payment_title']);
+        
         // Check if there's an existing generated fee record for this student and title
         $existingFee = null;
-        if (!empty($validated['generated_id'])) {
-            $existingFee = StudentPayment::where('id', $validated['generated_id'])
-                ->where('student_code', $validated['student_code'])
-                ->where('method', 'Generated')
-                ->first();
+        
+        // For installments, always create new records - don't check for existing fees
+        if (!$isInstallment) {
+            if (!empty($validated['generated_id'])) {
+                $existingFee = StudentPayment::where('id', $validated['generated_id'])
+                    ->where('student_code', $validated['student_code'])
+                    ->where('method', 'Generated')
+                    ->first();
 
-            if ($existingFee && $existingFee->payment_title) {
-                $validated['payment_title'] = $existingFee->payment_title;
+                if ($existingFee && $existingFee->payment_title) {
+                    $validated['payment_title'] = $existingFee->payment_title;
+                }
             }
-        }
 
-        if (!$existingFee) {
-            $existingFee = StudentPayment::where('student_code', $validated['student_code'])
-                ->where('payment_title', $validated['payment_title'])
-                ->where('method', 'Generated')
-                ->first();
+            if (!$existingFee) {
+                $existingFee = StudentPayment::where('student_code', $validated['student_code'])
+                    ->where('payment_title', $validated['payment_title'])
+                    ->where('method', 'Generated')
+                    ->first();
+            }
         }
 
         if ($existingFee) {
@@ -180,7 +199,7 @@ class StudentPaymentController extends Controller
                     $successMessage .= " Late fee of " . number_format($lateFee, 2) . " has been added.";
                 }
 
-                if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+                if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
                     return response()->json([
                         'success' => true,
                         'message' => $successMessage,
@@ -224,7 +243,7 @@ class StudentPaymentController extends Controller
 
             $payment = $existingFee->fresh();
 
-            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
                 return response()->json([
                     'success' => true,
                     'message' => $successMessage,
@@ -262,7 +281,7 @@ class StudentPaymentController extends Controller
             $payment = StudentPayment::create($validated);
         } catch (\Exception $e) {
             // If request expects JSON, return JSON response with error
-            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
                 return response()->json([
                     'success' => false,
                     'message' => 'Error creating payment record: ' . $e->getMessage()
@@ -277,7 +296,7 @@ class StudentPaymentController extends Controller
         }
 
         // If request is AJAX or expects JSON, return JSON response
-        if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json') {
+        if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
             return response()->json([
                 'success' => true,
                 'message' => $successMessage,
@@ -301,6 +320,20 @@ class StudentPaymentController extends Controller
         return redirect()
             ->route('accounting.direct-payment.student')
             ->with('success', $successMessage);
+        } catch (\Exception $e) {
+            // Catch any unexpected exceptions and return JSON response
+            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                \Log::error('Error in StudentPaymentController@store: ' . $e->getMessage(), [
+                    'exception' => $e,
+                    'request_data' => $request->all()
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error creating payment: ' . $e->getMessage()
+                ], 500);
+            }
+            throw $e;
+        }
     }
 }
 

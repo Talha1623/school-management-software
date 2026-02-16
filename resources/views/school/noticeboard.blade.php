@@ -163,8 +163,11 @@
                                             @endif
                                         </td>
                                         <td class="text-end">
-                                            @if($isSuperAdmin)
-                                                <div class="d-inline-flex gap-1">
+                                            <div class="d-inline-flex gap-1">
+                                                <a href="{{ route('school.noticeboard.print', $noticeboard->id) }}" target="_blank" class="btn btn-sm btn-warning px-2 py-1" title="Print">
+                                                    <span class="material-symbols-outlined">print</span>
+                                                </a>
+                                                @if($isSuperAdmin)
                                                     <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editNoticeboard({{ $noticeboard->id }}, '{{ addslashes($noticeboard->campus ?? '') }}', '{{ addslashes($noticeboard->title) }}', '{{ addslashes($noticeboard->notice ?? '') }}', '{{ $noticeboard->date->format('Y-m-d') }}', '{{ $noticeboard->show_on ?? '' }}', '{{ $noticeboard->image ? asset('storage/' . $noticeboard->image) : '' }}')">
                                                         <span class="material-symbols-outlined">edit</span>
                                                     </button>
@@ -175,10 +178,8 @@
                                                         @csrf
                                                         @method('DELETE')
                                                     </form>
-                                                </div>
-                                            @else
-                                                <span class="text-muted">View Only</span>
-                                            @endif
+                                                @endif
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty

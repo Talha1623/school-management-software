@@ -75,10 +75,36 @@ class BehaviorCategoryController extends Controller
             'campus' => ['required', 'string', 'max:255'],
         ]);
 
-        BehaviorCategory::create($validated);
+        // Check if category already exists for this campus
+        $existingCategory = BehaviorCategory::whereRaw('LOWER(TRIM(category_name)) = ?', [strtolower(trim($validated['category_name']))])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
+            ->first();
+        
+        if ($existingCategory) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Category already exists',
+                    'category' => $existingCategory
+                ]);
+            }
+            return redirect()
+                ->route('student-behavior.categories', request()->only('search', 'per_page'))
+                ->with('error', 'Category already exists for this campus!');
+        }
+
+        $category = BehaviorCategory::create($validated);
+
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Behavior category created successfully!',
+                'category' => $category
+            ]);
+        }
 
         return redirect()
-            ->route('student-behavior.categories')
+            ->route('student-behavior.categories', request()->only('search', 'per_page'))
             ->with('success', 'Behavior category created successfully!');
     }
 
@@ -95,7 +121,7 @@ class BehaviorCategoryController extends Controller
         $behaviorCategory->update($validated);
 
         return redirect()
-            ->route('student-behavior.categories')
+            ->route('student-behavior.categories', request()->only('search', 'per_page'))
             ->with('success', 'Behavior category updated successfully!');
     }
 

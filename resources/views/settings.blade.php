@@ -115,6 +115,16 @@
                                 <span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span>
                             </a>
                             @endif
+                            
+                            @if(Route::has('settings.biometric-attendance'))
+                            <a href="{{ route('settings.biometric-attendance') }}" class="btn btn-outline-primary d-flex align-items-center justify-content-between">
+                                <span>
+                                    <span class="material-symbols-outlined me-2" style="font-size: 18px; vertical-align: middle;">fingerprint</span>
+                                    Biometric Att. Setting
+                                </span>
+                                <span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span>
+                            </a>
+                            @endif
                         </div>
                     </div>
                 </div>

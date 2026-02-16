@@ -211,6 +211,38 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Function to load fee types by campus
+    function loadFeeTypesByCampus(campus) {
+        const feeTypeSelect = document.getElementById('fee_type');
+        if (!feeTypeSelect) {
+            return;
+        }
+
+        // Clear existing options except the first one
+        feeTypeSelect.innerHTML = '<option value="">Select Fee Type</option>';
+
+        if (!campus || campus === '') {
+            return;
+        }
+
+        // Fetch fee types for the selected campus
+        fetch(`{{ route('accounting.custom-fee.get-fee-types-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.fee_types && data.fee_types.length > 0) {
+                    data.fee_types.forEach(feeType => {
+                        const option = document.createElement('option');
+                        option.value = feeType;
+                        option.textContent = feeType;
+                        feeTypeSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading fee types:', error);
+            });
+    }
+    
     function loadClassesForCampus() {
         const campus = campusSelect ? campusSelect.value : '';
 
@@ -405,8 +437,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     if (campusSelect) {
-        campusSelect.addEventListener('change', loadClassesForCampus);
+        campusSelect.addEventListener('change', function() {
+            loadClassesForCampus();
+            loadFeeTypesByCampus(this.value);
+        });
     }
+    
+    // Load fee types on page load if campus is already selected
+    @if(old('campus'))
+        loadFeeTypesByCampus('{{ old('campus') }}');
+    @endif
     
     // Load students on page load if all fields are already filled
     setTimeout(function() {

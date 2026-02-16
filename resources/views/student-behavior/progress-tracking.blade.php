@@ -82,7 +82,7 @@
                         <div class="report-header mb-3">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
-                                    <h3 class="mb-1 fw-bold" style="color: #e91e63; font-size: 20px;">{{ config('app.name', 'ICMS') }}</h3>
+                                    <h3 class="mb-1 fw-bold" style="color: #e91e63; font-size: 20px;">{{ $student->student_name ?? request('search') }}</h3>
                                     <h4 class="mb-0 fw-bold" style="color: #000; font-size: 16px;">{{ $student->campus ?? 'Main Campus' }}</h4>
                                 </div>
                                 <div class="text-end">
@@ -157,9 +157,26 @@
                                     @if(count($behaviorSummary) > 0)
                                         @foreach($behaviorSummary as $index => $summary)
                                         <tr>
-                                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ $index + 1 }}</td>
-                                            <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">{{ $summary['type'] }}</td>
-                                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ $summary['points'] }}</td>
+                                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd; vertical-align: top;">{{ $index + 1 }}</td>
+                                            <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">
+                                                <div class="fw-semibold" style="color: #003471; margin-bottom: 6px; font-size: 13px;">{{ $summary['type'] }}</div>
+                                                @if(isset($summary['categories']) && count($summary['categories']) > 0)
+                                                    <div style="margin-top: 8px; padding-left: 8px; border-left: 2px solid #e0e7ff;">
+                                                        @foreach($summary['categories'] as $category)
+                                                            <div style="font-size: 11px; color: #666; padding: 3px 0; line-height: 1.4;">
+                                                                <span style="color: #999; margin-right: 6px;">▸</span> 
+                                                                <span>{{ $category['category'] }}</span>
+                                                                <span style="color: #999; margin-left: 6px;">({{ $category['points'] }} pts, {{ $category['count'] }}x)</span>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                @else
+                                                    <div style="font-size: 11px; color: #999; font-style: italic; margin-top: 4px; padding-left: 8px;">
+                                                        No categories
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td style="padding: 8px; text-align: center; border: 1px solid #ddd; vertical-align: top; font-weight: 600; color: #003471; font-size: 13px;">{{ $summary['points'] }}</td>
                                         </tr>
                                         @endforeach
                                     @else
@@ -173,9 +190,52 @@
                             </table>
                         </div>
 
+                        <!-- Detailed Behavior Records Table -->
+                        @if($behaviorRecords->count() > 0)
+                        <div class="detailed-records-table mb-3">
+                            <h5 class="mb-2 fw-semibold" style="color: #003471; font-size: 14px; margin-top: 20px;">All Behavior Records</h5>
+                            <table class="table table-bordered mb-0" style="font-size: 12px;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 8px; text-align: center; background-color: #f8f9fa; border: 1px solid #ddd;">#</th>
+                                        <th style="padding: 8px; text-align: left; background-color: #f8f9fa; border: 1px solid #ddd;">Date</th>
+                                        <th style="padding: 8px; text-align: left; background-color: #f8f9fa; border: 1px solid #ddd;">Behavior Type</th>
+                                        <th style="padding: 8px; text-align: left; background-color: #f8f9fa; border: 1px solid #ddd;">Category</th>
+                                        <th style="padding: 8px; text-align: center; background-color: #f8f9fa; border: 1px solid #ddd;">Points</th>
+                                        <th style="padding: 8px; text-align: left; background-color: #f8f9fa; border: 1px solid #ddd;">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($behaviorRecords as $index => $record)
+                                    <tr>
+                                        <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ $index + 1 }}</td>
+                                        <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">
+                                            {{ \Carbon\Carbon::parse($record->date)->format('d-m-Y') }}
+                                        </td>
+                                        <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">
+                                            <span class="badge" style="background-color: {{ strtolower($record->type) == 'positive' ? '#28a745' : (strtolower($record->type) == 'negative' ? '#dc3545' : '#6c757d') }}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">
+                                                {{ $record->type }}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">
+                                            {{ $record->category ?: 'N/A' }}
+                                        </td>
+                                        <td style="padding: 8px; text-align: center; border: 1px solid #ddd; font-weight: 600; color: {{ $record->points >= 0 ? '#28a745' : '#dc3545' }};">
+                                            {{ $record->points > 0 ? '+' : '' }}{{ $record->points }}
+                                        </td>
+                                        <td style="padding: 8px; text-align: left; border: 1px solid #ddd; font-size: 11px; color: #666;">
+                                            {{ $record->description ?: '-' }}
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                        @endif
+
                         <!-- Information Note -->
                         <div class="info-note mb-3" style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 10px; font-size: 12px; color: #856404;">
-                            Points are calculated based on all available records for the student.
+                            Points are calculated based on all available records for the student. Total Records: {{ $behaviorRecords->count() }}
                         </div>
 
                         <!-- Print Button -->
@@ -258,6 +318,53 @@
     
     body {
         background: white;
+    }
+    
+    .behavior-report,
+    .behavior-report * {
+        color: white !important;
+    }
+    
+    .behavior-report {
+        background: #000 !important;
+    }
+    
+    .report-header h3,
+    .report-header h4,
+    .report-header h5,
+    .report-header p,
+    .report-header span {
+        color: white !important;
+    }
+    
+    .summary-table table,
+    .summary-table th,
+    .summary-table td {
+        color: white !important;
+        border-color: white !important;
+    }
+    
+    .summary-table th {
+        background-color: #333 !important;
+    }
+    
+    .summary-table td {
+        background-color: #000 !important;
+    }
+    
+    .info-note {
+        background: #333 !important;
+        border-color: white !important;
+        color: white !important;
+    }
+    
+    .graph-container {
+        background: #000 !important;
+        border-color: white !important;
+    }
+    
+    .graph-container * {
+        color: white !important;
     }
 }
 </style>

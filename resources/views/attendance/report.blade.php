@@ -122,22 +122,22 @@
 
                 <!-- Attendance Table -->
                 @if($students->count() > 0)
-                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
-                    <table class="table table-bordered table-sm" style="font-size: 12px;">
+                <div class="table-responsive attendance-table-container" style="max-height: 600px; overflow-y: auto;">
+                    <table class="table table-bordered table-sm attendance-report-table" style="font-size: 12px; width: 100%;">
                         <thead style="background-color: #f8f9fa; position: sticky; top: 0; z-index: 10;">
                             <tr>
                                 <th style="padding: 8px; text-align: center; min-width: 50px; border: 1px solid #dee2e6;">Roll</th>
-                                <th style="padding: 8px; text-align: left; min-width: 150px; border: 1px solid #dee2e6;">Students</th>
+                                <th style="padding: 8px; text-align: left; min-width: 150px; border: 1px solid #dee2e6;">Student</th>
                                 <th style="padding: 8px; text-align: left; min-width: 150px; border: 1px solid #dee2e6;">
                                     Parent
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; cursor: pointer;">swap_vert</span>
+                                    <span class="material-symbols-outlined no-print-icon" style="font-size: 14px; vertical-align: middle; cursor: pointer;">swap_vert</span>
                                 </th>
                                 <th style="padding: 8px; text-align: center; border: 1px solid #dee2e6;">Date →</th>
                                 @for($day = 1; $day <= $daysInMonth; $day++)
-                                    <th style="padding: 4px; text-align: center; min-width: 30px; border: 1px solid #dee2e6; font-size: 11px;">{{ $day }}</th>
+                                    <th style="padding: 4px; text-align: center; min-width: 25px; width: 25px; border: 1px solid #dee2e6; font-size: 11px;">{{ $day }}</th>
                                 @endfor
-                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #e7f3ff;">Present Days</th>
-                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #ffe7e7;">Absent Days</th>
+                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #e7f3ff;">Presents</th>
+                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #ffe7e7;">Absents</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -210,6 +210,14 @@
                     <p class="mt-2 mb-0">No students found for the selected filters.</p>
                 </div>
                 @endif
+
+                <!-- Print Button -->
+                <div class="text-center mt-4 mb-3">
+                    <button type="button" class="btn btn-primary btn-lg" onclick="window.print()" style="padding: 10px 30px; font-size: 16px;">
+                        <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">print</span>
+                        Print Attendance Report
+                    </button>
+                </div>
             </div>
             @else
             <!-- Message when filters are not fully applied -->
@@ -263,16 +271,162 @@
 
 /* Print Styles */
 @media print {
-    .card, .filter-btn, .form-select-sm, .form-label, #filterForm {
+    /* Hide sidebar and navigation */
+    .sidebar-area,
+    .sidebar,
+    .main-sidebar,
+    .sidebar-wrapper,
+    nav.navbar,
+    .navbar,
+    .header,
+    .main-header,
+    .topbar,
+    .top-bar,
+    .navigation,
+    .nav-wrapper,
+    body > .sidebar,
+    body > nav,
+    body > header,
+    .no-print,
+    aside,
+    header {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Hide only filter form and buttons, NOT the entire card */
+    #filterForm,
+    .filter-btn,
+    .form-select-sm,
+    .form-label,
+    .btn-primary,
+    .btn,
+    button[onclick="window.print()"],
+    .no-print-icon {
         display: none !important;
     }
     
+    /* Show the card and its content */
+    .card {
+        display: block !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+    
+    /* Main content area adjustments */
+    body {
+        margin: 0 !important;
+        padding: 10px !important;
+    }
+    
+    .main-content,
+    .content-wrapper,
+    .content-area,
+    .container-fluid,
+    .container {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Table styling - ensure headers are visible and all days are shown */
     .table {
         font-size: 10px !important;
+        width: 100% !important;
+        border-collapse: collapse !important;
+        table-layout: auto !important;
     }
     
     .table th, .table td {
         padding: 4px !important;
+        border: 1px solid #000 !important;
+        white-space: nowrap !important;
+    }
+    
+    /* Ensure table header is visible and styled */
+    .table thead {
+        display: table-header-group !important;
+        visibility: visible !important;
+    }
+    
+    .table thead th {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+        font-weight: bold !important;
+        display: table-cell !important;
+        visibility: visible !important;
+        text-align: center !important;
+    }
+    
+    /* Ensure all day columns are visible */
+    .attendance-report-table thead th,
+    .attendance-report-table tbody td {
+        min-width: 25px !important;
+        width: auto !important;
+    }
+    
+    /* Day columns should be compact */
+    .attendance-report-table thead th:nth-child(n+5):not(:last-child):not(:nth-last-child(2)) {
+        min-width: 25px !important;
+        width: 25px !important;
+        padding: 2px !important;
+        font-size: 10px !important;
+    }
+    
+    .attendance-report-table tbody td:nth-child(n+5):not(:last-child):not(:nth-last-child(2)) {
+        min-width: 25px !important;
+        width: 25px !important;
+        padding: 2px !important;
+        font-size: 10px !important;
+    }
+    
+    .attendance-table-container {
+        overflow: visible !important;
+        max-height: none !important;
+        width: 100% !important;
+    }
+    
+    /* Ensure table fits on page - use landscape for better fit */
+    @page {
+        size: landscape;
+        margin: 0.5cm;
+    }
+    
+    /* Ensure all table cells are visible and properly formatted */
+    .attendance-report-table tbody tr td {
+        display: table-cell !important;
+        visibility: visible !important;
+    }
+    
+    /* Ensure report header is visible */
+    .text-center {
+        page-break-inside: avoid;
+    }
+    
+    /* Page break settings */
+    table {
+        page-break-inside: auto;
+    }
+    
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+    
+    thead {
+        display: table-header-group !important;
+    }
+    
+    tfoot {
+        display: table-footer-group;
+    }
+    
+    /* Ensure all table cells are visible */
+    .table tbody tr td {
+        display: table-cell !important;
+        visibility: visible !important;
     }
 }
 </style>

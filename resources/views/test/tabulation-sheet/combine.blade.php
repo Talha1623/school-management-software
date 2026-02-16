@@ -82,49 +82,92 @@
 
                 <div class="default-table-area" style="margin-top: 0;">
                     <div class="table-responsive">
-                        <table class="table">
+                        <table class="table table-bordered">
                             <thead>
                                 <tr>
-                                    <th>#</th>
                                     <th>Student Code</th>
-                                    <th>Student Name</th>
-                                    <th>Class</th>
-                                    <th>Section</th>
-                                    <th>Marks</th>
+                                    <th>Name</th>
+                                    <th>Parent</th>
+                                    <th>Campus</th>
+                                    @if($subjects->isNotEmpty())
+                                        @foreach($subjects as $subject)
+                                            @if(strtolower(trim($subject)) !== 'computer')
+                                                <th>{{ $subject }}</th>
+                                            @endif
+                                        @endforeach
+                                    @endif
+                                    <th>Computer</th>
+                                    <th>Total</th>
+                                    <th>Rank</th>
+                                    <th>Percentage</th>
                                     <th>Grade</th>
-                                    <th>Remarks</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($students as $index => $student)
+                                @php
+                                    $marksBySubject = $student->marksBySubject ?? collect();
+                                @endphp
                                 <tr>
-                                    <td>{{ $index + 1 }}</td>
                                     <td>{{ $student->student_code ?? 'N/A' }}</td>
                                     <td>
-                                        <strong class="text-primary">{{ $student->student_name }}</strong>
+                                        <strong style="color: #dc3545;">{{ $student->student_name }}</strong>
                                     </td>
-                                    <td>{{ $student->class }}</td>
+                                    <td>{{ $student->father_name ?? 'N/A' }}</td>
+                                    <td>{{ $student->campus ?? 'N/A' }}</td>
+                                    @if($subjects->isNotEmpty())
+                                        @foreach($subjects as $subject)
+                                            @if(strtolower(trim($subject)) !== 'computer')
+                                                @php
+                                                    // Try exact match first
+                                                    $subjectMarks = $marksBySubject->get($subject, collect());
+                                                    // If not found, try case-insensitive match
+                                                    if ($subjectMarks->isEmpty()) {
+                                                        $subjectLower = strtolower(trim($subject));
+                                                        foreach ($marksBySubject as $subjectName => $marks) {
+                                                            if (strtolower(trim($subjectName)) === $subjectLower) {
+                                                                $subjectMarks = $marks;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                    $marksObtained = $subjectMarks->isNotEmpty() ? (float)($subjectMarks->first()->marks_obtained ?? 0) : 0;
+                                                @endphp
+                                                <td>{{ $marksObtained }}</td>
+                                            @endif
+                                        @endforeach
+                                    @endif
+                                    @php
+                                        // Get Computer marks - try exact match and case-insensitive
+                                        $computerMarks = $marksBySubject->get('Computer', collect());
+                                        if ($computerMarks->isEmpty()) {
+                                            $computerMarks = $marksBySubject->get('computer', collect());
+                                        }
+                                        if ($computerMarks->isEmpty()) {
+                                            foreach ($marksBySubject as $subjectName => $marks) {
+                                                if (strtolower(trim($subjectName)) === 'computer') {
+                                                    $computerMarks = $marks;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        $computerObtained = $computerMarks->isNotEmpty() ? (float)($computerMarks->first()->marks_obtained ?? 0) : 0;
+                                    @endphp
+                                    <td>{{ $computerObtained }}</td>
+                                    <td>{{ $student->totalObtained ?? 0 }} / {{ $student->totalMarks ?? 0 }}</td>
+                                    <td>{{ $student->rank ?? '-' }}</td>
+                                    <td>{{ ($student->percentage ?? 0) > 0 ? number_format($student->percentage, 2) . '%' : 'nan' }}</td>
                                     <td>
-                                        <span class="badge bg-info text-white">{{ $student->section ?? 'N/A' }}</span>
-                                    </td>
-                                    <td>
-                                        <input type="number" class="form-control form-control-sm marks-input" data-student-id="{{ $student->id }}" placeholder="Marks" min="0" max="100" step="0.01" style="width: 100px; display: inline-block;">
-                                    </td>
-                                    <td>
-                                        <select class="form-select form-select-sm grade-select" data-student-id="{{ $student->id }}" style="width: 100px; display: inline-block;">
-                                            <option value="">Select Grade</option>
-                                            @foreach($grades as $grade)
-                                                <option value="{{ $grade }}">{{ $grade }}</option>
-                                            @endforeach
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <textarea class="form-control form-control-sm remarks-input" data-student-id="{{ $student->id }}" placeholder="Remarks" rows="1" style="width: 150px; min-width: 150px;"></textarea>
+                                        @if($student->grade)
+                                            <span class="badge bg-success">{{ $student->grade }}</span>
+                                        @else
+                                            -
+                                        @endif
                                     </td>
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="8" class="text-center py-4">
+                                    <td colspan="{{ 5 + ($subjects->count() ?? 0) + 4 }}" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center">
                                             <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
                                             <p class="text-muted mt-2 mb-0">No students found</p>
@@ -133,14 +176,6 @@
                                 </tr>
                                 @endforelse
                             </tbody>
-                            @if($students->count() > 0)
-                            <tfoot>
-                                <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="7" class="text-end">Total Students:</td>
-                                    <td>{{ $students->count() }}</td>
-                                </tr>
-                            </tfoot>
-                            @endif
                         </table>
                     </div>
                 </div>

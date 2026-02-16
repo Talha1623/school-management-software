@@ -24,10 +24,11 @@ return new class extends Migration
             // Unique constraint: one attendance per staff per day
             $table->unique(['staff_id', 'attendance_date']);
             
-            // Indexes for faster queries
+            // Indexes for faster queries (single column indexes for MyISAM compatibility)
             $table->index(['staff_id', 'attendance_date']);
             $table->index(['attendance_date', 'status']);
-            $table->index(['campus', 'designation']);
+            $table->index('campus');
+            $table->index('designation');
         });
     }
 

@@ -15,6 +15,7 @@
         th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
         th { background: #f5f5f5; }
         .empty { text-align: center; color: #666; padding: 24px 0; }
+        .summary-row { background: #f0f0f0; font-weight: 600; }
         @media print { .no-print { display: none !important; } }
     </style>
 </head>
@@ -39,13 +40,15 @@
                 <th>Father Name</th>
                 <th>Phone</th>
                 <th>Campus</th>
-                <th>Class</th>
                 <th>Section</th>
             </tr>
         </thead>
         <tbody>
             @forelse($records as $index => $attendance)
-                @php $student = $attendance->student; @endphp
+                @php 
+                    $student = $attendance->student;
+                    $section = $attendance->section ?? $student->section ?? 'N/A';
+                @endphp
                 <tr>
                     <td>{{ $index + 1 }}</td>
                     <td>{{ $student->student_name ?? 'N/A' }}</td>
@@ -53,14 +56,19 @@
                     <td>{{ $student->father_name ?? 'N/A' }}</td>
                     <td>{{ $student->father_phone ?? $student->whatsapp_number ?? 'N/A' }}</td>
                     <td>{{ $attendance->campus ?? $student->campus ?? 'N/A' }}</td>
-                    <td>{{ $attendance->class ?? $student->class ?? 'N/A' }}</td>
-                    <td>{{ $attendance->section ?? $student->section ?? 'N/A' }}</td>
+                    <td>{{ $section }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8" class="empty">No absent students found.</td>
+                    <td colspan="7" class="empty">No absent students found.</td>
                 </tr>
             @endforelse
+            @if($records->count() > 0)
+                <tr class="summary-row">
+                    <td colspan="6" style="text-align: right; font-weight: 600;">Student Absent:</td>
+                    <td style="font-weight: 600;">{{ $records->count() }}</td>
+                </tr>
+            @endif
         </tbody>
     </table>
 </body>

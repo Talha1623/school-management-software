@@ -9,6 +9,7 @@ use App\Models\Staff;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class CertificationController extends Controller
@@ -311,9 +312,20 @@ class CertificationController extends Controller
             abort(404, 'Invalid certificate type');
         }
         
-        // Get school information (you may want to store this in a settings table)
-        $schoolName = config('app.name', 'School Management System');
-        $schoolAddress = 'School Address'; // You can add this to config or database
+        // Get school information from General Settings
+        $settings = \App\Models\GeneralSetting::getSettings();
+        $schoolName = $settings->school_name ?? config('app.name', 'School Management System');
+        $schoolAddress = $settings->address ?? '';
+        $schoolPhone = $settings->school_phone ?? '';
+        $schoolEmail = $settings->school_email ?? '';
+        
+        // Get logo path - check if logo exists in storage
+        if ($settings->logo && Storage::disk('public')->exists($settings->logo)) {
+            $schoolLogo = asset('storage/' . $settings->logo);
+        } else {
+            $schoolLogo = asset('assets/images/logo-icon.png');
+        }
+        
         $currentDate = now()->format('d F Y');
         
         return view("certification.certificates.{$this->getCertificateViewName($certificateType)}", compact(
@@ -321,6 +333,9 @@ class CertificationController extends Controller
             'certificateType',
             'schoolName',
             'schoolAddress',
+            'schoolPhone',
+            'schoolEmail',
+            'schoolLogo',
             'currentDate'
         ));
     }

@@ -101,6 +101,7 @@
                                     <th>Total Amount</th>
                                     <th>Payment Method</th>
                                     <th>Campus</th>
+                                    <th>Received By</th>
                                     <th>Notes</th>
                                     <th class="text-end">Action</th>
                                 </tr>
@@ -123,6 +124,9 @@
                                     <td>
                                         <span class="badge bg-info text-white">{{ $record->campus }}</span>
                                     </td>
+                                    <td>
+                                        <span class="badge bg-success text-white">{{ $record->received_by ?? 'N/A' }}</span>
+                                    </td>
                                     <td>{{ $record->notes ? (strlen($record->notes) > 30 ? substr($record->notes, 0, 30) . '...' : $record->notes) : 'N/A' }}</td>
                                     <td class="text-end">
                                         <button type="button" class="btn btn-sm btn-danger action-btn px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this sale record?')) { document.getElementById('delete-sale-record-{{ $record->id }}').submit(); }">
@@ -136,7 +140,7 @@
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="11" class="text-center py-4">
+                                    <td colspan="12" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center">
                                             <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
                                             <p class="text-muted mt-2 mb-0">
@@ -160,17 +164,17 @@
                                 <tr class="fw-bold" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
                                     <td colspan="6" class="text-end" style="font-size: 14px;">Total Sales:</td>
                                     <td class="text-success" style="font-size: 14px;">PKR {{ number_format($totalSales, 2) }}</td>
-                                    <td colspan="4"></td>
+                                    <td colspan="5"></td>
                                 </tr>
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
                                     <td colspan="6" class="text-end" style="font-size: 14px;">Total Quantity:</td>
                                     <td style="font-size: 14px;">{{ number_format($totalQuantity, 0) }}</td>
-                                    <td colspan="4"></td>
+                                    <td colspan="5"></td>
                                 </tr>
                                 <tr class="fw-bold" style="background-color: #e7f3ff; border-top: 2px solid #003471;">
                                     <td colspan="6" class="text-end" style="font-size: 14px; color: #003471;">Total Records:</td>
                                     <td style="font-size: 14px; color: #003471;">{{ $saleRecords->count() }}</td>
-                                    <td colspan="4"></td>
+                                    <td colspan="5"></td>
                                 </tr>
                             </tfoot>
                             @endif

@@ -56,16 +56,11 @@
                     <td>{{ $managementExpense->method }}</td>
                 </tr>
                 <tr>
-                    <th>Notify Admin</th>
-                    <td>{{ $managementExpense->notify_admin ? 'Yes' : 'No' }}</td>
                     <th>Invoice/Receipt</th>
-                    <td>{{ $managementExpense->invoice_receipt ? 'Yes' : 'No' }}</td>
+                    <td colspan="3">{{ $managementExpense->invoice_receipt ? 'Yes' : 'No' }}</td>
                 </tr>
             </tbody>
         </table>
-
-        <div class="section-title">Description</div>
-        <div class="desc">{{ $managementExpense->description ?? 'N/A' }}</div>
     </div>
 </body>
 </html>

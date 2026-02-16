@@ -9,7 +9,11 @@
     <link rel="stylesheet" href="{{ asset('assets/css/remixicon.css') }}">
     <link rel="icon" type="image/png" href="{{ asset('assets/images/favicon.png') }}">
     
-    <title>Admin Login - ICMS</title>
+    @php
+        $settings = \App\Models\GeneralSetting::getSettings();
+        $systemName = $settings->system_name ?? 'ICMS';
+    @endphp
+    <title>Admin Login - {{ $systemName }}</title>
     
     <style>
         * {
@@ -386,7 +390,11 @@
         <div class="login-container">
             <div class="login-header">
                 <div class="logo-container">
-                    <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="SMS Logo" onerror="this.style.display='none'">
+                    @php
+                        $settings = \App\Models\GeneralSetting::getSettings();
+                        $logoUrl = $settings->logo ? asset('storage/' . $settings->logo) : asset('assets/images/Full Logo_SMS.png');
+                    @endphp
+                    <img src="{{ $logoUrl }}" alt="SMS Logo" onerror="this.style.display='none'">
                 </div>
                 <h1>Admin Login</h1>
                 <p>Welcome back! Please login to your account</p>
@@ -461,7 +469,11 @@
             </form>
             
             <div class="footer-text">
-                <p>&copy; {{ date('Y') }} ICMS. All rights reserved.</p>
+                @php
+                    $settings = \App\Models\GeneralSetting::getSettings();
+                    $systemName = $settings->system_name ?? 'ICMS';
+                @endphp
+                <p>&copy; {{ date('Y') }} {{ $systemName }}. All rights reserved.</p>
             </div>
         </div>
     </div>

@@ -18,146 +18,37 @@
                 </div>
             @endif
 
-            <form method="POST" action="#">
+            <form method="POST" action="{{ route('settings.exam.store') }}">
                 @csrf
                 <div class="row">
                     <div class="col-md-6 mb-4">
                         <div class="card border-0 shadow-sm rounded-10 p-4 h-100">
                             <h5 class="mb-4 fw-semibold" style="color: #003471;">
-                                <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">grading</span>
-                                Grading System
+                                <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">description</span>
+                                Admit Card INSTRUCTIONS
                             </h5>
                             
                             <div class="mb-3">
-                                <label class="form-label fw-medium">Grading System</label>
-                                <select class="form-select" name="grading_system">
-                                    <option value="percentage">Percentage</option>
-                                    <option value="letter">Letter Grade (A-F)</option>
-                                    <option value="gpa">GPA (0-4)</option>
-                                    <option value="custom">Custom</option>
+                                <label class="form-label fw-medium">Instructions Content</label>
+                                <textarea class="form-control" name="admit_card_instructions" id="admit_card_instructions" rows="8" placeholder="Enter admit card instructions here...">{{ old('admit_card_instructions', $settings->admit_card_instructions ?? '') }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-4">
+                        <div class="card border-0 shadow-sm rounded-10 p-4 h-100">
+                            <h5 class="mb-4 fw-semibold" style="color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">cancel</span>
+                                Fail student if
+                            </h5>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-medium">Select Option</label>
+                                <select class="form-select" name="fail_student_if" id="fail_student_if">
+                                    <option value="">Select option</option>
+                                    <option value="less_than_passing" {{ old('fail_student_if', $settings->fail_student_if ?? '') == 'less_than_passing' ? 'selected' : '' }}>Less than passing marks</option>
+                                    <option value="fail_any_subject" {{ old('fail_student_if', $settings->fail_student_if ?? '') == 'fail_any_subject' ? 'selected' : '' }}>Fail any subject</option>
                                 </select>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium">Passing Percentage</label>
-                                <input type="number" class="form-control" name="passing_percentage" placeholder="50" min="0" max="100">
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium">Maximum Marks</label>
-                                <input type="number" class="form-control" name="max_marks" placeholder="100" min="0">
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="show_rank" name="show_rank">
-                                <label class="form-check-label" for="show_rank">
-                                    Show Student Rank
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6 mb-4">
-                        <div class="card border-0 shadow-sm rounded-10 p-4 h-100">
-                            <h5 class="mb-4 fw-semibold" style="color: #003471;">
-                                <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">event</span>
-                                Exam Schedule Settings
-                            </h5>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium">Default Exam Duration (minutes)</label>
-                                <input type="number" class="form-control" name="exam_duration" placeholder="90" min="0">
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium">Exam Start Time</label>
-                                <input type="time" class="form-control" name="exam_start_time" value="09:00">
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_publish" name="auto_publish">
-                                <label class="form-check-label" for="auto_publish">
-                                    Auto-publish Results
-                                </label>
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="allow_recheck" name="allow_recheck">
-                                <label class="form-check-label" for="allow_recheck">
-                                    Allow Result Recheck Request
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6 mb-4">
-                        <div class="card border-0 shadow-sm rounded-10 p-4 h-100">
-                            <h5 class="mb-4 fw-semibold" style="color: #003471;">
-                                <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">assignment</span>
-                                Exam Types
-                            </h5>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="enable_quiz" name="enable_quiz">
-                                <label class="form-check-label" for="enable_quiz">
-                                    Enable Quiz/Test
-                                </label>
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="enable_midterm" name="enable_midterm">
-                                <label class="form-check-label" for="enable_midterm">
-                                    Enable Mid-term Exams
-                                </label>
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="enable_final" name="enable_final">
-                                <label class="form-check-label" for="enable_final">
-                                    Enable Final Exams
-                                </label>
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="enable_assignment" name="enable_assignment">
-                                <label class="form-check-label" for="enable_assignment">
-                                    Enable Assignments
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6 mb-4">
-                        <div class="card border-0 shadow-sm rounded-10 p-4 h-100">
-                            <h5 class="mb-4 fw-semibold" style="color: #003471;">
-                                <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">notifications</span>
-                                Notification Settings
-                            </h5>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="notify_exam_schedule" name="notify_exam_schedule">
-                                <label class="form-check-label" for="notify_exam_schedule">
-                                    Notify Exam Schedule
-                                </label>
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="notify_results" name="notify_results">
-                                <label class="form-check-label" for="notify_results">
-                                    Notify Results Release
-                                </label>
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="notify_reminder" name="notify_reminder">
-                                <label class="form-check-label" for="notify_reminder">
-                                    Send Exam Reminders
-                                </label>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-medium">Reminder Days Before Exam</label>
-                                <input type="number" class="form-control" name="reminder_days" placeholder="1" min="0">
                             </div>
                         </div>
                     </div>

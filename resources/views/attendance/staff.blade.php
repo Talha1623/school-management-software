@@ -204,9 +204,20 @@
                                                 <input type="hidden" name="attendance[{{ $staff->id }}][staff_id]" value="{{ $staff->id }}">
                                                 @if(isset($type) && $type === 'Subject Attendance')
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle; min-width: 220px;">
-                                                        <span class="badge bg-info text-white" style="font-size: 12px;">
-                                                            {{ !empty($assignedSubjects) ? count($assignedSubjects) : 0 }}
-                                                        </span>
+                                                        @if(!empty($assignedSubjects) && count($assignedSubjects) > 0)
+                                                            <div class="d-flex flex-column gap-1">
+                                                                <span class="badge bg-info text-white" style="font-size: 12px;">
+                                                                    {{ count($assignedSubjects) }}
+                                                                </span>
+                                                                <div style="font-size: 11px; color: #495057; max-width: 200px;">
+                                                                    @foreach($assignedSubjects as $subject)
+                                                                        <div class="text-truncate" title="{{ $subject }}">{{ $subject }}</div>
+                                                                    @endforeach
+                                                                </div>
+                                                            </div>
+                                                        @else
+                                                            <span class="badge bg-secondary text-white" style="font-size: 12px;">0</span>
+                                                        @endif
                                                     </td>
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
                                                         <input type="number" min="0" class="form-control form-control-sm" name="attendance[{{ $staff->id }}][conducted_lectures]" value="{{ $conductedLectures !== null ? $conductedLectures : '' }}" style="width: 120px;">
@@ -236,6 +247,7 @@
                                                             $timetableTime = $timetableTimesByStaff[$staff->id] ?? null;
                                                             $timetableStartTime = $timetableTime['start_time'] ?? null;
                                                             $timetableEndTime = $timetableTime['end_time'] ?? null;
+                                                            $totalHours = $timetableTime['total_hours'] ?? null;
                                                             
                                                             // For per hour teacher, use timetable time if available, otherwise use saved time
                                                             $displayStartTime = $startTime;
@@ -243,16 +255,30 @@
                                                                 $displayStartTime = $timetableStartTime;
                                                             }
                                                         @endphp
-                                                        <input type="time" name="attendance[{{ $staff->id }}][start_time]" class="form-control form-control-sm arrival-time" value="{{ $displayStartTime ? date('H:i', strtotime($displayStartTime)) : '' }}" style="min-width: 100px;" 
-                                                            @if($isPerHour) 
-                                                                @if($timetableStartTime)
-                                                                    data-timetable-start="{{ $timetableStartTime }}" 
-                                                                @endif
-                                                                data-is-per-hour="true"
-                                                                data-staff-name="{{ $staff->name }}"
-                                                            @else
-                                                                data-is-per-hour="false"
-                                                            @endif>
+                                                        <div class="d-flex flex-column gap-1">
+                                                            <input type="time" name="attendance[{{ $staff->id }}][start_time]" class="form-control form-control-sm arrival-time" value="{{ $displayStartTime ? date('H:i', strtotime($displayStartTime)) : '' }}" style="min-width: 100px;" 
+                                                                @if($isPerHour) 
+                                                                    @if($timetableStartTime)
+                                                                        data-timetable-start="{{ $timetableStartTime }}" 
+                                                                    @endif
+                                                                    data-is-per-hour="true"
+                                                                    data-staff-name="{{ $staff->name }}"
+                                                                @else
+                                                                    data-is-per-hour="false"
+                                                                @endif>
+                                                            @if($isPerHour)
+                                                                <small class="text-muted per-hour-count" style="font-size: 11px;" data-staff-id="{{ $staff->id }}">
+                                                                    <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">schedule</span>
+                                                                    <span class="hours-text">
+                                                                        @if($totalHours !== null)
+                                                                            Total: {{ $totalHours }} hrs
+                                                                        @else
+                                                                            Total: 0 hrs
+                                                                        @endif
+                                                                    </span>
+                                                                </small>
+                                                            @endif
+                                                        </div>
                                                     </td>
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
                                                         @php
@@ -275,8 +301,10 @@
                                                             }
                                                         @endphp
                                                         <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $exitTimeValue }}" style="min-width: 100px;" placeholder="HH:MM" 
-                                                            @if($isPerHour && $timetableEndTime)
-                                                                data-timetable-end="{{ $timetableEndTime }}"
+                                                            @if($isPerHour)
+                                                                @if($timetableEndTime)
+                                                                    data-timetable-end="{{ $timetableEndTime }}"
+                                                                @endif
                                                                 data-is-per-hour="true"
                                                             @else
                                                                 data-is-per-hour="false"
@@ -503,18 +531,28 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isPerHour) {
                 // Use timetable start time for per hour teacher
                 standardTime = input.getAttribute('data-timetable-start');
-                console.log('Per hour teacher - Timetable time:', standardTime, 'Arrival time:', time);
                 if (!standardTime || standardTime === '' || standardTime === 'null') {
                     // If timetable time not available, don't calculate (should not happen for per hour)
                     lateArrivalDisplay.innerHTML = '<span class="text-muted">-</span>';
-                    console.log('Per hour teacher but no timetable time found for:', input.getAttribute('data-staff-name'));
                     return;
                 }
                 // Ensure time is in HH:MM format (remove seconds if present)
                 if (standardTime.length > 5) {
                     standardTime = standardTime.substring(0, 5);
                 }
-                console.log('Using timetable time for per hour teacher:', standardTime);
+                // Handle 12-hour format if needed (convert AM/PM to 24-hour)
+                if (standardTime.includes('AM') || standardTime.includes('PM')) {
+                    // Parse 12-hour format and convert to 24-hour
+                    const timeMatch = standardTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+                    if (timeMatch) {
+                        let h = parseInt(timeMatch[1], 10);
+                        const m = timeMatch[2];
+                        const ampm = timeMatch[3].toUpperCase();
+                        if (ampm === 'PM' && h !== 12) h += 12;
+                        if (ampm === 'AM' && h === 12) h = 0;
+                        standardTime = String(h).padStart(2, '0') + ':' + m;
+                    }
+                }
             } else {
                 // Use salary setting for non-per-hour staff
                 standardTime = '{{ $lateArrivalTime ?? "09:00" }}';
@@ -569,6 +607,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (input && input.value && input.value.length >= 5) {
                 calculateLateArrival(input);
             }
+            // Calculate per hour count on page load
+            const row = input.closest('tr');
+            if (row) {
+                calculatePerHourCount(row);
+            }
         });
     }, 500);
     
@@ -582,14 +625,155 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Trigger calculation after setting value
                 setTimeout(() => {
                     calculateLateArrival(input);
+                    const row = input.closest('tr');
+                    if (row) {
+                        calculatePerHourCount(row);
+                    }
                 }, 100);
             }
         }
         
         input.addEventListener('change', function() {
             calculateLateArrival(this);
+            // Calculate per hour count when arrival time changes
+            const row = this.closest('tr');
+            if (row) {
+                calculatePerHourCount(row);
+            }
+        });
+        
+        // Also add input event for real-time updates as user types/changes time
+        input.addEventListener('input', function() {
+            calculateLateArrival(this);
+            // Calculate per hour count when arrival time changes
+            const row = this.closest('tr');
+            if (row) {
+                calculatePerHourCount(row);
+            }
         });
     });
+    
+    // Calculate and display per hour count for per hour teachers
+    // For per hour staff, calculate from ACTUAL entered arrival/exit times (like full time staff)
+    function calculatePerHourCount(row) {
+        if (!row) {
+            return;
+        }
+        
+        const isPerHour = row.querySelector('.arrival-time')?.getAttribute('data-is-per-hour') === 'true';
+        if (!isPerHour) {
+            return;
+        }
+        
+        const arrivalInput = row.querySelector('.arrival-time');
+        const exitInput = row.querySelector('.exit-time');
+        const hoursDisplay = row.querySelector('.per-hour-count .hours-text');
+        
+        if (!arrivalInput || !exitInput || !hoursDisplay) {
+            return;
+        }
+        
+        // Get actual entered times
+        const startTime = arrivalInput.value;
+        const endTime = exitInput.value;
+        
+        // If both times are entered, calculate from actual times (like full time staff)
+        if (startTime && endTime && startTime.length >= 5 && endTime.length >= 5) {
+            calculateHoursFromTimes(startTime, endTime, hoursDisplay);
+        } else {
+            // If times not entered, fallback to timetable time if available
+            const timetableStart = arrivalInput.getAttribute('data-timetable-start');
+            const timetableEnd = exitInput.getAttribute('data-timetable-end');
+            
+            if (timetableStart && timetableEnd) {
+                calculateHoursFromTimes(timetableStart, timetableEnd, hoursDisplay);
+            } else {
+                // If no times available, show 0
+                hoursDisplay.textContent = 'Total: 0 hrs';
+            }
+        }
+    }
+    
+    function calculateHoursFromTimes(startTimeStr, endTimeStr, hoursDisplay) {
+        try {
+            // Remove any AM/PM and whitespace, ensure we have clean HH:MM format
+            startTimeStr = startTimeStr.trim().replace(/\s*(AM|PM)/i, '');
+            endTimeStr = endTimeStr.trim().replace(/\s*(AM|PM)/i, '');
+            
+            // Handle 12-hour to 24-hour conversion if needed (though time inputs return 24-hour)
+            // But handle if somehow 12-hour format comes through
+            const startHasAMPM = startTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            const endHasAMPM = endTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            
+            if (startHasAMPM) {
+                let h = parseInt(startHasAMPM[1], 10);
+                const m = startHasAMPM[2];
+                const ampm = startHasAMPM[3].toUpperCase();
+                if (ampm === 'PM' && h !== 12) h += 12;
+                if (ampm === 'AM' && h === 12) h = 0;
+                startTimeStr = String(h).padStart(2, '0') + ':' + m;
+            }
+            
+            if (endHasAMPM) {
+                let h = parseInt(endHasAMPM[1], 10);
+                const m = endHasAMPM[2];
+                const ampm = endHasAMPM[3].toUpperCase();
+                if (ampm === 'PM' && h !== 12) h += 12;
+                if (ampm === 'AM' && h === 12) h = 0;
+                endTimeStr = String(h).padStart(2, '0') + ':' + m;
+            }
+            
+            const startParts = startTimeStr.split(':');
+            const endParts = endTimeStr.split(':');
+            
+            if (startParts.length < 2 || endParts.length < 2) {
+                hoursDisplay.textContent = 'Total: 0 hrs';
+                return;
+            }
+            
+            // Parse hours and minutes, handle seconds if present
+            const startHours = parseInt(startParts[0], 10);
+            const startMinutes = parseInt(startParts[1], 10);
+            const endHours = parseInt(endParts[0], 10);
+            const endMinutes = parseInt(endParts[1], 10);
+            
+            if (isNaN(startHours) || isNaN(startMinutes) || isNaN(endHours) || isNaN(endMinutes)) {
+                hoursDisplay.textContent = 'Total: 0 hrs';
+                return;
+            }
+            
+            // Validate time ranges
+            if (startHours < 0 || startHours > 23 || startMinutes < 0 || startMinutes > 59 ||
+                endHours < 0 || endHours > 23 || endMinutes < 0 || endMinutes > 59) {
+                hoursDisplay.textContent = 'Total: 0 hrs';
+                return;
+            }
+            
+            const startTotalMinutes = startHours * 60 + startMinutes;
+            const endTotalMinutes = endHours * 60 + endMinutes;
+            
+            if (endTotalMinutes <= startTotalMinutes) {
+                hoursDisplay.textContent = 'Total: 0 hrs';
+                return;
+            }
+            
+            const diffMinutes = endTotalMinutes - startTotalMinutes;
+            const hours = diffMinutes / 60;
+            
+            // Display format: Show minutes if less than 1 hour, otherwise show hours
+            if (diffMinutes < 60) {
+                // Less than 1 hour - show in minutes
+                hoursDisplay.textContent = 'Total: ' + diffMinutes + ' mins';
+            } else {
+                // 1 hour or more - show in hours with 2 decimal places
+                const roundedHours = Math.round(hours * 100) / 100;
+                hoursDisplay.textContent = 'Total: ' + roundedHours.toFixed(2) + ' hrs';
+            }
+        } catch (e) {
+            console.error('Error calculating hours:', e, 'Start:', startTimeStr, 'End:', endTimeStr);
+            hoursDisplay.textContent = 'Total: 0 hrs';
+        }
+    }
     
     // Calculate early exit when exit time changes
     function calculateEarlyExit(input) {
@@ -623,17 +807,36 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const time = input.value;
         
-        // Check if this is per hour teacher - use timetable time instead of salary setting
-        const isPerHour = input.getAttribute('data-is-per-hour') === 'true';
+        // Check if this is per hour teacher - IMPORTANT: Check from arrival input too for consistency
+        const arrivalInput = row.querySelector('.arrival-time');
+        const isPerHourFromArrival = arrivalInput ? arrivalInput.getAttribute('data-is-per-hour') === 'true' : false;
+        const isPerHourFromExit = input.getAttribute('data-is-per-hour') === 'true';
+        const isPerHour = isPerHourFromArrival || isPerHourFromExit; // Use either check
+        
         let earlyExitTimeSetting;
         
         if (isPerHour) {
             // Use timetable end time for per hour teacher
+            // Try to get from exit input first, then from arrival input
             earlyExitTimeSetting = input.getAttribute('data-timetable-end');
+            if (!earlyExitTimeSetting && arrivalInput) {
+                // If not on exit input, try to get from arrival input's row data
+                const exitInputFromRow = row.querySelector('.exit-time');
+                if (exitInputFromRow) {
+                    earlyExitTimeSetting = exitInputFromRow.getAttribute('data-timetable-end');
+                }
+            }
+            
             if (!earlyExitTimeSetting) {
+                console.log('Per hour staff but no timetable end time found');
                 earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
                 return;
             }
+            // Ensure timetable time is in HH:MM format (remove seconds if present)
+            if (earlyExitTimeSetting.length > 5) {
+                earlyExitTimeSetting = earlyExitTimeSetting.substring(0, 5);
+            }
+            console.log('Per hour staff - Using timetable end time:', earlyExitTimeSetting, 'Exit time:', time);
         } else {
             // Get early exit time from data attribute first
             earlyExitTimeSetting = input.getAttribute('data-early-exit-time');
@@ -672,83 +875,90 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Debug: Log for troubleshooting (can be removed later)
-        console.log('Early Exit Calculation:', {
-            exitTime: time,
-            earlyExitTimeSetting: earlyExitTimeSetting,
-            hasSetting: earlyExitTimeSetting && earlyExitTimeSetting !== ''
-        });
-        
-        try {
-            // Parse exit time (format: HH:MM from time input)
-            const timeParts = time.split(':');
-            if (timeParts.length < 2) {
-                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
-                return;
-            }
-            
-            const hours = parseInt(timeParts[0], 10);
-            const minutes = parseInt(timeParts[1], 10);
-            
-            if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
-                return;
-            }
-            
-            // Parse early exit time setting (format: HH:MM in 24-hour format)
-            const settingParts = earlyExitTimeSetting.split(':');
-            if (settingParts.length < 2) {
-                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
-                return;
-            }
-            
-            let stdHours = parseInt(settingParts[0], 10);
-            const stdMinutes = parseInt(settingParts[1], 10);
-            
-            // Handle 12-hour format if needed (should already be converted by controller, but double-check)
-            // If hours is 1-12 and no indication of 24-hour format, check if it might be PM
-            // But since controller already converts, this should be 24-hour format (0-23)
-            
-            if (isNaN(stdHours) || isNaN(stdMinutes) || stdHours < 0 || stdHours > 23 || stdMinutes < 0 || stdMinutes > 59) {
-                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
-                return;
-            }
-            
-            // Convert to minutes for comparison
-            const timeInMinutes = hours * 60 + minutes;
-            const stdTimeInMinutes = stdHours * 60 + stdMinutes;
-            
-            // Check if exit time is before early exit time setting
-            // Both times are now in 24-hour format (0-23 hours)
-            console.log('Time Comparison:', {
+            // Debug: Log for troubleshooting
+            console.log('Early Exit Calculation:', {
+                isPerHour: isPerHour,
                 exitTime: time,
-                exitTimeHours: hours,
-                exitTimeMinutes: timeInMinutes,
                 earlyExitTimeSetting: earlyExitTimeSetting,
-                earlyExitTimeHours: stdHours,
-                earlyExitTimeMinutes: stdTimeInMinutes,
-                isEarly: timeInMinutes < stdTimeInMinutes,
-                difference: stdTimeInMinutes - timeInMinutes
+                hasSetting: earlyExitTimeSetting && earlyExitTimeSetting !== ''
             });
             
-            if (timeInMinutes < stdTimeInMinutes) {
-                const diff = stdTimeInMinutes - timeInMinutes;
-                const earlyHours = Math.floor(diff / 60);
-                const earlyMinutes = diff % 60;
-                const earlyExit = String(earlyHours).padStart(2, '0') + ':' + String(earlyMinutes).padStart(2, '0');
+            try {
+                // Parse exit time (format: HH:MM from time input - always 24-hour format)
+                const timeParts = time.split(':');
+                if (timeParts.length < 2) {
+                    earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                    return;
+                }
                 
-                console.log('Early Exit Calculated:', earlyExit);
+                let hours = parseInt(timeParts[0], 10);
+                let minutes = parseInt(timeParts[1], 10);
                 
-                // Update early exit display immediately
-                earlyExitDisplay.innerHTML = '<span class="badge bg-danger text-white">' + earlyExit + '</span>';
-            } else {
-                // Exit time is on or after the early exit time, so no early exit
-                console.log('No early exit - exit time is on or after early exit time');
+                // Handle 12-hour format if time input somehow returns it (shouldn't happen, but safety check)
+                // Time input always returns 24-hour format, so this should not be needed
+                
+                if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                    earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                    return;
+                }
+                
+                // Parse early exit time setting (format: HH:MM in 24-hour format)
+                const settingParts = earlyExitTimeSetting.split(':');
+                if (settingParts.length < 2) {
+                    earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                    return;
+                }
+                
+                let stdHours = parseInt(settingParts[0], 10);
+                let stdMinutes = parseInt(settingParts[1], 10);
+                
+                // Ensure both times are in 24-hour format (0-23 hours)
+                // Timetable times from backend should already be in 24-hour format
+                
+                if (isNaN(stdHours) || isNaN(stdMinutes) || stdHours < 0 || stdHours > 23 || stdMinutes < 0 || stdMinutes > 59) {
+                    earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                    return;
+                }
+                
+                // Convert to minutes for comparison
+                const timeInMinutes = hours * 60 + minutes;
+                const stdTimeInMinutes = stdHours * 60 + stdMinutes;
+                
+                // Check if exit time is before early exit time setting
+                // For per hour staff: compare exit time with timetable end time
+                // For full time staff: compare exit time with salary setting early exit time
+                console.log('Time Comparison:', {
+                    isPerHour: isPerHour,
+                    exitTime: time,
+                    exitTimeHours: hours,
+                    exitTimeMinutes: timeInMinutes,
+                    earlyExitTimeSetting: earlyExitTimeSetting,
+                    earlyExitTimeHours: stdHours,
+                    earlyExitTimeMinutes: stdTimeInMinutes,
+                    isEarly: timeInMinutes < stdTimeInMinutes,
+                    difference: stdTimeInMinutes - timeInMinutes
+                });
+                
+                if (timeInMinutes < stdTimeInMinutes) {
+                    // Exit time is BEFORE the standard time, so it's an early exit
+                    const diff = stdTimeInMinutes - timeInMinutes;
+                    const earlyHours = Math.floor(diff / 60);
+                    const earlyMinutes = diff % 60;
+                    const earlyExit = String(earlyHours).padStart(2, '0') + ':' + String(earlyMinutes).padStart(2, '0');
+                    
+                    console.log('Early Exit Calculated:', earlyExit);
+                    
+                    // Update early exit display immediately
+                    earlyExitDisplay.innerHTML = '<span class="badge bg-danger text-white">' + earlyExit + '</span>';
+                } else {
+                    // Exit time is on or after the standard time, so no early exit
+                    console.log('No early exit - exit time is on or after standard time');
+                    earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+                }
+            } catch (e) {
+                console.error('Error calculating early exit:', e);
                 earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
             }
-        } catch (e) {
-            earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
-        }
     }
     
     // Also calculate when Exit Time changes (recalculate late arrival and early exit)
@@ -759,6 +969,20 @@ document.addEventListener('DOMContentLoaded', function() {
         exitTimeInputs.forEach(input => {
             if (input && input.value && input.value.length >= 5) {
                 calculateEarlyExit(input);
+            }
+            // Calculate per hour count on page load
+            const row = input.closest('tr');
+            if (row) {
+                calculatePerHourCount(row);
+            }
+        });
+        
+        // Also calculate per hour count for all per hour staff rows (even if times are empty)
+        const allRows = document.querySelectorAll('tr');
+        allRows.forEach(row => {
+            const arrivalInput = row.querySelector('.arrival-time');
+            if (arrivalInput && arrivalInput.getAttribute('data-is-per-hour') === 'true') {
+                calculatePerHourCount(row);
             }
         });
     }, 500);
@@ -773,6 +997,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Trigger calculation after setting value
                 setTimeout(() => {
                     calculateEarlyExit(input);
+                    const row = input.closest('tr');
+                    if (row) {
+                        calculatePerHourCount(row);
+                    }
                 }, 100);
             }
         }
@@ -786,11 +1014,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             // Immediately calculate early exit when exit time changes
             calculateEarlyExit(this);
+            // Calculate per hour count when exit time changes
+            calculatePerHourCount(row);
         });
         
         // Also calculate on input event for real-time updates - immediate
         input.addEventListener('input', function() {
             calculateEarlyExit(this);
+            // Calculate per hour count on input
+            const row = this.closest('tr');
+            if (row) {
+                calculatePerHourCount(row);
+            }
         });
         
         // Calculate when field gets focus (if value exists)

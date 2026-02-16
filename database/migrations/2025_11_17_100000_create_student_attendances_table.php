@@ -22,10 +22,11 @@ return new class extends Migration
             $table->text('remarks')->nullable();
             $table->timestamps();
             
-            // Index for faster queries
+            // Indexes for faster queries (single column indexes for MyISAM compatibility)
             $table->index(['student_id', 'attendance_date']);
             $table->index(['attendance_date', 'status']);
-            $table->index(['campus', 'class', 'section']);
+            $table->index('campus');
+            $table->index('class');
         });
     }
 

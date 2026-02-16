@@ -9,6 +9,8 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\CombinedResultGrade;
 use App\Models\Campus;
+use App\Models\ParticularTestGrade;
+use App\Models\StudentMark;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -124,22 +126,34 @@ class AssignGradesController extends Controller
             $tests = collect(['Quiz 1', 'Mid Term', 'Final Term', 'Assignment 1']);
         }
 
-        // Query students based on filters
-        $students = collect();
-        if ($filterCampus || $filterClass || $filterSection) {
-            $studentsQuery = Student::query();
+        // Get sessions
+        $sessions = Test::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
+        if ($sessions->isEmpty()) {
+            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        }
+
+        // Query grade definitions based on filters
+        $gradeDefinitions = collect();
+        if ($filterCampus || $filterClass || $filterSection || $filterSubject || $filterTest) {
+            $gradesQuery = ParticularTestGrade::query();
             
             if ($filterCampus) {
-                $studentsQuery->where('campus', $filterCampus);
+                $gradesQuery->where('campus', $filterCampus);
             }
             if ($filterClass) {
-                $studentsQuery->where('class', $filterClass);
+                $gradesQuery->where('class', $filterClass);
             }
             if ($filterSection) {
-                $studentsQuery->where('section', $filterSection);
+                $gradesQuery->where('section', $filterSection);
+            }
+            if ($filterSubject) {
+                $gradesQuery->where('subject', $filterSubject);
+            }
+            if ($filterTest) {
+                $gradesQuery->where('for_test', $filterTest);
             }
             
-            $students = $studentsQuery->orderBy('student_name')->get();
+            $gradeDefinitions = $gradesQuery->orderBy('from_percentage', 'desc')->get();
         }
 
         return view('test.assign-grades.particular', compact(
@@ -148,13 +162,93 @@ class AssignGradesController extends Controller
             'sections',
             'subjects',
             'tests',
-            'students',
+            'sessions',
+            'gradeDefinitions',
             'filterCampus',
             'filterClass',
             'filterSection',
             'filterSubject',
             'filterTest'
         ));
+    }
+
+    /**
+     * Store a newly created particular test grade definition.
+     */
+    public function storeParticularGrade(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
+            'from_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
+            'to_percentage' => ['required', 'numeric', 'min:0', 'max:100', 'gte:from_percentage'],
+            'for_test' => ['required', 'string', 'max:255'],
+            'class' => ['required', 'string', 'max:255'],
+            'section' => ['nullable', 'string', 'max:255'],
+            'subject' => ['nullable', 'string', 'max:255'],
+            'session' => ['required', 'string', 'max:255'],
+        ]);
+
+        ParticularTestGrade::create($validated);
+
+        return redirect()
+            ->route('test.assign-grades.particular', [
+                'filter_campus' => $validated['campus'],
+                'filter_class' => $validated['class'],
+                'filter_section' => $validated['section'],
+                'filter_subject' => $validated['subject'],
+                'filter_test' => $validated['for_test'],
+            ])
+            ->with('success', 'Grade definition created successfully!');
+    }
+
+    /**
+     * Delete a particular test grade definition.
+     */
+    public function deleteParticularGrade(ParticularTestGrade $particularTestGrade): RedirectResponse
+    {
+        $filterCampus = request()->get('filter_campus');
+        $filterClass = request()->get('filter_class');
+        $filterSection = request()->get('filter_section');
+        $filterSubject = request()->get('filter_subject');
+        $filterTest = request()->get('filter_test');
+
+        $particularTestGrade->delete();
+
+        return redirect()
+            ->route('test.assign-grades.particular', [
+                'filter_campus' => $filterCampus,
+                'filter_class' => $filterClass,
+                'filter_section' => $filterSection,
+                'filter_subject' => $filterSubject,
+                'filter_test' => $filterTest,
+            ])
+            ->with('success', 'Grade definition deleted successfully!');
+    }
+
+    /**
+     * Save student grade (marks, grade, remarks).
+     */
+    public function saveStudentGrade(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'mark_id' => ['required', 'exists:student_marks,id'],
+            'marks' => ['required', 'numeric', 'min:0'],
+            'grade' => ['required', 'string', 'max:10'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        $mark = StudentMark::findOrFail($validated['mark_id']);
+        $mark->update([
+            'marks_obtained' => $validated['marks'],
+            'grade' => $validated['grade'],
+            'teacher_remarks' => $validated['remarks'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Grade saved successfully!'
+        ]);
     }
 
     /**

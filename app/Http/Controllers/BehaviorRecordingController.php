@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BehaviorRecord;
+use App\Models\BehaviorCategory;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
@@ -182,15 +183,54 @@ class BehaviorRecordingController extends Controller
             $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
             
             if ($filterSection) {
+                // If section filter is selected, only show students with that specific section
+                // This ensures transferred students don't appear with wrong section
                 $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            } else {
+                // If no section filter, show all students in the class (including those without sections)
+                // This is fine - students without sections can still have behavior records
             }
+            
             if ($filterCampus) {
-                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                // Filter by campus - use case-insensitive comparison to match transferred students
+                // Normalize campus name first (same way transfer does)
+                $normalizedFilterCampus = trim($filterCampus);
+                $campusRecord = \App\Models\Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($normalizedFilterCampus)])->first();
+                if ($campusRecord) {
+                    $normalizedFilterCampus = $campusRecord->campus_name;
+                }
+                // Use both normalized and original campus name for matching
+                $studentsQuery->where(function($q) use ($normalizedFilterCampus, $filterCampus) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($normalizedFilterCampus))])
+                      ->orWhereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                });
             }
             
             $students = $studentsQuery->orderBy('student_code', 'asc')
                 ->orderBy('student_name', 'asc')
                 ->get();
+            
+            // Debug: Log query results for transferred students
+            \Log::info('Behavior Recording Query', [
+                'filter_campus' => $filterCampus,
+                'filter_class' => $filterClass,
+                'filter_section' => $filterSection,
+                'students_count' => $students->count(),
+                'query_sql' => $studentsQuery->toSql(),
+                'query_bindings' => $studentsQuery->getBindings(),
+                'sample_students' => $students->take(3)->map(function($s) {
+                    return [
+                        'id' => $s->id,
+                        'code' => $s->student_code,
+                        'name' => $s->student_name,
+                        'campus' => $s->campus,
+                        'class' => $s->class,
+                        'section' => $s->section,
+                        'parent_account_id' => $s->parent_account_id,
+                        'father_name' => $s->father_name,
+                    ];
+                })->toArray(),
+            ]);
             
             // Get campus from first student or use default
             if ($filterCampus) {
@@ -202,6 +242,21 @@ class BehaviorRecordingController extends Controller
 
         $types = collect(['daily behavior' => 'Daily Behavior']);
 
+        // Get behavior categories for the selected campus
+        $categories = collect();
+        if ($filterCampus) {
+            $categories = BehaviorCategory::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                ->orderBy('category_name', 'asc')
+                ->pluck('category_name')
+                ->values();
+        } else {
+            // If no campus selected, get all categories
+            $categories = BehaviorCategory::orderBy('category_name', 'asc')
+                ->pluck('category_name')
+                ->unique()
+                ->values();
+        }
+
         return view('student-behavior.recording', compact(
             'types',
             'campuses',
@@ -209,6 +264,7 @@ class BehaviorRecordingController extends Controller
             'sections',
             'students',
             'campusName',
+            'categories',
             'filterType',
             'filterClass',
             'filterSection',
@@ -356,6 +412,29 @@ class BehaviorRecordingController extends Controller
     }
 
     /**
+     * Get categories by campus (AJAX endpoint)
+     */
+    public function getCategoriesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        
+        if ($campus) {
+            $categories = BehaviorCategory::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+                ->orderBy('category_name', 'asc')
+                ->pluck('category_name')
+                ->values();
+        } else {
+            // If no campus selected, get all categories
+            $categories = BehaviorCategory::orderBy('category_name', 'asc')
+                ->pluck('category_name')
+                ->unique()
+                ->values();
+        }
+
+        return response()->json(['categories' => $categories]);
+    }
+
+    /**
      * Store behavior record
      */
     public function store(Request $request)
@@ -364,6 +443,7 @@ class BehaviorRecordingController extends Controller
             $validated = $request->validate([
                 'student_id' => ['required', 'exists:students,id'],
                 'type' => ['required', 'string'],
+                'category' => ['nullable', 'string'],
                 'points' => ['required', 'integer'],
                 'class' => ['required', 'string'],
                 'section' => ['nullable', 'string'],
@@ -376,39 +456,30 @@ class BehaviorRecordingController extends Controller
 
             // Normalize section - convert empty string to null
             $section = !empty($validated['section']) ? $validated['section'] : null;
+            $category = $validated['category'] ?? null;
 
-            // Check if record already exists for this student, type, and date
-            $existingRecord = BehaviorRecord::where('student_id', $validated['student_id'])
-                ->where('type', $validated['type'])
-                ->whereDate('date', $validated['date'])
-                ->first();
-
-            if ($existingRecord) {
-                // Update existing record
-                $existingRecord->update([
-                    'points' => $validated['points'],
-                    'section' => $section,
-                    'description' => $validated['points'] > 0 ? '+' . $validated['points'] . ' Points' : $validated['points'] . ' Points',
-                ]);
-            } else {
-                // Create new record
-                BehaviorRecord::create([
-                    'student_id' => $validated['student_id'],
-                    'student_name' => $student->student_name,
-                    'type' => $validated['type'],
-                    'points' => $validated['points'],
-                    'class' => $validated['class'],
-                    'section' => $section,
-                    'campus' => $validated['campus'],
-                    'date' => $validated['date'],
-                    'description' => $validated['points'] > 0 ? '+' . $validated['points'] . ' Points' : $validated['points'] . ' Points',
-                    'recorded_by' => auth()->user()->name ?? auth()->user()->email ?? 'System',
-                ]);
-            }
+            // Always create new record - allows multiple records for same student/type/date
+            // This ensures all behavior records are saved separately
+            $newRecord = BehaviorRecord::create([
+                'student_id' => $validated['student_id'],
+                'student_name' => $student->student_name,
+                'type' => $validated['type'],
+                'category' => $category,
+                'points' => $validated['points'],
+                'class' => $validated['class'],
+                'section' => $section,
+                'campus' => $validated['campus'],
+                'date' => $validated['date'],
+                'description' => $validated['points'] > 0 ? '+' . $validated['points'] . ' Points' : $validated['points'] . ' Points',
+                'recorded_by' => auth()->user()->name ?? auth()->user()->email ?? 'System',
+            ]);
+            
+            $savedCategory = $newRecord->category;
 
             return response()->json([
                 'success' => true,
-                'message' => 'Behavior record saved successfully'
+                'message' => 'Behavior record saved successfully',
+                'category' => $savedCategory
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([

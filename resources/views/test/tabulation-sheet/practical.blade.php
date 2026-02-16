@@ -13,6 +13,20 @@
             <!-- Filter Form -->
             <form action="{{ route('test.tabulation-sheet.practical') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
+                    <!-- Campus -->
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <!-- Class -->
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
@@ -57,6 +71,15 @@
                         </select>
                     </div>
 
+                    <!-- Type -->
+                    <div class="col-md-2">
+                        <label for="filter_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Type</label>
+                        <select class="form-select form-select-sm" id="filter_type" name="filter_type" style="height: 32px;">
+                            <option value="normal" {{ $filterType == 'normal' ? 'selected' : '' }}>Normal</option>
+                            <option value="editable" {{ $filterType == 'editable' ? 'selected' : '' }}>Editable</option>
+                        </select>
+                    </div>
+
                     <!-- Filter Button -->
                     <div class="col-md-2">
                         <button type="submit" class="btn btn-sm py-1 px-3 rounded-8 filter-btn w-100" style="height: 32px;">
@@ -68,13 +91,17 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_class', 'filter_section', 'filter_subject', 'filter_test']))
+            @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_subject', 'filter_test']))
             <div class="mt-3">
-                <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                <div class="mb-2 p-2 rounded-8 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
                         <span class="material-symbols-outlined" style="font-size: 18px;">table_chart</span>
                         <span>Tabulation Sheet</span>
                     </h5>
+                    <button type="button" class="btn btn-light btn-sm print-btn" onclick="window.print()">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                        <span style="font-size: 12px;">Print</span>
+                    </button>
                 </div>
 
                 <div class="default-table-area" style="margin-top: 0;">
@@ -94,6 +121,24 @@
                             </thead>
                             <tbody>
                                 @forelse($students as $index => $student)
+                                @php
+                                    $mark = $studentMarks->get($student->id);
+                                    $marksObtained = $mark ? $mark->marks_obtained : null;
+                                    $totalMarks = $mark ? $mark->total_marks : 100; // Default to 100 if not set
+                                    $remarks = $mark ? $mark->teacher_remarks : null;
+                                    
+                                    // Calculate grade based on marks
+                                    $calculatedGrade = null;
+                                    if ($marksObtained && $totalMarks && $totalMarks > 0) {
+                                        $percentage = ($marksObtained / $totalMarks) * 100;
+                                        foreach ($gradeDefinitions as $gradeDef) {
+                                            if ($percentage >= $gradeDef->from_percentage && $percentage <= $gradeDef->to_percentage) {
+                                                $calculatedGrade = $gradeDef->name;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                @endphp
                                 <tr>
                                     <td>{{ $index + 1 }}</td>
                                     <td>{{ $student->student_code ?? 'N/A' }}</td>
@@ -105,18 +150,43 @@
                                         <span class="badge bg-info text-white">{{ $student->section ?? 'N/A' }}</span>
                                     </td>
                                     <td>
-                                        <input type="number" class="form-control form-control-sm marks-input" data-student-id="{{ $student->id }}" placeholder="Marks" min="0" max="100" step="0.01" style="width: 100px; display: inline-block;">
+                                        @if($filterType == 'editable')
+                                            <input type="number" class="form-control form-control-sm marks-input" 
+                                                   data-student-id="{{ $student->id }}" 
+                                                   data-total-marks="{{ $totalMarks }}"
+                                                   value="{{ $marksObtained }}" 
+                                                   placeholder="Marks" min="0" step="0.01" 
+                                                   style="width: 100px; display: inline-block;">
+                                        @else
+                                            <span class="marks-display" data-student-id="{{ $student->id }}">
+                                                {{ $marksObtained ? number_format($marksObtained, 2) : '-' }}
+                                            </span>
+                                        @endif
                                     </td>
                                     <td>
-                                        <select class="form-select form-select-sm grade-select" data-student-id="{{ $student->id }}" style="width: 100px; display: inline-block;">
-                                            <option value="">Select Grade</option>
-                                            @foreach($grades as $grade)
-                                                <option value="{{ $grade }}">{{ $grade }}</option>
-                                            @endforeach
-                                        </select>
+                                        @if($filterType == 'editable')
+                                            <span class="grade-display-calculated badge bg-success" 
+                                                  data-student-id="{{ $student->id }}" 
+                                                  style="font-size: 12px; padding: 4px 8px;">
+                                                {{ $calculatedGrade ?? '-' }}
+                                            </span>
+                                        @else
+                                            <span class="grade-display badge bg-success" data-student-id="{{ $student->id }}" style="font-size: 12px; padding: 4px 8px;">
+                                                {{ $calculatedGrade ?? '-' }}
+                                            </span>
+                                        @endif
                                     </td>
                                     <td>
-                                        <textarea class="form-control form-control-sm remarks-input" data-student-id="{{ $student->id }}" placeholder="Remarks" rows="1" style="width: 150px; min-width: 150px;"></textarea>
+                                        @if($filterType == 'editable')
+                                            <textarea class="form-control form-control-sm remarks-input" 
+                                                      data-student-id="{{ $student->id }}" 
+                                                      placeholder="Remarks" rows="1" 
+                                                      style="width: 150px; min-width: 150px;">{{ $remarks }}</textarea>
+                                        @else
+                                            <span class="remarks-display" data-student-id="{{ $student->id }}">
+                                                {{ $remarks ?? '-' }}
+                                            </span>
+                                        @endif
                                     </td>
                                 </tr>
                                 @empty
@@ -202,11 +272,143 @@
     font-size: 11px;
     padding: 4px 8px;
 }
+
+.print-btn {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.3s ease;
+}
+
+.print-btn:hover {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+@media print {
+    /* Hide sidebar and navigation */
+    .sidebar-area,
+    #sidebar-area,
+    .sidebar,
+    .navbar,
+    .navbar-area,
+    .header-area,
+    #header-area,
+    .main-header,
+    .header-navbar,
+    .theme-settings-area,
+    .theme-settings,
+    .settings-btn {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Hide filter form and buttons */
+    .filter-btn,
+    .print-btn,
+    #filterForm,
+    .mb-2.p-2.rounded-8,
+    .d-flex.justify-content-between,
+    h4.mb-0,
+    .card-header,
+    .no-print {
+        display: none !important;
+    }
+    
+    /* Reset body and container */
+    body {
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    .main-content,
+    .main-content-container {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+    
+    .container-fluid,
+    .row {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    .col-12 {
+        padding: 0 !important;
+        width: 100% !important;
+    }
+    
+    /* Card styles */
+    .card {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+    }
+    
+    /* Hide card title */
+    h4.mb-0.fs-16 {
+        display: none !important;
+    }
+    
+    /* Table area */
+    .default-table-area {
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+    }
+    
+    /* Table styles */
+    .table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    
+    .table th,
+    .table td {
+        border: 1px solid #000 !important;
+        padding: 8px !important;
+        font-size: 12px !important;
+    }
+    
+    .table thead {
+        background: #f0f0f0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    
+    /* Ensure table prints properly */
+    .table-responsive {
+        overflow: visible !important;
+    }
+    
+    /* Page break */
+    .table {
+        page-break-inside: auto;
+    }
+    
+    .table tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+    
+    .table thead {
+        display: table-header-group;
+    }
+    
+    .table tfoot {
+        display: table-footer-group;
+    }
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Load sections when class changes
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
     const subjectSelect = document.getElementById('filter_subject');
@@ -250,6 +452,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to load subjects dynamically
     function loadSubjects() {
+        const campus = campusSelect ? campusSelect.value : '';
         const classValue = classSelect ? classSelect.value : '';
         const section = sectionSelect ? sectionSelect.value : '';
         
@@ -263,6 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Build query parameters
         const params = new URLSearchParams();
+        if (campus) params.append('campus', campus);
         if (classValue) params.append('class', classValue);
         if (section) params.append('section', section);
         
@@ -302,6 +506,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Load subjects when campus or section changes
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            const classValue = classSelect ? classSelect.value : '';
+            if (classValue) {
+                loadSubjects();
+            }
+        });
+    }
+    
     // Load subjects when section changes
     if (sectionSelect) {
         sectionSelect.addEventListener('change', function() {
@@ -314,69 +528,64 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSections('{{ $filterClass }}');
     @endif
     
-    // Function to update grade dropdowns dynamically
-    function updateGradeDropdowns() {
-        fetch(`{{ route('test.tabulation-sheet.practical.get-grades') }}`)
-            .then(response => response.json())
-            .then(data => {
-                const gradeSelects = document.querySelectorAll('.grade-select');
-                gradeSelects.forEach(function(select) {
-                    const currentValue = select.value;
-                    const optionsHtml = '<option value="">Select Grade</option>' + 
-                        data.grades.map(grade => `<option value="${grade}">${grade}</option>`).join('');
-                    select.innerHTML = optionsHtml;
-                    // Restore selected value if it still exists
-                    if (currentValue && data.grades.includes(currentValue)) {
-                        select.value = currentValue;
-                    }
-                });
-            })
-            .catch(error => {
-                console.error('Error loading grades:', error);
-            });
+    
+    // Auto-calculate grade based on marks using grade definitions (only for editable mode)
+    @if($filterType == 'editable')
+    // Grade definitions from server
+    @php
+        $gradeDefsArray = $gradeDefinitions->map(function($g) {
+            return [
+                'name' => $g->name,
+                'from_percentage' => (float)$g->from_percentage,
+                'to_percentage' => (float)$g->to_percentage
+            ];
+        })->values()->toArray();
+    @endphp
+    const gradeDefinitions = @json($gradeDefsArray);
+    
+    function calculateGradeFromMarks(marks, totalMarks) {
+        if (!marks || !totalMarks || totalMarks == 0) {
+            return null;
+        }
+        
+        const percentage = (marks / totalMarks) * 100;
+        
+        for (let i = 0; i < gradeDefinitions.length; i++) {
+            const gradeDef = gradeDefinitions[i];
+            if (percentage >= gradeDef.from_percentage && percentage <= gradeDef.to_percentage) {
+                return gradeDef.name;
+            }
+        }
+        
+        return null;
     }
     
-    // Update grade dropdowns on page load
-    updateGradeDropdowns();
-    
-    // Auto-calculate grade based on marks using dynamic grades
     document.querySelectorAll('.marks-input').forEach(function(input) {
         input.addEventListener('input', function() {
             const marks = parseFloat(this.value);
             const studentId = this.getAttribute('data-student-id');
-            const gradeSelect = document.querySelector('.grade-select[data-student-id="' + studentId + '"]');
+            const totalMarks = parseFloat(this.getAttribute('data-total-marks')) || 100;
+            const gradeDisplay = document.querySelector('.grade-display-calculated[data-student-id="' + studentId + '"]');
             
-            if (!isNaN(marks) && gradeSelect) {
-                // Fetch grades dynamically to determine which grade to assign
-                fetch(`{{ route('test.tabulation-sheet.practical.get-grades') }}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        // Find the appropriate grade based on percentage ranges
-                        let grade = '';
-                        if (marks >= 90) grade = 'A+';
-                        else if (marks >= 80) grade = 'A';
-                        else if (marks >= 70) grade = 'B+';
-                        else if (marks >= 60) grade = 'B';
-                        else if (marks >= 50) grade = 'C+';
-                        else if (marks >= 40) grade = 'C';
-                        else if (marks >= 33) grade = 'D';
-                        else grade = 'F';
-                        
-                        // Check if the calculated grade exists in the dynamic grades list
-                        if (data.grades.includes(grade)) {
-                            gradeSelect.value = grade;
-                        } else {
-                            // Find the closest grade
-                            const sortedGrades = data.grades.sort();
-                            gradeSelect.value = sortedGrades[0] || '';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching grades:', error);
-                    });
+            if (!isNaN(marks) && gradeDisplay) {
+                const calculatedGrade = calculateGradeFromMarks(marks, totalMarks);
+                if (calculatedGrade) {
+                    gradeDisplay.textContent = calculatedGrade;
+                    gradeDisplay.classList.remove('bg-secondary');
+                    gradeDisplay.classList.add('bg-success');
+                } else {
+                    gradeDisplay.textContent = '-';
+                    gradeDisplay.classList.remove('bg-success');
+                    gradeDisplay.classList.add('bg-secondary');
+                }
+            } else if (gradeDisplay) {
+                gradeDisplay.textContent = '-';
+                gradeDisplay.classList.remove('bg-success');
+                gradeDisplay.classList.add('bg-secondary');
             }
         });
     });
+    @endif
 });
 </script>
 @endsection

@@ -46,6 +46,29 @@ class StaffAttendanceController extends Controller
         }
 
         $staffList = $staffQuery->orderBy('name', 'asc')->get();
+        
+        // Filter per hour teachers: only show if they have classes scheduled on the selected date
+        if ($date && $staffList->isNotEmpty()) {
+            $dayName = Carbon::parse($date)->format('l'); // Monday, Tuesday, etc.
+            $filteredStaffList = collect();
+            
+            foreach ($staffList as $staff) {
+                $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
+                
+                // For per hour teachers, check if they have classes on this day
+                if ($isPerHour) {
+                    $hasClassOnDate = $this->hasClassOnDate($staff, $date, $dayName);
+                    if ($hasClassOnDate) {
+                        $filteredStaffList->push($staff);
+                    }
+                } else {
+                    // For non-per-hour staff, always include them
+                    $filteredStaffList->push($staff);
+                }
+            }
+            
+            $staffList = $filteredStaffList;
+        }
         if (!$type && $staffList->where('salary_type', 'lecture')->isNotEmpty()) {
             $type = 'Subject Attendance';
         }
@@ -206,7 +229,22 @@ class StaffAttendanceController extends Controller
             ->unique()
             ->values();
 
+        // Get day name from selected date for filtering subjects by timetable
+        $dayName = null;
+        if ($date) {
+            try {
+                $dayName = Carbon::parse($date)->format('l'); // Monday, Tuesday, etc.
+            } catch (\Exception $e) {
+                // If date parsing fails, continue without day filter
+            }
+        }
+
         $assignedSubjectsByStaff = [];
+        // Initialize array for all staff members to ensure 0 shows correctly
+        foreach ($staffList as $staff) {
+            $assignedSubjectsByStaff[$staff->id] = [];
+        }
+        
         if ($staffList->isNotEmpty()) {
             $staffNameToId = $staffList->mapWithKeys(function ($staff) {
                 return [strtolower(trim((string) $staff->name)) => $staff->id];
@@ -216,13 +254,110 @@ class StaffAttendanceController extends Controller
             if ($campus) {
                 $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
-            $subjects = $subjectsQuery->get(['teacher', 'class', 'section', 'subject_name']);
+            $subjects = $subjectsQuery->get(['teacher', 'class', 'section', 'subject_name', 'campus']);
+
+            // Subject name mapping for flexible matching (same as in getTimeFromTimetable)
+            $subjectNameMap = [
+                'maths' => ['maths', 'mathematics', 'math'],
+                'mathematics' => ['maths', 'mathematics', 'math'],
+                'english' => ['english', 'eng'],
+                'urdu' => ['urdu'],
+                'science' => ['science', 'sci'],
+                'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
+                'social studies' => ['social studies', 'social', 'sst'],
+            ];
 
             foreach ($subjects as $subject) {
                 $teacherKey = strtolower(trim((string) $subject->teacher));
                 if (!isset($staffNameToId[$teacherKey])) {
                     continue;
                 }
+                
+                // If day filter is enabled (for Subject Attendance type), check timetable
+                if ($type === 'Subject Attendance' && $dayName) {
+                    $subjectName = trim($subject->subject_name ?? '');
+                    $subjectClass = trim($subject->class ?? '');
+                    $subjectSection = trim($subject->section ?? '');
+                    $subjectCampus = trim($subject->campus ?? '');
+                    
+                    if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+                        continue;
+                    }
+                    
+                    // Check if this subject is scheduled on this day in timetable
+                    $subjectNameLower = strtolower($subjectName);
+                    
+                    // Build base query for subject, day, class, section matching
+                    $buildTimetableQuery = function($includeCampus = false) use ($subjectNameLower, $subjectNameMap, $dayName, $subjectClass, $subjectSection, $subjectCampus) {
+                        $query = Timetable::where(function($q) use ($subjectNameLower, $subjectNameMap) {
+                            // Exact match
+                            $q->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                            
+                            // Flexible matching for common subject name variations
+                            if (isset($subjectNameMap[$subjectNameLower])) {
+                                foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                                    $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                                }
+                            }
+                        })
+                        ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+                        ->where(function($q) use ($subjectClass) {
+                            // Match class name (handle variations like "Four" = "4" = "four")
+                            $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
+                            // Also try numeric matching if class is numeric
+                            if (is_numeric($subjectClass)) {
+                                $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
+                            } else {
+                                $wordToNumber = $this->wordToNumber($subjectClass);
+                                if ($wordToNumber !== null) {
+                                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
+                                }
+                            }
+                        })
+                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
+                        
+                        // Add campus filter only if requested
+                        if ($includeCampus && !empty($subjectCampus)) {
+                            $query->where(function($q) use ($subjectCampus) {
+                                // Match campus (case-insensitive) or allow null/empty
+                                $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)])
+                                  ->orWhereNull('campus')
+                                  ->orWhere('campus', '');
+                            });
+                        }
+                        
+                        return $query;
+                    };
+                    
+                    // First try without campus filter (most flexible)
+                    $timetableExists = $buildTimetableQuery(false)->exists();
+                    
+                    // If no results and subject has campus, try with campus filter
+                    if (!$timetableExists && !empty($subjectCampus)) {
+                        $timetableExists = $buildTimetableQuery(true)->exists();
+                    }
+                    
+                    // If still no match, try more flexible matching: just subject name + day (ignore class/section)
+                    if (!$timetableExists) {
+                        $flexibleQuery = Timetable::where(function($q) use ($subjectNameLower, $subjectNameMap) {
+                            $q->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                            if (isset($subjectNameMap[$subjectNameLower])) {
+                                foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                                    $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                                }
+                            }
+                        })
+                        ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)]);
+                        
+                        $timetableExists = $flexibleQuery->exists();
+                    }
+                    
+                    // Only include subject if it has a timetable entry for this day
+                    if (!$timetableExists) {
+                        continue;
+                    }
+                }
+                
                 $staffId = $staffNameToId[$teacherKey];
                 $labelParts = array_filter([
                     $subject->class ?? null,
@@ -234,7 +369,11 @@ class StaffAttendanceController extends Controller
             }
         }
 
+        // Format date label - include day name for Subject Attendance
         $dateLabel = Carbon::parse($date)->format('d F Y');
+        if ($type === 'Subject Attendance' && $dayName) {
+            $dateLabel = $dayName . ', ' . $dateLabel;
+        }
 
         return view('attendance.staff', [
             'staffList' => $staffList,
@@ -324,6 +463,17 @@ class StaffAttendanceController extends Controller
                 $staff = Staff::find($data['staff_id']);
                 if (!$staff) {
                     continue;
+                }
+
+                // For per hour teachers, check if they have classes on this date
+                $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
+                if ($isPerHour) {
+                    $dayName = Carbon::parse($date)->format('l');
+                    $hasClassOnDate = $this->hasClassOnDate($staff, $date, $dayName);
+                    if (!$hasClassOnDate) {
+                        // Skip per hour teachers who don't have classes on this date
+                        continue;
+                    }
                 }
 
                 $conductedLectures = isset($data['conducted_lectures']) && $data['conducted_lectures'] !== ''
@@ -427,6 +577,121 @@ class StaffAttendanceController extends Controller
     }
 
     /**
+     * Check if per hour teacher has classes scheduled on a specific date
+     */
+    private function hasClassOnDate(Staff $staff, string $date, string $dayName): bool
+    {
+        $staffName = trim($staff->name ?? '');
+        if (empty($staffName)) {
+            return false;
+        }
+
+        // Get staff's assigned subjects from Subject table
+        $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
+            ->whereNotNull('subject_name')
+            ->whereNotNull('class')
+            ->whereNotNull('section')
+            ->get();
+
+        if ($assignedSubjects->isEmpty()) {
+            return false;
+        }
+
+        // Subject name mapping for flexible matching
+        $subjectNameMap = [
+            'maths' => ['maths', 'mathematics', 'math'],
+            'mathematics' => ['maths', 'mathematics', 'math'],
+            'english' => ['english', 'eng'],
+            'urdu' => ['urdu'],
+            'science' => ['science', 'sci'],
+            'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
+            'social studies' => ['social studies', 'social', 'sst'],
+        ];
+
+        // Check if any of the staff's subjects have timetable entries on this day
+        foreach ($assignedSubjects as $subject) {
+            $subjectName = trim($subject->subject_name ?? '');
+            $subjectClass = trim($subject->class ?? '');
+            $subjectSection = trim($subject->section ?? '');
+            $subjectCampus = trim($subject->campus ?? '');
+            
+            if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+                continue;
+            }
+            
+            $subjectNameLower = strtolower($subjectName);
+            
+            // Build timetable query
+            $timetableQuery = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
+                $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                
+                if (isset($subjectNameMap[$subjectNameLower])) {
+                    foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                        $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                    }
+                }
+            })
+            ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+            ->where(function($query) use ($subjectClass) {
+                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
+                if (is_numeric($subjectClass)) {
+                    $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
+                } else {
+                    $wordToNumber = $this->wordToNumber($subjectClass);
+                    if ($wordToNumber !== null) {
+                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
+                    }
+                }
+            })
+            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
+            
+            // Add campus filter if both subject and timetable have campus
+            if (!empty($subjectCampus)) {
+                $timetableQuery->where(function($query) use ($subjectCampus) {
+                    $query->whereNull('campus')
+                        ->orWhereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)]);
+                });
+            }
+            
+            // Check if timetable entry exists
+            if ($timetableQuery->exists()) {
+                return true;
+            }
+            
+            // Try without campus filter if first query didn't find anything
+            if (!empty($subjectCampus)) {
+                $timetableQueryWithoutCampus = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
+                    $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                    if (isset($subjectNameMap[$subjectNameLower])) {
+                        foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                            $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                        }
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+                ->where(function($query) use ($subjectClass) {
+                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
+                    if (is_numeric($subjectClass)) {
+                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
+                    } else {
+                        $wordToNumber = $this->wordToNumber($subjectClass);
+                        if ($wordToNumber !== null) {
+                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
+                        }
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
+                
+                if ($timetableQueryWithoutCampus->exists()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Get time from timetable for per hour teacher
      */
     private function getTimeFromTimetable(Staff $staff, string $date): ?array
@@ -452,6 +717,7 @@ class StaffAttendanceController extends Controller
         
         $earliestStartTime = null;
         $latestEndTime = null;
+        $totalHours = 0; // Total hours count from all timetable entries
 
         // Subject name mapping for flexible matching (Maths = Mathematics, etc.)
         $subjectNameMap = [
@@ -477,6 +743,8 @@ class StaffAttendanceController extends Controller
             
             // Build timetable query with flexible subject name matching
             $subjectNameLower = strtolower($subjectName);
+            
+            // First try with campus match if campus is provided
             $timetableQuery = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
                 // Exact match
                 $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
@@ -504,28 +772,86 @@ class StaffAttendanceController extends Controller
             })
             ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
             
+            // Add campus filter if both subject and timetable have campus
             if (!empty($subjectCampus)) {
-                $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)]);
+                $timetableQuery->where(function($query) use ($subjectCampus) {
+                    // Match campus (case-insensitive)
+                    $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)])
+                          // Also allow entries without campus if subject has campus
+                          ->orWhereNull('campus')
+                          ->orWhere('campus', '');
+                });
             }
             
             $timetableEntries = $timetableQuery->get();
             
-            // Find earliest start time and latest end time
+            // If no results with campus filter, try without campus filter (more flexible)
+            if ($timetableEntries->isEmpty() && !empty($subjectCampus)) {
+                $timetableQuery = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
+                    $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                    if (isset($subjectNameMap[$subjectNameLower])) {
+                        foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                            $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                        }
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+                ->where(function($query) use ($subjectClass) {
+                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
+                    if (is_numeric($subjectClass)) {
+                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
+                    } else {
+                        $wordToNumber = $this->wordToNumber($subjectClass);
+                        if ($wordToNumber !== null) {
+                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
+                        }
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
+                
+                $timetableEntries = $timetableQuery->get();
+            }
+            
+            // Find earliest start time, latest end time, and calculate total hours
             foreach ($timetableEntries as $entry) {
                 if (!empty($entry->starting_time) && !empty($entry->ending_time)) {
                     try {
-                        $startTime = Carbon::parse($entry->starting_time);
-                        $endTime = Carbon::parse($entry->ending_time);
+                        // Parse time properly - handle both time string and Carbon object
+                        $startTimeStr = is_object($entry->starting_time) ? $entry->starting_time->format('H:i') : $entry->starting_time;
+                        $endTimeStr = is_object($entry->ending_time) ? $entry->ending_time->format('H:i') : $entry->ending_time;
                         
-                        if ($earliestStartTime === null || $startTime->lt($earliestStartTime)) {
-                            $earliestStartTime = $startTime;
+                        // Create Carbon instances from time format (H:i)
+                        $startTime = Carbon::createFromFormat('H:i:s', $startTimeStr . ':00');
+                        if (!$startTime) {
+                            $startTime = Carbon::createFromFormat('H:i', $startTimeStr);
                         }
                         
-                        if ($latestEndTime === null || $endTime->gt($latestEndTime)) {
-                            $latestEndTime = $endTime;
+                        $endTime = Carbon::createFromFormat('H:i:s', $endTimeStr . ':00');
+                        if (!$endTime) {
+                            $endTime = Carbon::createFromFormat('H:i', $endTimeStr);
+                        }
+                        
+                        if ($startTime && $endTime) {
+                            // Calculate hours for this period
+                            $hours = $startTime->diffInMinutes($endTime) / 60;
+                            $totalHours += $hours;
+                            
+                            if ($earliestStartTime === null || $startTime->lt($earliestStartTime)) {
+                                $earliestStartTime = $startTime;
+                            }
+                            
+                            if ($latestEndTime === null || $endTime->gt($latestEndTime)) {
+                                $latestEndTime = $endTime;
+                            }
                         }
                     } catch (\Exception $e) {
-                        // Skip invalid times
+                        // Skip invalid times - log error for debugging
+                        \Log::warning('Error parsing timetable time', [
+                            'entry_id' => $entry->id ?? null,
+                            'starting_time' => $entry->starting_time ?? null,
+                            'ending_time' => $entry->ending_time ?? null,
+                            'error' => $e->getMessage()
+                        ]);
                     }
                 }
             }
@@ -535,6 +861,7 @@ class StaffAttendanceController extends Controller
             return [
                 'start_time' => $earliestStartTime->format('H:i'),
                 'end_time' => $latestEndTime->format('H:i'),
+                'total_hours' => round($totalHours, 2), // Total hours from all timetable entries
             ];
         }
 

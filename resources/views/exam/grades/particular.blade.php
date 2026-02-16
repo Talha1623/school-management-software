@@ -8,10 +8,10 @@
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Exam Grades - For Particular Exam</h4>
-                @if(!empty($filterCampus) && !empty($filterExam) && !empty($filterSession))
+                @if($showResults)
                     <button type="button" class="btn btn-sm py-1 px-2 d-inline-flex align-items-center gap-1 rounded-8 grade-add-btn text-white" data-bs-toggle="modal" data-bs-target="#gradeModal" onclick="resetForm()">
                         <span class="material-symbols-outlined text-white" style="font-size: 16px;">add</span>
-                        <span class="text-white">Add New Grade</span>
+                        <span class="text-white">Add Grades</span>
                     </button>
                 @endif
             </div>
@@ -247,8 +247,8 @@
                         Cancel
                     </button>
                     <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 grade-submit-btn">
-                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
-                        Save Grade
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">add</span>
+                        Add Grade
                     </button>
                 </div>
             </form>

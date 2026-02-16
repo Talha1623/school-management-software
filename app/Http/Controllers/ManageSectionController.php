@@ -9,6 +9,8 @@ use App\Models\Campus;
 use App\Models\Subject;
 use App\Models\Student;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -143,11 +145,11 @@ class ManageSectionController extends Controller
             ]);
         }
         
-        // Get only teachers from staff table
+        // Get only teachers from staff table with salary_type
         $teachers = Staff::whereRaw('LOWER(TRIM(designation)) LIKE ?', ['%teacher%'])
             ->whereNotNull('name')
             ->orderBy('name')
-            ->get(['name', 'campus']);
+            ->get(['name', 'campus', 'salary_type']);
         
         return view('classes.manage-section', compact('sections', 'campuses', 'classes', 'allSessions', 'teachers'));
     }
@@ -195,6 +197,7 @@ class ManageSectionController extends Controller
             'nick_name' => ['nullable', 'string', 'max:255'],
             'class' => ['required', 'string', 'max:255'],
             'teacher' => ['nullable', 'string', 'max:255'],
+            'teacher_type' => ['nullable', 'string', 'in:per hour,per lecture,full time'],
             'session' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -221,6 +224,7 @@ class ManageSectionController extends Controller
             'nick_name' => ['nullable', 'string', 'max:255'],
             'class' => ['required', 'string', 'max:255'],
             'teacher' => ['nullable', 'string', 'max:255'],
+            'teacher_type' => ['nullable', 'string', 'in:per hour,per lecture,full time'],
             'session' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -314,7 +318,8 @@ class ManageSectionController extends Controller
                   ->orWhere('name', 'like', "%{$search}%")
                   ->orWhere('nick_name', 'like', "%{$search}%")
                   ->orWhere('class', 'like', "%{$search}%")
-                  ->orWhere('teacher', 'like', "%{$search}%");
+                  ->orWhere('teacher', 'like', "%{$search}%")
+                  ->orWhere('teacher_type', 'like', "%{$search}%");
             });
         }
         
@@ -417,6 +422,112 @@ class ManageSectionController extends Controller
         
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Verify passout credentials.
+     */
+    public function verifyPassout(Request $request, Section $section): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        $email = $request->input('email');
+        $password = $request->input('password');
+
+        // Try admin guard first
+        $admin = \App\Models\AdminRole::where('email', $email)->first();
+        
+        if ($admin && Hash::check($password, $admin->password)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Verification successful.',
+            ]);
+        }
+
+        // Try accountant guard
+        $accountant = \App\Models\Accountant::where('email', $email)->first();
+        
+        if ($accountant && Hash::check($password, $accountant->password)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Verification successful.',
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid email or password. Please try again.',
+        ], 401);
+    }
+
+    /**
+     * Passout all students from a section.
+     */
+    public function passout(Request $request, Section $section): JsonResponse
+    {
+        // Check if user is authenticated (admin or accountant)
+        if (!Auth::guard('admin')->check() && !Auth::guard('accountant')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication required. Please login.',
+            ], 401);
+        }
+
+        // Normalize section name, class name, and campus for comparison
+        $sectionName = strtolower(trim($section->name));
+        $className = strtolower(trim($section->class));
+        $sectionCampus = $section->campus ? strtolower(trim($section->campus)) : null;
+        
+        // Find all students in this section
+        $studentsQuery = Student::whereNotNull('class')
+            ->where('class', '!=', '')
+            ->whereNotNull('section')
+            ->where('section', '!=', '')
+            ->whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className])
+            ->whereRaw('LOWER(TRIM(COALESCE(section, ""))) = ?', [$sectionName]);
+        
+        // If section has a campus, match students from that campus OR students with no campus set
+        if ($sectionCampus) {
+            $studentsQuery->where(function($query) use ($sectionCampus) {
+                $query->whereNull('campus')
+                    ->orWhere('campus', '')
+                    ->orWhereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$sectionCampus]);
+            });
+        }
+        
+        $students = $studentsQuery->get();
+        
+        if ($students->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No students found in this section to passout.',
+            ], 404);
+        }
+        
+        // Update all students' class to "Passout" and store original class/section
+        $updatedCount = 0;
+        foreach ($students as $student) {
+            // Store original class and section before passout
+            if ($student->class && strtolower(trim($student->class)) !== 'passout') {
+                $student->previous_class = $student->class;
+            }
+            if ($student->section) {
+                $student->previous_section = $student->section;
+            }
+            $student->class = 'Passout';
+            $student->section = null; // Clear section when passing out
+            $student->save();
+            $updatedCount++;
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully passed out {$updatedCount} student(s) from section '{$section->name}' of class '{$section->class}'.",
+            'count' => $updatedCount,
+        ]);
     }
 
     /**

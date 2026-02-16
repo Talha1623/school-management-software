@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BehaviorRecord;
+use App\Models\BehaviorReportType;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
@@ -89,14 +90,12 @@ class ReportingAnalysisController extends Controller
             $years = collect([Carbon::now()->year]);
         }
 
-        // Report types
-        $reportTypes = [
-            'summary' => 'Summary Report',
-            'detailed' => 'Detailed Report',
-            'monthly' => 'Monthly Report',
-            'yearly' => 'Yearly Report',
-            'type-wise' => 'Type-wise Report',
-        ];
+        // Get report types dynamically from database
+        $reportTypes = BehaviorReportType::where('is_active', true)
+            ->orderBy('sort_order', 'asc')
+            ->get()
+            ->pluck('report_type_name', 'report_type_key')
+            ->toArray();
 
         return view('student-behavior.reporting-analysis', compact(
             'campuses',
@@ -197,26 +196,62 @@ class ReportingAnalysisController extends Controller
                 break;
 
             case 'monthly':
+            case 'monthly-behavior-report':
                 $records = $query->get();
-                $monthlyData = $records->groupBy(function($record) {
-                    return Carbon::parse($record->date)->format('Y-m');
-                })->map(function($monthRecords, $month) {
+                
+                // Get selected month from request or use current month
+                $selectedMonthInput = $request->get('month');
+                if ($selectedMonthInput && $year) {
+                    // Combine year and month: YYYY-MM
+                    $selectedMonth = $year . '-' . str_pad($selectedMonthInput, 2, '0', STR_PAD_LEFT);
+                } else {
+                    $selectedMonth = Carbon::now()->format('Y-m');
+                }
+                
+                // Filter records for selected month
+                $monthRecords = $records->filter(function($record) use ($selectedMonth) {
+                    return Carbon::parse($record->date)->format('Y-m') === $selectedMonth;
+                });
+                
+                // Group by student for student-wise monthly report
+                $studentMonthlyData = $students->map(function($student) use ($monthRecords) {
+                    $studentRecords = $monthRecords->where('student_id', $student->id);
+                    
+                    // Group by behavior type
+                    $behaviorTypes = $studentRecords->groupBy('type')->map(function($typeRecords, $type) {
+                        return [
+                            'type' => $type,
+                            'points' => $typeRecords->sum('points'),
+                            'count' => $typeRecords->count(),
+                            'remarks' => $typeRecords->pluck('description')->filter()->first() ?? '',
+                        ];
+                    })->values();
+                    
                     return [
-                        'month' => $month,
-                        'month_formatted' => Carbon::parse($month . '-01')->format('F Y'),
-                        'total_records' => $monthRecords->count(),
-                        'total_points' => $monthRecords->sum('points'),
-                        'positive_points' => $monthRecords->where('points', '>', 0)->sum('points'),
-                        'negative_points' => $monthRecords->where('points', '<', 0)->sum('points'),
+                        'student_id' => $student->id,
+                        'student_name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'campus' => $student->campus ?? 'Main Campus',
+                        'father_name' => $student->father_name ?? 'N/A',
+                        'total_records' => $studentRecords->count(),
+                        'total_points' => $studentRecords->sum('points'),
+                        'behavior_types' => $behaviorTypes,
                     ];
-                })->sortKeys()->values();
+                })->filter(function($student) {
+                    return $student['total_records'] > 0; // Only show students with records
+                })->values();
+                
                 $reportData = [
-                    'total_records' => $records->count(),
-                    'monthly_data' => $monthlyData,
+                    'month' => $selectedMonth,
+                    'month_formatted' => Carbon::parse($selectedMonth . '-01')->format('F Y'),
+                    'total_records' => $monthRecords->count(),
+                    'total_students' => $studentMonthlyData->count(),
+                    'student_monthly_data' => $studentMonthlyData,
                 ];
                 break;
 
             case 'yearly':
+            case 'yearly-behavior-report':
                 $currentYearRecords = $query->whereYear('date', $year)->get();
                 $previousYearRecords = BehaviorRecord::query()
                     ->whereYear('date', $year - 1);
@@ -245,6 +280,37 @@ class ReportingAnalysisController extends Controller
                         'positive_points' => $previousYearRecords->where('points', '>', 0)->sum('points'),
                         'negative_points' => $previousYearRecords->where('points', '<', 0)->sum('points'),
                     ],
+                ];
+                break;
+
+            case 'behavior-track-report':
+                // Behavior Track Report: Individual student behavior tracking with all records
+                $records = $query->orderBy('date', 'desc')->get();
+                $studentTrackData = $students->map(function($student) use ($records) {
+                    $studentRecords = $records->where('student_id', $student->id);
+                    return [
+                        'student_id' => $student->id,
+                        'student_name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'total_records' => $studentRecords->count(),
+                        'total_points' => $studentRecords->sum('points'),
+                        'positive_points' => $studentRecords->where('points', '>', 0)->sum('points'),
+                        'negative_points' => $studentRecords->where('points', '<', 0)->sum('points'),
+                        'records' => $studentRecords->map(function($record) {
+                            return [
+                                'date' => $record->date->format('Y-m-d'),
+                                'type' => $record->type,
+                                'category' => $record->category,
+                                'points' => $record->points,
+                                'description' => $record->description,
+                            ];
+                        })->values(),
+                    ];
+                })->values();
+                $reportData = [
+                    'total_students' => $students->count(),
+                    'total_records' => $records->count(),
+                    'student_track_data' => $studentTrackData,
                 ];
                 break;
 
@@ -462,6 +528,7 @@ class ReportingAnalysisController extends Controller
                     break;
 
                 case 'monthly':
+                case 'monthly-behavior-report':
                     // Monthly Report: Behavior records grouped by month
                     $records = $query->get();
                     
@@ -485,6 +552,7 @@ class ReportingAnalysisController extends Controller
                     break;
 
                 case 'yearly':
+                case 'yearly-behavior-report':
                     // Yearly Report: Compare current year with previous year
                     $currentYearRecords = $query->whereYear('date', $year)->get();
                     $previousYearRecords = BehaviorRecord::query()
@@ -516,6 +584,38 @@ class ReportingAnalysisController extends Controller
                             'positive_points' => $previousYearRecords->where('points', '>', 0)->sum('points'),
                             'negative_points' => $previousYearRecords->where('points', '<', 0)->sum('points'),
                         ],
+                    ];
+                    break;
+
+                case 'behavior-track-report':
+                    // Behavior Track Report: Individual student behavior tracking with all records
+                    $records = $query->orderBy('date', 'desc')->get();
+                    $studentTrackData = $students->map(function($student) use ($records) {
+                        $studentRecords = $records->where('student_id', $student->id);
+                        return [
+                            'student_id' => $student->id,
+                            'student_name' => $student->student_name,
+                            'student_code' => $student->student_code,
+                            'total_records' => $studentRecords->count(),
+                            'total_points' => $studentRecords->sum('points'),
+                            'positive_points' => $studentRecords->where('points', '>', 0)->sum('points'),
+                            'negative_points' => $studentRecords->where('points', '<', 0)->sum('points'),
+                            'records' => $studentRecords->map(function($record) {
+                                return [
+                                    'date' => $record->date->format('Y-m-d'),
+                                    'type' => $record->type,
+                                    'category' => $record->category,
+                                    'points' => $record->points,
+                                    'description' => $record->description,
+                                ];
+                            })->values(),
+                        ];
+                    })->values();
+                    
+                    $reportData = [
+                        'total_students' => $students->count(),
+                        'total_records' => $records->count(),
+                        'student_track_data' => $studentTrackData,
                     ];
                     break;
 

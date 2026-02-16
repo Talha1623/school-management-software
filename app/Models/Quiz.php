@@ -17,10 +17,16 @@ class Quiz extends Model
         'section',
         'total_questions',
         'start_date_time',
+        'duration_minutes',
     ];
 
     protected $casts = [
         'start_date_time' => 'datetime',
     ];
+
+    public function questions()
+    {
+        return $this->hasMany(QuizQuestion::class)->orderBy('question_number');
+    }
 }
 

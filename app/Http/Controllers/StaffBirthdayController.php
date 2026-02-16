@@ -41,41 +41,59 @@ class StaffBirthdayController extends Controller
     }
 
     /**
-     * Get staff data (empty for now)
+     * Print birthday card for a staff member.
+     */
+    public function printBirthdayCard(Staff $staff): View
+    {
+        return view('staff.birthday-card-print', [
+            'staff' => $staff,
+            'printedAt' => now()->format('d-m-Y H:i'),
+            'autoPrint' => request()->get('auto_print'),
+        ]);
+    }
+
+    /**
+     * Get staff data - only show staff with birthdays today
      */
     private function getStaffData()
     {
         $today = Carbon::today();
+        $todayMonth = $today->month;
+        $todayDay = $today->day;
 
+        // Get all staff with birthdays and filter to only today's birthdays
         $staffMembers = Staff::whereNotNull('birthday')
-            ->orderByRaw("DATE_FORMAT(birthday, '%m-%d') asc")
-            ->get();
+            ->get()
+            ->filter(function (Staff $member) use ($today, $todayMonth, $todayDay) {
+                if (!$member->birthday) {
+                    return false;
+                }
+                
+                $birthday = Carbon::parse($member->birthday);
+                // Check if month and day match today (ignoring year)
+                return $birthday->month == $todayMonth && $birthday->day == $todayDay;
+            })
+            ->values();
 
         return $staffMembers->map(function (Staff $member) use ($today) {
             $birthday = $member->birthday ? Carbon::parse($member->birthday) : null;
-            $status = 'N/A';
-            $wish = 'Pending';
-
-            if ($birthday) {
-                $birthdayThisYear = $birthday->copy()->year($today->year);
-                if ($birthdayThisYear->isSameDay($today)) {
-                    $status = 'Today';
-                    $wish = 'Sent';
-                } elseif ($birthdayThisYear->isAfter($today)) {
-                    $status = 'Upcoming';
-                } else {
-                    $status = 'Past';
-                }
-            }
+            $status = 'Today'; // All shown are today's birthdays
+            $wish = 'Sent';
+            $birthdayCard = 'Sent';
 
             return [
+                'id' => $member->id,
                 'emp_code' => $member->emp_id ?? 'N/A',
                 'name' => $member->name ?? 'N/A',
                 'father_husband' => $member->father_husband_name ?? 'N/A',
+                'campus' => $member->campus ?? 'N/A',
+                'designation' => $member->designation ?? 'N/A',
                 'birthday' => $member->birthday ? $member->birthday->format('Y-m-d') : null,
                 'status' => $status,
+                'birthday_card' => $birthdayCard,
                 'wish' => $wish,
                 'picture' => $member->photo ? Storage::url($member->photo) : null,
+                'phone' => $member->whatsapp ?? $member->phone,
             ];
         })->values();
     }
@@ -99,7 +117,7 @@ class StaffBirthdayController extends Controller
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             
             // Add headers
-            fputcsv($file, ['EMP Code', 'Name', 'Father/Husband', 'Birthday', 'Status', 'Wish']);
+            fputcsv($file, ['EMP Code', 'Name', 'Father/Husband', 'Campus', 'Designation', 'Birthday', 'Status', 'Birthday Card', 'Wish']);
             
             // Add data rows
             foreach ($staff as $member) {
@@ -107,8 +125,11 @@ class StaffBirthdayController extends Controller
                     $member['emp_code'],
                     $member['name'],
                     $member['father_husband'],
+                    $member['campus'],
+                    $member['designation'],
                     $member['birthday'],
                     $member['status'],
+                    $member['birthday_card'],
                     $member['wish'],
                 ]);
             }
@@ -135,7 +156,7 @@ class StaffBirthdayController extends Controller
             $file = fopen('php://output', 'w');
             
             // Add headers
-            fputcsv($file, ['EMP Code', 'Name', 'Father/Husband', 'Birthday', 'Status', 'Wish']);
+            fputcsv($file, ['EMP Code', 'Name', 'Father/Husband', 'Campus', 'Designation', 'Birthday', 'Status', 'Birthday Card', 'Wish']);
             
             // Add data rows
             foreach ($staff as $member) {
@@ -143,8 +164,11 @@ class StaffBirthdayController extends Controller
                     $member['emp_code'],
                     $member['name'],
                     $member['father_husband'],
+                    $member['campus'],
+                    $member['designation'],
                     $member['birthday'],
                     $member['status'],
+                    $member['birthday_card'],
                     $member['wish'],
                 ]);
             }

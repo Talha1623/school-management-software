@@ -142,17 +142,17 @@
                             <!-- System Name Field -->
                             <div class="mb-3">
                                 <label class="form-label fw-medium">System Name</label>
-                                <input type="text" class="form-control" id="systemName" name="system_name" value="ICMS" placeholder="Enter system name" onchange="updateSystemName(this.value)">
+                                <input type="text" class="form-control" id="systemName" name="system_name" value="{{ old('system_name', $settings->system_name ?? 'ICMS') }}" placeholder="Enter system name" onchange="updateSystemName(this.value)">
                                 <small class="text-muted">This will change the "ICMS" text in sidebar and header</small>
                             </div>
                             
                             <div class="mb-3 text-center">
                                 <div class="border rounded-10 p-4" style="background-color: #f8f9fa; min-height: 200px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
                                     <div class="text-center mb-3">
-                                        <img id="logoPreview" src="{{ asset('assets/images/logo-icon.png') }}" alt="Logo Preview" style="max-width: 150px; max-height: 100px; display: block; margin: 0 auto;">
+                                        <img id="logoPreview" src="{{ $settings->logo ? asset('storage/' . $settings->logo) : asset('assets/images/logo-icon.png') }}" alt="Logo Preview" style="max-width: 150px; max-height: 100px; display: block; margin: 0 auto;">
                                     </div>
                                     <div class="text-center">
-                                        <span id="systemNamePreview" class="logo-text text-secondary fw-semibold" style="font-size: 18px;">ICMS</span>
+                                        <span id="systemNamePreview" class="logo-text text-secondary fw-semibold" style="font-size: 18px;">{{ $settings->system_name ?? 'ICMS' }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -272,21 +272,41 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Load saved logo and system name from localStorage
+    // Load saved logo and system name from database (via blade variables)
+    @php
+        $settings = \App\Models\GeneralSetting::getSettings();
+        $logoUrl = $settings->logo ? asset('storage/' . $settings->logo) : asset('assets/images/logo-icon.png');
+        $systemName = $settings->system_name ?? 'ICMS';
+    @endphp
+    
+    // Update logo preview and sidebar if logo exists
+    const dbLogoUrl = '{{ $logoUrl }}';
+    const dbSystemName = '{{ $systemName }}';
+    
+    if (dbLogoUrl && dbLogoUrl !== '{{ asset('assets/images/logo-icon.png') }}') {
+        document.getElementById('logoPreview').src = dbLogoUrl;
+        const sidebarLogo = document.querySelector('.sidebar-area .logo img');
+        if (sidebarLogo) sidebarLogo.src = dbLogoUrl;
+        localStorage.setItem('schoolLogo', dbLogoUrl);
+    }
+    
+    if (dbSystemName && dbSystemName !== 'ICMS') {
+        document.getElementById('systemName').value = dbSystemName;
+        updateSystemName(dbSystemName);
+        localStorage.setItem('systemName', dbSystemName);
+    }
+    
+    // Also check localStorage for any recent changes
     const savedLogo = localStorage.getItem('schoolLogo');
     const savedName = localStorage.getItem('systemName');
     
-    // Load saved logo and system name from localStorage
-    const savedLogo = localStorage.getItem('schoolLogo');
-    const savedName = localStorage.getItem('systemName');
-    
-    if (savedLogo) {
+    if (savedLogo && savedLogo !== dbLogoUrl) {
         document.getElementById('logoPreview').src = savedLogo;
         const sidebarLogo = document.querySelector('.sidebar-area .logo img');
         if (sidebarLogo) sidebarLogo.src = savedLogo;
     }
     
-    if (savedName) {
+    if (savedName && savedName !== dbSystemName) {
         document.getElementById('systemName').value = savedName;
         updateSystemName(savedName);
     }

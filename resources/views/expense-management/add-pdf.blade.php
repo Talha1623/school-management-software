@@ -56,6 +56,7 @@
                 <th>Invoice/Receipt</th>
                 <th>Date</th>
                 <th class="text-center">Notify Admin</th>
+                <th>Created By</th>
                 <th>Created At</th>
             </tr>
         </thead>
@@ -72,11 +73,12 @@
                     <td>{{ $expense->invoice_receipt ?? 'N/A' }}</td>
                     <td>{{ $expense->date->format('Y-m-d') }}</td>
                     <td class="text-center">{{ $expense->notify_admin ? 'Yes' : 'No' }}</td>
+                    <td>{{ $expense->created_by ?? 'N/A' }}</td>
                     <td>{{ $expense->created_at->format('Y-m-d H:i:s') }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="11" style="text-align: center;">No expenses found.</td>
+                    <td colspan="12" style="text-align: center;">No expenses found.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -85,7 +87,7 @@
             <tr style="background-color: #003471; color: white; font-weight: bold;">
                 <td colspan="5" class="text-right">Total:</td>
                 <td class="text-right">₹{{ number_format($expenses->sum('amount'), 2) }}</td>
-                <td colspan="5"></td>
+                <td colspan="6"></td>
             </tr>
         </tfoot>
         @endif

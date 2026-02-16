@@ -459,6 +459,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Load subjects when exam changes
+    if (examSelect) {
+        examSelect.addEventListener('change', function() {
+            const selectedExam = this.value;
+            if (selectedExam && classSelect && classSelect.value && sectionSelect && sectionSelect.value) {
+                loadSubjects();
+            }
+        });
+    }
+
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
             loadClasses();
@@ -509,6 +519,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const classValue = classSelect ? classSelect.value : '';
         const section = sectionSelect ? sectionSelect.value : '';
+        const exam = examSelect ? examSelect.value : '';
         
         if (!classValue || !section) {
             subjectSelect.innerHTML = '<option value="">Select Subject</option>';
@@ -521,6 +532,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (classValue) params.append('class', classValue);
         if (section) params.append('section', section);
         if (campusSelect && campusSelect.value) params.append('campus', campusSelect.value);
+        if (exam) params.append('exam', exam);
         
         // Get the currently selected subject value before reloading
         const currentSelectedSubject = subjectSelect ? subjectSelect.value : '';

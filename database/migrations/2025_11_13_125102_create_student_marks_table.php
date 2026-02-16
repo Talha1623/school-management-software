@@ -25,8 +25,11 @@ return new class extends Migration
             $table->text('teacher_remarks')->nullable();
             $table->timestamps();
             
-            // Index for faster queries
-            $table->index(['student_id', 'test_name', 'campus', 'class', 'section', 'subject']);
+            // Indexes for faster queries (single column indexes for MyISAM compatibility)
+            $table->index('student_id');
+            $table->index('test_name');
+            $table->index('campus');
+            $table->index('class');
         });
     }
 

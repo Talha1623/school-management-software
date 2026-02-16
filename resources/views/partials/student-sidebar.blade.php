@@ -2,7 +2,11 @@
 <div class="sidebar-area" id="sidebar-area">
     <div class="logo position-relative d-flex align-items-center justify-content-between">
         <a href="{{ route('student.dashboard') }}" class="d-block text-decoration-none position-relative">
-            <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
+            @php
+                $settings = \App\Models\GeneralSetting::getSettings();
+                $logoUrl = $settings->logo ? asset('storage/' . $settings->logo) : asset('assets/images/Full Logo_SMS.png');
+            @endphp
+            <img src="{{ $logoUrl }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
         </a> 
         <button class="sidebar-burger-menu-close bg-transparent py-3 border-0 opacity-0 z-n1 position-absolute top-50 end-0 translate-middle-y" id="sidebar-burger-menu-close">
             <span class="border-1 d-block for-dark-burger" style="border-bottom: 1px solid #475569; height: 1px; width: 25px; transform: rotate(45deg);"></span>

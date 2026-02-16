@@ -13,6 +13,20 @@
             <!-- Filter Form -->
             <form action="{{ route('test.position-holder.combine') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
+                    <!-- Campus -->
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <!-- Class -->
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
@@ -71,7 +85,7 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_class', 'filter_section', 'filter_test_type', 'filter_from_date', 'filter_to_date']))
+            @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_test_type', 'filter_from_date', 'filter_to_date']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
@@ -97,6 +111,11 @@
                             </thead>
                             <tbody>
                                 @forelse($students as $index => $student)
+                                @php
+                                    $marksObtained = $student->totalObtained ?? 0;
+                                    $totalMarks = $student->totalMarks ?? 0;
+                                    $calculatedGrade = $student->grade ?? null;
+                                @endphp
                                 <tr>
                                     <td>
                                         @if($index == 0)
@@ -136,15 +155,14 @@
                                         <span class="badge bg-info text-white">{{ $student->section ?? 'N/A' }}</span>
                                     </td>
                                     <td>
-                                        <input type="number" class="form-control form-control-sm marks-input" data-student-id="{{ $student->id }}" placeholder="Marks" min="0" max="100" step="0.01" style="width: 100px; display: inline-block;">
+                                        <span class="fw-semibold">{{ $marksObtained }} / {{ $totalMarks }}</span>
                                     </td>
                                     <td>
-                                        <select class="form-select form-select-sm grade-select" data-student-id="{{ $student->id }}" style="width: 100px; display: inline-block;">
-                                            <option value="">Select Grade</option>
-                                            @foreach($grades as $grade)
-                                                <option value="{{ $grade }}">{{ $grade }}</option>
-                                            @endforeach
-                                        </select>
+                                        @if($calculatedGrade)
+                                            <span class="badge bg-success">{{ $calculatedGrade }}</span>
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
                                     </td>
                                 </tr>
                                 @empty
@@ -237,14 +255,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load sections when class changes
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const campusSelect = document.getElementById('filter_campus');
     
     // Function to load sections dynamically
-    function loadSections(selectedClass) {
+    function loadSections(selectedClass, selectedCampus) {
         if (selectedClass) {
             sectionSelect.disabled = false;
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
             
-            fetch(`{{ route('test.position-holder.combine.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            let url = `{{ route('test.position-holder.combine.get-sections') }}?class=${encodeURIComponent(selectedClass)}`;
+            if (selectedCampus) {
+                url += `&campus=${encodeURIComponent(selectedCampus)}`;
+            }
+            
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -273,78 +297,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load sections when class changes
     if (classSelect) {
         classSelect.addEventListener('change', function() {
-            loadSections(this.value);
+            loadSections(this.value, campusSelect ? campusSelect.value : '');
+        });
+    }
+    
+    // Reload sections when campus changes
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            if (classSelect && classSelect.value) {
+                loadSections(classSelect.value, this.value);
+            }
         });
     }
     
     // Load sections on page load if class is already selected
     @if($filterClass)
-    loadSections('{{ $filterClass }}');
+    loadSections('{{ $filterClass }}', '{{ $filterCampus ?? '' }}');
     @endif
-    
-    // Function to update grade dropdowns dynamically
-    function updateGradeDropdowns() {
-        fetch(`{{ route('test.position-holder.combine.get-grades') }}`)
-            .then(response => response.json())
-            .then(data => {
-                const gradeSelects = document.querySelectorAll('.grade-select');
-                gradeSelects.forEach(function(select) {
-                    const currentValue = select.value;
-                    const optionsHtml = '<option value="">Select Grade</option>' + 
-                        data.grades.map(grade => `<option value="${grade}">${grade}</option>`).join('');
-                    select.innerHTML = optionsHtml;
-                    // Restore selected value if it still exists
-                    if (currentValue && data.grades.includes(currentValue)) {
-                        select.value = currentValue;
-                    }
-                });
-            })
-            .catch(error => {
-                console.error('Error loading grades:', error);
-            });
-    }
-    
-    // Update grade dropdowns on page load
-    updateGradeDropdowns();
-    
-    // Auto-calculate grade based on marks using dynamic grades
-    document.querySelectorAll('.marks-input').forEach(function(input) {
-        input.addEventListener('input', function() {
-            const marks = parseFloat(this.value);
-            const studentId = this.getAttribute('data-student-id');
-            const gradeSelect = document.querySelector('.grade-select[data-student-id="' + studentId + '"]');
-            
-            if (!isNaN(marks) && gradeSelect) {
-                // Fetch grades dynamically to determine which grade to assign
-                fetch(`{{ route('test.position-holder.combine.get-grades') }}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        // Find the appropriate grade based on percentage ranges
-                        let grade = '';
-                        if (marks >= 90) grade = 'A+';
-                        else if (marks >= 80) grade = 'A';
-                        else if (marks >= 70) grade = 'B+';
-                        else if (marks >= 60) grade = 'B';
-                        else if (marks >= 50) grade = 'C+';
-                        else if (marks >= 40) grade = 'C';
-                        else if (marks >= 33) grade = 'D';
-                        else grade = 'F';
-                        
-                        // Check if the calculated grade exists in the dynamic grades list
-                        if (data.grades.includes(grade)) {
-                            gradeSelect.value = grade;
-                        } else {
-                            // Find the closest grade
-                            const sortedGrades = data.grades.sort();
-                            gradeSelect.value = sortedGrades[0] || '';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching grades:', error);
-                    });
-            }
-        });
-    });
 });
 </script>
 @endsection

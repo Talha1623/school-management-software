@@ -170,11 +170,11 @@
                                 </label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">lock</span></span>
-                                    <input type="password" class="form-control border-start-0 py-1" id="parent_password" name="parent_password" placeholder="Parent Password" style="height: 32px; font-size: 13px;">
+                                    <input type="text" class="form-control border-start-0 py-1" id="parent_password" name="parent_password" value="parent" placeholder="Parent Password" style="height: 32px; font-size: 13px;">
                                 </div>
                                 <small class="text-muted fs-11 mt-0 d-block">
                                     <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">info</span>
-                                    Password for parent account login
+                                    Default password: parent (can be changed)
                                 </small>
                             </div>
                             
@@ -491,7 +491,7 @@
                         <div class="d-flex justify-content-end gap-2 flex-wrap">
                             <button type="button" class="btn btn-outline-secondary" id="printAdmitBtn" data-print-url="{{ session('print_url') }}">
                                 <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">print</span>
-                                Print Student Details
+                                Print Admission Form
                             </button>
                             <button type="button" class="btn btn-outline-primary" id="printFeeVoucherBtn" data-fee-url="{{ session('fee_voucher_url') }}">
                                 <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">receipt</span>
@@ -587,9 +587,15 @@ function toggleParentPasswordField() {
     
     if (createParentAccount && parentPasswordField && parentPasswordInput) {
         if (createParentAccount.value === '1') {
+            // Show field when "Yes" is selected
             parentPasswordField.style.display = 'block';
             parentPasswordInput.required = true;
+            // Set default value to "parent" if field is empty
+            if (!parentPasswordInput.value) {
+                parentPasswordInput.value = 'parent';
+            }
         } else {
+            // Hide field when "No" or nothing is selected
             parentPasswordField.style.display = 'none';
             parentPasswordInput.required = false;
             parentPasswordInput.value = '';
@@ -647,11 +653,25 @@ document.addEventListener('DOMContentLoaded', function() {
                             const whatsappInput = document.getElementById('whatsapp_number');
                             const addressInput = document.getElementById('home_address');
                             
+                            // Always fill fields from parent account if they exist
                             if (fatherNameInput && parent.name) {
                                 fatherNameInput.value = parent.name;
                             }
-                            if (fatherEmailInput && parent.email) {
-                                fatherEmailInput.value = parent.email;
+                            // IMPORTANT: Always fill email from parent account when parent is found
+                            // This ensures that when adding a second child with the same Father ID Card,
+                            // the email is correctly populated from the parent account (not from previous child's data)
+                            if (fatherEmailInput) {
+                                // Always populate email from parent account when parent is found
+                                // This prevents email from changing incorrectly when adding multiple children
+                                if (parent.email && parent.email.trim() !== '') {
+                                    fatherEmailInput.value = parent.email.trim();
+                                    console.log('Email populated from parent account:', parent.email.trim());
+                                } else {
+                                    // If parent account exists but email is empty/null, clear the field
+                                    // This ensures consistency - if parent has no email, field should be empty
+                                    fatherEmailInput.value = '';
+                                    console.log('Parent account found but email is empty');
+                                }
                             }
                             if (fatherPhoneInput && parent.phone) {
                                 fatherPhoneInput.value = parent.phone;
@@ -737,19 +757,37 @@ function loadClassesForCampus(campusValue, selectedClass = '') {
             console.error('Error loading classes:', error);
         });
 
+    // Always update student code when campus changes
     if (studentCodeInput) {
         if (!campusValue) {
             studentCodeInput.value = '';
             return;
         }
 
+        // Show loading state
+        studentCodeInput.value = 'Loading...';
+        studentCodeInput.style.color = '#6c757d';
+
         fetch(`{{ route('admission.get-next-student-code') }}?campus=${encodeURIComponent(campusValue)}`)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                studentCodeInput.value = data.code || '';
+                if (data.code) {
+                    studentCodeInput.value = data.code;
+                    studentCodeInput.style.color = '#000';
+                } else {
+                    studentCodeInput.value = '';
+                    console.warn('No student code returned from server');
+                }
             })
             .catch(error => {
                 console.error('Error loading student code:', error);
+                studentCodeInput.value = '';
+                studentCodeInput.style.color = '#dc3545';
             });
     }
 }
@@ -783,6 +821,38 @@ function loadSectionsForClass(classValue, campusValue, selectedSection = '') {
         });
 }
 
+// Load fee types by campus
+function loadFeeTypesByCampus(campus) {
+    const feeTypeSelect = document.getElementById('fee_type');
+    if (!feeTypeSelect) {
+        return;
+    }
+
+    // Clear existing options except the first one
+    feeTypeSelect.innerHTML = '<option value="">Select Fee Type</option>';
+
+    if (!campus || campus === '') {
+        return;
+    }
+
+    // Fetch fee types for the selected campus
+    fetch(`{{ route('admission.get-fee-types') }}?campus=${encodeURIComponent(campus)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.fee_types && data.fee_types.length > 0) {
+                data.fee_types.forEach(feeType => {
+                    const option = document.createElement('option');
+                    option.value = feeType;
+                    option.textContent = feeType;
+                    feeTypeSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading fee types:', error);
+        });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
@@ -792,6 +862,7 @@ document.addEventListener('DOMContentLoaded', function() {
             loadClassesForCampus(this.value);
             loadTransportRoutesByCampus(this.value);
             loadTransportFare('');
+            loadFeeTypesByCampus(this.value);
         });
     }
 
@@ -808,8 +879,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (initialCampus) {
         loadClassesForCampus(initialCampus, initialClass);
+        loadFeeTypesByCampus(initialCampus);
+        // Student code will be loaded automatically by loadClassesForCampus
         if (initialClass) {
             loadSectionsForClass(initialClass, initialCampus, initialSection);
+        }
+    } else {
+        // If no campus selected initially, ensure student code is empty
+        const studentCodeInput = document.getElementById('student_code');
+        if (studentCodeInput && !studentCodeInput.value) {
+            studentCodeInput.value = '';
         }
     }
 });

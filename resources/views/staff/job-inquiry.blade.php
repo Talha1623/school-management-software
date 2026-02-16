@@ -264,17 +264,23 @@ use Illuminate\Support\Facades\Storage;
                                         @endif
                                     </td>
                                     <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
-                                        <div class="d-inline-flex gap-1">
-                                            <a href="{{ route('staff.job-inquiry.show', $inquiry) }}" class="btn btn-sm btn-info px-2 py-1" title="View">
+                                        <div class="d-inline-flex gap-1 flex-wrap justify-content-center">
+                                            <a href="{{ route('staff.job-inquiry.show', $inquiry) }}" class="btn btn-sm btn-info px-2 py-1" title="View" style="min-width: 35px;">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
                                             </a>
-                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editInquiry({{ $inquiry->id }})" title="Edit">
+                                            <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editInquiry({{ $inquiry->id }})" title="Edit" style="min-width: 35px;">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </button>
+                                            <form action="{{ route('staff.job-inquiry.appoint', $inquiry) }}" method="POST" class="d-inline appoint-form" onsubmit="return confirm('Are you sure you want to appoint {{ $inquiry->name }} as staff member? This will add them to Staff Management page.');">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-success px-2 py-1" title="Appoint - Add to Staff Management" style="min-width: 35px; background-color: #28a745 !important; border-color: #28a745 !important;">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white !important;">person_add</span>
+                                                </button>
+                                            </form>
                                             <form action="{{ route('staff.job-inquiry.destroy', $inquiry) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this job inquiry?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
+                                                <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete" style="min-width: 35px;">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
                                             </form>
@@ -443,9 +449,9 @@ use Illuminate\Support\Facades\Storage;
                                 </span>
                                 <select class="form-control inquiry-input" name="salary_type" id="salary_type" style="font-size: 12px;">
                                     <option value="">Select Salary Type</option>
-                                    <option value="Full Time">Full Time</option>
-                                    <option value="Part Time">Part Time</option>
-                                    <option value="Per Lecture">Per Lecture</option>
+                                    <option value="full time">Full Time</option>
+                                    <option value="per hour">Per Hour</option>
+                                    <option value="lecture">Per Lecture</option>
                                 </select>
                             </div>
                         </div>
@@ -459,6 +465,69 @@ use Illuminate\Support\Facades\Storage;
                                 </span>
                                 <input type="number" step="0.01" class="form-control inquiry-input" name="salary_demand" id="salary_demand" placeholder="Enter salary demand" style="font-size: 12px;">
                             </div>
+                        </div>
+
+                        <!-- Salary -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Salary</label>
+                            <div class="input-group input-group-sm inquiry-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">attach_money</span>
+                                </span>
+                                <input type="number" step="0.01" class="form-control inquiry-input" name="salary" id="salary" placeholder="Enter salary" style="font-size: 12px;">
+                            </div>
+                        </div>
+
+                        <!-- Absent Fees -->
+                        <div class="col-md-6" id="absent_fees_container">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Absent Fees</label>
+                            <div class="input-group input-group-sm inquiry-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">money_off</span>
+                                </span>
+                                <input type="number" step="0.01" class="form-control inquiry-input" name="absent_fees" id="absent_fees" placeholder="Enter absent fees" min="0" style="font-size: 12px;">
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Deduction per absent day</small>
+                        </div>
+
+                        <!-- Late Fees -->
+                        <div class="col-md-6" id="late_fees_container">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Late Fees</label>
+                            <div class="input-group input-group-sm inquiry-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">schedule</span>
+                                </span>
+                                <input type="number" step="0.01" class="form-control inquiry-input" name="late_fees" id="late_fees" placeholder="Enter late fees" min="0" style="font-size: 12px;">
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Deduction per late arrival</small>
+                        </div>
+
+                        <!-- Early Exit Fees -->
+                        <div class="col-md-6" id="early_exit_fees_container">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Early Exit Fees</label>
+                            <div class="input-group input-group-sm inquiry-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">exit_to_app</span>
+                                </span>
+                                <input type="number" step="0.01" class="form-control inquiry-input" name="early_exit_fees" id="early_exit_fees" placeholder="Enter early exit fees" min="0" style="font-size: 12px;">
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Deduction per early exit</small>
+                        </div>
+
+                        <!-- Free Absent -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Free Absent</label>
+                            <div class="input-group input-group-sm inquiry-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">event_busy</span>
+                                </span>
+                                <select class="form-control inquiry-input" name="free_absent" id="free_absent" style="font-size: 12px;">
+                                    @for($i = 0; $i <= 30; $i++)
+                                        <option value="{{ $i }}" {{ $i == 0 ? 'selected' : '' }}>{{ $i }}</option>
+                                    @endfor
+                                </select>
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Number of free absents allowed</small>
                         </div>
 
                         <!-- Email -->
@@ -791,6 +860,13 @@ function resetForm() {
     modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">work</span><span style="color: white;">Add New Inquiry</span>';
     document.getElementById('cv_resume').value = '';
     document.getElementById('campus').value = '';
+    document.getElementById('absent_fees').value = '';
+    document.getElementById('late_fees').value = '';
+    document.getElementById('early_exit_fees').value = '';
+    document.getElementById('free_absent').value = '0';
+    
+    // Toggle fees fields based on salary type (default will be empty, so fields will be enabled)
+    toggleFeesFields();
 }
 
 function editInquiry(id) {
@@ -823,9 +899,17 @@ function editInquiry(id) {
             document.getElementById('applied_for_designation').value = data.applied_for_designation || '';
             document.getElementById('salary_type').value = data.salary_type || '';
             document.getElementById('salary_demand').value = data.salary_demand || '';
+            document.getElementById('salary').value = data.salary || '';
+            document.getElementById('absent_fees').value = data.absent_fees || '';
+            document.getElementById('late_fees').value = data.late_fees || '';
+            document.getElementById('early_exit_fees').value = data.early_exit_fees || '';
+            document.getElementById('free_absent').value = data.free_absent || '0';
             document.getElementById('email').value = data.email || '';
             document.getElementById('home_address').value = data.home_address || '';
             document.getElementById('cv_resume').value = '';
+            
+            // Toggle fees fields based on salary type
+            toggleFeesFields();
             
             new bootstrap.Modal(document.getElementById('inquiryModal')).show();
         })
@@ -886,5 +970,55 @@ function printTable() {
     document.body.innerHTML = originalContents;
     window.location.reload();
 }
+
+// Function to toggle fees fields based on salary type
+function toggleFeesFields() {
+    const salaryType = document.getElementById('salary_type').value;
+    const absentFeesContainer = document.getElementById('absent_fees_container');
+    const lateFeesContainer = document.getElementById('late_fees_container');
+    const earlyExitFeesContainer = document.getElementById('early_exit_fees_container');
+    
+    // Hide fields for per lecture and per hour
+    if (salaryType === 'lecture' || salaryType === 'per hour') {
+        if (absentFeesContainer) {
+            absentFeesContainer.style.display = 'none';
+        }
+        if (lateFeesContainer) {
+            lateFeesContainer.style.display = 'none';
+        }
+        if (earlyExitFeesContainer) {
+            earlyExitFeesContainer.style.display = 'none';
+        }
+        
+        // Clear values when hidden
+        const absentFees = document.getElementById('absent_fees');
+        const lateFees = document.getElementById('late_fees');
+        const earlyExitFees = document.getElementById('early_exit_fees');
+        if (absentFees) absentFees.value = '';
+        if (lateFees) lateFees.value = '';
+        if (earlyExitFees) earlyExitFees.value = '';
+    } else {
+        // Show fields for full time or empty
+        if (absentFeesContainer) {
+            absentFeesContainer.style.display = 'block';
+        }
+        if (lateFeesContainer) {
+            lateFeesContainer.style.display = 'block';
+        }
+        if (earlyExitFeesContainer) {
+            earlyExitFeesContainer.style.display = 'block';
+        }
+    }
+}
+
+// Add event listener for salary type change
+document.addEventListener('DOMContentLoaded', function() {
+    const salaryTypeSelect = document.getElementById('salary_type');
+    if (salaryTypeSelect) {
+        salaryTypeSelect.addEventListener('change', toggleFeesFields);
+        // Initialize on page load
+        toggleFeesFields();
+    }
+});
 </script>
 @endsection

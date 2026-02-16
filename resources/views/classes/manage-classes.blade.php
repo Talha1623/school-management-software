@@ -119,6 +119,7 @@
                                 <th>Class Name</th>
                                 <th>Numeric No</th>
                                 <th>Sections</th>
+                                <th>Passout</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
@@ -147,9 +148,15 @@
                                                 <span class="text-muted" style="font-size: 12px;">No sections</span>
                                             @endif
                                         </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-warning" title="Passout Class" onclick="passoutClass({{ $class->id }}, '{{ addslashes($class->class_name) }}', '{{ addslashes($class->campus) }}')" style="display: inline-flex; align-items: center; gap: 4px;">
+                                                <span class="material-symbols-outlined" style="color: white; font-size: 14px;">school</span>
+                                                <span style="font-size: 11px; color: white;">Passout</span>
+                                            </button>
+                                        </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1 align-items-center">
-                                                <button type="button" class="btn btn-sm btn-info" title="Transfer" onclick="transferClass({{ $class->id }})">
+                                                <button type="button" class="btn btn-sm btn-info" title="Transfer" onclick="transferClass({{ $class->id }}, '{{ addslashes($class->campus) }}')">
                                                     <span class="material-symbols-outlined" style="color: white;">swap_horiz</span>
                                                 </button>
                                                 <button type="button" class="btn btn-sm btn-primary" title="Edit" onclick="editClass({{ $class->id }}, '{{ $class->campus }}', '{{ $class->class_name }}', {{ $class->numeric_no }})">
@@ -167,7 +174,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted py-5">
+                                        <td colspan="7" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No classes found.</p>
                                         </td>
@@ -175,7 +182,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-5">
+                                    <td colspan="7" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No classes found.</p>
                                     </td>
@@ -253,6 +260,186 @@
                     <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 class-submit-btn">
                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
                         Save Class
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Passout Verification Modal -->
+<div class="modal fade" id="passoutVerificationModal" tabindex="-1" aria-labelledby="passoutVerificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="passoutVerificationModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">lock</span>
+                    <span>Verification Required</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning mb-3" style="font-size: 12px;">
+                    <strong>Security Check:</strong> Please enter your login credentials to proceed with passout action.
+                </div>
+                <div id="verificationError" class="alert alert-danger" style="display: none; font-size: 12px;"></div>
+                <form id="verificationForm" onsubmit="event.preventDefault(); verifyAndPassout();">
+                    <div class="mb-3">
+                        <label for="verificationEmail" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Email</label>
+                        <div class="input-group">
+                            <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">email</span>
+                            </span>
+                            <input type="email" class="form-control" id="verificationEmail" placeholder="Enter your email" required autocomplete="email">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="verificationPassword" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">lock</span>
+                            </span>
+                            <input type="password" class="form-control" id="verificationPassword" placeholder="Enter your password" required autocomplete="current-password" onkeypress="if(event.key === 'Enter') { event.preventDefault(); verifyAndPassout(); }">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-sm py-2 px-4 rounded-8" id="verifyPassoutBtn" onclick="verifyAndPassout()" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">verified</span>
+                    Verify & Proceed
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transfer Modal -->
+<div class="modal fade" id="transferModal" tabindex="-1" aria-labelledby="transferModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="transferModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">swap_horiz</span>
+                    <span>Transfer Students</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <form id="transferForm">
+                <div class="modal-body p-4">
+                    <input type="hidden" id="transferClassId" name="class_id">
+                    <div class="row g-3">
+                        <!-- From Campus -->
+                        <div class="col-md-6">
+                            <label for="fromCampus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">From Campus <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">location_on</span>
+                                </span>
+                                <select class="form-select" id="fromCampus" name="from_campus" required>
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- To Campus -->
+                        <div class="col-md-6">
+                            <label for="toCampus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">To Campus <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">location_on</span>
+                                </span>
+                                <select class="form-select" id="toCampus" name="to_campus" required>
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}">{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Class -->
+                        <div class="col-md-6">
+                            <label for="transferClass" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">class</span>
+                                </span>
+                                <select class="form-select" id="transferClass" name="class">
+                                    <option value="">Select Class (Optional)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Section -->
+                        <div class="col-md-6">
+                            <label for="transferSection" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">view_list</span>
+                                </span>
+                                <select class="form-select" id="transferSection" name="section">
+                                    <option value="">Select Section (Optional)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Options -->
+                        <div class="col-md-4">
+                            <label for="moveDues" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Also Move Dues</label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">account_balance_wallet</span>
+                                </span>
+                                <select class="form-select" id="moveDues" name="move_dues" required>
+                                    <option value="0">No</option>
+                                    <option value="1">Yes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="movePayments" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Also Move Payments</label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">payments</span>
+                                </span>
+                                <select class="form-select" id="movePayments" name="move_payments" required>
+                                    <option value="0">No</option>
+                                    <option value="1">Yes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="notifyAdmin" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Notify Admin</label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">notifications</span>
+                                </span>
+                                <select class="form-select" id="notifyAdmin" name="notify_admin" required>
+                                    <option value="0">No</option>
+                                    <option value="1" selected>Yes</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                    <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">swap_horiz</span>
+                        Transfer Students
                     </button>
                 </div>
             </form>
@@ -593,7 +780,19 @@
     
     .default-table-area .btn-primary .material-symbols-outlined,
     .default-table-area .btn-danger .material-symbols-outlined,
-    .default-table-area .btn-info .material-symbols-outlined {
+    .default-table-area .btn-info .material-symbols-outlined,
+    .default-table-area .btn-warning .material-symbols-outlined {
+        color: white !important;
+    }
+    
+    .default-table-area .btn-warning {
+        background-color: #ff9800 !important;
+        border-color: #ff9800 !important;
+    }
+    
+    .default-table-area .btn-warning:hover {
+        background-color: #f57c00 !important;
+        border-color: #f57c00 !important;
         color: white !important;
     }
 </style>
@@ -637,9 +836,287 @@ function editClass(id, campus, className, numericNo) {
 }
 
 // Transfer class function
-function transferClass(id) {
-    // You can implement transfer functionality here
-    alert('Transfer functionality for class ID: ' + id + ' - This can be implemented based on your requirements');
+function transferClass(id, fromCampus) {
+    // Set form data
+    document.getElementById('transferClassId').value = id;
+    const fromCampusSelect = document.getElementById('fromCampus');
+    fromCampusSelect.value = fromCampus || '';
+    document.getElementById('toCampus').value = '';
+    document.getElementById('transferClass').innerHTML = '<option value="">Select Class (Optional)</option>';
+    document.getElementById('transferSection').innerHTML = '<option value="">Select Section (Optional)</option>';
+    document.getElementById('moveDues').value = '0';
+    document.getElementById('movePayments').value = '0';
+    document.getElementById('notifyAdmin').value = '1';
+    
+    // Load classes for selected from campus
+    if (fromCampus) {
+        loadClassesForCampus(fromCampus, 'transferClass');
+    }
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('transferModal'));
+    modal.show();
+}
+
+// Load classes based on campus
+function loadClassesForCampus(campus, targetSelectId) {
+    if (!campus) {
+        document.getElementById(targetSelectId).innerHTML = '<option value="">Select Class (Optional)</option>';
+        return;
+    }
+    
+    const selectElement = document.getElementById(targetSelectId);
+    selectElement.innerHTML = '<option value="">Loading...</option>';
+    selectElement.disabled = true;
+    
+    fetch(`{{ route('classes.manage-classes.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        selectElement.innerHTML = '<option value="">Select Class (Optional)</option>';
+        if (data.classes && data.classes.length > 0) {
+            data.classes.forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                selectElement.appendChild(option);
+            });
+        }
+        selectElement.disabled = false;
+    })
+    .catch(error => {
+        console.error('Error loading classes:', error);
+        selectElement.innerHTML = '<option value="">Error loading classes</option>';
+        selectElement.disabled = false;
+    });
+}
+
+// Load sections based on class
+function loadSectionsForClass(className, campus, targetSelectId) {
+    if (!className) {
+        document.getElementById(targetSelectId).innerHTML = '<option value="">Select Section (Optional)</option>';
+        return;
+    }
+    
+    const selectElement = document.getElementById(targetSelectId);
+    selectElement.innerHTML = '<option value="">Loading...</option>';
+    selectElement.disabled = true;
+    
+    const params = new URLSearchParams();
+    params.append('class', className);
+    if (campus) {
+        params.append('campus', campus);
+    }
+    
+    fetch(`{{ route('classes.manage-classes.get-sections-by-class') }}?${params.toString()}`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        selectElement.innerHTML = '<option value="">Select Section (Optional)</option>';
+        if (data.sections && data.sections.length > 0) {
+            data.sections.forEach(sectionName => {
+                const option = document.createElement('option');
+                option.value = sectionName;
+                option.textContent = sectionName;
+                selectElement.appendChild(option);
+            });
+        }
+        selectElement.disabled = false;
+    })
+    .catch(error => {
+        console.error('Error loading sections:', error);
+        selectElement.innerHTML = '<option value="">Error loading sections</option>';
+        selectElement.disabled = false;
+    });
+}
+
+// Handle transfer form submission
+document.getElementById('transferForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const classId = formData.get('class_id');
+    const fromCampus = formData.get('from_campus');
+    const toCampus = formData.get('to_campus');
+    
+    if (!toCampus) {
+        alert('Please select a destination campus.');
+        return;
+    }
+    
+    if (fromCampus === toCampus) {
+        alert('From Campus and To Campus cannot be the same.');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to transfer all students from "${fromCampus}" to "${toCampus}"?`)) {
+        return;
+    }
+    
+    // Show loading state
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Transferring...';
+    
+    fetch(`{{ url('classes/manage-classes') }}/${classId}/transfer`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Students transferred successfully!');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('transferModal'));
+            modal.hide();
+            window.location.reload();
+        } else {
+            alert(data.message || 'Error: Failed to transfer students.');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while transferring students. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+    });
+});
+
+// Store passout data for verification
+let pendingPassoutData = null;
+
+// Passout class function
+function passoutClass(id, className, campus) {
+    // Store passout data
+    pendingPassoutData = { id, className, campus };
+    
+    // Show verification modal
+    const modal = new bootstrap.Modal(document.getElementById('passoutVerificationModal'));
+    document.getElementById('verificationEmail').value = '';
+    document.getElementById('verificationPassword').value = '';
+    document.getElementById('verificationError').textContent = '';
+    document.getElementById('verificationError').style.display = 'none';
+    modal.show();
+}
+
+// Verify and proceed with passout
+function verifyAndPassout() {
+    const email = document.getElementById('verificationEmail').value.trim();
+    const password = document.getElementById('verificationPassword').value;
+    
+    if (!email || !password) {
+        document.getElementById('verificationError').textContent = 'Please enter both email and password.';
+        document.getElementById('verificationError').style.display = 'block';
+        return;
+    }
+    
+    // Show loading state
+    const verifyBtn = document.getElementById('verifyPassoutBtn');
+    const originalBtnText = verifyBtn.innerHTML;
+    verifyBtn.disabled = true;
+    verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Verifying...';
+    
+    // Verify credentials
+    fetch(`{{ url('classes/manage-classes') }}/${pendingPassoutData.id}/verify-passout`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            email: email,
+            password: password
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('passoutVerificationModal'));
+            modal.hide();
+            
+            // Proceed with passout
+            proceedWithPassout();
+        } else {
+            document.getElementById('verificationError').textContent = data.message || 'Invalid credentials. Please try again.';
+            document.getElementById('verificationError').style.display = 'block';
+            verifyBtn.disabled = false;
+            verifyBtn.innerHTML = originalBtnText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('verificationError').textContent = 'An error occurred during verification. Please try again.';
+        document.getElementById('verificationError').style.display = 'block';
+        verifyBtn.disabled = false;
+        verifyBtn.innerHTML = originalBtnText;
+    });
+}
+
+// Proceed with passout after verification
+function proceedWithPassout() {
+    if (!pendingPassoutData) return;
+    
+    const { id, className, campus } = pendingPassoutData;
+    
+    if (!confirm(`Are you sure you want to passout all students from class "${className}" in campus "${campus}"?\n\nThis will mark all students in this class as "Passout" and clear their sections.`)) {
+        pendingPassoutData = null;
+        return;
+    }
+    
+    // Show loading state
+    const btn = document.querySelector(`button[onclick*="passoutClass(${id}"]`);
+    if (btn) {
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Processing...';
+        
+        // Make AJAX request
+        fetch(`{{ url('classes/manage-classes') }}/${id}/passout`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message || 'Students passed out successfully!');
+                window.location.reload();
+            } else {
+                alert(data.message || 'Error: ' + (data.error || 'Failed to passout students'));
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while passing out students. Please try again.');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+    }
+    
+    pendingPassoutData = null;
 }
 
 // Search functionality
@@ -712,5 +1189,30 @@ function printTable() {
     document.body.innerHTML = originalContents;
     window.location.reload();
 }
+
+// Add event listeners for dynamic dropdowns in transfer modal
+document.addEventListener('DOMContentLoaded', function() {
+    const fromCampusSelect = document.getElementById('fromCampus');
+    const transferClassSelect = document.getElementById('transferClass');
+    
+    // When From Campus changes, load classes
+    if (fromCampusSelect) {
+        fromCampusSelect.addEventListener('change', function() {
+            const campus = this.value;
+            loadClassesForCampus(campus, 'transferClass');
+            // Clear section when campus changes
+            document.getElementById('transferSection').innerHTML = '<option value="">Select Section (Optional)</option>';
+        });
+    }
+    
+    // When Class changes, load sections
+    if (transferClassSelect) {
+        transferClassSelect.addEventListener('change', function() {
+            const className = this.value;
+            const campus = fromCampusSelect ? fromCampusSelect.value : '';
+            loadSectionsForClass(className, campus, 'transferSection');
+        });
+    }
+});
 </script>
 @endsection

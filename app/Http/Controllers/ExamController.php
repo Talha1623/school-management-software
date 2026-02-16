@@ -12,6 +12,7 @@ use App\Models\StudentMark;
 use App\Models\ParticularExamGrade;
 use App\Models\FinalExamGrade;
 use App\Models\ExamTimetable;
+use App\Models\ExamSetting;
 use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -427,6 +428,29 @@ class ExamController extends Controller
             $subjects = $subjectsForClass;
         }
         
+        // If exam is selected, ONLY show subjects assigned to that exam from ExamTimetable
+        if ($filterExam && $filterClass) {
+            $timetableQuery = ExamTimetable::whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower(trim($filterExam))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+            
+            if ($filterCampus) {
+                $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            if ($filterSection) {
+                $timetableQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            }
+            
+            $examSubjects = $timetableQuery->distinct()->pluck('subject')->filter()->map(fn($s) => trim($s))->unique()->sort()->values();
+            
+            // If exam is selected, ONLY return subjects from ExamTimetable
+            if ($examSubjects->isNotEmpty()) {
+                $subjects = $examSubjects;
+            } else {
+                // If no subjects found in ExamTimetable for this exam, return empty
+                $subjects = collect();
+            }
+        }
+        
         // If no subjects found and no filters applied, show all subjects (or teacher's subjects if teacher)
         if ($subjects->isEmpty() && !$filterClass && !$filterSection) {
             if ($staff && $staff->isTeacher()) {
@@ -570,9 +594,36 @@ class ExamController extends Controller
         $class = $request->get('class');
         $section = $request->get('section');
         $campus = $request->get('campus');
+        $exam = $request->get('exam');
         
         $staff = Auth::guard('staff')->user();
         
+        // If exam is selected, get subjects ONLY from ExamTimetable
+        if ($exam) {
+            $timetableQuery = ExamTimetable::whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower(trim($exam))]);
+            
+            if ($campus) {
+                $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            if ($class) {
+                $timetableQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            }
+            if ($section) {
+                $timetableQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            }
+            
+            $examSubjects = $timetableQuery->distinct()->pluck('subject')->filter()->map(fn($s) => trim($s))->unique()->sort()->values();
+            
+            // If exam is selected, return ONLY subjects from ExamTimetable
+            if ($examSubjects->isNotEmpty()) {
+                return response()->json(['subjects' => $examSubjects]);
+            } else {
+                // If no subjects found in ExamTimetable for this exam, return empty
+                return response()->json(['subjects' => collect()]);
+            }
+        }
+        
+        // If no exam selected, get subjects from Subject model as before
         $subjectsQuery = Subject::query();
         
         // Filter by teacher's assigned subjects if teacher
@@ -1475,6 +1526,31 @@ class ExamController extends Controller
     }
 
     /**
+     * Update an existing exam timetable entry.
+     */
+    public function updateTimetable(Request $request, ExamTimetable $examTimetable): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => ['required', 'date'],
+            'starting_time' => ['required'],
+            'ending_time' => ['required'],
+            'room_block' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $examTimetable->update([
+            'exam_date' => $validated['date'],
+            'starting_time' => $validated['starting_time'],
+            'ending_time' => $validated['ending_time'],
+            'room_block' => $validated['room_block'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Timetable updated successfully!'
+        ]);
+    }
+
+    /**
      * Get sections based on class (AJAX) for exam timetable.
      */
     public function getSectionsForTimetable(Request $request): JsonResponse
@@ -1581,11 +1657,22 @@ class ExamController extends Controller
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
 
-        // Get campuses for dropdown
+        // Get campuses for dropdown - First from Campus model (primary source)
+        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+
+        // Also get campuses from ClassModel and Section as fallback
         $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
         $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+
+        // Merge all campuses and get unique values
+        $campuses = $campusesFromModel
+            ->merge($campusesFromClasses)
+            ->merge($campusesFromSections)
+            ->unique()
+            ->sort()
+            ->values();
+
+        // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
@@ -1687,11 +1774,22 @@ class ExamController extends Controller
         $filterExam = $request->get('filter_exam');
         $filterType = $request->get('filter_type');
 
-        // Get campuses for dropdown
+        // Get campuses for dropdown - First from Campus model (primary source)
+        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+
+        // Also get campuses from ClassModel and Section as fallback
         $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
         $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+
+        // Merge all campuses and get unique values
+        $campuses = $campusesFromModel
+            ->merge($campusesFromClasses)
+            ->merge($campusesFromSections)
+            ->unique()
+            ->sort()
+            ->values();
+
+        // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
@@ -1720,37 +1818,34 @@ class ExamController extends Controller
         }
         $exams = $examsQuery->whereNotNull('exam_name')->distinct()->pluck('exam_name')->sort()->values();
 
-        // Get exam types (remove Daily Test and ensure Normal/Editable are present)
-        $examTypes = collect(['Normal', 'Editable', 'Mid Term', 'Final Term', 'Quiz', 'Assignment', 'Project', 'Oral Test', 'Practical']);
-        $testTypes = Test::whereNotNull('test_type')->distinct()->pluck('test_type')->sort()->values();
-        if ($testTypes->isNotEmpty()) {
-            $examTypes = $testTypes->filter(function ($type) {
-                return strtolower(trim($type)) !== 'daily test';
-            })->values();
-            if (!$examTypes->contains('Normal')) {
-                $examTypes->prepend('Normal');
-            }
-            if (!$examTypes->contains('Editable')) {
-                $examTypes->prepend('Editable');
-            }
-        }
+        // Get exam types - only "editable" and "normal"
+        $examTypes = collect(['editable', 'normal']);
 
         $subjects = collect();
         $tabulationRows = collect();
         $examSession = null;
+        $grades = collect();
 
         if ($filterCampus && $filterClass && $filterSection && $filterExam) {
             $examSession = Exam::whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower(trim($filterExam))])
                 ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
                 ->value('session');
 
-            $subjectsQuery = Subject::query()
-                ->whereNotNull('subject_name')
+            // Get subjects from ExamTimetable for the selected exam (priority)
+            $subjects = ExamTimetable::whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower(trim($filterExam))])
                 ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
-            $subjects = $subjectsQuery->distinct()->pluck('subject_name')->sort()->values();
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                ->whereNotNull('subject')
+                ->distinct()
+                ->pluck('subject')
+                ->map(fn($subject) => trim((string) $subject))
+                ->filter(fn($subject) => $subject !== '')
+                ->unique()
+                ->sort()
+                ->values();
 
+            // Fallback to StudentMark if no subjects found in ExamTimetable
             if ($subjects->isEmpty()) {
                 $subjects = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($filterExam))])
                     ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
@@ -1856,7 +1951,8 @@ class ExamController extends Controller
             'filterType',
             'subjects',
             'tabulationRows',
-            'examSession'
+            'examSession',
+            'grades'
         ));
     }
 
@@ -1904,6 +2000,90 @@ class ExamController extends Controller
     }
 
     /**
+     * Save marks for tabulation sheet (editable mode).
+     */
+    public function saveTabulationSheetMarks(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'marks' => ['required', 'array'],
+            'marks.*.student_id' => ['required', 'integer'],
+            'marks.*.subject' => ['required', 'string'],
+            'marks.*.marks_obtained' => ['required', 'numeric', 'min:0'],
+            'exam_name' => ['required', 'string'],
+            'campus' => ['required', 'string'],
+            'class' => ['required', 'string'],
+            'section' => ['required', 'string'],
+            'session' => ['nullable', 'string'],
+        ]);
+
+        $examName = $validated['exam_name'];
+        $campus = $validated['campus'];
+        $class = $validated['class'];
+        $section = $validated['section'];
+        $session = $validated['session'] ?? null;
+
+        $savedCount = 0;
+        $errors = [];
+
+        foreach ($validated['marks'] as $markData) {
+            try {
+                // Find existing mark or create new one
+                $studentMark = StudentMark::where('student_id', $markData['student_id'])
+                    ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($examName))])
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+                    ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($markData['subject']))])
+                    ->first();
+
+                if ($studentMark) {
+                    // Update existing mark
+                    $studentMark->update([
+                        'marks_obtained' => $markData['marks_obtained'],
+                        // Keep total_marks as is, or update if needed
+                    ]);
+                } else {
+                    // Create new mark entry
+                    StudentMark::create([
+                        'student_id' => $markData['student_id'],
+                        'test_name' => $examName,
+                        'subject' => $markData['subject'],
+                        'marks_obtained' => $markData['marks_obtained'],
+                        'total_marks' => 100, // Default total marks - adjust as needed
+                        'campus' => $campus,
+                        'class' => $class,
+                        'section' => $section,
+                        'session' => $session,
+                        'test_type' => 'Particular Exam',
+                    ]);
+                }
+                $savedCount++;
+            } catch (\Exception $e) {
+                $errors[] = "Error saving marks for student ID {$markData['student_id']}, subject {$markData['subject']}: " . $e->getMessage();
+            }
+        }
+
+        if ($savedCount > 0 && empty($errors)) {
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully saved {$savedCount} mark(s)."
+            ]);
+        } elseif ($savedCount > 0) {
+            return response()->json([
+                'success' => true,
+                'message' => "Saved {$savedCount} mark(s) with some errors.",
+                'errors' => $errors
+            ], 207); // 207 Multi-Status
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save marks.',
+                'errors' => $errors
+            ], 400);
+        }
+    }
+
+    /**
      * Display the tabulation sheet for final result page.
      */
     public function tabulationSheetFinal(Request $request): View
@@ -1914,11 +2094,22 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterSession = $request->get('filter_session');
 
-        // Get campuses for dropdown
+        // Get campuses for dropdown - First from Campus model (primary source)
+        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+
+        // Also get campuses from ClassModel and Section as fallback
         $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
         $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+
+        // Merge all campuses and get unique values
+        $campuses = $campusesFromModel
+            ->merge($campusesFromClasses)
+            ->merge($campusesFromSections)
+            ->unique()
+            ->sort()
+            ->values();
+
+        // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
@@ -1948,6 +2139,130 @@ class ExamController extends Controller
             $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
         }
 
+        // Initialize variables for tabulation data
+        $subjects = collect();
+        $tabulationRows = collect();
+        $grades = collect();
+
+        // Process data if filters are applied
+        if ($filterCampus && $filterClass && $filterSection && $filterSession) {
+            // Get students
+            $students = Student::query()
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                ->orderBy('student_name')
+                ->get();
+
+            if ($students->isNotEmpty()) {
+                // Get all exam names for this session
+                $examNames = Exam::where('session', $filterSession)
+                    ->whereNotNull('exam_name')
+                    ->distinct()
+                    ->pluck('exam_name');
+
+                // Get all subjects from exams in this session
+                $subjects = StudentMark::whereIn('test_name', $examNames)
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                    ->whereNotNull('subject')
+                    ->distinct()
+                    ->pluck('subject')
+                    ->map(fn($subject) => trim((string) $subject))
+                    ->filter(fn($subject) => $subject !== '')
+                    ->unique()
+                    ->sort()
+                    ->values();
+
+                // If no subjects from StudentMark, try ExamTimetable
+                if ($subjects->isEmpty()) {
+                    $subjects = ExamTimetable::whereIn('exam_name', $examNames)
+                        ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                        ->whereNotNull('subject')
+                        ->distinct()
+                        ->pluck('subject')
+                        ->map(fn($subject) => trim((string) $subject))
+                        ->filter(fn($subject) => $subject !== '')
+                        ->unique()
+                        ->sort()
+                        ->values();
+                }
+
+                // Get all marks for students from exams in the session
+                $marks = StudentMark::whereIn('test_name', $examNames)
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                    ->get();
+
+                $marksByStudent = $marks->groupBy('student_id');
+
+                // Get grades for final exam
+                $gradesQuery = FinalExamGrade::query()
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                if ($filterSession) {
+                    $gradesQuery->whereRaw('LOWER(TRIM(session)) = ?', [strtolower(trim($filterSession))]);
+                }
+                $grades = $gradesQuery->orderBy('from_percentage', 'desc')->get();
+
+                // Build tabulation rows
+                $tabulationRows = $students->map(function ($student) use ($marksByStudent, $subjects, $grades) {
+                    $studentMarks = $marksByStudent->get($student->id, collect());
+                    $subjectScores = [];
+                    $totalMarks = 0;
+                    $obtainedMarks = 0;
+
+                    foreach ($subjects as $subjectName) {
+                        // Aggregate marks for this subject across all exams
+                        $subjectMarks = $studentMarks->filter(function ($item) use ($subjectName) {
+                            return strtolower(trim((string) $item->subject)) === strtolower(trim((string) $subjectName));
+                        });
+                        
+                        $subjectObtained = $subjectMarks->sum('marks_obtained') ?? 0;
+                        $subjectTotal = $subjectMarks->sum('total_marks') ?? 0;
+                        
+                        $subjectScores[$subjectName] = $subjectObtained;
+                        $totalMarks += $subjectTotal;
+                        $obtainedMarks += $subjectObtained;
+                    }
+
+                    $percentage = $totalMarks > 0 ? ($obtainedMarks / $totalMarks) * 100 : 0;
+                    $gradeName = '-';
+                    $gradeGpa = '-';
+                    
+                    if ($grades->isNotEmpty()) {
+                        $matchedGrade = $grades->first(function ($grade) use ($percentage) {
+                            return $percentage >= $grade->from_percentage && $percentage <= $grade->to_percentage;
+                        });
+                        if ($matchedGrade) {
+                            $gradeName = $matchedGrade->name;
+                            $gradeGpa = $matchedGrade->grade_points;
+                        }
+                    }
+
+                    return (object) [
+                        'student' => $student,
+                        'subject_scores' => $subjectScores,
+                        'total_marks' => $totalMarks,
+                        'obtained_marks' => $obtainedMarks,
+                        'percentage' => $percentage,
+                        'grade' => $gradeName,
+                        'gpa' => $gradeGpa,
+                    ];
+                });
+
+                // Sort by obtained marks descending and assign ranks
+                $tabulationRows = $tabulationRows->sortByDesc('obtained_marks')->values();
+                $tabulationRows = $tabulationRows->map(function ($row, $index) {
+                    $row->rank = $index + 1;
+                    return $row;
+                });
+            }
+        }
+
         return view('exam.tabulation-sheet.final', compact(
             'campuses',
             'classes',
@@ -1956,7 +2271,10 @@ class ExamController extends Controller
             'filterCampus',
             'filterClass',
             'filterSection',
-            'filterSession'
+            'filterSession',
+            'subjects',
+            'tabulationRows',
+            'grades'
         ));
     }
 
@@ -1971,11 +2289,22 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterExam = $request->get('filter_exam');
 
-        // Get campuses for dropdown
+        // Get campuses for dropdown - First from Campus model (primary source)
+        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+
+        // Also get campuses from ClassModel and Section as fallback
         $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
         $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+
+        // Merge all campuses and get unique values
+        $campuses = $campusesFromModel
+            ->merge($campusesFromClasses)
+            ->merge($campusesFromSections)
+            ->unique()
+            ->sort()
+            ->values();
+
+        // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
@@ -2014,20 +2343,71 @@ class ExamController extends Controller
             }
             $students = $studentsQuery->orderBy('student_name')->get();
 
-            $marksQuery = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($filterExam))])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-            if ($filterSection) {
-                $marksQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            // Check if the selected exam is actually an exam (not a test)
+            // First check Exam table - if exists there, it's definitely an exam
+            $isExam = Exam::whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower(trim($filterExam))])
+                ->exists();
+            
+            // If not found in Exam table, check Test table
+            // Only count if test_type is explicitly "Exam", otherwise it's a test and should be excluded
+            if (!$isExam) {
+                $testRecord = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($filterExam))])
+                    ->first();
+                if ($testRecord) {
+                    $testType = $testRecord->test_type ?? null;
+                    // Only consider it an exam if test_type is explicitly "Exam"
+                    $isExam = ($testType !== null && strtolower(trim($testType)) === 'exam');
+                } else {
+                    // Not found in either table, don't count
+                    $isExam = false;
+                }
             }
-            $marks = $marksQuery->get()->groupBy('student_id');
+            
+            // Only fetch marks if it's an exam, otherwise return empty (test marks should not be counted)
+            if ($isExam) {
+                $marksQuery = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($filterExam))])
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+                if ($filterSection) {
+                    $marksQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                }
+                $marks = $marksQuery->get()->groupBy('student_id');
+            } else {
+                // If it's a test (not an exam), don't count marks - return empty collection
+                $marks = collect()->groupBy('student_id');
+            }
 
             $positionRows = $students->map(function ($student) use ($marks) {
                 $studentMarks = $marks->get($student->id, collect());
-                $totalObtained = $studentMarks->sum('marks_obtained');
+                
+                // Group marks by subject to avoid duplicates
+                // If same student has multiple entries for same subject, take the latest one
+                $marksBySubject = $studentMarks
+                    ->filter(function($mark) {
+                        // Filter out marks with null or empty subject
+                        return !empty(trim($mark->subject ?? ''));
+                    })
+                    ->groupBy(function($mark) {
+                        return strtolower(trim($mark->subject ?? ''));
+                    })
+                    ->map(function($subjectMarks) {
+                        // If multiple marks for same subject, take the latest (most recent created_at)
+                        return $subjectMarks->sortByDesc('created_at')->first();
+                    })
+                    ->filter(); // Remove any null values
+                
+                // Calculate totals from unique subject marks only
+                $totalObtained = $marksBySubject->sum(function($mark) {
+                    return (float)($mark->marks_obtained ?? 0);
+                });
+                $totalMarks = $marksBySubject->sum(function($mark) {
+                    return (float)($mark->total_marks ?? 0);
+                });
+                
                 return (object) [
                     'student' => $student,
                     'total_obtained' => $totalObtained,
+                    'total_marks' => $totalMarks,
                 ];
             });
 
@@ -2105,11 +2485,22 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterSession = $request->get('filter_session');
 
-        // Get campuses for dropdown
+        // Get campuses for dropdown - First from Campus model (primary source)
+        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+
+        // Also get campuses from ClassModel and Section as fallback
         $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
         $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-        
+
+        // Merge all campuses and get unique values
+        $campuses = $campusesFromModel
+            ->merge($campusesFromClasses)
+            ->merge($campusesFromSections)
+            ->unique()
+            ->sort()
+            ->values();
+
+        // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
@@ -2139,6 +2530,68 @@ class ExamController extends Controller
             $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
         }
 
+        // Initialize position rows
+        $positionRows = collect();
+
+        // Process data if filters are applied
+        if ($filterCampus && $filterClass && $filterSection && $filterSession) {
+            // Get students
+            $students = Student::query()
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                ->orderBy('student_name')
+                ->get();
+
+            if ($students->isNotEmpty()) {
+                // Get all exam names for this session (only from Exam table, not Test table)
+                $examNames = Exam::where('session', $filterSession)
+                    ->whereNotNull('exam_name')
+                    ->distinct()
+                    ->pluck('exam_name');
+
+                // Also get exam names from Test table where test_type = 'Exam'
+                $examNamesFromTests = Test::where('session', $filterSession)
+                    ->whereRaw('LOWER(TRIM(test_type)) = ?', ['exam'])
+                    ->whereNotNull('test_name')
+                    ->distinct()
+                    ->pluck('test_name');
+
+                // Merge both collections
+                $allExamNames = $examNames->merge($examNamesFromTests)->unique()->values();
+
+                // Get all marks for students from exams only (exclude tests)
+                $marks = StudentMark::whereIn('test_name', $allExamNames)
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                    ->get();
+
+                $marksByStudent = $marks->groupBy('student_id');
+
+                // Build position rows
+                $positionRows = $students->map(function ($student) use ($marksByStudent) {
+                    $studentMarks = $marksByStudent->get($student->id, collect());
+                    // Calculate total marks and obtained marks from marks entry data
+                    $totalObtained = $studentMarks->sum('marks_obtained') ?? 0;
+                    $totalMarks = $studentMarks->sum('total_marks') ?? 0;
+                    
+                    return (object) [
+                        'student' => $student,
+                        'total_obtained' => $totalObtained,
+                        'total_marks' => $totalMarks,
+                    ];
+                });
+
+                // Sort by obtained marks descending and assign positions
+                $positionRows = $positionRows->sortByDesc('total_obtained')->values();
+                $positionRows = $positionRows->map(function ($row, $index) {
+                    $row->position = $index + 1;
+                    return $row;
+                });
+            }
+        }
+
         return view('exam.position-holders.final', compact(
             'campuses',
             'classes',
@@ -2147,7 +2600,8 @@ class ExamController extends Controller
             'filterCampus',
             'filterClass',
             'filterSection',
-            'filterSession'
+            'filterSession',
+            'positionRows'
         ));
     }
 
@@ -2162,12 +2616,24 @@ class ExamController extends Controller
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
         $filterType = $request->get('filter_type');
+        $isPrint = $request->boolean('print');
 
-        // Get campuses for dropdown
+        // Get campuses for dropdown - First from Campus model (primary source)
+        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+        
+        // Also get campuses from ClassModel and Section as fallback
         $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
         $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
         
+        // Merge all campuses and get unique values
+        $campuses = $campusesFromModel
+            ->merge($campusesFromClasses)
+            ->merge($campusesFromSections)
+            ->unique()
+            ->sort()
+            ->values();
+        
+        // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
@@ -2201,17 +2667,14 @@ class ExamController extends Controller
             $sections = collect(['A', 'B', 'C', 'D']);
         }
 
-        // Get types (using test_type from Test model as reference)
-        $types = collect(['Card', 'Slip']);
-        
-        // Try to get from Test model if available
-        $testTypes = Test::whereNotNull('test_type')->distinct()->pluck('test_type')->sort()->values();
-        if ($testTypes->isNotEmpty()) {
-            $types = $testTypes->merge($types)->unique()->sort()->values();
-        }
+        // Get types
+        $types = collect(['admit slip', 'admit card slip']);
 
         // Load students for admit cards
         $students = collect();
+        $examTimetables = collect();
+        $examSettings = \App\Models\ExamSetting::getSettings();
+        
         if ($filterCampus && $filterClass) {
             $studentsQuery = Student::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
@@ -2219,6 +2682,17 @@ class ExamController extends Controller
                 $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
             }
             $students = $studentsQuery->orderBy('student_name', 'asc')->get();
+            
+            // Load exam timetables if exam is selected
+            if ($filterExam && $filterType == 'admit slip') {
+                $timetableQuery = ExamTimetable::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower(trim($filterExam))]);
+                if ($filterSection) {
+                    $timetableQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                }
+                $examTimetables = $timetableQuery->orderBy('exam_date')->orderBy('starting_time')->get();
+            }
         }
 
         return view('exam.print-admit-cards', compact(
@@ -2229,11 +2703,14 @@ class ExamController extends Controller
             'sections',
             'types',
             'students',
+            'examTimetables',
+            'examSettings',
             'filterCampus',
             'filterExam',
             'filterClass',
             'filterSection',
-            'filterType'
+            'filterType',
+            'isPrint'
         ));
     }
 
@@ -2433,6 +2910,179 @@ class ExamController extends Controller
     }
 
     /**
+     * Display the print marksheet for final result page.
+     */
+    public function printMarksheetFinal(Request $request): View
+    {
+        $filterCampus = $request->get('filter_campus');
+        $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+        $filterSession = $request->get('filter_session');
+
+        // Campuses for dropdown
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        }
+
+        // Classes filtered by campus
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($filterCampus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+        $filterClasses = $classes;
+
+        // Sections filtered by class/campus
+        $sectionsQuery = Section::query();
+        if ($filterClass) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+        }
+        if ($filterCampus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+        $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
+
+        // Sessions from Exam table
+        $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
+        if ($sessions->isEmpty()) {
+            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        }
+
+        $marksByStudent = collect();
+        $teacherRemarksByStudent = collect();
+        $students = collect();
+        $highestBySubject = collect();
+        $studentSummaries = collect();
+
+        if ($filterCampus && $filterClass && $filterSection && $filterSession) {
+            // Get all exam names for this session (only exams, not tests)
+            $examNames = Exam::where('session', $filterSession)
+                ->whereNotNull('exam_name')
+                ->distinct()
+                ->pluck('exam_name');
+
+            // Also get exam names from Test table where test_type = 'Exam'
+            $examNamesFromTests = Test::where('session', $filterSession)
+                ->whereRaw('LOWER(TRIM(test_type)) = ?', ['exam'])
+                ->whereNotNull('test_name')
+                ->distinct()
+                ->pluck('test_name');
+
+            // Merge both collections
+            $allExamNames = $examNames->merge($examNamesFromTests)->unique()->values();
+
+            if ($allExamNames->isNotEmpty()) {
+                // Get all marks from exams in the session
+                $marksQuery = StudentMark::whereIn('test_name', $allExamNames)
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+
+                $marks = $marksQuery->get();
+
+                // Group marks by student and subject (to avoid duplicates)
+                $marksByStudentAndSubject = $marks->groupBy(function($mark) {
+                    return $mark->student_id . '_' . strtolower(trim($mark->subject ?? ''));
+                })->map(function($group) {
+                    // If multiple marks for same student-subject, take the latest
+                    return $group->sortByDesc('created_at')->first();
+                });
+
+                // Group by student_id
+                $marksByStudent = $marksByStudentAndSubject->groupBy('student_id');
+
+                // Get teacher remarks (latest for each student)
+                $teacherRemarksByStudent = $marks
+                    ->filter(function ($mark) {
+                        return $mark->teacher_remarks !== null && trim((string) $mark->teacher_remarks) !== '';
+                    })
+                    ->sortByDesc('created_at')
+                    ->groupBy('student_id')
+                    ->map(function ($items) {
+                        return trim((string) $items->first()->teacher_remarks);
+                    });
+
+                // Calculate highest marks by subject
+                $highestBySubject = $marksByStudentAndSubject->groupBy(function($mark) {
+                    return strtolower(trim($mark->subject ?? ''));
+                })->map(function($items) {
+                    return $items->max('marks_obtained') ?? 0;
+                });
+
+                // Get students
+                $studentIds = $marksByStudent->keys();
+                if ($studentIds->isNotEmpty()) {
+                    $students = Student::whereIn('id', $studentIds)
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                        ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                        ->orderBy('student_name')
+                        ->get();
+                }
+
+                // Calculate summaries for each student
+                $studentSummaries = $marksByStudent->mapWithKeys(function($items, $studentId) {
+                    // Group by subject to avoid duplicate counting
+                    $marksBySubject = $items->groupBy(function($m) {
+                        return strtolower(trim($m->subject ?? ''));
+                    })->map(function($subjectMarks) {
+                        return $subjectMarks->first();
+                    });
+
+                    $totalMarks = $marksBySubject->sum(function($m) { return (float) ($m->total_marks ?? 0); });
+                    $totalPassing = $marksBySubject->sum(function($m) { return (float) ($m->passing_marks ?? 0); });
+                    $totalObtained = $marksBySubject->sum(function($m) { return (float) ($m->marks_obtained ?? 0); });
+                    $presentCount = $marksBySubject->filter(function($m) {
+                        return $m->marks_obtained !== null;
+                    })->count();
+                    $subjectCount = $marksBySubject->count();
+
+                    $percentage = $totalMarks > 0 ? round(($totalObtained / $totalMarks) * 100, 2) : 0;
+                    $status = $totalObtained >= $totalPassing ? 'PASS' : 'FAIL';
+
+                    return [$studentId => [
+                        'total_marks' => $totalMarks,
+                        'total_passing' => $totalPassing,
+                        'total_obtained' => $totalObtained,
+                        'percentage' => $percentage,
+                        'status' => $status,
+                        'present_count' => $presentCount,
+                        'subject_count' => $subjectCount,
+                    ]];
+                });
+
+                // Calculate ranks
+                $ranked = $studentSummaries->sortByDesc('total_obtained')->keys()->values();
+                $rankMap = collect();
+                $ranked->each(function($studentId, $index) use ($rankMap) {
+                    $rankMap->put($studentId, $index + 1);
+                });
+                $studentSummaries = $studentSummaries->map(function($summary, $studentId) use ($rankMap) {
+                    $summary['rank'] = $rankMap->get($studentId);
+                    return $summary;
+                });
+            }
+        }
+
+        return view('exam.print-marksheet.final', compact(
+            'campuses',
+            'classes',
+            'filterClasses',
+            'sections',
+            'sessions',
+            'students',
+            'studentSummaries',
+            'filterCampus',
+            'filterClass',
+            'filterSection',
+            'filterSession'
+        ));
+    }
+
+    /**
      * Get exams based on campus (AJAX) for print marksheet.
      */
     public function getExamsForPrintMarksheet(Request $request): JsonResponse
@@ -2452,7 +3102,65 @@ class ExamController extends Controller
      */
     public function examReport(): View
     {
-        return view('exam.report');
+        // Get total exams count
+        $totalExams = Exam::count();
+        
+        // Get declared results for exams (exams that have marks entered)
+        // Get unique exam names from StudentMark table that have marks
+        $examsWithMarks = StudentMark::whereNotNull('test_name')
+            ->whereNotNull('marks_obtained')
+            ->distinct()
+            ->pluck('test_name');
+        
+        // Count exams from Exam table that match exams with marks
+        $declaredExamResults = Exam::whereIn('exam_name', $examsWithMarks)
+            ->distinct()
+            ->count();
+        
+        // Get total tests count
+        $totalTests = Test::count();
+        
+        // Get declared results for tests (result_status = 1)
+        $declaredTestResults = Test::where('result_status', 1)->count();
+        
+        return view('exam.report', compact(
+            'totalExams',
+            'declaredExamResults',
+            'totalTests',
+            'declaredTestResults'
+        ));
+    }
+
+    /**
+     * Print blank tabulation sheet for exams.
+     */
+    public function printBlankTabulationSheet(): View
+    {
+        return view('exam.reports.print.blank-tabulation-sheet');
+    }
+
+    /**
+     * Print blank attendance sheet for exams.
+     */
+    public function printBlankAttendanceSheet(): View
+    {
+        return view('exam.reports.print.blank-attendance-sheet');
+    }
+
+    /**
+     * Print blank marksheet for exams.
+     */
+    public function printBlankMarksheet(): View
+    {
+        return view('exam.reports.print.blank-marksheet');
+    }
+
+    /**
+     * Print seat number list for exams.
+     */
+    public function printSeatNumberList(): View
+    {
+        return view('exam.reports.print.seat-number-list');
     }
 
     /**

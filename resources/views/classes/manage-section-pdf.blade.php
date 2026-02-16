@@ -43,6 +43,7 @@
                 <th>Nick Name</th>
                 <th>Class</th>
                 <th>Teacher</th>
+                <th>Teacher Type</th>
                 <th>Session</th>
                 <th>Created At</th>
             </tr>
@@ -56,12 +57,13 @@
                     <td>{{ $section->nick_name ?? 'N/A' }}</td>
                     <td>{{ $section->class }}</td>
                     <td>{{ $section->teacher ?? 'N/A' }}</td>
+                    <td>{{ $section->teacher_type ?? 'N/A' }}</td>
                     <td>{{ $section->session ?? 'N/A' }}</td>
                     <td>{{ $section->created_at->format('Y-m-d H:i:s') }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8" style="text-align: center;">No sections found.</td>
+                    <td colspan="9" style="text-align: center;">No sections found.</td>
                 </tr>
             @endforelse
         </tbody>

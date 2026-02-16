@@ -21,6 +21,23 @@
                         </div>
                         
                         <div class="card-body p-3">
+                            <!-- Campus Selector -->
+                            <div class="mb-2">
+                                <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 10px;">
+                                    <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">location_on</span>
+                                    Campus *
+                                </label>
+                                <select class="form-select form-select-sm" id="campusSelect" required style="font-size: 11px; padding: 4px 6px;">
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        @php
+                                            $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                                        @endphp
+                                        <option value="{{ $campusName }}">{{ $campusName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            
                             <!-- Barcode Input -->
                             <div class="mb-2">
                                 <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 10px;">
@@ -191,6 +208,12 @@ let basket = [];
 // Scan product function
 function scanProduct() {
     const barcode = document.getElementById('barcodeInput').value.trim();
+    const campus = document.getElementById('campusSelect').value;
+    
+    if (!campus) {
+        alert('Please select campus first');
+        return;
+    }
     
     if (!barcode) {
         alert('Please enter barcode or product code');
@@ -211,7 +234,7 @@ function scanProduct() {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ barcode: barcode })
+        body: JSON.stringify({ barcode: barcode, campus: campus })
     })
     .then(response => response.json())
     .then(data => {
@@ -347,18 +370,25 @@ function completeOrder() {
     
     const buyerName = document.getElementById('buyerNameInput').value.trim();
     const paymentMethod = document.getElementById('paymentMethod').value;
+    const campus = document.getElementById('campusSelect').value;
     const total = basket.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    if (!campus) {
+        alert('Please select campus');
+        return;
+    }
     
     if (!buyerName) {
         alert('Please enter buyer name');
         return;
     }
     
-    if (confirm(`Complete order for ${buyerName}?\nTotal: PKR ${total.toFixed(2)}\nPayment Method: ${paymentMethod}`)) {
+    if (confirm(`Complete order for ${buyerName}?\nCampus: ${campus}\nTotal: PKR ${total.toFixed(2)}\nPayment Method: ${paymentMethod}`)) {
         // Prepare order data
         const orderData = {
             buyer_name: buyerName,
             payment_method: paymentMethod,
+            campus: campus,
             items: basket.map(item => ({
                 product_id: item.id,
                 product_name: item.name,

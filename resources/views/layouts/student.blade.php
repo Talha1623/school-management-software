@@ -20,7 +20,11 @@
     <link rel="icon" type="image/png" href="{{ asset('assets/images/favicon.png') }}">
     
     <!-- Title -->
-    <title>@yield('title', 'Student Dashboard - ICMS')</title>
+    @php
+        $settings = \App\Models\GeneralSetting::getSettings();
+        $systemName = $settings->system_name ?? 'ICMS';
+    @endphp
+    <title>@yield('title', 'Student Dashboard - ' . $systemName)</title>
 
     @stack('styles')
 </head>

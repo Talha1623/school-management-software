@@ -2,7 +2,11 @@
 <div class="sidebar-area" id="sidebar-area">
     <div class="logo position-relative d-flex align-items-center justify-content-between">
         <a href="{{ route('accountant.dashboard') }}" class="d-block text-decoration-none position-relative" id="accountant-logo-link">
-            <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
+            @php
+                $settings = \App\Models\GeneralSetting::getSettings();
+                $logoUrl = $settings->logo ? asset('storage/' . $settings->logo) : asset('assets/images/Full Logo_SMS.png');
+            @endphp
+            <img src="{{ $logoUrl }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
         </a> 
         <button class="sidebar-burger-menu-close bg-transparent py-3 border-0 opacity-0 z-n1 position-absolute top-50 end-0 translate-middle-y" id="sidebar-burger-menu-close">
             <span class="border-1 d-block for-dark-burger" style="border-bottom: 1px solid #475569; height: 1px; width: 25px; transform: rotate(45deg);"></span>
@@ -126,6 +130,14 @@
                 <a href="{{ route('accountant.deleted-fees') }}" class="menu-link {{ request()->routeIs('accountant.deleted-fees*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">delete</span>
                     <span class="title">Deleted Fees</span>
+                </a>
+            </li>
+            
+            {{-- Bulk Fee Payment --}}
+            <li class="menu-item {{ request()->routeIs('accountant.bulk-fee-payment*') ? 'active' : '' }}">
+                <a href="{{ route('accountant.bulk-fee-payment') }}" class="menu-link {{ request()->routeIs('accountant.bulk-fee-payment*') ? 'active' : '' }}">
+                    <span class="material-symbols-outlined menu-icon">payments</span>
+                    <span class="title">Bulk Fee Payment</span>
                 </a>
             </li>
             

@@ -9,6 +9,11 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Transport;
 use App\Models\FeeType;
+use App\Models\StudentAttendance;
+use App\Models\StudentMark;
+use App\Models\StudentPayment;
+use App\Models\Exam;
+use App\Models\Test;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,11 +29,23 @@ class StudentController extends Controller
      */
     public function index(Request $request): View
     {
+        // Get active campuses first
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name')->toArray();
+        
         $query = Student::query();
+        
+        // Only show students from active campuses
+        if (!empty($activeCampuses)) {
+            $query->whereIn('campus', $activeCampuses);
+        } else {
+            // If no active campuses, show no students
+            $query->whereRaw('1 = 0');
+        }
+        
         $filterCampus = $request->get('filter_campus');
         
-        // Filter by Campus
-        if ($filterCampus) {
+        // Filter by Campus (only if it's an active campus)
+        if ($filterCampus && in_array($filterCampus, $activeCampuses)) {
             $query->where('campus', $filterCampus);
         }
         
@@ -50,13 +67,32 @@ class StudentController extends Controller
             }
         }
 
-        // Filter by Status (Active/Inactive)
+        // Filter by Status (Active/Inactive/Passout)
         if ($request->filled('filter_status')) {
             $filterStatus = $request->filter_status;
+            $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
+            
             if ($filterStatus === 'active') {
-                $query->whereNotNull('admission_date');
+                // Active: has admission_date and class is not passout
+                $query->whereNotNull('admission_date')
+                      ->where(function($q) use ($passoutClasses) {
+                          $q->whereNull('class')
+                            ->orWhere('class', '')
+                            ->orWhere(function($subQ) use ($passoutClasses) {
+                                // Class should not match any passout value
+                                $subQ->whereRaw("LOWER(TRIM(COALESCE(class, ''))) NOT IN ('" . implode("', '", array_map('strtolower', $passoutClasses)) . "')");
+                            });
+                      });
             } elseif ($filterStatus === 'inactive') {
+                // Inactive: no admission_date
                 $query->whereNull('admission_date');
+            } elseif ($filterStatus === 'passout') {
+                // Passout: class field contains passout-related values
+                $query->where(function($q) use ($passoutClasses) {
+                    foreach ($passoutClasses as $passoutClass) {
+                        $q->orWhereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower($passoutClass)]);
+                    }
+                });
             }
         }
         
@@ -84,21 +120,22 @@ class StudentController extends Controller
         
         $students = $query->latest('admission_date')->paginate($perPage)->withQueryString();
         
-        // Get filter options
+        // Get filter options - only active campuses
         $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
-        if ($campuses->isEmpty()) {
-            $campusesFromStudents = Student::whereNotNull('campus')->distinct()->pluck('campus')->sort();
-            $campuses = $campusesFromStudents;
-        }
         
         $classesQuery = ClassModel::whereNotNull('class_name');
-        if ($filterCampus) {
+        if ($filterCampus && in_array($filterCampus, $activeCampuses)) {
             $classesQuery->where('campus', $filterCampus);
+        }
+        // Only get classes from active campuses
+        if (!empty($activeCampuses)) {
+            $classesQuery->whereIn('campus', $activeCampuses);
         }
         $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         if ($classes->isEmpty()) {
-            $classesFromStudents = Student::whereNotNull('class');
-            if ($filterCampus) {
+            $classesFromStudents = Student::whereNotNull('class')
+                ->whereIn('campus', $activeCampuses);
+            if ($filterCampus && in_array($filterCampus, $activeCampuses)) {
                 $classesFromStudents->where('campus', $filterCampus);
             }
             $classesFromStudents = $classesFromStudents->distinct()->pluck('class')->sort();
@@ -108,8 +145,12 @@ class StudentController extends Controller
         $sections = collect();
         if ($request->filled('filter_class')) {
             $sectionsQuery = Section::where('class', $request->filter_class);
-            if ($filterCampus) {
+            if ($filterCampus && in_array($filterCampus, $activeCampuses)) {
                 $sectionsQuery->where('campus', $filterCampus);
+            }
+            // Only get sections from active campuses
+            if (!empty($activeCampuses)) {
+                $sectionsQuery->whereIn('campus', $activeCampuses);
             }
             $sections = $sectionsQuery
                 ->whereNotNull('name')
@@ -118,8 +159,9 @@ class StudentController extends Controller
                 ->sort()
                 ->values();
             if ($sections->isEmpty()) {
-                $sectionsFromStudents = Student::where('class', $request->filter_class);
-                if ($filterCampus) {
+                $sectionsFromStudents = Student::where('class', $request->filter_class)
+                    ->whereIn('campus', $activeCampuses);
+                if ($filterCampus && in_array($filterCampus, $activeCampuses)) {
                     $sectionsFromStudents->where('campus', $filterCampus);
                 }
                 $sectionsFromStudents = $sectionsFromStudents
@@ -208,10 +250,21 @@ class StudentController extends Controller
      */
     public function export(Request $request, string $format)
     {
+        // Get active campuses first
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name')->toArray();
+        
         $query = Student::query();
         
+        // Only export students from active campuses
+        if (!empty($activeCampuses)) {
+            $query->whereIn('campus', $activeCampuses);
+        } else {
+            // If no active campuses, export no students
+            $query->whereRaw('1 = 0');
+        }
+        
         // Apply same filters as index method
-        if ($request->filled('filter_campus')) {
+        if ($request->filled('filter_campus') && in_array($request->filter_campus, $activeCampuses)) {
             $query->where('campus', $request->filter_campus);
         }
         
@@ -392,7 +445,67 @@ class StudentController extends Controller
             }
         }
 
-        return view('student.view', compact('student', 'transportFare'));
+        // Get exam names from Exam table
+        $examNames = Exam::whereNotNull('exam_name')
+            ->distinct()
+            ->pluck('exam_name')
+            ->toArray();
+
+        // Get exam names from Test table where test_type = 'Exam'
+        $examNamesFromTests = Test::whereRaw('LOWER(TRIM(test_type)) = ?', ['exam'])
+            ->whereNotNull('test_name')
+            ->distinct()
+            ->pluck('test_name')
+            ->toArray();
+
+        // Merge exam names
+        $allExamNames = array_unique(array_merge($examNames, $examNamesFromTests));
+
+        // Get exam marks for this student
+        $examMarks = collect();
+        if (!empty($allExamNames)) {
+            $examMarks = StudentMark::where('student_id', $student->id)
+                ->whereIn('test_name', $allExamNames)
+                ->orderBy('test_name', 'asc')
+                ->orderBy('subject', 'asc')
+                ->get();
+        }
+
+        // Get test names (excluding exams)
+        // Get all test names first
+        $allTestNames = Test::whereNotNull('test_name')
+            ->distinct()
+            ->pluck('test_name')
+            ->toArray();
+        
+        // Filter out exam names to get only test names
+        $testNames = array_diff($allTestNames, $allExamNames);
+
+        // Get test marks for this student (excluding exams)
+        $testMarks = collect();
+        if (!empty($testNames)) {
+            $testMarks = StudentMark::where('student_id', $student->id)
+                ->whereIn('test_name', $testNames)
+                ->orderBy('test_name', 'asc')
+                ->orderBy('subject', 'asc')
+                ->get();
+        }
+
+        // Get payments for current year
+        $currentYear = date('Y');
+        $paymentsThisYear = StudentPayment::where('student_code', $student->student_code)
+            ->whereYear('payment_date', $currentYear)
+            ->where('method', '!=', 'Generated') // Only actual payments
+            ->orderBy('payment_date', 'desc')
+            ->get();
+
+        return view('student.view', compact(
+            'student',
+            'transportFare',
+            'examMarks',
+            'testMarks',
+            'paymentsThisYear'
+        ));
     }
 
     /**
@@ -997,6 +1110,65 @@ class StudentController extends Controller
         }
         
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Reactivate a passout student (move back to original class).
+     */
+    public function reactivate(Request $request, Student $student): JsonResponse
+    {
+        // Check if student is passout
+        $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
+        $isPassout = $student->class && in_array(strtolower(trim($student->class)), $passoutClasses);
+        
+        if (!$isPassout) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Student is not in passout status.',
+            ], 400);
+        }
+
+        $originalClass = null;
+        $originalSection = null;
+
+        // First, try to get from previous_class field (for newly passout students)
+        if ($student->previous_class) {
+            $originalClass = $student->previous_class;
+            $originalSection = $student->previous_section;
+        } else {
+            // If previous_class not found, try to find from attendance records (for old passout students)
+            $lastAttendance = StudentAttendance::where('student_id', $student->id)
+                ->whereNotNull('class')
+                ->where('class', '!=', '')
+                ->whereRaw("LOWER(TRIM(COALESCE(class, ''))) NOT IN ('" . implode("', '", array_map('strtolower', $passoutClasses)) . "')")
+                ->orderBy('attendance_date', 'desc')
+                ->first();
+            
+            if ($lastAttendance && $lastAttendance->class) {
+                $originalClass = $lastAttendance->class;
+                $originalSection = $lastAttendance->section;
+            }
+        }
+
+        // If still no class found, return error
+        if (!$originalClass) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot reactivate: Original class information not found. Please edit the student manually to assign a class.',
+            ], 400);
+        }
+
+        // Restore original class and section
+        $student->class = $originalClass;
+        $student->section = $originalSection;
+        $student->previous_class = null;
+        $student->previous_section = null;
+        $student->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Student '{$student->student_name}' has been reactivated and moved back to class '{$student->class}'" . ($student->section ? " (Section: {$student->section})" : '') . ".",
+        ]);
     }
 }
 

@@ -105,6 +105,14 @@ use Illuminate\Support\Facades\Auth;
                             <option value="100" {{ request('per_page', 100) == 100 ? 'selected' : '' }}>100</option>
                         </select>
                     </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="statusFilter" class="mb-0 fs-13 fw-medium text-dark">Status:</label>
+                        <select id="statusFilter" class="form-select form-select-sm" style="width: auto; min-width: 150px;" onchange="updateStatusFilter(this.value)">
+                            <option value="">All Teachers</option>
+                            <option value="active" {{ request('status_filter') == 'active' ? 'selected' : '' }}>Active Teacher</option>
+                            <option value="inactive" {{ request('status_filter') == 'inactive' ? 'selected' : '' }}>Deactive Teacher</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Right Side -->
@@ -187,6 +195,7 @@ use Illuminate\Support\Facades\Auth;
                                 <th style="padding: 12px 15px; font-size: 14px;">#</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Photo</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Name</th>
+                                <th style="padding: 12px 15px; font-size: 14px;">Salary Type</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Emp. ID</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Designation</th>
                                 <th style="padding: 12px 15px; font-size: 14px;">Campus</th>
@@ -216,6 +225,21 @@ use Illuminate\Support\Facades\Auth;
                                         <strong class="text-primary">{{ $member->name }}</strong>
                                         @if($member->father_husband_name)
                                             <br><small class="text-muted" style="font-size: 12px;">{{ $member->father_husband_name }}</small>
+                                        @endif
+                                    </td>
+                                    <td style="padding: 12px 15px; font-size: 14px;">
+                                        @if($member->salary_type)
+                                            @if(strtolower($member->salary_type) == 'full time')
+                                                <span class="badge bg-success text-white" style="font-size: 11px;">Full Time</span>
+                                            @elseif(strtolower($member->salary_type) == 'per hour')
+                                                <span class="badge bg-warning text-dark" style="font-size: 11px;">Per Hour</span>
+                                            @elseif(strtolower($member->salary_type) == 'lecture')
+                                                <span class="badge bg-info text-white" style="font-size: 11px;">Per Lecture</span>
+                                            @else
+                                                <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ ucfirst($member->salary_type) }}</span>
+                                            @endif
+                                        @else
+                                            <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
                                     <td style="padding: 12px 15px; font-size: 14px;">
@@ -1042,23 +1066,107 @@ function resetForm() {
     // Update fields based on salary type (default will be empty, so fields will be enabled)
     toggleFeesFields();
     
-    // Fetch next Employee ID
-    fetch('{{ route('staff.management.next-emp-id') }}', {
+    // Fetch next Employee ID based on campus (if campus is selected)
+    // Small delay to ensure campus field is accessible
+    setTimeout(function() {
+        const campusField = document.getElementById('campus');
+        if (campusField && campusField.value) {
+            updateEmployeeId();
+        } else {
+            // Clear emp_id if no campus selected
+            const empIdField = document.getElementById('emp_id');
+            if (empIdField) {
+                empIdField.value = '';
+            }
+        }
+    }, 50);
+}
+
+// Function to update Employee ID based on selected campus
+function updateEmployeeId() {
+    const campusField = document.getElementById('campus');
+    const empIdField = document.getElementById('emp_id');
+    const campus = campusField ? campusField.value : '';
+    
+    if (!empIdField) {
+        console.log('Emp ID field not found');
+        return;
+    }
+    
+    // Build URL with campus parameter
+    let url = '{{ route('staff.management.next-emp-id') }}';
+    if (campus) {
+        url += '?campus=' + encodeURIComponent(campus);
+    }
+    
+    console.log('Updating Employee ID for campus:', campus, 'URL:', url);
+    
+    // Show loading state
+    empIdField.value = 'Loading...';
+    
+    fetch(url, {
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
     .then(data => {
+        console.log('Employee ID response:', data);
         if (data.emp_id) {
             empIdField.value = data.emp_id;
+        } else if (data.error) {
+            console.error('Error from server:', data.error);
+            empIdField.value = '';
         }
     })
     .catch(error => {
         console.error('Error fetching Employee ID:', error);
+        empIdField.value = '';
     });
 }
+
+// Update EMP ID when campus changes
+document.addEventListener('DOMContentLoaded', function() {
+    const campusField = document.getElementById('campus');
+    if (campusField) {
+        // Add event listener for campus change
+        campusField.addEventListener('change', function() {
+            console.log('Campus changed to:', this.value);
+            
+            // Check if we're in add mode (not edit mode)
+            const methodField = document.getElementById('methodField');
+            const isEditMode = methodField && methodField.innerHTML.includes('PUT');
+            
+            // Update Employee ID only in add mode (not edit mode)
+            if (!isEditMode) {
+                updateEmployeeId();
+            }
+        });
+        
+        // Also trigger update when modal is opened (in case campus is pre-selected)
+        const staffModal = document.getElementById('staffModal');
+        if (staffModal) {
+            staffModal.addEventListener('shown.bs.modal', function() {
+                // Small delay to ensure form is reset
+                setTimeout(function() {
+                    const methodField = document.getElementById('methodField');
+                    const isEditMode = methodField && methodField.innerHTML.includes('PUT');
+                    
+                    // Update Employee ID if in add mode and campus is selected
+                    if (!isEditMode && campusField.value) {
+                        updateEmployeeId();
+                    }
+                }, 100);
+            });
+        }
+    }
+});
 
 function editStaff(id) {
     fetch(`{{ url('/staff/management') }}/${id}`, {
@@ -1176,6 +1284,17 @@ function clearSearch() {
 function updateEntriesPerPage(value) {
     const url = new URL(window.location.href);
     url.searchParams.set('per_page', value);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+
+function updateStatusFilter(value) {
+    const url = new URL(window.location.href);
+    if (value) {
+        url.searchParams.set('status_filter', value);
+    } else {
+        url.searchParams.delete('status_filter');
+    }
     url.searchParams.set('page', '1');
     window.location.href = url.toString();
 }
@@ -1314,6 +1433,20 @@ function buildStaffRow(staff, photoUrl, isSuperAdmin) {
         ? `<span class="badge ${staff.gender === 'Male' ? 'bg-primary' : (staff.gender === 'Female' ? 'bg-danger' : 'bg-secondary')} text-white" style="font-size: 11px;">${escapeHtml(staff.gender)}</span>`
         : `<span class="text-muted">N/A</span>`;
 
+    let salaryTypeBadge = '<span class="text-muted">N/A</span>';
+    if (staff.salary_type) {
+        const salaryTypeLower = staff.salary_type.toLowerCase();
+        if (salaryTypeLower === 'full time') {
+            salaryTypeBadge = '<span class="badge bg-success text-white" style="font-size: 11px;">Full Time</span>';
+        } else if (salaryTypeLower === 'per hour') {
+            salaryTypeBadge = '<span class="badge bg-warning text-dark" style="font-size: 11px;">Per Hour</span>';
+        } else if (salaryTypeLower === 'lecture') {
+            salaryTypeBadge = '<span class="badge bg-info text-white" style="font-size: 11px;">Per Lecture</span>';
+        } else {
+            salaryTypeBadge = `<span class="badge bg-secondary text-white" style="font-size: 11px;">${escapeHtml(staff.salary_type.charAt(0).toUpperCase() + staff.salary_type.slice(1))}</span>`;
+        }
+    }
+
     return `
         <tr data-staff-id="${staff.id}">
             <td style="padding: 12px 15px; font-size: 14px;">NEW</td>
@@ -1322,6 +1455,7 @@ function buildStaffRow(staff, photoUrl, isSuperAdmin) {
                 <strong class="text-primary">${escapeHtml(staff.name)}</strong>
                 ${staff.father_husband_name ? `<br><small class="text-muted" style="font-size: 12px;">${escapeHtml(staff.father_husband_name)}</small>` : ''}
             </td>
+            <td style="padding: 12px 15px; font-size: 14px;">${salaryTypeBadge}</td>
             <td style="padding: 12px 15px; font-size: 14px;">
                 ${staff.emp_id ? `<span class="badge bg-info text-white" style="font-size: 11px;">${escapeHtml(staff.emp_id)}</span>` : '<span class="text-muted">N/A</span>'}
             </td>

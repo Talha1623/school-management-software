@@ -132,24 +132,78 @@ class ManageSalariesController extends Controller
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
         ]);
 
-        // Calculate new salary generated (base + bonus - deduction)
+        // Calculate loan repayment (use provided value or calculate from loans)
+        $loanRepayment = $validated['loan_repayment'] ?? $salary->loan_repayment ?? 0;
+        if ($loanRepayment == 0) {
+            // Calculate loan repayment from approved loans (exclude Completed, Rejected, Pending)
+            $approvedLoans = \App\Models\Loan::where('staff_id', $salary->staff_id)
+                ->where('status', 'Approved')
+                ->get();
+            
+            foreach ($approvedLoans as $loan) {
+                // Only calculate if loan has approved amount and repayment instalments
+                if ($loan->approved_amount && $loan->approved_amount > 0 && $loan->repayment_instalments > 0) {
+                    // Calculate monthly installment: approved_amount / repayment_instalments
+                    $monthlyInstallment = (float) $loan->approved_amount / (int) $loan->repayment_instalments;
+                    $loanRepayment += $monthlyInstallment;
+                }
+            }
+            $loanRepayment = round($loanRepayment, 2);
+        }
+
+        // Recalculate salary generated from base (base + bonus - deduction - discount - loan repayment)
         $bonusAmount = $validated['bonus_amount'] ?? 0;
         $deductionAmount = $validated['deduction_amount'] ?? 0;
-        $newSalaryGenerated = $salary->salary_generated + $bonusAmount - $deductionAmount;
+        
+        // Get month number from salary month name
+        $monthNames = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
+        ];
+        $monthNumber = (int) ($monthNames[$salary->salary_month] ?? date('m'));
+        
+        // Use reflection to access private methods from GenerateSalaryController
+        $generateController = app(\App\Http\Controllers\GenerateSalaryController::class);
+        $reflection = new \ReflectionClass($generateController);
+        
+        // Calculate attendance summary
+        $calculateAttendanceMethod = $reflection->getMethod('calculateAttendanceSummary');
+        $calculateAttendanceMethod->setAccessible(true);
+        $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
+        
+        // Calculate base salary generated (with late/early deductions already applied)
+        $calculateSalaryMethod = $reflection->getMethod('calculateSalaryGenerated');
+        $calculateSalaryMethod->setAccessible(true);
+        $baseSalaryGenerated = $calculateSalaryMethod->invoke($generateController, $salary->staff, $attendanceSummary, 0, (int) $salary->year, $monthNumber);
+        
+        // Calculate fee discount from student payments
+        $calculateDiscountMethod = $reflection->getMethod('calculateFeeDiscount');
+        $calculateDiscountMethod->setAccessible(true);
+        $feeDiscount = $calculateDiscountMethod->invoke($generateController, $salary->staff, (int) $salary->year, $monthNumber);
+        
+        // Subtract discount and loan repayment from salary generated
+        $newSalaryGenerated = max(0, $baseSalaryGenerated + $bonusAmount - $deductionAmount - $feeDiscount - $loanRepayment);
+
+        // Deduct loan repayment from amount_paid automatically
+        // amount_paid entered by user is the gross amount, we deduct loan from it
+        $enteredAmountPaid = (float) ($validated['amount_paid'] ?? 0);
+        $finalAmountPaid = max(0, $enteredAmountPaid - $loanRepayment);
 
         // Determine status based on fully_paid or amount_paid
+        // Note: newSalaryGenerated already has loan repayment deducted
         $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
         $status = 'Pending';
-        if ($fullyPaid || $validated['amount_paid'] >= $newSalaryGenerated) {
+        if ($fullyPaid || $finalAmountPaid >= $newSalaryGenerated) {
             $status = 'Paid';
-        } elseif ($validated['amount_paid'] > 0) {
+        } elseif ($finalAmountPaid > 0) {
             $status = 'Issued';
         }
 
         // Update salary
         $salary->update([
-            'amount_paid' => $validated['amount_paid'],
-            'loan_repayment' => $validated['loan_repayment'] ?? 0,
+            'amount_paid' => $finalAmountPaid,
+            'loan_repayment' => $loanRepayment,
             'salary_generated' => $newSalaryGenerated,
             'status' => $status,
         ]);

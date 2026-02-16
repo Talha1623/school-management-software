@@ -240,7 +240,11 @@ function fetchStudentDetails(studentCode, showAlertOnEmpty = false) {
     studentName.className = 'text-info';
     studentInfo.style.display = 'block';
 
-    fetch(`{{ route('accountant.get-student-by-code') }}?student_code=${encodeURIComponent(studentCode)}`, {
+    // Get selected campus
+    const selectedCampus = campusSelect ? campusSelect.value : '';
+    const campusParam = selectedCampus ? `&campus=${encodeURIComponent(selectedCampus)}` : '';
+
+    fetch(`{{ route('accountant.get-student-by-code') }}?student_code=${encodeURIComponent(studentCode)}${campusParam}`, {
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
@@ -288,6 +292,17 @@ document.addEventListener('DOMContentLoaded', function() {
             fetchStudentDetails(code, false);
         }, 500);
     });
+
+    // Re-search when campus changes
+    const campusSelect = document.getElementById('campus');
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            const code = studentCodeInput.value.trim();
+            if (code) {
+                fetchStudentDetails(code, false);
+            }
+        });
+    }
 
     generatedFeeSelect.addEventListener('change', function() {
         const selectedOption = this.options[this.selectedIndex];

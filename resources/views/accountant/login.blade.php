@@ -9,7 +9,11 @@
     <link rel="stylesheet" href="{{ asset('assets/css/remixicon.css') }}">
     <link rel="icon" type="image/png" href="{{ asset('assets/images/favicon.png') }}">
     
-    <title>Accountant Login - ICMS</title>
+    @php
+        $settings = \App\Models\GeneralSetting::getSettings();
+        $systemName = $settings->system_name ?? 'ICMS';
+    @endphp
+    <title>Accountant Login - {{ $systemName }}</title>
     
     <style>
         * {
@@ -141,6 +145,13 @@
     <div class="login-container">
         <div class="login-card">
             <div class="login-header">
+                @php
+                    $settings = \App\Models\GeneralSetting::getSettings();
+                    $logoUrl = $settings->logo ? asset('storage/' . $settings->logo) : asset('assets/images/Full Logo_SMS.png');
+                @endphp
+                <div class="logo-container" style="margin-bottom: 20px;">
+                    <img src="{{ $logoUrl }}" alt="Logo" style="max-width: 200px; max-height: 80px; object-fit: contain;" onerror="this.style.display='none'">
+                </div>
                 <h1>Accountant Login</h1>
                 <p>Welcome back! Please login to continue.</p>
             </div>

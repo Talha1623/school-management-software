@@ -127,17 +127,6 @@
                                 </div>
                             </div>
 
-                            <!-- Deduction Per Late Arrival -->
-                            <div class="col-12">
-                                <label for="deduction_per_late_arrival" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Deduction Per Late Arrival</label>
-                                <div class="input-group input-group-sm salary-input-group">
-                                    <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
-                                    </span>
-                                    <input type="number" class="form-control salary-input" name="deduction_per_late_arrival" id="deduction_per_late_arrival" placeholder="Enter deduction amount" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;">
-                                </div>
-                            </div>
-
                             <!-- Filter Button -->
                             <div class="col-12">
                                 <button type="button" class="btn btn-sm w-100 py-2 px-3 rounded-8 filter-staff-btn" onclick="loadStaffList()" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-weight: 500;">
@@ -217,6 +206,7 @@
                                         <th class="text-center">Absent</th>
                                         <th class="text-center">Late</th>
                                         <th class="text-end">Basic</th>
+                                        <th class="text-end">Discount</th>
                                         <th class="text-end">Salary Generated</th>
                                         <th class="text-end">Amount Paid</th>
                                         <th class="text-end">Loan Repayment</th>
@@ -262,6 +252,9 @@
                                             </div>
                                         </td>
                                         <td class="text-end">
+                                            <strong class="text-danger">{{ number_format($salary->discount ?? 0, 2) }}</strong>
+                                        </td>
+                                        <td class="text-end">
                                             <strong class="text-success">{{ number_format($salary->salary_generated ?? 0, 2) }}</strong>
                                         </td>
                                         <td class="text-end">
@@ -303,6 +296,7 @@
                                     <tr style="background-color: #f8f9fa; font-weight: 600;">
                                         <td colspan="8" class="text-end"><strong>Total:</strong></td>
                                         <td class="text-end"><strong class="text-primary">{{ number_format($generatedSalaries->sum('basic'), 2) }}</strong></td>
+                                        <td class="text-end"><strong class="text-danger">{{ number_format($generatedSalaries->sum('discount'), 2) }}</strong></td>
                                         <td class="text-end"><strong class="text-success">{{ number_format($generatedSalaries->sum('salary_generated'), 2) }}</strong></td>
                                         <td class="text-end"><strong class="text-info">{{ number_format($generatedSalaries->sum('amount_paid'), 2) }}</strong></td>
                                         <td class="text-end"><strong class="text-warning">{{ number_format($generatedSalaries->sum('loan_repayment'), 2) }}</strong></td>

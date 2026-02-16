@@ -17,9 +17,9 @@
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">today</span>
                         </div>
-                        <button class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px;">
+                        <a href="{{ route('admission.report.today') }}" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
                             View Report
-                        </button>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -203,24 +203,26 @@ function printReport(type) {
     
     switch(type) {
         case 'today':
-            url = '/admission/report/today';
+            url = '{{ route("admission.report.today", ["print" => 1]) }}';
             break;
         case 'monthly':
-            url = '/admission/report/monthly';
+            url = '{{ route("admission.report.monthly", ["print" => 1]) }}';
             break;
         case 'yearly':
-            url = '/admission/report/yearly';
+            url = '{{ route("admission.report.yearly", ["print" => 1]) }}';
             break;
         case 'forms':
-            url = '/admission/report/forms';
+            url = '{{ route("admission.report.forms", ["print" => 1]) }}';
             break;
         case 'blank':
-            url = '/admission/report/blank';
+            url = '{{ route("admission.report.blank", ["print" => 1]) }}';
             break;
     }
     
     // Open in new window for printing
-    window.open(url, '_blank');
+    if (url) {
+        window.open(url, '_blank');
+    }
 }
 </script>
 @endsection

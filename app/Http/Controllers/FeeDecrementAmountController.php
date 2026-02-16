@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class FeeDecrementAmountController extends Controller
 {
@@ -29,14 +30,11 @@ class FeeDecrementAmountController extends Controller
 
         $accountants = Accountant::orderBy('name')->get();
 
-        $defaultAccountant = null;
-        if (auth()->guard('accountant')->check()) {
-            $defaultAccountant = auth()->guard('accountant')->user()->name ?? null;
-        } elseif (auth()->check()) {
-            $defaultAccountant = auth()->user()->name ?? null;
-        }
+        // Get logged in user name
+        $loggedInUser = Auth::guard('admin')->user() ?? Auth::guard('accountant')->user() ?? Auth::user();
+        $loggedInUserName = $loggedInUser ? ($loggedInUser->name ?? 'Admin') : 'Admin';
         
-        return view('accounting.fee-document.decrement-amount', compact('accountants', 'campuses', 'defaultAccountant'));
+        return view('accounting.fee-document.decrement-amount', compact('accountants', 'campuses', 'loggedInUserName'));
     }
 
     /**

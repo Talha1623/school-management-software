@@ -86,11 +86,30 @@ class StudyMaterialController extends Controller
         $classes = $this->getClassesForCampus(null, $staff);
         $filterClasses = $filterCampus ? $this->getClassesForCampus($filterCampus, $staff) : $classes;
 
+        // Get active campuses list
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+
         // Get sections (filtered by class if provided)
         $sections = collect();
         if ($filterClass) {
             $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
                 ->whereNotNull('name');
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $sectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($filterCampus) {
                 $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
             }
@@ -99,6 +118,16 @@ class StudyMaterialController extends Controller
             if ($sections->isEmpty()) {
                 $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
                     ->whereNotNull('section');
+                
+                // Filter by active campuses only
+                if (!empty($activeCampuses)) {
+                    $subjectsQuery->where(function($q) use ($activeCampuses) {
+                        foreach ($activeCampuses as $activeCampus) {
+                            $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                        }
+                    });
+                }
+                
                 if ($filterCampus) {
                     $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
                 }
@@ -222,6 +251,20 @@ class StudyMaterialController extends Controller
             return response()->json(['sections' => []]);
         }
         
+        // Get active campuses list
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // If campus is specified, verify it's active
+        if ($campus && !in_array(strtolower(trim($campus)), $activeCampuses)) {
+            return response()->json(['sections' => []]);
+        }
+        
         $staff = Auth::guard('staff')->user();
         $sections = collect();
         
@@ -230,6 +273,16 @@ class StudyMaterialController extends Controller
             // Get sections from teacher's assigned subjects for this class
             $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $assignedSubjectsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
@@ -238,6 +291,16 @@ class StudyMaterialController extends Controller
             // Get sections from teacher's assigned sections for this class
             $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $assignedSectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
@@ -256,9 +319,19 @@ class StudyMaterialController extends Controller
                 ->sort()
                 ->values();
         } else {
-            // For non-teachers, get all sections
+            // For non-teachers, get all sections from active campuses only
             $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                 ->whereNotNull('name');
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $sectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
@@ -267,6 +340,16 @@ class StudyMaterialController extends Controller
             if ($sections->isEmpty()) {
                 $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                     ->whereNotNull('section');
+                
+                // Filter by active campuses only
+                if (!empty($activeCampuses)) {
+                    $subjectsQuery->where(function($q) use ($activeCampuses) {
+                        foreach ($activeCampuses as $activeCampus) {
+                            $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                        }
+                    });
+                }
+                
                 if ($campus) {
                     $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
                 }
@@ -301,11 +384,41 @@ class StudyMaterialController extends Controller
         $isTeacher = $staff && $staff->isTeacher();
         $teacherName = $isTeacher ? strtolower(trim($staff->name ?? '')) : null;
 
+        // Get active campuses list
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // If campus is specified, verify it's active
+        if ($campus && !in_array($campusLower, $activeCampuses)) {
+            return collect();
+        }
+
         $classes = collect();
 
         if ($isTeacher && $teacherName) {
             $subjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
             $sectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $subjectsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+                
+                $sectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
                 $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
@@ -322,9 +435,20 @@ class StudyMaterialController extends Controller
 
         if ($classes->isEmpty()) {
             $classQuery = ClassModel::whereNotNull('class_name');
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $classQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $classQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
             }
+            
             $classModelClasses = $classQuery->distinct()->pluck('class_name')
                 ->map(fn($class) => trim((string) $class))
                 ->filter(fn($class) => $class !== '')
@@ -339,6 +463,21 @@ class StudyMaterialController extends Controller
 
             $sectionClasses = Section::whereNotNull('class');
             $subjectClasses = Subject::whereNotNull('class');
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $sectionClasses->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+                $subjectClasses->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $sectionClasses->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
                 $subjectClasses->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
@@ -369,13 +508,42 @@ class StudyMaterialController extends Controller
     {
         $class = $request->get('class');
         $section = $request->get('section');
+        $campus = $request->get('campus');
+        
+        // Get active campuses list
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // If campus is specified, verify it's active
+        if ($campus && !in_array(strtolower(trim($campus)), $activeCampuses)) {
+            return response()->json(['subjects' => []]);
+        }
         
         $staff = Auth::guard('staff')->user();
         $subjectsQuery = Subject::query();
         
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $subjectsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
+        }
+        
         // Filter by teacher's assigned subjects if teacher
         if ($staff && $staff->isTeacher()) {
             $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))]);
+        }
+        
+        // Filter by campus
+        if ($campus) {
+            $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
         
         if ($class) {
@@ -410,6 +578,29 @@ class StudyMaterialController extends Controller
         }
 
         return response()->file($filePath);
+    }
+
+    /**
+     * Download study material file.
+     */
+    public function downloadFile(StudyMaterial $studyMaterial)
+    {
+        if (!$studyMaterial->file_path) {
+            abort(404, 'File not found');
+        }
+
+        $filePath = storage_path('app/public/' . $studyMaterial->file_path);
+        
+        if (!file_exists($filePath)) {
+            abort(404, 'File not found');
+        }
+
+        // Get original filename or use material title
+        $originalName = $studyMaterial->title ?? 'study-material';
+        $extension = pathinfo($studyMaterial->file_path, PATHINFO_EXTENSION);
+        $downloadName = $originalName . '.' . $extension;
+
+        return response()->download($filePath, $downloadName);
     }
 
     /**

@@ -9,6 +9,8 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
 use App\Models\CombinedResultGrade;
+use App\Models\ParticularTestGrade;
+use App\Models\StudentMark;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -143,6 +145,8 @@ class PositionHolderController extends Controller
 
         // Query students based on filters
         $students = collect();
+        $studentMarks = collect();
+        
         if ($filterCampus || $filterClass || $filterSection) {
             $studentsQuery = Student::query();
             
@@ -157,6 +161,64 @@ class PositionHolderController extends Controller
             }
             
             $students = $studentsQuery->orderBy('student_name')->get();
+            
+            // Load existing marks if test is selected
+            if ($filterTest && $students->isNotEmpty()) {
+                $studentIds = $students->pluck('id');
+                
+                $marksQuery = StudentMark::where('test_name', $filterTest)
+                    ->whereIn('student_id', $studentIds);
+                
+                if ($filterCampus) {
+                    $marksQuery->where('campus', $filterCampus);
+                }
+                if ($filterClass) {
+                    $marksQuery->where('class', $filterClass);
+                }
+                if ($filterSection) {
+                    $marksQuery->where('section', $filterSection);
+                }
+                if ($filterSubject) {
+                    $marksQuery->where('subject', $filterSubject);
+                }
+                
+                $studentMarks = $marksQuery->get()->keyBy('student_id');
+                
+                // Sort students by marks (descending) for position holders
+                $students = $students->map(function($student) use ($studentMarks) {
+                    $mark = $studentMarks->get($student->id);
+                    $student->marks_obtained = $mark ? $mark->marks_obtained : 0;
+                    $student->total_marks = $mark ? $mark->total_marks : 100;
+                    return $student;
+                })->sortByDesc('marks_obtained')->values();
+            }
+        }
+
+        // Get grade definitions for calculating grades
+        $gradeDefinitions = collect();
+        if ($filterCampus && $filterTest) {
+            // Try to get from ParticularTestGrade first (more specific)
+            $particularGrades = ParticularTestGrade::where('campus', $filterCampus)
+                ->where('for_test', $filterTest);
+            
+            if ($filterClass) {
+                $particularGrades->where('class', $filterClass);
+            }
+            if ($filterSection) {
+                $particularGrades->where('section', $filterSection);
+            }
+            if ($filterSubject) {
+                $particularGrades->where('subject', $filterSubject);
+            }
+            
+            $gradeDefinitions = $particularGrades->orderBy('from_percentage', 'desc')->get();
+        }
+        
+        // If no particular test grades found, use CombinedResultGrade
+        if ($gradeDefinitions->isEmpty() && $filterCampus) {
+            $gradeDefinitions = CombinedResultGrade::where('campus', $filterCampus)
+                ->orderBy('from_percentage', 'desc')
+                ->get();
         }
 
         return view('test.position-holder.practical', compact(
@@ -168,6 +230,8 @@ class PositionHolderController extends Controller
             'tests',
             'grades',
             'students',
+            'studentMarks',
+            'gradeDefinitions',
             'filterCampus',
             'filterClass',
             'filterSection',
@@ -182,14 +246,20 @@ class PositionHolderController extends Controller
     public function getSectionsByClass(Request $request): JsonResponse
     {
         $class = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$class) {
             return response()->json(['sections' => []]);
         }
         
         // Use case-insensitive matching for class
-        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-            ->whereNotNull('name')
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        $sections = $sectionsQuery->whereNotNull('name')
             ->distinct()
             ->pluck('name')
             ->sort()
@@ -197,14 +267,19 @@ class PositionHolderController extends Controller
             
         if ($sections->isEmpty()) {
             // Try from subjects table with case-insensitive matching
-            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('section')
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            
+            if ($campus) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            
+            $sections = $subjectsQuery->whereNotNull('section')
                 ->distinct()
                 ->pluck('section')
                 ->sort()
                 ->values();
         }
-
+        
         return response()->json(['sections' => $sections]);
     }
 
@@ -331,11 +406,23 @@ class PositionHolderController extends Controller
     public function combine(Request $request): View
     {
         // Get filter values
+        $filterCampus = $request->get('filter_campus');
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
         $filterTestType = $request->get('filter_test_type');
         $filterFromDate = $request->get('filter_from_date');
         $filterToDate = $request->get('filter_to_date');
+
+        // Get campuses
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(function($campus) {
+                return (object)['campus_name' => $campus];
+            });
+        }
 
         // Get classes
         $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
@@ -392,9 +479,15 @@ class PositionHolderController extends Controller
 
         // Query students based on filters
         $students = collect();
+        $studentMarks = collect();
+        $gradeDefinitions = collect();
+        
         if ($filterClass || $filterSection) {
             $studentsQuery = Student::query();
             
+            if ($filterCampus) {
+                $studentsQuery->where('campus', $filterCampus);
+            }
             if ($filterClass) {
                 $studentsQuery->where('class', $filterClass);
             }
@@ -403,14 +496,113 @@ class PositionHolderController extends Controller
             }
             
             $students = $studentsQuery->orderBy('student_name')->get();
+            
+            if ($students->isNotEmpty()) {
+                $studentIds = $students->pluck('id');
+                
+                // Get student marks for combine tests
+                $marksQuery = StudentMark::whereIn('student_id', $studentIds);
+                
+                if ($filterCampus) {
+                    $marksQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                }
+                if ($filterClass) {
+                    $marksQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+                }
+                if ($filterSection) {
+                    $marksQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                }
+                
+                // Filter by test_type if provided - need to join with tests table
+                if ($filterTestType) {
+                    $testNames = Test::where('test_type', $filterTestType)
+                        ->when($filterCampus, function($q) use ($filterCampus) {
+                            return $q->where('campus', $filterCampus);
+                        })
+                        ->when($filterClass, function($q) use ($filterClass) {
+                            return $q->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($filterClass))]);
+                        })
+                        ->when($filterSection, function($q) use ($filterSection) {
+                            return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                        })
+                        ->distinct()
+                        ->pluck('test_name');
+                    
+                    if ($testNames->isNotEmpty()) {
+                        $marksQuery->whereIn('test_name', $testNames);
+                    } else {
+                        $marksQuery->whereRaw('1 = 0');
+                    }
+                }
+                
+                if ($filterFromDate) {
+                    $marksQuery->whereDate('created_at', '>=', $filterFromDate);
+                }
+                if ($filterToDate) {
+                    $marksQuery->whereDate('created_at', '<=', $filterToDate);
+                }
+                
+                $marks = $marksQuery->get();
+                $studentMarks = $marks->groupBy('student_id');
+                
+                // Get grade definitions for combined results
+                if ($filterCampus) {
+                    $gradeDefinitions = CombinedResultGrade::where('campus', $filterCampus)
+                        ->orderBy('from_percentage', 'desc')
+                        ->get();
+                } else {
+                    $gradeDefinitions = CombinedResultGrade::orderBy('from_percentage', 'desc')->get();
+                }
+                
+                // Calculate totals, percentage, and grade for each student
+                $studentSummaries = collect();
+                foreach ($students as $student) {
+                    $studentMarkList = $studentMarks->get($student->id, collect());
+                    $totalMarks = $studentMarkList->sum(function($m) { return (float)($m->total_marks ?? 0); });
+                    $totalObtained = $studentMarkList->sum(function($m) { return (float)($m->marks_obtained ?? 0); });
+                    $percentage = $totalMarks > 0 ? round(($totalObtained / $totalMarks) * 100, 2) : 0;
+                    
+                    // Calculate grade
+                    $calculatedGrade = null;
+                    if ($percentage > 0 && $gradeDefinitions->isNotEmpty()) {
+                        foreach ($gradeDefinitions as $gradeDef) {
+                            if ($percentage >= $gradeDef->from_percentage && $percentage <= $gradeDef->to_percentage) {
+                                $calculatedGrade = $gradeDef->name;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    $studentSummaries->put($student->id, [
+                        'total_marks' => $totalMarks,
+                        'total_obtained' => $totalObtained,
+                        'percentage' => $percentage,
+                        'grade' => $calculatedGrade,
+                    ]);
+                }
+                
+                // Sort students by total obtained marks (descending) for position
+                $students = $students->map(function($student) use ($studentSummaries) {
+                    $summary = $studentSummaries->get($student->id, []);
+                    $student->totalMarks = $summary['total_marks'] ?? 0;
+                    $student->totalObtained = $summary['total_obtained'] ?? 0;
+                    $student->percentage = $summary['percentage'] ?? 0;
+                    $student->grade = $summary['grade'] ?? null;
+                    return $student;
+                })->sortByDesc('totalObtained')->values();
+            }
         }
 
         return view('test.position-holder.combine', compact(
+            'campuses',
             'classes',
             'sections',
             'testTypes',
             'grades',
             'students',
+            'studentMarks',
+            'gradeDefinitions',
+            'filterCampus',
             'filterClass',
             'filterSection',
             'filterTestType',

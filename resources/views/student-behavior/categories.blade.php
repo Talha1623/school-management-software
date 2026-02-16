@@ -10,7 +10,7 @@
                 <h4 class="mb-0 fs-16 fw-semibold">Behavior Categories</h4>
                 <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 category-add-btn" data-bs-toggle="modal" data-bs-target="#categoryModal" onclick="resetForm()">
                     <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Category</span>
+                    <span>Add Category</span>
                 </button>
             </div>
 
@@ -135,7 +135,7 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editCategory({{ $category->id }}, '{{ addslashes($category->category_name) }}', '{{ addslashes($category->campus) }}')">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editCategoryInline({{ $category->id }}, '{{ addslashes($category->category_name) }}', '{{ addslashes($category->campus) }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this category?')) { document.getElementById('delete-form-{{ $category->id }}').submit(); }">
@@ -267,7 +267,7 @@
         outline: none;
     }
     
-    #categoryModal .input-group-text {
+    #categoryModal .category-input-group .input-group-text {
         height: 36px;
         padding: 0 0.75rem;
         display: flex;
@@ -284,11 +284,6 @@
         border-right-color: #003471;
     }
     
-    #categoryModal .form-label {
-        margin-bottom: 0.4rem;
-        line-height: 1.3;
-    }
-    
     #categoryModal .category-submit-btn {
         background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
         color: white;
@@ -302,6 +297,7 @@
         background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 52, 113, 0.35);
+        color: white;
     }
     
     #categoryModal .category-submit-btn:active {
@@ -661,7 +657,7 @@ function resetForm() {
     document.getElementById('categoryForm').action = "{{ route('student-behavior.categories.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('categoryModalLabel').innerHTML = `
-        <span class="material-symbols-outlined" style="font-size: 20px;">category</span>
+        <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">category</span>
         <span>Add New Category</span>
     `;
     document.querySelector('.category-submit-btn').innerHTML = `
@@ -671,7 +667,7 @@ function resetForm() {
 }
 
 // Edit category function
-function editCategory(id, categoryName, campus) {
+function editCategoryInline(id, categoryName, campus) {
     document.getElementById('category_name').value = categoryName;
     document.getElementById('campus').value = campus;
     document.getElementById('categoryForm').action = "{{ url('student-behavior/categories') }}/" + id;

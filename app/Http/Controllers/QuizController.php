@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Quiz;
+use App\Models\QuizQuestion;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
@@ -73,6 +74,7 @@ class QuizController extends Controller
             'section' => ['required', 'string', 'max:255'],
             'total_questions' => ['required', 'integer', 'min:1'],
             'start_date_time' => ['required', 'date'],
+            'duration_minutes' => ['required', 'integer', 'min:1'],
         ]);
 
         Quiz::create($validated);
@@ -95,6 +97,7 @@ class QuizController extends Controller
             'section' => ['required', 'string', 'max:255'],
             'total_questions' => ['required', 'integer', 'min:1'],
             'start_date_time' => ['required', 'date'],
+            'duration_minutes' => ['required', 'integer', 'min:1'],
         ]);
 
         $quiz->update($validated);
@@ -269,6 +272,93 @@ class QuizController extends Controller
             ->unique()
             ->sort()
             ->values();
+    }
+
+    /**
+     * Get quiz questions (AJAX).
+     */
+    public function getQuestions(Quiz $quiz): JsonResponse
+    {
+        $questions = $quiz->questions()->orderBy('question_number')->get();
+        
+        return response()->json([
+            'questions' => $questions->map(function($q) {
+                return [
+                    'question_number' => $q->question_number,
+                    'question' => $q->question,
+                    'answer1' => $q->answer1,
+                    'marks1' => $q->marks1,
+                    'answer2' => $q->answer2,
+                    'marks2' => $q->marks2,
+                    'answer3' => $q->answer3,
+                    'marks3' => $q->marks3,
+                ];
+            })
+        ]);
+    }
+
+    /**
+     * Update quiz questions.
+     */
+    public function updateQuestions(Request $request, Quiz $quiz): RedirectResponse
+    {
+        $request->validate([
+            'questions' => ['required', 'array'],
+            'questions.*.question' => ['nullable', 'string'],
+            'questions.*.answer1' => ['nullable', 'string'],
+            'questions.*.marks1' => ['nullable', 'integer', 'min:0'],
+            'questions.*.answer2' => ['nullable', 'string'],
+            'questions.*.marks2' => ['nullable', 'integer', 'min:0'],
+            'questions.*.answer3' => ['nullable', 'string'],
+            'questions.*.marks3' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        // Delete existing questions
+        $quiz->questions()->delete();
+
+        // Create new questions
+        foreach ($request->questions as $questionNumber => $questionData) {
+            if (!empty($questionData['question']) || !empty($questionData['answer1']) || !empty($questionData['answer2']) || !empty($questionData['answer3'])) {
+                QuizQuestion::create([
+                    'quiz_id' => $quiz->id,
+                    'question_number' => (int) $questionNumber,
+                    'question' => $questionData['question'] ?? '',
+                    'answer1' => $questionData['answer1'] ?? null,
+                    'marks1' => (int) ($questionData['marks1'] ?? 0),
+                    'answer2' => $questionData['answer2'] ?? null,
+                    'marks2' => (int) ($questionData['marks2'] ?? 0),
+                    'answer3' => $questionData['answer3'] ?? null,
+                    'marks3' => (int) ($questionData['marks3'] ?? 0),
+                ]);
+            }
+        }
+
+        return redirect()
+            ->route('quiz.manage')
+            ->with('success', 'Quiz questions updated successfully!');
+    }
+
+    /**
+     * Get quiz result (marks) for display.
+     */
+    public function getResult(Quiz $quiz): JsonResponse
+    {
+        $questions = $quiz->questions()->orderBy('question_number')->get();
+        
+        return response()->json([
+            'questions' => $questions->map(function($q) {
+                return [
+                    'question_number' => $q->question_number,
+                    'question' => $q->question,
+                    'answer1' => $q->answer1,
+                    'marks1' => $q->marks1,
+                    'answer2' => $q->answer2,
+                    'marks2' => $q->marks2,
+                    'answer3' => $q->answer3,
+                    'marks3' => $q->marks3,
+                ];
+            })
+        ]);
     }
 }
 

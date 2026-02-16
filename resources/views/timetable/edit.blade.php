@@ -112,6 +112,12 @@
                                         <option value="{{ $subject }}" {{ ($timetable->subject == $subject) ? 'selected' : '' }}>{{ $subject }}</option>
                                     @endforeach
                                 </select>
+                                <div id="assigned-teacher-display" class="mt-2" style="display: none;">
+                                    <small class="text-muted d-flex align-items-center" style="font-size: 11px;">
+                                        <span class="material-symbols-outlined me-1" style="font-size: 14px;">person</span>
+                                        <span id="assigned-teacher-text"></span>
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -229,6 +235,61 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Function to load assigned teacher for selected subject
+    function loadAssignedTeacher(subject, className, sectionName) {
+        const teacherDisplay = document.getElementById('assigned-teacher-display');
+        const teacherText = document.getElementById('assigned-teacher-text');
+        
+        if (!teacherDisplay || !teacherText) {
+            return;
+        }
+        
+        if (!subject || subject === '') {
+            teacherDisplay.style.display = 'none';
+            return;
+        }
+        
+        // Check if it's a static subject (starts with [)
+        if (subject.startsWith('[')) {
+            teacherDisplay.style.display = 'none';
+            return;
+        }
+        
+        // Show loading state
+        teacherDisplay.style.display = 'block';
+        teacherText.textContent = 'Loading...';
+        
+        // Make AJAX request
+        const params = new URLSearchParams();
+        params.append('subject', subject);
+        if (className) {
+            params.append('class', className);
+        }
+        if (sectionName) {
+            params.append('section', sectionName);
+        }
+        
+        fetch(`{{ route('timetable.get-teacher-by-subject') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.teacher) {
+                    let displayText = `Assigned Teacher: ${data.teacher}`;
+                    if (data.note) {
+                        displayText += ` (${data.note})`;
+                    }
+                    teacherText.textContent = displayText;
+                    teacherText.style.color = '#28a745';
+                } else {
+                    teacherText.textContent = data.message || 'No teacher assigned';
+                    teacherText.style.color = '#dc3545';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading assigned teacher:', error);
+                teacherDisplay.style.display = 'none';
+            });
+    }
+    
     // Function to load sections based on selected class
     function loadSections(className) {
         if (!className) {
@@ -282,6 +343,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Listen for subject selection changes
+    const subjectSelect = document.getElementById('subject');
+    if (subjectSelect) {
+        subjectSelect.addEventListener('change', function() {
+            const className = classSelect ? classSelect.value : '';
+            const sectionName = sectionSelect ? sectionSelect.value : '';
+            loadAssignedTeacher(this.value, className, sectionName);
+        });
+    }
+    
     // Listen for class selection changes
     if (classSelect) {
         classSelect.addEventListener('change', function() {
@@ -290,14 +361,34 @@ document.addEventListener('DOMContentLoaded', function() {
             if (this.value !== '{{ $timetable->class }}') {
                 sectionSelect.value = '';
             }
+            // Reload teacher if subject is selected
+            if (subjectSelect && subjectSelect.value) {
+                loadAssignedTeacher(subjectSelect.value, this.value, '');
+            }
         });
     }
 
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
             filterClassOptions(this.value);
+            // Clear teacher display when campus changes
+            const teacherDisplay = document.getElementById('assigned-teacher-display');
+            if (teacherDisplay) {
+                teacherDisplay.style.display = 'none';
+            }
             loadSections('');
             sectionSelect.value = '';
+        });
+    }
+    
+    // Listen for section selection changes
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            // Reload teacher if subject is selected
+            if (subjectSelect && subjectSelect.value) {
+                const className = classSelect ? classSelect.value : '';
+                loadAssignedTeacher(subjectSelect.value, className, this.value);
+            }
         });
     }
     
@@ -307,6 +398,16 @@ document.addEventListener('DOMContentLoaded', function() {
         loadSections('{{ $timetable->class }}');
     @else
         filterClassOptions('{{ $timetable->campus }}');
+    @endif
+    
+    // Load assigned teacher on page load if subject is already selected
+    @if($timetable->subject)
+        const initialSubject = '{{ $timetable->subject }}';
+        const initialClass = '{{ $timetable->class }}';
+        const initialSection = '{{ $timetable->section }}';
+        if (initialSubject && !initialSubject.startsWith('[')) {
+            loadAssignedTeacher(initialSubject, initialClass, initialSection);
+        }
     @endif
 });
 </script>

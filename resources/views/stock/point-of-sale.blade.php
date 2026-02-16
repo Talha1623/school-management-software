@@ -21,6 +21,23 @@
                         </div>
                         
                         <div class="card-body p-3">
+                            <!-- Campus Selector -->
+                            <div class="mb-2">
+                                <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 10px;">
+                                    <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">location_on</span>
+                                    Campus *
+                                </label>
+                                <select class="form-select form-select-sm" id="campusSelect" required style="font-size: 11px; padding: 4px 6px;">
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        @php
+                                            $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                                        @endphp
+                                        <option value="{{ $campusName }}">{{ $campusName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            
                             <!-- Barcode Input -->
                             <div class="mb-2">
                                 <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 10px;">
@@ -160,6 +177,71 @@
     </div>
 </div>
 
+<!-- Available Products Section -->
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card bg-white border border-white rounded-10 p-2 mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h4 class="mb-0 fw-semibold" style="color: #003471; font-size: 16px;">Available Products</h4>
+                <button type="button" class="btn btn-sm btn-primary" onclick="refreshProducts()" style="font-size: 11px; padding: 4px 12px;">
+                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">refresh</span>
+                    Refresh
+                </button>
+            </div>
+            
+            <div class="mb-2">
+                <input type="text" class="form-control form-control-sm" id="productSearchInput" placeholder="Search products by name or code..." style="font-size: 11px; padding: 4px 8px;" onkeyup="filterProducts()">
+            </div>
+            
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-bordered table-sm table-hover" style="font-size: 11px;">
+                    <thead style="background-color: #f8f9fa; position: sticky; top: 0; z-index: 10;">
+                        <tr>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Sr.</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Product Name</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Product Code</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Category</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Campus</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Sale Price</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Stock</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsTableBody">
+                        @forelse($products as $index => $product)
+                        <tr class="product-row" data-name="{{ strtolower($product->product_name ?? '') }}" data-code="{{ strtolower($product->product_code ?? '') }}" data-campus="{{ strtolower($product->campus ?? '') }}">
+                            <td style="padding: 6px;">{{ $index + 1 }}</td>
+                            <td style="padding: 6px; font-weight: 500;">{{ $product->product_name ?? 'N/A' }}</td>
+                            <td style="padding: 6px;">{{ $product->product_code ?? 'N/A' }}</td>
+                            <td style="padding: 6px;">{{ $product->category ?? 'N/A' }}</td>
+                            <td style="padding: 6px;">{{ $product->campus ?? 'N/A' }}</td>
+                            <td style="padding: 6px; text-align: right;">PKR {{ number_format($product->sale_price ?? 0, 2) }}</td>
+                            <td style="padding: 6px; text-align: center;">
+                                <span class="badge {{ ($product->total_stock ?? 0) > 0 ? 'bg-success' : 'bg-danger' }}" style="font-size: 10px;">
+                                    {{ $product->total_stock ?? 0 }}
+                                </span>
+                            </td>
+                            <td style="padding: 6px; text-align: center;">
+                                <button type="button" class="btn btn-sm btn-warning" onclick="addProductToBasket({{ $product->id }}, '{{ addslashes($product->product_name) }}', '{{ $product->product_code ?? '' }}', {{ $product->sale_price ?? 0 }}, {{ $product->total_stock ?? 0 }})" style="padding: 2px 8px; font-size: 10px; color: white;" {{ ($product->total_stock ?? 0) <= 0 ? 'disabled' : '' }}>
+                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">add_shopping_cart</span>
+                                </button>
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="8" class="text-center py-4">
+                                <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inventory_2</span>
+                                <p class="text-muted mt-2 mb-0">No products available. Add products from Product and Stock page.</p>
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .bg-purple {
         background-color: #9c27b0;
@@ -191,6 +273,12 @@ let basket = [];
 // Scan product function
 function scanProduct() {
     const barcode = document.getElementById('barcodeInput').value.trim();
+    const campus = document.getElementById('campusSelect').value;
+    
+    if (!campus) {
+        alert('Please select campus first');
+        return;
+    }
     
     if (!barcode) {
         alert('Please enter barcode or product code');
@@ -211,7 +299,7 @@ function scanProduct() {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ barcode: barcode })
+        body: JSON.stringify({ barcode: barcode, campus: campus })
     })
     .then(response => response.json())
     .then(data => {
@@ -251,6 +339,8 @@ function addToBasket(product) {
             return;
         }
         existingItem.quantity += 1;
+        // Update stock display in products table
+        updateProductStockDisplay(product.id, 1);
     } else {
         basket.push({
             id: product.id,
@@ -260,6 +350,8 @@ function addToBasket(product) {
             quantity: 1,
             stock: availableStock
         });
+        // Update stock display in products table
+        updateProductStockDisplay(product.id, 1);
     }
     
     updateBasketDisplay();
@@ -267,7 +359,13 @@ function addToBasket(product) {
 
 // Remove item from basket
 function removeFromBasket(productId) {
-    basket = basket.filter(item => item.id !== productId);
+    const item = basket.find(item => item.id === productId);
+    if (item) {
+        const quantityToRestore = item.quantity;
+        basket = basket.filter(item => item.id !== productId);
+        // Restore stock display in products table
+        updateProductStockDisplay(productId, -quantityToRestore);
+    }
     updateBasketDisplay();
 }
 
@@ -279,11 +377,15 @@ function updateQuantity(productId, change) {
             alert('Stock limit reached. Available: ' + item.stock);
             return;
         }
+        const oldQuantity = item.quantity;
         item.quantity += change;
         if (item.quantity <= 0) {
             removeFromBasket(productId);
             return;
         }
+        // Update stock display in products table
+        const quantityChange = item.quantity - oldQuantity;
+        updateProductStockDisplay(productId, quantityChange);
         updateBasketDisplay();
     }
 }
@@ -303,6 +405,7 @@ function updateBasketDisplay() {
         basketTotal.textContent = 'PKR 0.00';
         completeOrderBtn.disabled = true;
         clearBasketBtn.disabled = true;
+        
     } else {
         basketItems.style.display = 'block';
         emptyBasket.style.display = 'none';
@@ -315,7 +418,7 @@ function updateBasketDisplay() {
         // Calculate total
         let total = 0;
         
-        // Add items to table
+        // Add items to basket table
         basket.forEach((item, index) => {
             const itemTotal = item.price * item.quantity;
             total += itemTotal;
@@ -348,6 +451,10 @@ function updateBasketDisplay() {
 // Clear basket
 function clearBasket() {
     if (confirm('Are you sure you want to clear the basket?')) {
+        // Restore stock for all items in basket
+        basket.forEach(item => {
+            updateProductStockDisplay(item.id, -item.quantity);
+        });
         basket = [];
         updateBasketDisplay();
     }
@@ -362,18 +469,25 @@ function completeOrder() {
     
     const buyerName = document.getElementById('buyerNameInput').value.trim();
     const paymentMethod = document.getElementById('paymentMethod').value;
+    const campus = document.getElementById('campusSelect').value;
     const total = basket.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    if (!campus) {
+        alert('Please select campus');
+        return;
+    }
     
     if (!buyerName) {
         alert('Please enter buyer name');
         return;
     }
     
-    if (confirm(`Complete order for ${buyerName}?\nTotal: PKR ${total.toFixed(2)}\nPayment Method: ${paymentMethod}`)) {
+    if (confirm(`Complete order for ${buyerName}?\nCampus: ${campus}\nTotal: PKR ${total.toFixed(2)}\nPayment Method: ${paymentMethod}`)) {
         // Prepare order data
         const orderData = {
             buyer_name: buyerName,
             payment_method: paymentMethod,
+            campus: campus,
             items: basket.map(item => ({
                 product_id: item.id,
                 product_name: item.name,
@@ -418,10 +532,42 @@ function completeOrder() {
             
             if (data.success) {
                 console.log('Sale saved successfully:', data);
+                
+                // Update stock in products table for sold items
+                const soldItems = basket.map(item => ({
+                    id: item.id,
+                    quantity: item.quantity
+                }));
+                
+                // Update stock values in the products table
+                soldItems.forEach(soldItem => {
+                    const productRow = document.querySelector(`button[onclick*="addProductToBasket(${soldItem.id}"]`)?.closest('tr');
+                    if (productRow) {
+                        const stockCell = productRow.querySelector('td:nth-child(6)');
+                        const stockBadge = stockCell?.querySelector('.badge');
+                        if (stockBadge) {
+                            const currentStock = parseInt(stockBadge.textContent.trim()) || 0;
+                            const newStock = Math.max(0, currentStock - soldItem.quantity);
+                            stockBadge.textContent = newStock;
+                            stockBadge.className = `badge ${newStock > 0 ? 'bg-success' : 'bg-danger'}`;
+                            
+                            // Disable add button if stock is 0
+                            const addButton = productRow.querySelector('button[onclick*="addProductToBasket"]');
+                            if (addButton) {
+                                if (newStock <= 0) {
+                                    addButton.disabled = true;
+                                } else {
+                                    addButton.disabled = false;
+                                }
+                            }
+                        }
+                    }
+                });
+                
                 alert('Order completed successfully!\n\n' + 
                       'Records saved: ' + (data.records_saved || basket.length) + '\n' +
                       'Sale Date: ' + (data.sale_date || 'Today') + '\n\n' +
-                      'You can now view them in Manage Sale Records page.');
+                      'Stock has been updated automatically.');
                 basket = [];
                 document.getElementById('buyerNameInput').value = '';
                 document.getElementById('barcodeInput').value = '';
@@ -437,6 +583,84 @@ function completeOrder() {
             console.error('Error saving sale:', error);
             alert('Error saving sale: ' + error.message + '\n\nPlease check browser console for details.');
         });
+    }
+}
+
+// Add product directly to basket from products table
+function addProductToBasket(productId, productName, productCode, price, stock) {
+    const product = {
+        id: productId,
+        name: productName,
+        product_code: productCode,
+        price: parseFloat(price) || 0,
+        stock: parseInt(stock) || 0
+    };
+    
+    addToBasket(product);
+}
+
+// Filter products by search and campus
+function filterProducts() {
+    const searchInput = document.getElementById('productSearchInput');
+    const campusSelect = document.getElementById('campusSelect');
+    const filter = searchInput.value.toLowerCase();
+    const selectedCampus = campusSelect ? campusSelect.value.toLowerCase() : '';
+    const rows = document.querySelectorAll('.product-row');
+    
+    rows.forEach(row => {
+        const name = row.getAttribute('data-name');
+        const code = row.getAttribute('data-code');
+        const campus = row.getAttribute('data-campus') || '';
+        
+        const matchesSearch = !filter || name.includes(filter) || code.includes(filter);
+        const matchesCampus = !selectedCampus || campus === selectedCampus;
+        
+        if (matchesSearch && matchesCampus) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Filter products when campus changes
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campusSelect');
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            filterProducts();
+        });
+    }
+});
+
+// Refresh products list
+function refreshProducts() {
+    // Reload the page to get latest products and stock
+    window.location.reload();
+}
+
+// Update stock display in products table after adding to basket
+function updateProductStockDisplay(productId, quantityChange) {
+    const productRow = document.querySelector(`button[onclick*="addProductToBasket(${productId}"]`)?.closest('tr');
+    if (productRow) {
+        const stockCell = productRow.querySelector('td:nth-child(6)');
+        const stockBadge = stockCell?.querySelector('.badge');
+        if (stockBadge) {
+            const currentStock = parseInt(stockBadge.textContent.trim()) || 0;
+            const newStock = Math.max(0, currentStock - quantityChange);
+            stockBadge.textContent = newStock;
+            stockBadge.className = `badge ${newStock > 0 ? 'bg-success' : 'bg-danger'}`;
+            
+            // Disable add button if stock is 0
+            const addButton = productRow.querySelector('button[onclick*="addProductToBasket"]');
+            if (addButton) {
+                if (newStock <= 0) {
+                    addButton.disabled = true;
+                } else {
+                    addButton.disabled = false;
+                }
+            }
+        }
     }
 }
 

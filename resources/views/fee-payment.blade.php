@@ -355,6 +355,134 @@
     </div>
 </div>
 
+<!-- Make Installments Modal -->
+<div class="modal fade" id="makeInstallmentModal" tabindex="-1" aria-labelledby="makeInstallmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border-radius: 12px 12px 0 0; border: none; padding: 20px;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="makeInstallmentModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">account_balance</span>
+                    <span style="color: white !important;">Make Installments</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="makeInstallmentForm" method="POST" action="{{ route('accounting.direct-payment.student.store') }}" onsubmit="handleInstallmentSubmit(event)">
+                @csrf
+                <div class="modal-body p-4" style="background-color: #f8f9fa;">
+                    <div class="row g-3">
+                        <!-- Student -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Student</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">person</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_student" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                                <input type="hidden" id="installment_student_code" name="student_code">
+                            </div>
+                        </div>
+
+                        <!-- Fee Title -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Fee Title <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">receipt</span>
+                                </span>
+                                <select class="form-select" id="installment_fee_title" name="payment_title" required>
+                                    <option value="">Select Fee Title</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Fee Cards (will be populated dynamically) -->
+                        <div class="col-12" id="feeCardsContainer" style="display: none;">
+                            <label class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 13px;">Quick Select Fee:</label>
+                            <div class="row g-2" id="feeCardsRow">
+                                <!-- Fee cards will be dynamically added here -->
+                            </div>
+                        </div>
+
+                        <!-- Total Amount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Total Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">attach_money</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_total_amount" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Amount Paid -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Amount Paid</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">payments</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_amount_paid" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Discount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Discount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">remove</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_discount" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Remaining Amount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Remaining Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">account_balance_wallet</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_remaining_amount" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Total Installments -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Total Installments <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">calendar_view_month</span>
+                                </span>
+                                <input type="number" step="1" min="1" max="12" class="form-control" id="installment_total_installments" name="total_installments" placeholder="Enter number of installments" required>
+                            </div>
+                            <small class="text-muted">Enter how many installments you want to split the remaining amount</small>
+                        </div>
+
+                        <!-- Installment Amount (Auto-calculated) -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Per Installment Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">calculate</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_per_installment" readonly style="background-color: #e7f3ff; cursor: not-allowed; font-weight: 600;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #dee2e6; padding: 15px 20px;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="padding: 8px 20px;">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="background-color: #003471; border: none; padding: 8px 20px;">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">check</span>
+                        <span style="color: white;">Create Installments</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <style>
     .stat-card {
         transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -380,7 +508,10 @@
 
     #partialPaymentModal .input-group-text,
     #partialPaymentModal .form-control,
-    #partialPaymentModal .form-select {
+    #partialPaymentModal .form-select,
+    #makeInstallmentModal .input-group-text,
+    #makeInstallmentModal .form-control,
+    #makeInstallmentModal .form-select {
         height: 32px;
     }
     
@@ -653,6 +784,15 @@ function searchByName() {
                                     <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
+                                        Print Voucher
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${student.student_name}', {title: '${feeTitleSafe}', total: ${total}, paid: ${paid}, discount: ${discount}, due: ${due}}); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance</span>
+                                        Make Installments
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="#" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
                                         Edit
@@ -804,7 +944,14 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
         : parseFloat(studentData.monthly_fee || 0);
     document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
     document.getElementById('partial_fee_title').value = studentData.fee_title || '';
+    
+    // If paymentAmount is provided from Fee Calculator, pre-fill it
+    if (studentData.paymentAmount !== undefined && studentData.paymentAmount !== null) {
+        document.getElementById('partial_payment').value = parseFloat(studentData.paymentAmount || 0).toFixed(2);
+    } else {
     document.getElementById('partial_payment').value = '';
+    }
+    
     document.getElementById('partial_discount').value = '0';
     document.getElementById('partial_method').value = 'Cash Payment';
     document.getElementById('partial_date').value = new Date().toISOString().split('T')[0];
@@ -916,6 +1063,12 @@ function buildLatestPaymentActionDropdown(payment) {
 }
 
 function addLatestPaymentRow(payment) {
+    // Skip installments
+    const paymentTitle = (payment.payment_title || '').toLowerCase();
+    if (paymentTitle.includes('installment') || paymentTitle.match(/\/\d+$/)) {
+        return;
+    }
+    
     const container = document.getElementById('latestPaymentsContainer');
     if (!container) return;
 
@@ -1103,8 +1256,12 @@ function renderLatestPaymentsForStudents(students) {
         results.forEach((data) => {
             if (data && data.success && Array.isArray(data.payments)) {
                 data.payments.forEach((payment) => {
+                    // Exclude installments from latest payments
+                    const paymentTitle = (payment.payment_title || '').toLowerCase();
+                    if (!paymentTitle.includes('installment') && !paymentTitle.match(/\/\d+$/)) {
                     addLatestPaymentRow(payment);
                     hasPayments = true;
+                    }
                 });
             }
         });
@@ -1427,6 +1584,15 @@ function searchByCNIC() {
                                     <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
+                                        Print Voucher
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${student.student_name}', {title: '${feeTitleSafe}', total: ${total}, paid: ${paid}, discount: ${discount}, due: ${due}}); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance</span>
+                                        Make Installments
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="#" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
                                         Edit
@@ -1504,18 +1670,309 @@ function payAll(studentCode, studentName) {
 }
 
 function printVoucher(studentCode, studentName) {
-    // Redirect to print voucher page
-    window.open(`{{ route('accounting.fee-voucher.print', ['student_code' => '']) }}${studentCode}`, '_blank');
+    // Redirect to print voucher page with student_code as query parameter
+    const url = `{{ route('accounting.fee-voucher.print') }}?student_code=${encodeURIComponent(studentCode)}`;
+    window.open(url, '_blank');
 }
 
-function makeInstallment(studentCode, studentName) {
-    // Redirect to make installment page
-    window.location.href = `{{ route('accounting.make-installment', ['student_code' => '']) }}${studentCode}`;
+function makeInstallment(studentCode, studentName, selectedFeeData = null) {
+    // Fetch student fee data
+    fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(studentCode)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.students && data.students.length > 0) {
+            const student = data.students[0];
+            
+            // Populate student info
+            document.getElementById('installment_student').value = `${studentName} (${studentCode})`;
+            document.getElementById('installment_student_code').value = studentCode;
+            
+            // Clear and populate fee title dropdown
+            const feeTitleSelect = document.getElementById('installment_fee_title');
+            feeTitleSelect.innerHTML = '<option value="">Select Fee Title</option>';
+            
+            // Remove existing change listener to avoid duplicates
+            const newSelect = feeTitleSelect.cloneNode(true);
+            feeTitleSelect.parentNode.replaceChild(newSelect, feeTitleSelect);
+            const updatedSelect = document.getElementById('installment_fee_title');
+            
+            let selectedFeeIndex = 0;
+            
+            // Create fee cards container
+            const feeCardsContainer = document.getElementById('feeCardsContainer');
+            const feeCardsRow = document.getElementById('feeCardsRow');
+            feeCardsRow.innerHTML = ''; // Clear existing cards
+            
+            if (student.fee_rows && student.fee_rows.length > 0) {
+                student.fee_rows.forEach((fee, index) => {
+                    const option = document.createElement('option');
+                    option.value = fee.title;
+                    option.textContent = fee.title;
+                    option.dataset.totalAmount = fee.total || 0;
+                    option.dataset.amountPaid = fee.paid || 0;
+                    option.dataset.discount = fee.discount || 0;
+                    option.dataset.remaining = fee.due || 0;
+                    updatedSelect.appendChild(option);
+                    
+                    // Create fee card
+                    const cardCol = document.createElement('div');
+                    cardCol.className = 'col-md-4 col-sm-6';
+                    const remaining = parseFloat(fee.due || 0);
+                    const total = parseFloat(fee.total || 0);
+                    cardCol.innerHTML = `
+                        <div class="fee-card-clickable" style="border: 2px solid #e0e7ff; border-radius: 8px; padding: 12px; background: white; cursor: pointer; transition: all 0.3s; margin-bottom: 8px;" 
+                             onclick="selectFeeCard('${fee.title}', ${index + 1})"
+                             onmouseover="this.style.borderColor='#003471'; this.style.boxShadow='0 2px 8px rgba(0,52,113,0.2)'"
+                             onmouseout="this.style.borderColor='#e0e7ff'; this.style.boxShadow='none'">
+                            <div class="fw-semibold" style="color: #003471; font-size: 13px; margin-bottom: 4px;">${fee.title}</div>
+                            <div style="color: #6c757d; font-size: 11px;">Total: Rs. ${total.toFixed(2)}</div>
+                            <div style="color: #dc3545; font-size: 12px; font-weight: 600;">Due: Rs. ${remaining.toFixed(2)}</div>
+                        </div>
+                    `;
+                    feeCardsRow.appendChild(cardCol);
+                    
+                    // If selectedFeeData matches this fee, remember its index
+                    if (selectedFeeData && selectedFeeData.title === fee.title) {
+                        selectedFeeIndex = index + 1; // +1 because first option is "Select Fee Title"
+                    }
+                });
+                
+                // Show fee cards container
+                feeCardsContainer.style.display = 'block';
+            } else {
+                // If no fees, show default monthly fee
+                const option = document.createElement('option');
+                const currentMonth = new Date().toLocaleString('default', { month: 'long' });
+                const currentYear = new Date().getFullYear();
+                option.value = `Monthly Fee - ${currentMonth} ${currentYear}`;
+                option.textContent = option.value;
+                option.dataset.totalAmount = student.monthly_fee || 0;
+                option.dataset.amountPaid = 0;
+                option.dataset.discount = 0;
+                option.dataset.remaining = student.monthly_fee || 0;
+                updatedSelect.appendChild(option);
+            }
+            
+            // Update fee details when fee title changes
+            updatedSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                if (selectedOption && selectedOption.dataset.totalAmount) {
+                    const totalAmount = parseFloat(selectedOption.dataset.totalAmount || 0);
+                    const amountPaid = parseFloat(selectedOption.dataset.amountPaid || 0);
+                    const discount = parseFloat(selectedOption.dataset.discount || 0);
+                    const remaining = parseFloat(selectedOption.dataset.remaining || 0);
+                    
+                    document.getElementById('installment_total_amount').value = totalAmount.toFixed(2);
+                    document.getElementById('installment_amount_paid').value = amountPaid.toFixed(2);
+                    document.getElementById('installment_discount').value = discount.toFixed(2);
+                    document.getElementById('installment_remaining_amount').value = remaining.toFixed(2);
+                    
+                    // Calculate per installment amount
+                    calculatePerInstallment();
+                }
+            });
+            
+            // Calculate per installment when total installments changes
+            const totalInstallmentsInput = document.getElementById('installment_total_installments');
+            const newInput = totalInstallmentsInput.cloneNode(true);
+            totalInstallmentsInput.parentNode.replaceChild(newInput, totalInstallmentsInput);
+            document.getElementById('installment_total_installments').addEventListener('input', calculatePerInstallment);
+            
+            // Reset form fields
+            document.getElementById('installment_total_amount').value = '';
+            document.getElementById('installment_amount_paid').value = '';
+            document.getElementById('installment_discount').value = '';
+            document.getElementById('installment_remaining_amount').value = '';
+            document.getElementById('installment_per_installment').value = '';
+            document.getElementById('installment_total_installments').value = '';
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('makeInstallmentModal'));
+            modal.show();
+            
+            // If selectedFeeData is provided, pre-select and populate that fee
+            if (selectedFeeData && selectedFeeIndex > 0) {
+                updatedSelect.selectedIndex = selectedFeeIndex;
+                updatedSelect.dispatchEvent(new Event('change'));
+            } else if (updatedSelect.options.length > 1) {
+                // Otherwise, select first fee by default
+                updatedSelect.selectedIndex = 1;
+                updatedSelect.dispatchEvent(new Event('change'));
+            }
+        } else {
+            alert('Student not found or no fee data available.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading student fee data. Please try again.');
+    });
+}
+
+function selectFeeCard(feeTitle, optionIndex) {
+    const feeTitleSelect = document.getElementById('installment_fee_title');
+    feeTitleSelect.selectedIndex = optionIndex;
+    feeTitleSelect.dispatchEvent(new Event('change'));
+}
+
+function calculatePerInstallment() {
+    const remainingAmount = parseFloat(document.getElementById('installment_remaining_amount').value || 0);
+    const totalInstallments = parseInt(document.getElementById('installment_total_installments').value || 1);
+    
+    if (totalInstallments > 0 && remainingAmount > 0) {
+        const perInstallment = remainingAmount / totalInstallments;
+        document.getElementById('installment_per_installment').value = perInstallment.toFixed(2);
+    } else {
+        document.getElementById('installment_per_installment').value = '0.00';
+    }
+}
+
+function handleInstallmentSubmit(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const studentCode = formData.get('student_code');
+    const feeTitle = formData.get('payment_title');
+    const totalInstallments = parseInt(formData.get('total_installments') || 1);
+    const remainingAmount = parseFloat(document.getElementById('installment_remaining_amount').value || 0);
+    
+    if (!studentCode || !feeTitle || totalInstallments < 1) {
+        alert('Please fill all required fields.');
+        return;
+    }
+    
+    if (remainingAmount <= 0) {
+        alert('Remaining amount must be greater than 0 to create installments.');
+        return;
+    }
+    
+    const perInstallment = remainingAmount / totalInstallments;
+    
+    // Show loading
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Creating...';
+    
+    // Create installments
+    const installmentAmount = perInstallment.toFixed(2);
+    const promises = [];
+    
+    for (let i = 1; i <= totalInstallments; i++) {
+        const installmentFormData = new FormData();
+        installmentFormData.append('_token', formData.get('_token'));
+        installmentFormData.append('student_code', studentCode);
+        installmentFormData.append('payment_title', `${feeTitle}/${i}`);
+        installmentFormData.append('payment_amount', installmentAmount);
+        installmentFormData.append('discount', '0');
+        installmentFormData.append('method', 'Generated');
+        installmentFormData.append('payment_date', new Date().toISOString().split('T')[0]);
+        installmentFormData.append('sms_notification', 'Yes');
+        
+        promises.push(
+            fetch(form.action, {
+                method: 'POST',
+                body: installmentFormData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                }
+            })
+        );
+    }
+    
+    // Execute all installment creation requests
+    Promise.all(promises)
+    .then(responses => {
+        return Promise.all(responses.map(async (response) => {
+            if (!response.ok) {
+                // Try to parse error response
+                let errorData = { success: false, message: 'Request failed' };
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        errorData = await response.json();
+                    } else {
+                        // Try to get text response for debugging
+                        const textResponse = await response.text();
+                        errorData.message = `Server error: ${response.status} ${response.statusText}`;
+                        if (textResponse) {
+                            console.error('Non-JSON error response:', textResponse.substring(0, 200));
+                        }
+                    }
+                } catch (e) {
+                    errorData.message = `Server error: ${response.status} ${response.statusText}. ${e.message}`;
+                }
+                return errorData;
+            }
+            try {
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const textResponse = await response.text();
+                    console.error('Non-JSON response received:', textResponse.substring(0, 200));
+                    return { success: false, message: 'Server returned non-JSON response' };
+                }
+                return await response.json();
+            } catch (e) {
+                console.error('Error parsing JSON:', e);
+                return { success: false, message: 'Invalid response from server: ' + e.message };
+            }
+        }));
+    })
+    .then(results => {
+        const successCount = results.filter(r => r.success !== false).length;
+        const failedResults = results.filter(r => r.success === false);
+        
+        if (successCount === totalInstallments) {
+            alert(`Successfully created ${totalInstallments} installment(s) for ${feeTitle}!`);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('makeInstallmentModal'));
+            modal.hide();
+            // Refresh search results
+            if (window.lastFeeSearch && window.lastFeeSearch.value) {
+                if (window.lastFeeSearch.type === 'name') {
+                    document.getElementById('searchByName').value = window.lastFeeSearch.value;
+                    searchByName();
+                } else if (window.lastFeeSearch.type === 'cnic') {
+                    document.getElementById('searchByCNIC').value = window.lastFeeSearch.value;
+                    searchByCNIC();
+                }
+            }
+        } else {
+            let errorMsg = `Created ${successCount} out of ${totalInstallments} installments.`;
+            if (failedResults.length > 0) {
+                const firstError = failedResults[0];
+                if (firstError.message) {
+                    errorMsg += `\n\nError: ${firstError.message}`;
+                    if (firstError.errors) {
+                        const errorDetails = Object.values(firstError.errors).flat().join(', ');
+                        errorMsg += `\nDetails: ${errorDetails}`;
+                    }
+                }
+            }
+            alert(errorMsg);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error creating installments. Please try again.\n\n' + (error.message || 'Unknown error occurred'));
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
 }
 
 function particularReceipt(studentCode, studentName) {
-    // Redirect to particular receipt page
-    window.open(`{{ route('accounting.particular-receipt', ['student_code' => '']) }}${studentCode}`, '_blank');
+    // Redirect to thermal print particular receipt page
+    const url = `{{ url('/fee-payment/particular-receipt-thermal') }}/${encodeURIComponent(studentCode)}`;
+    window.open(url, '_blank');
 }
 
 // Allow Enter key to trigger search
@@ -1528,6 +1985,119 @@ document.getElementById('searchByName')?.addEventListener('keypress', function(e
 document.getElementById('searchByCNIC')?.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
         searchByCNIC();
+    }
+});
+
+// Check for Fee Calculator partial payment data on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const feeCalculatorPayment = sessionStorage.getItem('feeCalculatorPayment');
+    
+    if (feeCalculatorPayment) {
+        try {
+            const paymentData = JSON.parse(feeCalculatorPayment);
+            
+            if (paymentData.students && paymentData.students.length > 0 && paymentData.paymentType === 'partial') {
+                // Show notification
+                const notification = document.createElement('div');
+                notification.className = 'alert alert-info alert-dismissible fade show';
+                notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                notification.innerHTML = `
+                    <strong>Fee Calculator Payment:</strong> Processing partial payment for ${paymentData.students.length} student(s). Total Amount: ${paymentData.totalAmount.toFixed(2)}, Payment Amount: ${paymentData.paymentAmount.toFixed(2)}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(notification);
+                
+                // Auto-search for first student to populate the page
+                if (paymentData.students.length > 0) {
+                    const firstStudent = paymentData.students[0];
+                    const studentCode = firstStudent.student_code || firstStudent.code;
+                    
+                    if (studentCode) {
+                        // Search for the student
+                        document.getElementById('searchByName').value = studentCode;
+                        searchByName();
+                        
+                        // After search completes, open partial payment modal
+                        setTimeout(function() {
+                            // Find the student in search results and trigger partial payment
+                            if (window.feeCalculatorPaymentData) {
+                                // Store payment data globally for use in partial payment modal
+                                window.feeCalculatorPaymentData = paymentData;
+                                
+                                // Process students from Fee Calculator
+                                // Helper function to calculate student total
+                                function calculateStudentTotal(student) {
+                                    return (parseFloat(student.monthly_fee || 0)) + 
+                                           (parseFloat(student.transport_fare || 0)) + 
+                                           (parseFloat(student.admission_fee_amount || 0)) + 
+                                           (parseFloat(student.other_fee_amount || 0));
+                                }
+                                
+                                if (paymentData.students.length === 1) {
+                                    // Single student - open partial payment modal directly
+                                    const student = paymentData.students[0];
+                                    const studentCode = student.student_code || student.code;
+                                    const studentName = student.student_name || student.name;
+                                    
+                                    // Calculate proportional payment amount for this student
+                                    const studentTotal = calculateStudentTotal(student);
+                                    const proportionalAmount = paymentData.totalAmount > 0 
+                                        ? (paymentData.paymentAmount * (studentTotal / paymentData.totalAmount))
+                                        : paymentData.paymentAmount;
+                                    
+                                    takePayment(studentCode, studentName, 'partial', {
+                                        student_code: studentCode,
+                                        student_name: studentName,
+                                        campus: student.campus || '',
+                                        monthly_fee: student.monthly_fee || 0,
+                                        paymentAmount: proportionalAmount,
+                                        totalAmount: studentTotal,
+                                        fee_title: 'Monthly Fee'
+                                    });
+                                } else {
+                                    // Multiple students - open partial payment for first student with proportional amount
+                                    const firstStudent = paymentData.students[0];
+                                    const studentCode = firstStudent.student_code || firstStudent.code;
+                                    const studentName = firstStudent.student_name || firstStudent.name;
+                                    
+                                    // Calculate proportional payment for first student
+                                    const firstStudentTotal = calculateStudentTotal(firstStudent);
+                                    const proportionalAmount = paymentData.totalAmount > 0 
+                                        ? (paymentData.paymentAmount * (firstStudentTotal / paymentData.totalAmount))
+                                        : (paymentData.paymentAmount / paymentData.students.length);
+                                    
+                                    takePayment(studentCode, studentName, 'partial', {
+                                        student_code: studentCode,
+                                        student_name: studentName,
+                                        campus: firstStudent.campus || '',
+                                        monthly_fee: firstStudent.monthly_fee || 0,
+                                        paymentAmount: proportionalAmount,
+                                        totalAmount: firstStudentTotal,
+                                        fee_title: 'Monthly Fee',
+                                        remainingStudents: paymentData.students.slice(1),
+                                        totalPaymentAmount: paymentData.paymentAmount,
+                                        totalDueAmount: paymentData.totalAmount
+                                    });
+                                    
+                                    // Show info about remaining students
+                                    if (paymentData.students.length > 1) {
+                                        setTimeout(() => {
+                                            alert(`Fee Calculator Payment:\n\nProcessing ${paymentData.students.length} student(s).\nTotal Due: ${paymentData.totalAmount.toFixed(2)}\nPayment Amount: ${paymentData.paymentAmount.toFixed(2)}\n\nAfter completing this payment, please search for the next student to continue.`);
+                                        }, 500);
+                                    }
+                                }
+                            }
+                        }, 1000);
+                    }
+                }
+                
+                // Clear sessionStorage after processing
+                sessionStorage.removeItem('feeCalculatorPayment');
+            }
+        } catch (error) {
+            console.error('Error parsing fee calculator payment data:', error);
+            sessionStorage.removeItem('feeCalculatorPayment');
+        }
     }
 });
 </script>

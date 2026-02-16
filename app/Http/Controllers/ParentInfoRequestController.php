@@ -16,7 +16,48 @@ class ParentInfoRequestController extends Controller
      */
     public function index(): View
     {
-        return view('parent.info-request');
+        // Calculate statistics for summary cards
+        $totalParents = ParentAccount::count();
+        
+        // Parents with credit (paid amounts > 0)
+        $parentsWithCredit = ParentAccount::with('students')->get()->filter(function ($parent) {
+            $studentCodes = $parent->students->pluck('student_code')->filter()->values();
+            if ($studentCodes->isEmpty()) {
+                return false;
+            }
+            $paidTotal = StudentPayment::whereIn('student_code', $studentCodes)
+                ->where('method', '!=', 'Generated')
+                ->sum('payment_amount');
+            return $paidTotal > 0;
+        })->count();
+        
+        // Defaulter parents (with outstanding dues)
+        $defaulterParents = ParentAccount::with('students')->get()->filter(function ($parent) {
+            $studentCodes = $parent->students->pluck('student_code')->filter()->values();
+            if ($studentCodes->isEmpty()) {
+                return false;
+            }
+            $dueTotal = StudentPayment::whereIn('student_code', $studentCodes)
+                ->where('method', 'Generated')
+                ->get()
+                ->sum(function ($payment) {
+                    $amount = (float) ($payment->payment_amount ?? 0);
+                    $discount = (float) ($payment->discount ?? 0);
+                    $lateFee = (float) ($payment->late_fee ?? 0);
+                    return $amount - $discount + $lateFee;
+                });
+            return $dueTotal > 0;
+        })->count();
+        
+        // Total linked students
+        $totalLinkedStudents = Student::whereNotNull('parent_account_id')->count();
+        
+        return view('parent.info-request', compact(
+            'totalParents',
+            'parentsWithCredit',
+            'defaulterParents',
+            'totalLinkedStudents'
+        ));
     }
 
     /**

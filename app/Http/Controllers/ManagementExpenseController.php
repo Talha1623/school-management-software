@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 
 class ManagementExpenseController extends Controller
 {
@@ -82,15 +83,11 @@ class ManagementExpenseController extends Controller
             'campus' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:255'],
             'title' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
             'amount' => ['required', 'numeric', 'min:0'],
             'method' => ['required', 'string', 'max:255'],
             'invoice_receipt' => ['nullable', 'image', 'mimes:jpeg,jpg,png,gif,webp', 'max:5120'], // 5MB max
             'date' => ['required', 'date'],
-            'notify_admin' => ['nullable', 'boolean'],
         ]);
-
-        $validated['notify_admin'] = $request->has('notify_admin') ? true : false;
 
         // Handle file upload
         if ($request->hasFile('invoice_receipt')) {
@@ -100,6 +97,17 @@ class ManagementExpenseController extends Controller
             $validated['invoice_receipt'] = $path;
         }
 
+        // Get logged-in user's name
+        $createdBy = 'System';
+        if (Auth::guard('admin')->check()) {
+            $admin = Auth::guard('admin')->user();
+            $createdBy = $admin->name ?? $admin->email ?? 'Admin';
+        } elseif (Auth::guard('accountant')->check()) {
+            $accountant = Auth::guard('accountant')->user();
+            $createdBy = $accountant->name ?? $accountant->email ?? 'Accountant';
+        }
+        
+        $validated['created_by'] = $createdBy;
         ManagementExpense::create($validated);
 
         // Redirect based on which route was used (accountant or expense-management)
@@ -121,15 +129,11 @@ class ManagementExpenseController extends Controller
             'campus' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:255'],
             'title' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
             'amount' => ['required', 'numeric', 'min:0'],
             'method' => ['required', 'string', 'max:255'],
             'invoice_receipt' => ['nullable', 'image', 'mimes:jpeg,jpg,png,gif,webp', 'max:5120'], // 5MB max
             'date' => ['required', 'date'],
-            'notify_admin' => ['nullable', 'boolean'],
         ]);
-
-        $validated['notify_admin'] = $request->has('notify_admin') ? true : false;
 
         // Handle file upload
         if ($request->hasFile('invoice_receipt')) {
@@ -259,7 +263,7 @@ class ManagementExpenseController extends Controller
             // Add BOM for UTF-8
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             
-            fputcsv($file, ['ID', 'Campus', 'Category', 'Title', 'Description', 'Amount', 'Method', 'Invoice/Receipt', 'Date', 'Notify Admin', 'Created At']);
+            fputcsv($file, ['ID', 'Campus', 'Category', 'Title', 'Description', 'Amount', 'Method', 'Invoice/Receipt', 'Date', 'Notify Admin', 'Created By', 'Created At']);
             
             foreach ($expenses as $expense) {
                 fputcsv($file, [
@@ -273,6 +277,7 @@ class ManagementExpenseController extends Controller
                     $expense->invoice_receipt ?? '',
                     $expense->date->format('Y-m-d'),
                     $expense->notify_admin ? 'Yes' : 'No',
+                    $expense->created_by ?? 'N/A',
                     $expense->created_at->format('Y-m-d H:i:s'),
                 ]);
             }
@@ -298,7 +303,7 @@ class ManagementExpenseController extends Controller
         $callback = function() use ($expenses) {
             $file = fopen('php://output', 'w');
             
-            fputcsv($file, ['ID', 'Campus', 'Category', 'Title', 'Description', 'Amount', 'Method', 'Invoice/Receipt', 'Date', 'Notify Admin', 'Created At']);
+            fputcsv($file, ['ID', 'Campus', 'Category', 'Title', 'Description', 'Amount', 'Method', 'Invoice/Receipt', 'Date', 'Notify Admin', 'Created By', 'Created At']);
             
             foreach ($expenses as $expense) {
                 fputcsv($file, [
@@ -312,6 +317,7 @@ class ManagementExpenseController extends Controller
                     $expense->invoice_receipt ?? '',
                     $expense->date->format('Y-m-d'),
                     $expense->notify_admin ? 'Yes' : 'No',
+                    $expense->created_by ?? 'N/A',
                     $expense->created_at->format('Y-m-d H:i:s'),
                 ]);
             }

@@ -87,7 +87,8 @@
                                     <th>Student Code</th>
                                     <th>Name</th>
                                     <th>Parent</th>
-                                    <th>Total Marks Obtained</th>
+                                    <th>Total Marks</th>
+                                    <th>Obtained</th>
                                     <th>Position</th>
                                 </tr>
                             </thead>
@@ -98,14 +99,15 @@
                                         <td>{{ $row->student->student_code ?? 'N/A' }}</td>
                                         <td><strong class="text-primary">{{ $row->student->student_name }}</strong></td>
                                         <td>{{ $row->student->father_name ?? 'N/A' }}</td>
-                                        <td>{{ number_format($row->total_obtained, 0) }}</td>
+                                        <td>{{ number_format($row->total_marks ?? 0, 0) }}</td>
+                                        <td>{{ number_format($row->total_obtained ?? 0, 0) }}</td>
                                         <td>
                                             <span class="badge bg-success">{{ $row->position }}</span>
                                         </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="text-center py-4">
+                                        <td colspan="7" class="text-center py-4">
                                             <div class="d-flex flex-column align-items-center">
                                                 <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
                                                 <p class="text-muted mt-2 mb-0">No records found for selected filters.</p>

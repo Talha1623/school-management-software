@@ -29,6 +29,17 @@ class BulkFeePaymentController extends Controller
             ->sort()
             ->values();
 
+        // Filter campuses for accountant
+        $isAccountantRoute = request()->route()->getName() === 'accountant.bulk-fee-payment';
+        if ($isAccountantRoute && auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && $accountant->campus) {
+                $campuses = $campuses->filter(function ($campus) use ($accountant) {
+                    return $campus === $accountant->campus;
+                })->values();
+            }
+        }
+
         $classes = ClassModel::orderBy('class_name', 'asc')->get();
 
         $feeTypes = StudentPayment::whereNotNull('payment_title')
@@ -37,7 +48,10 @@ class BulkFeePaymentController extends Controller
             ->pluck('payment_title')
             ->values();
 
-        return view('accounting.parent-wallet.bulk-fee-payment', compact('campuses', 'classes', 'feeTypes'));
+        // Determine which view to use based on route
+        $viewName = $isAccountantRoute ? 'accountant.bulk-fee-payment' : 'accounting.parent-wallet.bulk-fee-payment';
+        
+        return view($viewName, compact('campuses', 'classes', 'feeTypes'));
     }
 
     public function data(Request $request): JsonResponse
@@ -47,9 +61,43 @@ class BulkFeePaymentController extends Controller
         $section = $request->get('section');
         $feeType = $request->get('fee_type');
 
+        // Filter by accountant campus if accountant route
+        $isAccountantRoute = request()->route()->getName() === 'accountant.bulk-fee-payment.data';
+        if ($isAccountantRoute && auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && $accountant->campus) {
+                // Override campus filter with accountant's campus
+                $campus = $accountant->campus;
+            }
+        }
+
         $query = StudentPayment::with('student')
             ->where('method', 'Generated');
 
+        // Always filter by campus if provided, and ensure student exists and is not deleted
+        $query->whereHas('student', function ($q) use ($campus, $class, $section) {
+            // Exclude deleted students (check if soft deletes are used)
+            if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive(\App\Models\Student::class))) {
+                $q->withoutTrashed();
+            }
+            
+            // Filter by campus (required)
+            if ($campus) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            
+            // Filter by class if provided
+            if ($class) {
+                $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            }
+            
+            // Filter by section if provided
+            if ($section) {
+                $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            }
+        });
+
+        // Also filter StudentPayment by campus for consistency
         if ($campus) {
             $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
@@ -58,21 +106,23 @@ class BulkFeePaymentController extends Controller
             $query->whereRaw('LOWER(TRIM(payment_title)) = ?', [strtolower(trim($feeType))]);
         }
 
-        if ($class || $section) {
-            $query->whereHas('student', function ($q) use ($class, $section) {
-                if ($class) {
-                    $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-                }
-                if ($section) {
-                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-                }
-            });
-        }
-
         $payments = $query->orderBy('payment_date', 'desc')->get();
 
-        $items = $payments->map(function ($payment) {
+        $items = $payments->map(function ($payment) use ($campus) {
             $student = $payment->student;
+            
+            // Skip if student is deleted or doesn't exist
+            if (!$student) {
+                return null;
+            }
+            
+            // Double-check campus filter (in case payment campus doesn't match student campus)
+            if ($campus && $student->campus) {
+                if (strtolower(trim($student->campus)) !== strtolower(trim($campus))) {
+                    return null;
+                }
+            }
+            
             $amount = (float) $payment->payment_amount;
             $lateFee = (float) ($payment->late_fee ?? 0);
 
@@ -119,7 +169,15 @@ class BulkFeePaymentController extends Controller
             return response()->json(['success' => false, 'message' => 'No payment data found.'], 422);
         }
 
-        $accountantName = auth()->check() ? (auth()->user()->name ?? null) : null;
+        // Get accountant name based on guard
+        $accountantName = 'System';
+        if (auth()->guard('accountant')->check()) {
+            $accountantName = auth()->guard('accountant')->user()->name ?? 'System';
+        } elseif (auth()->guard('admin')->check()) {
+            $accountantName = auth()->guard('admin')->user()->name ?? 'System';
+        } elseif (auth()->check()) {
+            $accountantName = auth()->user()->name ?? null;
+        }
         $saved = 0;
 
         foreach ($items as $item) {

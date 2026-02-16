@@ -107,6 +107,23 @@
                             </thead>
                             <tbody>
                                 @forelse($students as $index => $student)
+                                @php
+                                    $mark = $studentMarks->get($student->id);
+                                    $marksObtained = $mark ? $mark->marks_obtained : null;
+                                    $totalMarks = $mark ? $mark->total_marks : 100; // Default to 100 if not set
+                                    
+                                    // Calculate grade based on marks
+                                    $calculatedGrade = null;
+                                    if ($marksObtained && $totalMarks && $totalMarks > 0) {
+                                        $percentage = ($marksObtained / $totalMarks) * 100;
+                                        foreach ($gradeDefinitions as $gradeDef) {
+                                            if ($percentage >= $gradeDef->from_percentage && $percentage <= $gradeDef->to_percentage) {
+                                                $calculatedGrade = $gradeDef->name;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                @endphp
                                 <tr>
                                     <td>
                                         @if($index == 0)
@@ -146,15 +163,14 @@
                                         <span class="badge bg-info text-white">{{ $student->section ?? 'N/A' }}</span>
                                     </td>
                                     <td>
-                                        <input type="number" class="form-control form-control-sm marks-input" data-student-id="{{ $student->id }}" placeholder="Marks" min="0" max="100" step="0.01" style="width: 100px; display: inline-block;">
+                                        <span class="marks-display fw-bold" data-student-id="{{ $student->id }}">
+                                            {{ $marksObtained ? number_format($marksObtained, 2) : '-' }}
+                                        </span>
                                     </td>
                                     <td>
-                                        <select class="form-select form-select-sm grade-select" data-student-id="{{ $student->id }}" style="width: 100px; display: inline-block;">
-                                            <option value="">Select Grade</option>
-                                            @foreach($grades as $grade)
-                                                <option value="{{ $grade }}">{{ $grade }}</option>
-                                            @endforeach
-                                        </select>
+                                        <span class="grade-display badge bg-success" data-student-id="{{ $student->id }}" style="font-size: 12px; padding: 4px 8px;">
+                                            {{ $calculatedGrade ?? '-' }}
+                                        </span>
                                     </td>
                                 </tr>
                                 @empty
@@ -418,69 +434,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSections('{{ $filterClass }}');
     @endif
     
-    // Function to update grade dropdowns dynamically
-    function updateGradeDropdowns() {
-        fetch(`{{ route('test.position-holder.practical.get-grades') }}`)
-            .then(response => response.json())
-            .then(data => {
-                const gradeSelects = document.querySelectorAll('.grade-select');
-                gradeSelects.forEach(function(select) {
-                    const currentValue = select.value;
-                    const optionsHtml = '<option value="">Select Grade</option>' + 
-                        data.grades.map(grade => `<option value="${grade}">${grade}</option>`).join('');
-                    select.innerHTML = optionsHtml;
-                    // Restore selected value if it still exists
-                    if (currentValue && data.grades.includes(currentValue)) {
-                        select.value = currentValue;
-                    }
-                });
-            })
-            .catch(error => {
-                console.error('Error loading grades:', error);
-            });
-    }
-    
-    // Update grade dropdowns on page load
-    updateGradeDropdowns();
-    
-    // Auto-calculate grade based on marks using dynamic grades
-    document.querySelectorAll('.marks-input').forEach(function(input) {
-        input.addEventListener('input', function() {
-            const marks = parseFloat(this.value);
-            const studentId = this.getAttribute('data-student-id');
-            const gradeSelect = document.querySelector('.grade-select[data-student-id="' + studentId + '"]');
-            
-            if (!isNaN(marks) && gradeSelect) {
-                // Fetch grades dynamically to determine which grade to assign
-                fetch(`{{ route('test.position-holder.practical.get-grades') }}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        // Find the appropriate grade based on percentage ranges
-                        let grade = '';
-                        if (marks >= 90) grade = 'A+';
-                        else if (marks >= 80) grade = 'A';
-                        else if (marks >= 70) grade = 'B+';
-                        else if (marks >= 60) grade = 'B';
-                        else if (marks >= 50) grade = 'C+';
-                        else if (marks >= 40) grade = 'C';
-                        else if (marks >= 33) grade = 'D';
-                        else grade = 'F';
-                        
-                        // Check if the calculated grade exists in the dynamic grades list
-                        if (data.grades.includes(grade)) {
-                            gradeSelect.value = grade;
-                        } else {
-                            // Find the closest grade
-                            const sortedGrades = data.grades.sort();
-                            gradeSelect.value = sortedGrades[0] || '';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching grades:', error);
-                    });
-            }
-        });
-    });
 });
 </script>
 @endsection

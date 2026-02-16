@@ -63,6 +63,7 @@
                             <option value="">All Status</option>
                             <option value="active" {{ request('filter_status') == 'active' ? 'selected' : '' }}>Active</option>
                             <option value="inactive" {{ request('filter_status') == 'inactive' ? 'selected' : '' }}>Inactive</option>
+                            <option value="passout" {{ request('filter_status') == 'passout' ? 'selected' : '' }}>Passout Student</option>
                         </select>
                     </div>
                     <div class="col-md-2">
@@ -252,6 +253,14 @@
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
                                         <div class="d-flex gap-1 justify-content-center">
+                                            @php
+                                                $isPassout = $student->class && in_array(strtolower(trim($student->class)), ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni']);
+                                            @endphp
+                                            @if($isPassout)
+                                                <button type="button" class="btn btn-sm btn-success px-2 py-1" onclick="reactivateStudent({{ $student->id }}, '{{ addslashes($student->student_name) }}', '{{ addslashes($student->previous_class ?? '') }}', '{{ addslashes($student->previous_section ?? '') }}')" title="Reactivate Student">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">check_circle</span>
+                                                </button>
+                                            @endif
                                             <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="viewStudent({{ $student->id }})" title="View Details">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">visibility</span>
                                             </button>
@@ -779,6 +788,52 @@ function viewStudent(studentId) {
 }
 
 // Delete student
+function reactivateStudent(studentId, studentName, previousClass, previousSection) {
+    let confirmMessage;
+    
+    if (previousClass) {
+        confirmMessage = `Are you sure you want to reactivate "${studentName}"?\n\nStudent will be moved back to:\nClass: ${previousClass}${previousSection ? '\nSection: ' + previousSection : ''}`;
+    } else {
+        confirmMessage = `Are you sure you want to reactivate "${studentName}"?\n\nSystem will try to find the original class from attendance records.`;
+    }
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Show loading state
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+    
+    fetch(`{{ url('student') }}/${studentId}/reactivate`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Student reactivated successfully!');
+            window.location.reload();
+        } else {
+            alert(data.message || 'Error: Failed to reactivate student.');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while reactivating the student.');
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+}
+
 function deleteStudent(studentId, studentName, studentCode) {
     if (confirm(`Are you sure you want to delete student "${studentName}" (${studentCode})? This action cannot be undone!`)) {
         fetch(`{{ route('student.delete', ':id') }}`.replace(':id', studentId), {

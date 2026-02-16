@@ -51,6 +51,8 @@ class Student extends Authenticatable
         'campus',
         'class',
         'section',
+        'previous_class',
+        'previous_section',
         'previous_school',
         'admission_date',
         'reference_remarks',

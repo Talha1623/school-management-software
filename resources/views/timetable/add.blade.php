@@ -87,29 +87,17 @@
                         <div class="card bg-light border-0 rounded-10 p-2 mb-2">
                             <h5 class="mb-1 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -8px -8px 8px -8px; background-color: #003471;">Subject</h5>
                             
-                            @php
-                                $staticSubjects = [
-                                    '[Assembly]',
-                                    '[Lunch Break]',
-                                    '[Free Time]',
-                                    '[Lab Active]',
-                                    '[physicial/sports/activity]',
-                                    '[singing class]',
-                                    '[material arts class]',
-                                    '[Library Activity]',
-                                    '[chilligraphy class]',
-                                    '[other fun activities]',
-                                ];
-                                $allSubjects = collect($subjects ?? [])->merge($staticSubjects)->unique()->values();
-                            @endphp
                             <div class="mb-1">
                                 <label for="subject" class="form-label mb-0 fs-13 fw-medium">Subject <span class="text-danger">*</span></label>
-                                <select class="form-select form-select-sm py-1" id="subject" name="subject" required style="height: 32px;">
-                                    <option value="">Select Subject</option>
-                                    @foreach($allSubjects as $subject)
-                                        <option value="{{ $subject }}">{{ $subject }}</option>
-                                    @endforeach
+                                <select class="form-select form-select-sm py-1" id="subject" name="subject" required style="height: 32px;" disabled>
+                                    <option value="">Select Campus, Class & Section First</option>
                                 </select>
+                                <div id="assigned-teacher-display" class="mt-2" style="display: none;">
+                                    <small class="text-muted d-flex align-items-center" style="font-size: 11px;">
+                                        <span class="material-symbols-outlined me-1" style="font-size: 14px;">person</span>
+                                        <span id="assigned-teacher-text"></span>
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -224,11 +212,67 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Function to load assigned teacher for selected subject
+    function loadAssignedTeacher(subject, className, sectionName) {
+        const teacherDisplay = document.getElementById('assigned-teacher-display');
+        const teacherText = document.getElementById('assigned-teacher-text');
+        
+        if (!teacherDisplay || !teacherText) {
+            return;
+        }
+        
+        if (!subject || subject === '') {
+            teacherDisplay.style.display = 'none';
+            return;
+        }
+        
+        // Check if it's a static subject (starts with [)
+        if (subject.startsWith('[')) {
+            teacherDisplay.style.display = 'none';
+            return;
+        }
+        
+        // Show loading state
+        teacherDisplay.style.display = 'block';
+        teacherText.textContent = 'Loading...';
+        
+        // Make AJAX request
+        const params = new URLSearchParams();
+        params.append('subject', subject);
+        if (className) {
+            params.append('class', className);
+        }
+        if (sectionName) {
+            params.append('section', sectionName);
+        }
+        
+        fetch(`{{ route('timetable.get-teacher-by-subject') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.teacher) {
+                    let displayText = `Assigned Teacher: ${data.teacher}`;
+                    if (data.note) {
+                        displayText += ` (${data.note})`;
+                    }
+                    teacherText.textContent = displayText;
+                    teacherText.style.color = '#28a745';
+                } else {
+                    teacherText.textContent = data.message || 'No teacher assigned';
+                    teacherText.style.color = '#dc3545';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading assigned teacher:', error);
+                teacherDisplay.style.display = 'none';
+            });
+    }
+    
     // Function to load sections based on selected class
     function loadSections(className) {
         if (!className) {
             sectionSelect.innerHTML = '<option value="">Select Class First</option>';
             sectionSelect.disabled = true;
+            loadSubjects(); // Clear subjects when class is cleared
             return;
         }
         
@@ -265,11 +309,86 @@ document.addEventListener('DOMContentLoaded', function() {
                 sectionSelect.innerHTML = '<option value="">No sections found</option>';
                 sectionSelect.disabled = true;
             }
+            // Load subjects after sections are loaded
+            loadSubjects();
         })
         .catch(error => {
             console.error('Error loading sections:', error);
             sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
             sectionSelect.disabled = true;
+            loadSubjects(); // Clear subjects on error
+        });
+    }
+    
+    // Function to load subjects based on campus, class, and section
+    function loadSubjects() {
+        const subjectSelect = document.getElementById('subject');
+        if (!subjectSelect) return;
+        
+        const campusValue = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const sectionValue = sectionSelect ? sectionSelect.value : '';
+        
+        // Only load subjects if campus, class, and section are all selected
+        if (!campusValue || !classValue || !sectionValue) {
+            subjectSelect.innerHTML = '<option value="">Select Campus, Class & Section First</option>';
+            subjectSelect.disabled = true;
+            // Clear teacher display
+            const teacherDisplay = document.getElementById('assigned-teacher-display');
+            if (teacherDisplay) {
+                teacherDisplay.style.display = 'none';
+            }
+            return;
+        }
+        
+        // Show loading state
+        subjectSelect.innerHTML = '<option value="">Loading...</option>';
+        subjectSelect.disabled = true;
+        
+        // Make AJAX request
+        const params = new URLSearchParams();
+        params.append('campus', campusValue);
+        params.append('class', classValue);
+        params.append('section', sectionValue);
+        
+        fetch(`{{ route('timetable.get-subjects') }}?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+            
+            if (data.subjects && data.subjects.length > 0) {
+                data.subjects.forEach(subject => {
+                    const option = document.createElement('option');
+                    option.value = subject;
+                    option.textContent = subject;
+                    subjectSelect.appendChild(option);
+                });
+                subjectSelect.disabled = false;
+            } else {
+                subjectSelect.innerHTML = '<option value="">No subjects found</option>';
+                subjectSelect.disabled = true;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading subjects:', error);
+            subjectSelect.innerHTML = '<option value="">Error loading subjects</option>';
+            subjectSelect.disabled = true;
+        });
+    }
+    
+    // Listen for subject selection changes
+    const subjectSelect = document.getElementById('subject');
+    if (subjectSelect) {
+        subjectSelect.addEventListener('change', function() {
+            const className = classSelect ? classSelect.value : '';
+            const sectionName = sectionSelect ? sectionSelect.value : '';
+            loadAssignedTeacher(this.value, className, sectionName);
         });
     }
     
@@ -279,6 +398,12 @@ document.addEventListener('DOMContentLoaded', function() {
             loadSections(this.value);
             // Clear section when class changes
             sectionSelect.value = '';
+            // Clear subject when class changes
+            const subjectSelect = document.getElementById('subject');
+            if (subjectSelect) {
+                subjectSelect.value = '';
+                loadSubjects();
+            }
         });
     }
 
@@ -287,22 +412,58 @@ document.addEventListener('DOMContentLoaded', function() {
             filterClassOptions(this.value);
             loadSections('');
             sectionSelect.value = '';
+            // Clear subject when campus changes
+            const subjectSelect = document.getElementById('subject');
+            if (subjectSelect) {
+                subjectSelect.value = '';
+                loadSubjects();
+            }
+            // Clear teacher display when campus changes
+            const teacherDisplay = document.getElementById('assigned-teacher-display');
+            if (teacherDisplay) {
+                teacherDisplay.style.display = 'none';
+            }
+        });
+    }
+    
+    // Listen for section selection changes
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            // Load subjects when section changes
+            loadSubjects();
+            // Reload teacher if subject is selected
+            const subjectSelect = document.getElementById('subject');
+            if (subjectSelect && subjectSelect.value) {
+                const className = classSelect ? classSelect.value : '';
+                loadAssignedTeacher(subjectSelect.value, className, this.value);
+            }
         });
     }
     
     // Load sections on page load if class is already selected (for form validation errors)
     @if(old('class'))
-        loadSections('{{ old('class') }}');
         filterClassOptions(document.getElementById('campus')?.value || '');
+        loadSections('{{ old('class') }}');
         // Set the selected section if it was previously selected
         @if(old('section'))
             setTimeout(() => {
                 sectionSelect.value = '{{ old('section') }}';
+                loadSubjects();
+                // Set the selected subject if it was previously selected
+                @if(old('subject'))
+                    setTimeout(() => {
+                        const subjectSelect = document.getElementById('subject');
+                        if (subjectSelect) {
+                            subjectSelect.value = '{{ old('subject') }}';
+                            loadAssignedTeacher('{{ old('subject') }}', '{{ old('class') }}', '{{ old('section') }}');
+                        }
+                    }, 1000);
+                @endif
             }, 500);
         @endif
+    @else
+        filterClassOptions(document.getElementById('campus')?.value || '');
     @endif
-
-    filterClassOptions(document.getElementById('campus')?.value || '');
 
     if (form) {
         const submitBtn = form.querySelector('button[type="submit"]');

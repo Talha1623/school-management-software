@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class FeeIncrementPercentageController extends Controller
 {
@@ -29,7 +30,11 @@ class FeeIncrementPercentageController extends Controller
 
         $accountants = Accountant::orderBy('name')->get();
 
-        return view('accounting.fee-increment.percentage', compact('accountants', 'campuses'));
+        // Get logged in user name
+        $loggedInUser = Auth::guard('admin')->user() ?? Auth::guard('accountant')->user() ?? Auth::user();
+        $loggedInUserName = $loggedInUser ? ($loggedInUser->name ?? 'Admin') : 'Admin';
+
+        return view('accounting.fee-increment.percentage', compact('accountants', 'campuses', 'loggedInUserName'));
     }
 
     /**

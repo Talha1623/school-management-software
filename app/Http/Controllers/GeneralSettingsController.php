@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class GeneralSettingsController extends Controller
@@ -43,9 +44,24 @@ class GeneralSettingsController extends Controller
             'school_email' => ['nullable', 'email', 'max:255'],
             'currency' => ['nullable', 'string', 'max:10'],
             'timezone' => ['nullable', 'string', 'max:255'],
+            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,svg', 'max:2048'],
+            'system_name' => ['nullable', 'string', 'max:100'],
         ]);
 
         $settings = GeneralSetting::getSettings();
+
+        // Handle logo upload
+        if ($request->hasFile('logo')) {
+            // Delete old logo if exists
+            if ($settings->logo && Storage::disk('public')->exists($settings->logo)) {
+                Storage::disk('public')->delete($settings->logo);
+            }
+
+            // Store new logo
+            $logoPath = $request->file('logo')->store('logos', 'public');
+            $validated['logo'] = $logoPath;
+        }
+
         $settings->update($validated);
 
         return redirect()

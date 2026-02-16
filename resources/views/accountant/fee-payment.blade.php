@@ -166,12 +166,13 @@
                                     <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Student</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Fee Title</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Fee Type</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Total</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Dis</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Late Fee</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Paid</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Due</th>
+                                    <th style="padding: 8px 12px; font-size: 13px;">Status</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">Actions</th>
                                     <th style="padding: 8px 12px; font-size: 13px;">More</th>
                                 </tr>
@@ -193,77 +194,22 @@
                     </h5>
                 </div>
 
+                <div id="latestPaymentsContainer">
                 <div class="default-table-area" style="margin-top: 0;">
                     <div class="table-responsive">
                         <table class="table table-sm table-hover">
-                            <thead>
-                                <tr>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Roll</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Student</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Class</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Title</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Paid</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Late</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Date</th>
-                                    <th style="padding: 8px 12px; font-size: 13px;">Accountant</th>
-                                </tr>
-                            </thead>
                             <tbody>
-                                @if(isset($latestPayments) && $latestPayments->count() > 0)
-                                    @foreach($latestPayments as $payment)
-                                        <tr>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                <strong>{{ $payment->student_code }}</strong>
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->student_name ?? 'N/A' }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->father_name ?? 'N/A' }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                @if($payment->class && $payment->section)
-                                                    {{ $payment->class }}/{{ $payment->section }}
-                                                @elseif($payment->class)
-                                                    {{ $payment->class }}
-                                                @else
-                                                    N/A
-                                                @endif
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->payment_title }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                <strong style="color: #28a745;">{{ number_format($payment->payment_amount ?? 0, 2) }}</strong>
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
-                                                @if($payment->late_fee && $payment->late_fee > 0)
-                                                    <span style="display: inline-block; width: 12px; height: 12px; background-color: #dc3545; border-radius: 50%;"></span>
-                                                @else
-                                                    <span style="color: #6c757d;">-</span>
-                                                @endif
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->payment_date ? $payment->payment_date->format('d-m-Y h:i:s A') : 'N/A' }}
-                                            </td>
-                                            <td style="padding: 8px 12px; font-size: 13px;">
-                                                {{ $payment->accountant ?? 'N/A' }}
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                @else
                                     <tr>
-                                        <td colspan="9" class="text-center py-4">
+                                        <td colspan="12" class="text-center py-4" id="latestPaymentsEmpty">
                                             <div class="d-flex flex-column align-items-center gap-2">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">payments</span>
                                                 <p class="text-muted mb-0">No payments found.</p>
                                             </div>
                                         </td>
                                     </tr>
-                                @endif
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -282,7 +228,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="partialPaymentForm" method="POST" action="{{ route('accounting.direct-payment.student.store') }}" onsubmit="handlePartialPaymentSubmit(event)">
+            <form id="partialPaymentForm" method="POST" action="{{ route('accountant.direct-payment.student.store') }}" onsubmit="handlePartialPaymentSubmit(event)">
                 @csrf
                 <div class="modal-body p-4" style="background-color: #f8f9fa;">
                     <div class="row g-3">
@@ -317,7 +263,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 16px;">receipt</span>
                                 </span>
-                                <input type="text" class="form-control" id="partial_fee_title" name="payment_title" placeholder="Enter Fee Title" required>
+                                <input type="text" class="form-control" id="partial_fee_title" name="payment_title" placeholder="Enter Fee Title" readonly style="background-color: #f8f9fa; cursor: not-allowed;" required>
                             </div>
                         </div>
 
@@ -403,6 +349,134 @@
                     <button type="submit" class="btn btn-primary" style="background-color: #003471; border: none; padding: 8px 20px;">
                         <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">check</span>
                         <span style="color: white;">Submit Payment</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Make Installments Modal -->
+<div class="modal fade" id="makeInstallmentModal" tabindex="-1" aria-labelledby="makeInstallmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border-radius: 12px 12px 0 0; border: none; padding: 20px;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="makeInstallmentModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">account_balance</span>
+                    <span style="color: white !important;">Make Installments</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="makeInstallmentForm" method="POST" action="{{ route('accountant.direct-payment.student.store') }}" onsubmit="handleInstallmentSubmit(event)">
+                @csrf
+                <div class="modal-body p-4" style="background-color: #f8f9fa;">
+                    <div class="row g-3">
+                        <!-- Student -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Student</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">person</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_student" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                                <input type="hidden" id="installment_student_code" name="student_code">
+                            </div>
+                        </div>
+
+                        <!-- Fee Title -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Fee Title <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">receipt</span>
+                                </span>
+                                <select class="form-select" id="installment_fee_title" name="payment_title" required>
+                                    <option value="">Select Fee Title</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Fee Cards (will be populated dynamically) -->
+                        <div class="col-12" id="feeCardsContainer" style="display: none;">
+                            <label class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 13px;">Quick Select Fee:</label>
+                            <div class="row g-2" id="feeCardsRow">
+                                <!-- Fee cards will be dynamically added here -->
+                            </div>
+                        </div>
+
+                        <!-- Total Amount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Total Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">attach_money</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_total_amount" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Amount Paid -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Amount Paid</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">payments</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_amount_paid" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Discount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Discount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">remove</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_discount" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Remaining Amount -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Remaining Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">account_balance_wallet</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_remaining_amount" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            </div>
+                        </div>
+
+                        <!-- Total Installments -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Total Installments <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">calendar_view_month</span>
+                                </span>
+                                <input type="number" step="1" min="1" max="12" class="form-control" id="installment_total_installments" name="total_installments" placeholder="Enter number of installments" required>
+                            </div>
+                            <small class="text-muted">Enter how many installments you want to split the remaining amount</small>
+                        </div>
+
+                        <!-- Installment Amount (Auto-calculated) -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 13px;">Per Installment Amount</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">calculate</span>
+                                </span>
+                                <input type="text" class="form-control" id="installment_per_installment" readonly style="background-color: #e7f3ff; cursor: not-allowed; font-weight: 600;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #dee2e6; padding: 15px 20px;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="padding: 8px 20px;">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="background-color: #003471; border: none; padding: 8px 20px;">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">check</span>
+                        <span style="color: white;">Create Installments</span>
                     </button>
                 </div>
             </form>
@@ -601,7 +675,32 @@
 </style>
 
 <script>
-function searchByName(onComplete) {
+function renderStatusCell(due, paidForStatus, studentCode, studentName) {
+    if (due <= 0) {
+        return `
+            <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                <span style="color: white;">Paid</span>
+            </button>
+        `;
+    }
+    if (paidForStatus > 0) {
+        return `
+            <button class="btn btn-sm btn-warning" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Partial payment">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">hourglass_top</span>
+                <span style="color: white;">Partial</span>
+            </button>
+        `;
+    }
+    return `
+        <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${studentCode}', '${studentName}', ${due})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${due.toFixed(2)}">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
+            <span style="color: white;">Unpaid</span>
+        </button>
+    `;
+}
+
+function searchByName() {
     const searchValue = document.getElementById('searchByName').value.trim();
     if (!searchValue) {
         alert('Please enter student name or code');
@@ -615,11 +714,11 @@ function searchByName(onComplete) {
     const latestPaymentsSection = document.getElementById('latestPaymentsSection');
     
     searchResultsSection.style.display = 'block';
-    latestPaymentsSection.style.display = 'none';
-    searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
+    latestPaymentsSection.style.display = 'block';
+    searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
 
     // Make AJAX call to search students
-    fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(searchValue)}`, {
+    fetch(`{{ route('accountant.fee-payment.search-student') }}?search=${encodeURIComponent(searchValue)}`, {
         method: 'GET',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
@@ -631,34 +730,36 @@ function searchByName(onComplete) {
         searchResultsBody.innerHTML = '';
         
         if (data.success && data.students && data.students.length > 0) {
-            let totals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
+            const grandTotals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
             data.students.forEach((student) => {
-                const feeRows = (student.fee_rows && student.fee_rows.length > 0) ? student.fee_rows : [{
-                    title: 'N/A',
+                const feeRows = Array.isArray(student.fee_rows) && student.fee_rows.length > 0
+                    ? student.fee_rows
+                    : [{
+                        title: 'No Fee Generated',
                     total: 0,
                     discount: 0,
                     late_fee: 0,
                     paid: 0,
                     due: 0,
-                    amount: 0,
-                    remaining_late: 0,
+                        is_empty: true,
                 }];
 
-                feeRows.forEach((fee, index) => {
-                    const row = document.createElement('tr');
+                feeRows.forEach((fee) => {
                     const feeTitleSafe = (fee.title || '').replace(/'/g, "\\'");
-                    const studentNameSafe = (student.student_name || '').replace(/'/g, "\\'");
-                    const campusSafe = (student.campus || '').replace(/'/g, "\\'");
-                    const dueAmount = parseFloat(fee.due || 0);
-                    const feeAmount = parseFloat(fee.amount || 0);
-                    const generatedId = fee.generated_id || null;
-                    const generatedId = fee.generated_id || null;
-                    const lateAmount = parseFloat(fee.remaining_late || 0);
-                    totals.total += parseFloat(fee.total || 0);
-                    totals.discount += parseFloat(fee.discount || 0);
-                    totals.late += parseFloat(fee.late_fee || 0);
-                    totals.paid += parseFloat(fee.paid || 0);
-                    totals.due += dueAmount;
+                    const total = parseFloat(fee.total || 0);
+                    const discount = parseFloat(fee.discount || 0);
+                    const lateFee = parseFloat(fee.late_fee || 0);
+                    const paid = parseFloat(fee.paid || 0);
+                    const due = parseFloat(fee.due || 0);
+                    const isEmptyFee = !!fee.is_empty;
+                    const paidForStatus = paid;
+                    const paidDisplay = paid;
+                    grandTotals.total += total;
+                    grandTotals.discount += discount;
+                    grandTotals.late += lateFee;
+                    grandTotals.paid += paid;
+                    grandTotals.due += due;
+                    const row = document.createElement('tr');
                     row.innerHTML = `
                         <td style="padding: 8px 12px; font-size: 13px;">
                             <strong>${student.student_code || 'N/A'}</strong>
@@ -673,115 +774,96 @@ function searchByName(onComplete) {
                             ${fee.title || 'N/A'}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.total || 0).toFixed(2)}
+                            ${total.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.discount || 0).toFixed(2)}
+                            ${discount.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.late_fee || 0).toFixed(2)}
+                            ${lateFee.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.paid || 0).toFixed(2)}
+                            ${paidDisplay.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${dueAmount.toFixed(2)}
+                            ${due.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
+                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                            <div class="d-flex gap-2 flex-wrap" style="position: relative;">
-                                ${dueAmount > 0 ? `
-                                    <button class="btn btn-sm btn-danger" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'})" style="padding: 4px 12px; font-size: 12px; color: white !important;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
-                                        <span style="color: white;">Unpaid</span>
-                                    </button>
-                                ` : `
-                                    <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
-                                        <span style="color: white;">Paid</span>
-                                    </button>
-                                `}
                                 <div class="btn-group" style="position: static;">
                                     <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
                                         <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
                                         <span style="color: white;">Take Payment</span>
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}}); return false;">
                                             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
-                                            Pay This Fee
+                                        Full Payment
                                         </a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${feeAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due}}); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
+                                        Partial Payment
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee'); return false;">
                                             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
                                             Pay without late fee
                                         </a></li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${studentNameSafe}', 'full'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                            Pay All
-                                        </a></li>
                                     </ul>
-                                </div>
                             </div>
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                            <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
-                                <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${studentNameSafe}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
-                                </button>
                                 <div class="btn-group" style="position: static;">
-                                    <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
+                                <button type="button" class="btn btn-sm" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 2px 6px; border: none; background: #000; color: #fff; border-radius: 4px;" title="More Options">
+                                    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                        <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                            Pay All
+                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
+                                        Print Voucher
                                         </a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
-                                            Print Voucher
+                                    <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${student.student_name}', {title: '${feeTitleSafe}', total: ${total}, paid: ${paid}, discount: ${discount}, due: ${due}}); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance</span>
+                                        Make Installments
                                         </a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">schedule</span>
-                                            Make Installment
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="#" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
+                                        Edit
                                         </a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
-                                            Particular Receipt
+                                    <li><a class="dropdown-item" href="#" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">delete</span>
+                                        Delete
                                         </a></li>
                                     </ul>
-                                </div>
                             </div>
                         </td>
                     `;
                     searchResultsBody.appendChild(row);
                 });
             });
-
             const totalRow = document.createElement('tr');
             totalRow.innerHTML = `
-                <td colspan="4" class="text-end fw-semibold">Total</td>
-                <td class="fw-semibold">${totals.total.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.discount.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.late.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.paid.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.due.toFixed(2)}</td>
-                <td colspan="2"></td>
+                <td colspan="4" style="padding: 8px 12px; font-size: 13px;" class="text-end fw-semibold">Total</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.total.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.discount.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.late.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.paid.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.due.toFixed(2)}</td>
+                <td colspan="3"></td>
             `;
             searchResultsBody.appendChild(totalRow);
+            renderLatestPaymentsForStudents(data.students);
         } else {
-            searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No students found matching your search.</td></tr>';
-        }
-        if (typeof onComplete === 'function') {
-            onComplete();
+            searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">No students found matching your search.</td></tr>';
+            renderLatestPaymentsForStudents([]);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
-        if (typeof onComplete === 'function') {
-            onComplete();
-        }
+        searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
     });
 }
 
@@ -807,101 +889,11 @@ function getFeeTypeLabel(title) {
     return 'Title Fee';
 }
 
-function viewUnpaid(studentCode, studentName, encodedFees, unpaidAmount, campus) {
-    currentFeeStudent = {
-        student_code: studentCode,
-        student_name: studentName,
-        campus: campus || ''
-    };
-
-    let fees = [];
-    try {
-        fees = JSON.parse(decodeURIComponent(encodedFees || '')) || [];
-    } catch (e) {
-        fees = [];
-    }
-
-    const searchResultsBody = document.getElementById('searchResultsBody');
-    const existingRow = searchResultsBody.querySelector(`tr.fee-breakdown-row[data-student-code="${studentCode}"]`);
-    if (existingRow) {
-        existingRow.remove();
-        return;
-    }
-
-    // Remove any other open breakdown rows
-    searchResultsBody.querySelectorAll('tr.fee-breakdown-row').forEach(row => row.remove());
-
-    const detailRow = document.createElement('tr');
-    detailRow.className = 'fee-breakdown-row';
-    detailRow.dataset.studentCode = studentCode;
-
-    let rowsHtml = '';
-    let totalDue = 0;
-    if (fees.length === 0) {
-        rowsHtml = '<tr><td colspan="5" class="text-center text-muted">No pending fees.</td></tr>';
-    } else {
-        rowsHtml = fees.map(fee => {
-            const amount = parseFloat(fee.amount || 0);
-            const lateFee = parseFloat(fee.late_fee || 0);
-            const total = parseFloat(fee.total || 0);
-            totalDue += total;
-            const safeTitle = (fee.title || '').replace(/'/g, "\\'");
-            return `
-                <tr>
-                    <td>${getFeeTypeLabel(fee.title)}</td>
-                    <td>${fee.title || 'N/A'}</td>
-                    <td class="text-end">${amount.toFixed(2)}</td>
-                    <td class="text-end">${lateFee.toFixed(2)}</td>
-                    <td class="text-end fw-semibold">${total.toFixed(2)}</td>
-                    <td class="text-end">
-                        <button type="button" class="btn btn-sm btn-primary" onclick="openPartialPaymentFromBreakdown('${safeTitle}', ${total.toFixed(2)})">
-                            Pay
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    detailRow.innerHTML = `
-        <td colspan="8" style="padding: 0;">
-            <div style="padding: 12px 16px; background: #f8f9fa; border: 1px solid #e9ecef;">
-                <div class="mb-2 fw-semibold" style="color: #003471;">${studentName} (${studentCode})</div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>Type</th>
-                                <th>Fee Title</th>
-                                <th class="text-end">Amount</th>
-                                <th class="text-end">Late Fee</th>
-                                <th class="text-end">Total</th>
-                                <th class="text-end">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rowsHtml}
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <th colspan="4" class="text-end">Total Due</th>
-                                <th class="text-end">${(fees.length ? totalDue : 0).toFixed(2)}</th>
-                                <th></th>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </div>
-        </td>
-    `;
-
-    const targetRow = Array.from(searchResultsBody.querySelectorAll('tr')).find(row => {
-        const codeCell = row.querySelector('td:first-child strong');
-        return codeCell && codeCell.textContent.trim() === studentCode;
-    });
-    if (targetRow) {
-        targetRow.insertAdjacentElement('afterend', detailRow);
-    }
+function viewUnpaid(studentCode, studentName, unpaidAmount) {
+    // Show unpaid amount details
+    alert('Unpaid Amount for ' + studentName + ' (' + studentCode + '): Rs. ' + parseFloat(unpaidAmount).toFixed(2));
+    // You can redirect to unpaid invoices page or show modal
+    // window.location.href = '/accounting/unpaid-invoices?student_code=' + studentCode;
 }
 
 function takePayment(studentCode, studentName, paymentType = 'full', studentData = null) {
@@ -959,7 +951,9 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
                 'Accept': 'application/json',
             },
             body: JSON.stringify({
-                student_code: studentCode
+                student_code: studentCode,
+                payment_title: studentData && studentData.payment_title ? studentData.payment_title : null,
+                generated_id: studentData && studentData.generated_id ? studentData.generated_id : null
             })
         })
         .then(response => response.json())
@@ -969,9 +963,9 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
             if (data.success) {
                 // Update button status from Unpaid to Paid
                 updatePaymentStatus(studentCode, false);
+                refreshLatestPaymentsForStudent(studentCode);
+                refreshSearchResultsAfterPayment();
                 alert('Payment recorded successfully!');
-                // Reload page to update history
-                window.location.reload();
             } else {
                 alert(data.message || 'Error processing payment');
             }
@@ -986,22 +980,26 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
     
     // For without late fee, redirect to payment page
     if (paymentType === 'without_late_fee') {
-        let url = '{{ route("accounting.direct-payment.student") }}?student_code=' + studentCode + '&payment_type=without_late_fee';
+        let url = '{{ route("accountant.direct-payment.student") }}?student_code=' + studentCode + '&payment_type=without_late_fee';
         window.location.href = url;
         return;
     }
 }
 
-function openPartialPaymentModal(studentCode, studentName, studentData, feeTitle = '', feeAmount = null, generatedId = null) {
+function openPartialPaymentModal(studentCode, studentName, studentData) {
     // Populate modal fields
     document.getElementById('partial_campus').value = studentData.campus || 'N/A';
     document.getElementById('partial_student').value = studentName + ' (' + studentCode + ')';
     document.getElementById('partial_student_code').value = studentCode;
-    document.getElementById('partial_generated_id').value = generatedId || '';
-    const dueAmountValue = feeAmount !== null ? feeAmount : (studentData.monthly_fee || 0);
-    document.getElementById('partial_due_amount').value = 'Rs. ' + parseFloat(dueAmountValue || 0).toFixed(2);
-    document.getElementById('partial_fee_title').value = feeTitle || '';
-    document.getElementById('partial_payment').value = feeAmount !== null ? parseFloat(feeAmount).toFixed(2) : '';
+    const dueAmount = (studentData.fee_due !== undefined && studentData.fee_due !== null)
+        ? parseFloat(studentData.fee_due || 0)
+        : parseFloat(studentData.monthly_fee || 0);
+    document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
+    document.getElementById('partial_fee_title').value = studentData.fee_title || '';
+    if (studentData.generated_id) {
+        document.getElementById('partial_generated_id').value = studentData.generated_id || '';
+    }
+    document.getElementById('partial_payment').value = '';
     document.getElementById('partial_discount').value = '0';
     document.getElementById('partial_method').value = 'Cash Payment';
     document.getElementById('partial_date').value = new Date().toISOString().split('T')[0];
@@ -1012,30 +1010,6 @@ function openPartialPaymentModal(studentCode, studentName, studentData, feeTitle
     modal.show();
 }
 
-function openPartialPaymentFromBreakdown(feeTitle, feeAmount) {
-    if (!currentFeeStudent) {
-        return;
-    }
-    openPartialPaymentModal(
-        currentFeeStudent.student_code,
-        currentFeeStudent.student_name,
-        currentFeeStudent,
-        feeTitle,
-        feeAmount,
-        null
-    );
-}
-
-function openFeePaymentModal(studentCode, studentName, campus, feeTitle, feeAmount, generatedId = null) {
-    openPartialPaymentModal(
-        studentCode,
-        studentName,
-        { campus: campus || '' },
-        feeTitle,
-        feeAmount,
-        generatedId
-    );
-}
 
 function updatePaymentStatus(studentCode, hasUnpaid) {
     // Find all rows with this student code and update the button
@@ -1043,29 +1017,20 @@ function updatePaymentStatus(studentCode, hasUnpaid) {
     rows.forEach(row => {
         const codeCell = row.querySelector('td:first-child strong');
         if (codeCell && codeCell.textContent.trim() === studentCode) {
-            const actionsCell = row.querySelector('td:last-child');
-            if (actionsCell) {
-                // Find either Unpaid (btn-danger) or Paid (btn-success) button
-                const statusButton = actionsCell.querySelector('.btn-danger, .btn-success');
+            const statusCell = row.querySelector('.status-cell');
+            if (statusCell) {
+                // Find existing status button
+                const statusButton = statusCell.querySelector('.btn-danger, .btn-success, .btn-warning');
                 if (statusButton) {
                     if (!hasUnpaid) {
-                        // Change Unpaid button to Paid button
+                        // Change to Paid button
                         statusButton.className = 'btn btn-sm btn-success';
                         statusButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span>';
                         statusButton.onclick = null;
                         statusButton.title = 'Payment completed';
                     }
                 } else {
-                    // If button doesn't exist, create Paid button
-                    const buttonContainer = actionsCell.querySelector('.d-flex');
-                    if (buttonContainer) {
-                        const paidButton = document.createElement('button');
-                        paidButton.className = 'btn btn-sm btn-success';
-                        paidButton.style.cssText = 'padding: 4px 12px; font-size: 12px; color: white !important;';
-                        paidButton.title = 'Payment completed';
-                        paidButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span>';
-                        buttonContainer.insertBefore(paidButton, buttonContainer.firstChild);
-                    }
+                    statusCell.innerHTML = '<button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span></button>';
                 }
             }
         }
@@ -1078,10 +1043,10 @@ function updatePaymentStatusWithData(studentCode, hasUnpaid, unpaidAmount) {
     rows.forEach(row => {
         const codeCell = row.querySelector('td:first-child strong');
         if (codeCell && codeCell.textContent.trim() === studentCode) {
-            const actionsCell = row.querySelector('td:last-child');
-            if (actionsCell) {
-                // Find either Unpaid (btn-danger) or Paid (btn-success) button
-                const statusButton = actionsCell.querySelector('.btn-danger, .btn-success');
+            const statusCell = row.querySelector('.status-cell');
+            if (statusCell) {
+                // Find existing status button
+                const statusButton = statusCell.querySelector('.btn-danger, .btn-success, .btn-warning');
                 if (statusButton) {
                     if (!hasUnpaid || unpaidAmount <= 0) {
                         // Change to Paid button
@@ -1097,32 +1062,354 @@ function updatePaymentStatusWithData(studentCode, hasUnpaid, unpaidAmount) {
                         statusButton.title = 'Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2);
                     }
                 } else {
-                    // If button doesn't exist, create appropriate button
-                    const buttonContainer = actionsCell.querySelector('.d-flex');
-                    if (buttonContainer) {
                         if (!hasUnpaid || unpaidAmount <= 0) {
-                            // Create Paid button
-                            const paidButton = document.createElement('button');
-                            paidButton.className = 'btn btn-sm btn-success';
-                            paidButton.style.cssText = 'padding: 4px 12px; font-size: 12px; color: white !important;';
-                            paidButton.title = 'Payment completed';
-                            paidButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span>';
-                            buttonContainer.insertBefore(paidButton, buttonContainer.firstChild);
+                        statusCell.innerHTML = '<button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span></button>';
                         } else {
-                            // Create Unpaid button
-                            const unpaidButton = document.createElement('button');
-                            unpaidButton.className = 'btn btn-sm btn-danger';
-                            unpaidButton.style.cssText = 'padding: 4px 12px; font-size: 12px; color: white !important;';
-                            unpaidButton.title = 'Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2);
-                            unpaidButton.onclick = function() { viewUnpaid(studentCode, '', unpaidAmount); };
-                            unpaidButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span><span style="color: white;">Unpaid</span>';
-                            buttonContainer.insertBefore(unpaidButton, buttonContainer.firstChild);
-                        }
+                        statusCell.innerHTML = '<button class="btn btn-sm btn-danger" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2) + '"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span><span style="color: white;">Unpaid</span></button>';
                     }
                 }
             }
         }
     });
+}
+
+function parsePaymentDateTime(dateTime) {
+    if (!dateTime) {
+        return { date: 'N/A', time: 'N/A' };
+    }
+    const parts = String(dateTime).split(' ');
+    const date = parts[0] || 'N/A';
+    const time = parts.length > 1 ? parts.slice(1).join(' ') : 'N/A';
+    return { date, time };
+}
+
+function buildLatestPaymentActionDropdown(payment) {
+    const paymentId = payment.id || '';
+    const studentCode = payment.student_code || '';
+    const studentName = (payment.student_name || '').replace(/'/g, "\\'");
+    const feeTitle = (payment.payment_title || '').replace(/'/g, "\\'");
+    return `
+        <div class="btn-group" style="position: static;">
+            <button type="button" class="btn btn-sm" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 2px 6px; border: none; background: #000; color: #fff; border-radius: 4px;" title="Actions">
+                <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                <li><a class="dropdown-item" href="#" onclick="particularReceipt('${studentCode}', '${studentName}'); return false;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
+                    Print
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="editPayment('${studentCode}', '${feeTitle}'); return false;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
+                    Edit
+                </a></li>
+                <li><a class="dropdown-item text-danger" href="#" onclick="deletePayment('${paymentId}'); return false;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">delete</span>
+                    Delete
+                </a></li>
+            </ul>
+        </div>
+    `;
+}
+
+function addLatestPaymentRow(payment) {
+    // Skip installments
+    const paymentTitle = (payment.payment_title || '').toLowerCase();
+    if (paymentTitle.includes('installment') || paymentTitle.match(/\/\d+$/)) {
+        return;
+    }
+    
+    const container = document.getElementById('latestPaymentsContainer');
+    if (!container) return;
+
+    const emptyRow = document.getElementById('latestPaymentsEmpty');
+    if (emptyRow) {
+        emptyRow.closest('.default-table-area')?.remove();
+    }
+
+    const studentCode = payment.student_code || 'N/A';
+    const key = [
+        payment.student_code,
+        payment.payment_title,
+        payment.payment_date,
+        payment.payment_amount,
+        payment.discount,
+        payment.late_fee,
+    ].join('|');
+
+    let tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
+    if (!tbody) {
+        const studentName = payment.student_name || 'N/A';
+        const fatherName = payment.father_name || 'N/A';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mb-3';
+        wrapper.id = `latestPaymentsStudent_${studentCode}`;
+        wrapper.innerHTML = `
+            <div class="fw-semibold mb-2" style="color: #003471;">
+                ${studentName} (${studentCode}) - ${fatherName}
+            </div>
+            <div class="default-table-area" style="margin-top: 0;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student Code</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Student</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Title</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Amount Paid</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Late Fee</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Discount</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Date</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Time</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Received By</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Status</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="latestPaymentsBody_${studentCode}" data-student-code="${studentCode}"></tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="text-end fw-semibold">Total</td>
+                                <td class="fw-semibold" data-student-total="${studentCode}">0.00</td>
+                                <td colspan="7"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        `;
+        container.prepend(wrapper);
+        tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
+    }
+
+    if (!tbody || tbody.querySelector(`tr[data-key="${key}"]`)) {
+        return;
+    }
+
+    const { date, time } = parsePaymentDateTime(payment.payment_date);
+    const row = document.createElement('tr');
+    row.setAttribute('data-key', key);
+    row.setAttribute('data-payment-id', payment.id || '');
+    row.setAttribute('data-student-code', studentCode);
+    row.setAttribute('data-amount', parseFloat(payment.payment_amount || 0).toFixed(2));
+    row.innerHTML = `
+        <td style="padding: 8px 12px; font-size: 13px;">
+            <strong>${payment.student_code || 'N/A'}</strong>
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.student_name || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.father_name || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.payment_title || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            <strong style="color: #28a745;">${parseFloat(payment.payment_amount || 0).toFixed(2)}</strong>
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${parseFloat(payment.late_fee || 0) > 0 ? `<span style="color: #dc3545; font-weight: 600;">${parseFloat(payment.late_fee || 0).toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${parseFloat(payment.discount || 0).toFixed(2)}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${date}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${time}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${payment.accountant || payment.received_by || 'N/A'}
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            <span class="badge bg-success">Paid</span>
+        </td>
+        <td style="padding: 8px 12px; font-size: 13px;">
+            ${buildLatestPaymentActionDropdown(payment)}
+        </td>
+    `;
+    tbody.insertBefore(row, tbody.firstChild);
+
+    const totalCell = container.querySelector(`[data-student-total="${studentCode}"]`);
+    if (totalCell) {
+        const currentTotal = parseFloat(totalCell.textContent || '0') || 0;
+        const newTotal = currentTotal + parseFloat(payment.payment_amount || 0);
+        totalCell.textContent = newTotal.toFixed(2);
+    }
+}
+
+function refreshLatestPaymentsForStudent(studentCode) {
+    if (!studentCode) return;
+    fetch(`{{ route('fee-payment.history') }}?student_code=${encodeURIComponent(studentCode)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && Array.isArray(data.payments)) {
+            // Filter out installments
+            const nonInstallmentPayments = data.payments.filter(payment => {
+                const paymentTitle = (payment.payment_title || '').toLowerCase();
+                return !paymentTitle.includes('installment') && !paymentTitle.match(/\/\d+$/);
+            });
+            for (let i = nonInstallmentPayments.length - 1; i >= 0; i -= 1) {
+                addLatestPaymentRow(nonInstallmentPayments[i]);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error loading payment history:', error);
+    });
+}
+
+function renderLatestPaymentsForStudents(students) {
+    const container = document.getElementById('latestPaymentsContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const studentCodes = Array.from(new Set((students || [])
+        .map((student) => student.student_code)
+        .filter((code) => code)));
+
+    if (studentCodes.length === 0) {
+        container.innerHTML = `
+            <div class="default-table-area" style="margin-top: 0;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <tbody>
+                            <tr>
+                                <td colspan="12" class="text-center py-4" id="latestPaymentsEmpty">
+                                    <div class="d-flex flex-column align-items-center gap-2">
+                                        <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">payments</span>
+                                        <p class="text-muted mb-0">No payments found.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    Promise.all(studentCodes.map((code) => fetch(`{{ route('fee-payment.history') }}?student_code=${encodeURIComponent(code)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    }).then(response => response.json()).catch(() => null)))
+    .then((results) => {
+        let hasPayments = false;
+        results.forEach((data) => {
+            if (data && data.success && Array.isArray(data.payments)) {
+                data.payments.forEach((payment) => {
+                    // Exclude installments from latest payments
+                    const paymentTitle = (payment.payment_title || '').toLowerCase();
+                    if (!paymentTitle.includes('installment') && !paymentTitle.match(/\/\d+$/)) {
+                        addLatestPaymentRow(payment);
+                        hasPayments = true;
+                    }
+                });
+            }
+        });
+
+        if (!hasPayments) {
+            container.innerHTML = `
+                <div class="default-table-area" style="margin-top: 0;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <tbody>
+                                <tr>
+                                    <td colspan="12" class="text-center py-4" id="latestPaymentsEmpty">
+                                        <div class="d-flex flex-column align-items-center gap-2">
+                                            <span class="material-symbols-outlined" style="font-size: 48px; color: #dee2e6;">payments</span>
+                                            <p class="text-muted mb-0">No payments found.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+    })
+    .catch((error) => {
+        console.error('Error loading payment history:', error);
+    });
+}
+
+function deletePayment(paymentId) {
+    if (!paymentId) return;
+    if (!confirm('Are you sure you want to delete this fee?')) {
+        return;
+    }
+    const deleteUrl = '{{ route("fee-payment.payment.delete", ":id") }}'.replace(':id', paymentId);
+    fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            alert(data.message || 'Failed to delete fee.');
+            return;
+        }
+        const row = document.querySelector(`tr[data-payment-id="${paymentId}"]`);
+        if (!row) return;
+        const studentCode = row.getAttribute('data-student-code');
+        const amount = parseFloat(row.getAttribute('data-amount') || '0') || 0;
+        row.remove();
+
+        const totalCell = document.querySelector(`[data-student-total="${studentCode}"]`);
+        if (totalCell) {
+            const currentTotal = parseFloat(totalCell.textContent || '0') || 0;
+            const newTotal = Math.max(0, currentTotal - amount);
+            totalCell.textContent = newTotal.toFixed(2);
+        }
+
+        const tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
+        if (tbody && tbody.children.length === 0) {
+            document.getElementById(`latestPaymentsStudent_${studentCode}`)?.remove();
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting fee:', error);
+        alert('Error deleting fee. Please try again.');
+    });
+}
+
+function editPayment(studentCode, paymentTitle) {
+    const url = '{{ route("accountant.direct-payment.student") }}'
+        + `?student_code=${encodeURIComponent(studentCode)}`
+        + `&payment_title=${encodeURIComponent(paymentTitle || '')}`;
+    window.location.href = url;
+}
+
+function refreshSearchResultsAfterPayment() {
+    if (!window.lastFeeSearch || !window.lastFeeSearch.value) {
+        return;
+    }
+    if (window.lastFeeSearch.type === 'name') {
+        const input = document.getElementById('searchByName');
+        if (input) input.value = window.lastFeeSearch.value;
+        searchByName();
+    } else if (window.lastFeeSearch.type === 'cnic') {
+        const input = document.getElementById('searchByCNIC');
+        if (input) input.value = window.lastFeeSearch.value;
+        searchByCNIC();
+    }
 }
 
 function handlePartialPaymentSubmit(event) {
@@ -1170,12 +1457,44 @@ function handlePartialPaymentSubmit(event) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('partialPaymentModal'));
             if (modal) modal.hide();
 
-            if (result.data && result.data.payment) {
-                prependPaymentHistoryRow(result.data.payment);
+            if (result.isJson && result.data && result.data.payment) {
+                addLatestPaymentRow(result.data.payment);
+                if (!result.data.payment.accountant) {
+                    refreshLatestPaymentsForStudent(studentCode);
+                }
+            } else {
+                refreshLatestPaymentsForStudent(studentCode);
             }
-
-            refreshSearchResults(() => renderStudentHistory(studentCode));
+            refreshSearchResultsAfterPayment();
+            
+            // Fetch updated student data to check unpaid amount
+            fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(studentCode)}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.students && data.students.length > 0) {
+                    const student = data.students[0];
+                    // Update payment status based on actual unpaid amount
+                    updatePaymentStatusWithData(studentCode, student.has_unpaid, student.unpaid_amount);
+                } else {
+                    // If can't fetch data, just update status
+                    updatePaymentStatus(studentCode, false);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching updated data:', error);
+                // If error, just update status
+                updatePaymentStatus(studentCode, false);
+            });
+            
             alert('Payment recorded successfully!');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
         } else {
             const errorMsg = result.data.message || result.data.error || 'Error processing payment';
             alert(errorMsg);
@@ -1199,140 +1518,7 @@ function handlePartialPaymentSubmit(event) {
     });
 }
 
-function refreshSearchResults(onComplete) {
-    if (!window.lastFeeSearch || !window.lastFeeSearch.value) {
-        return;
-    }
-    if (window.lastFeeSearch.type === 'name') {
-        document.getElementById('searchByName').value = window.lastFeeSearch.value;
-        searchByName(onComplete);
-    } else if (window.lastFeeSearch.type === 'cnic') {
-        document.getElementById('searchByCNIC').value = window.lastFeeSearch.value;
-        searchByCNIC(onComplete);
-    }
-}
-
-function prependPaymentHistoryRow(payment) {
-    const tbody = document.querySelector('#latestPaymentsSection table tbody');
-    if (!tbody || !payment) return;
-
-    const totalAmount = (parseFloat(payment.payment_amount || 0) + parseFloat(payment.late_fee || 0)).toFixed(2);
-    const discount = parseFloat(payment.discount || 0).toFixed(2);
-    const lateFee = parseFloat(payment.late_fee || 0).toFixed(2);
-    const paid = parseFloat(payment.payment_amount || 0).toFixed(2);
-    const due = '0.00';
-    const dateText = payment.payment_date || 'N/A';
-
-    const row = document.createElement('tr');
-    row.innerHTML = `
-        <td style="padding: 8px 12px; font-size: 13px;"><strong>${payment.student_code || 'N/A'}</strong></td>
-        <td style="padding: 8px 12px; font-size: 13px;">${payment.student_name || 'N/A'}</td>
-        <td style="padding: 8px 12px; font-size: 13px;">${payment.father_name || 'N/A'}</td>
-        <td style="padding: 8px 12px; font-size: 13px;">${payment.payment_title || 'N/A'}</td>
-        <td style="padding: 8px 12px; font-size: 13px;"><strong style="color: #28a745;">${totalAmount}</strong></td>
-        <td style="padding: 8px 12px; font-size: 13px;">${discount}</td>
-        <td style="padding: 8px 12px; font-size: 13px;">${lateFee}</td>
-        <td style="padding: 8px 12px; font-size: 13px;"><strong style="color: #28a745;">${paid}</strong></td>
-        <td style="padding: 8px 12px; font-size: 13px;">${due}</td>
-        <td style="padding: 8px 12px; font-size: 13px;">${dateText}</td>
-        <td style="padding: 8px 12px; font-size: 13px;">${payment.accountant || 'N/A'}</td>
-    `;
-
-    const totalRow = Array.from(tbody.querySelectorAll('tr')).find(r => r.textContent.includes('Total'));
-    if (totalRow) {
-        tbody.insertBefore(row, totalRow);
-        const cells = totalRow.querySelectorAll('td');
-        if (cells.length >= 9) {
-            cells[1].textContent = (parseFloat(cells[1].textContent || 0) + parseFloat(totalAmount)).toFixed(2);
-            cells[2].textContent = (parseFloat(cells[2].textContent || 0) + parseFloat(discount)).toFixed(2);
-            cells[3].textContent = (parseFloat(cells[3].textContent || 0) + parseFloat(lateFee)).toFixed(2);
-            cells[4].textContent = (parseFloat(cells[4].textContent || 0) + parseFloat(paid)).toFixed(2);
-            cells[5].textContent = (parseFloat(cells[5].textContent || 0) + parseFloat(due)).toFixed(2);
-        }
-    } else {
-        tbody.prepend(row);
-    }
-}
-
-function renderStudentHistory(studentCode) {
-    if (!studentCode) return;
-    fetch(`{{ route('fee-payment.history') }}?student_code=${encodeURIComponent(studentCode)}`, {
-        method: 'GET',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json',
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) return;
-        const searchResultsBody = document.getElementById('searchResultsBody');
-        if (!searchResultsBody) return;
-
-        // Remove existing history row for this student
-        searchResultsBody.querySelectorAll(`tr.student-history-row[data-student-code="${studentCode}"]`).forEach(row => row.remove());
-
-        const rows = Array.from(searchResultsBody.querySelectorAll('tr'));
-        const studentRows = rows.filter(row => {
-            const codeCell = row.querySelector('td:first-child strong');
-            return codeCell && codeCell.textContent.trim() === studentCode;
-        });
-        if (studentRows.length === 0) return;
-
-        const lastRow = studentRows[studentRows.length - 1];
-        const historyRow = document.createElement('tr');
-        historyRow.className = 'student-history-row';
-        historyRow.dataset.studentCode = studentCode;
-
-        const paymentRows = (data.payments || []).map(payment => {
-            const totalAmount = (parseFloat(payment.payment_amount || 0) + parseFloat(payment.late_fee || 0)).toFixed(2);
-            return `
-                <tr>
-                    <td>${payment.payment_title || 'N/A'}</td>
-                    <td class="text-end">${totalAmount}</td>
-                    <td class="text-end">${parseFloat(payment.discount || 0).toFixed(2)}</td>
-                    <td class="text-end">${parseFloat(payment.late_fee || 0).toFixed(2)}</td>
-                    <td class="text-end">${parseFloat(payment.payment_amount || 0).toFixed(2)}</td>
-                    <td class="text-end">0.00</td>
-                    <td>${payment.payment_date || 'N/A'}</td>
-                    <td>${payment.accountant || 'N/A'}</td>
-                </tr>
-            `;
-        }).join('');
-
-        historyRow.innerHTML = `
-            <td colspan="11" style="padding: 0;">
-                <div style="padding: 12px 16px; background: #f8f9fa; border: 1px solid #e9ecef;">
-                    <div class="mb-2 fw-semibold" style="color: #003471;">Payment History</div>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Fee Title</th>
-                                    <th class="text-end">Total</th>
-                                    <th class="text-end">Dis</th>
-                                    <th class="text-end">Late Fee</th>
-                                    <th class="text-end">Paid</th>
-                                    <th class="text-end">Due</th>
-                                    <th>Date</th>
-                                    <th>Accountant</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${paymentRows || '<tr><td colspan="8" class="text-center text-muted">No history found.</td></tr>'}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </td>
-        `;
-
-        lastRow.insertAdjacentElement('afterend', historyRow);
-    })
-    .catch(() => {});
-}
-
-function searchByCNIC(onComplete) {
+function searchByCNIC() {
     const searchValue = document.getElementById('searchByCNIC').value.trim();
     if (!searchValue) {
         alert('Please enter Father\'s CNIC or Parent ID');
@@ -1350,7 +1536,7 @@ function searchByCNIC(onComplete) {
     searchResultsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Searching...</p></td></tr>';
 
     // Make AJAX call to search students by CNIC
-    fetch(`{{ route('fee-payment.search-by-cnic') }}?cnic=${encodeURIComponent(searchValue)}`, {
+    fetch(`{{ route('accountant.fee-payment.search-by-cnic') }}?cnic=${encodeURIComponent(searchValue)}`, {
         method: 'GET',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
@@ -1362,31 +1548,36 @@ function searchByCNIC(onComplete) {
         searchResultsBody.innerHTML = '';
         
         if (data.success && data.students && data.students.length > 0) {
-            let totals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
+            const grandTotals = { total: 0, discount: 0, late: 0, paid: 0, due: 0 };
             data.students.forEach((student) => {
-                const feeRows = (student.fee_rows && student.fee_rows.length > 0) ? student.fee_rows : [{
-                    title: 'N/A',
-                    total: 0,
-                    discount: 0,
-                    late_fee: 0,
-                    paid: 0,
-                    due: 0,
-                    amount: 0,
-                    remaining_late: 0,
-                }];
+                const feeRows = Array.isArray(student.fee_rows) && student.fee_rows.length > 0
+                    ? student.fee_rows
+                    : [{
+                        title: 'No Fee Generated',
+                        total: 0,
+                        discount: 0,
+                        late_fee: 0,
+                        paid: 0,
+                        due: 0,
+                        is_empty: true,
+                    }];
 
                 feeRows.forEach((fee) => {
-                    const row = document.createElement('tr');
                     const feeTitleSafe = (fee.title || '').replace(/'/g, "\\'");
-                    const studentNameSafe = (student.student_name || '').replace(/'/g, "\\'");
-                    const campusSafe = (student.campus || '').replace(/'/g, "\\'");
-                    const dueAmount = parseFloat(fee.due || 0);
-                    const feeAmount = parseFloat(fee.amount || 0);
-                    totals.total += parseFloat(fee.total || 0);
-                    totals.discount += parseFloat(fee.discount || 0);
-                    totals.late += parseFloat(fee.late_fee || 0);
-                    totals.paid += parseFloat(fee.paid || 0);
-                    totals.due += dueAmount;
+                    const total = parseFloat(fee.total || 0);
+                    const discount = parseFloat(fee.discount || 0);
+                    const lateFee = parseFloat(fee.late_fee || 0);
+                    const paid = parseFloat(fee.paid || 0);
+                    const due = parseFloat(fee.due || 0);
+                    const isEmptyFee = !!fee.is_empty;
+                    const paidForStatus = paid;
+                    const paidDisplay = paid;
+                    grandTotals.total += total;
+                    grandTotals.discount += discount;
+                    grandTotals.late += lateFee;
+                    grandTotals.paid += paid;
+                    grandTotals.due += due;
+                    const row = document.createElement('tr');
                     row.innerHTML = `
                         <td style="padding: 8px 12px; font-size: 13px;">
                             <strong>${student.student_code || 'N/A'}</strong>
@@ -1401,119 +1592,92 @@ function searchByCNIC(onComplete) {
                             ${fee.title || 'N/A'}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.total || 0).toFixed(2)}
+                            ${total.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.discount || 0).toFixed(2)}
+                            ${discount.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.late_fee || 0).toFixed(2)}
+                            ${lateFee.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${parseFloat(fee.paid || 0).toFixed(2)}
+                            ${paidDisplay.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${dueAmount.toFixed(2)}
+                            ${due.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
+                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                            <div class="d-flex gap-2 flex-wrap" style="position: relative;">
-                                ${dueAmount > 0 ? `
-                                    <button class="btn btn-sm btn-danger" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'})" style="padding: 4px 12px; font-size: 12px; color: white !important;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
-                                        <span style="color: white;">Unpaid</span>
-                                    </button>
-                                ` : `
-                                    <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
-                                        <span style="color: white;">Paid</span>
-                                    </button>
-                                `}
-                                <div class="btn-group" style="position: static;">
-                                    <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
-                                        <span style="color: white;">Take Payment</span>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${dueAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
-                                            Pay This Fee
-                                        </a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="openFeePaymentModal('${student.student_code}', '${studentNameSafe}', '${campusSafe}', '${feeTitleSafe}', ${feeAmount.toFixed(2)}, ${generatedId ? generatedId : 'null'}); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
-                                            Pay without late fee
-                                        </a></li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${studentNameSafe}', 'full'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                            Pay All
-                                        </a></li>
-                                    </ul>
-                                </div>
+                            <div class="btn-group" style="position: static;">
+                                <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 12px; font-size: 12px; color: white !important;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">payments</span>
+                                    <span style="color: white;">Take Payment</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'full', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}}); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
+                                        Full Payment
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due}}); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
+                                        Partial Payment
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
+                                        Pay without late fee
+                                    </a></li>
+                                </ul>
                             </div>
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
-                            <div class="d-flex gap-2 flex-wrap align-items-center" style="position: relative;">
-                                <button class="btn btn-sm btn-warning" onclick="editStudent(${student.id}, '${student.student_code}', '${studentNameSafe}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Edit Student">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">edit</span>
+                            <div class="btn-group" style="position: static;">
+                                <button type="button" class="btn btn-sm" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 2px 6px; border: none; background: #000; color: #fff; border-radius: 4px;" title="More Options">
+                                    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
                                 </button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteStudent(${student.id}, '${student.student_code}', '${studentNameSafe}')" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="Delete Student">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">delete</span>
-                                </button>
-                                <div class="btn-group" style="position: static;">
-                                    <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 4px 10px; font-size: 12px; color: white !important;" title="More Options">
-                                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">arrow_drop_down</span>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                                        <li><a class="dropdown-item" href="#" onclick="payAll('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">payments</span>
-                                            Pay All
-                                        </a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">receipt</span>
-                                            Print Voucher
-                                        </a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="makeInstallment('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">calendar_month</span>
-                                            Make Installment
-                                        </a></li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item" href="#" onclick="particularReceipt('${student.student_code}', '${studentNameSafe}'); return false;">
-                                            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">description</span>
-                                            Particular Receipt
-                                        </a></li>
-                                    </ul>
-                                </div>
+                                <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
+                                    <li><a class="dropdown-item" href="#" onclick="printVoucher('${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
+                                        Print Voucher
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="#" onclick="editStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
+                                        Edit
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="deleteStudent(${student.id}, '${student.student_code}', '${student.student_name}'); return false;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">delete</span>
+                                        Delete
+                                    </a></li>
+                                </ul>
                             </div>
                         </td>
                     `;
                     searchResultsBody.appendChild(row);
                 });
             });
-
             const totalRow = document.createElement('tr');
             totalRow.innerHTML = `
-                <td colspan="4" class="text-end fw-semibold">Total sab se nechi</td>
-                <td class="fw-semibold">${totals.total.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.discount.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.late.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.paid.toFixed(2)}</td>
-                <td class="fw-semibold">${totals.due.toFixed(2)}</td>
-                <td colspan="2"></td>
+                <td colspan="4" style="padding: 8px 12px; font-size: 13px;" class="text-end fw-semibold">Total</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.total.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.discount.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.late.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.paid.toFixed(2)}</td>
+                <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.due.toFixed(2)}</td>
+                <td colspan="3"></td>
             `;
             searchResultsBody.appendChild(totalRow);
+            renderLatestPaymentsForStudents(data.students);
         } else {
-            searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No students found matching this CNIC / Parent ID.</td></tr>';
-        }
-        if (typeof onComplete === 'function') {
-            onComplete();
+            searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">No students found matching this CNIC / Parent ID.</td></tr>';
+            renderLatestPaymentsForStudents([]);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        searchResultsBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
-        if (typeof onComplete === 'function') {
-            onComplete();
-        }
+        searchResultsBody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
     });
 }
 
@@ -1523,79 +1687,459 @@ function editStudent(studentId, studentCode, studentName) {
     window.location.href = '{{ route("student.view", ":id") }}'.replace(':id', studentId);
 }
 
+function deleteStudent(studentId, studentCode, studentName) {
+    if (confirm(`Are you sure you want to delete student ${studentName} (${studentCode})? This action cannot be undone.`)) {
+        // Implement delete functionality
+        fetch('{{ route("student.delete", ":id") }}'.replace(':id', studentId), {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Student deleted successfully!');
+                location.reload();
+            } else {
+                alert('Error: ' + (data.message || 'Failed to delete student'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting student. Please try again.');
+        });
+    }
+}
+
 function payAll(studentCode, studentName) {
     // Redirect to pay all fees page or trigger full payment
     takePayment(studentCode, studentName, 'full');
 }
 
 function printVoucher(studentCode, studentName) {
-    // Redirect to print voucher page
-    window.open(`{{ route('accounting.fee-voucher.print', ['student_code' => '']) }}${studentCode}`, '_blank');
+    // Redirect to print voucher page with student_code as query parameter
+    const url = `{{ route('accountant.fee-voucher.print') }}?student_code=${encodeURIComponent(studentCode)}`;
+    window.open(url, '_blank');
 }
 
-function makeInstallment(studentCode, studentName) {
-    // Redirect to make installment page
-    window.location.href = `{{ route('accounting.make-installment', ['student_code' => '']) }}${studentCode}`;
+function makeInstallment(studentCode, studentName, selectedFeeData = null) {
+    // Fetch student fee data
+    fetch(`{{ route('fee-payment.search-student') }}?search=${encodeURIComponent(studentCode)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.students && data.students.length > 0) {
+            const student = data.students[0];
+            
+            // Populate student info
+            document.getElementById('installment_student').value = `${studentName} (${studentCode})`;
+            document.getElementById('installment_student_code').value = studentCode;
+            
+            // Clear and populate fee title dropdown
+            const feeTitleSelect = document.getElementById('installment_fee_title');
+            feeTitleSelect.innerHTML = '<option value="">Select Fee Title</option>';
+            
+            // Remove existing change listener to avoid duplicates
+            const newSelect = feeTitleSelect.cloneNode(true);
+            feeTitleSelect.parentNode.replaceChild(newSelect, feeTitleSelect);
+            const updatedSelect = document.getElementById('installment_fee_title');
+            
+            let selectedFeeIndex = 0;
+            
+            // Create fee cards container
+            const feeCardsContainer = document.getElementById('feeCardsContainer');
+            const feeCardsRow = document.getElementById('feeCardsRow');
+            feeCardsRow.innerHTML = ''; // Clear existing cards
+            
+            if (student.fee_rows && student.fee_rows.length > 0) {
+                student.fee_rows.forEach((fee, index) => {
+                    const option = document.createElement('option');
+                    option.value = fee.title;
+                    option.textContent = fee.title;
+                    option.dataset.totalAmount = fee.total || 0;
+                    option.dataset.amountPaid = fee.paid || 0;
+                    option.dataset.discount = fee.discount || 0;
+                    option.dataset.remaining = fee.due || 0;
+                    updatedSelect.appendChild(option);
+                    
+                    // Create fee card
+                    const cardCol = document.createElement('div');
+                    cardCol.className = 'col-md-4 col-sm-6';
+                    const remaining = parseFloat(fee.due || 0);
+                    const total = parseFloat(fee.total || 0);
+                    cardCol.innerHTML = `
+                        <div class="fee-card-clickable" style="border: 2px solid #e0e7ff; border-radius: 8px; padding: 12px; background: white; cursor: pointer; transition: all 0.3s; margin-bottom: 8px;" 
+                             onclick="selectFeeCard('${fee.title}', ${index + 1})"
+                             onmouseover="this.style.borderColor='#003471'; this.style.boxShadow='0 2px 8px rgba(0,52,113,0.2)'"
+                             onmouseout="this.style.borderColor='#e0e7ff'; this.style.boxShadow='none'">
+                            <div class="fw-semibold" style="color: #003471; font-size: 13px; margin-bottom: 4px;">${fee.title}</div>
+                            <div style="color: #6c757d; font-size: 11px;">Total: Rs. ${total.toFixed(2)}</div>
+                            <div style="color: #dc3545; font-size: 12px; font-weight: 600;">Due: Rs. ${remaining.toFixed(2)}</div>
+                        </div>
+                    `;
+                    feeCardsRow.appendChild(cardCol);
+                    
+                    // If selectedFeeData matches this fee, remember its index
+                    if (selectedFeeData && selectedFeeData.title === fee.title) {
+                        selectedFeeIndex = index + 1; // +1 because first option is "Select Fee Title"
+                    }
+                });
+                
+                // Show fee cards container
+                feeCardsContainer.style.display = 'block';
+            } else {
+                // If no fees, show default monthly fee
+                const option = document.createElement('option');
+                const currentMonth = new Date().toLocaleString('default', { month: 'long' });
+                const currentYear = new Date().getFullYear();
+                option.value = `Monthly Fee - ${currentMonth} ${currentYear}`;
+                option.textContent = option.value;
+                option.dataset.totalAmount = student.monthly_fee || 0;
+                option.dataset.amountPaid = 0;
+                option.dataset.discount = 0;
+                option.dataset.remaining = student.monthly_fee || 0;
+                updatedSelect.appendChild(option);
+            }
+            
+            // Update fee details when fee title changes
+            updatedSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                if (selectedOption && selectedOption.dataset.totalAmount) {
+                    const totalAmount = parseFloat(selectedOption.dataset.totalAmount || 0);
+                    const amountPaid = parseFloat(selectedOption.dataset.amountPaid || 0);
+                    const discount = parseFloat(selectedOption.dataset.discount || 0);
+                    const remaining = parseFloat(selectedOption.dataset.remaining || 0);
+                    
+                    document.getElementById('installment_total_amount').value = totalAmount.toFixed(2);
+                    document.getElementById('installment_amount_paid').value = amountPaid.toFixed(2);
+                    document.getElementById('installment_discount').value = discount.toFixed(2);
+                    document.getElementById('installment_remaining_amount').value = remaining.toFixed(2);
+                    
+                    // Calculate per installment amount
+                    calculatePerInstallment();
+                }
+            });
+            
+            // Calculate per installment when total installments changes
+            const totalInstallmentsInput = document.getElementById('installment_total_installments');
+            const newInput = totalInstallmentsInput.cloneNode(true);
+            totalInstallmentsInput.parentNode.replaceChild(newInput, totalInstallmentsInput);
+            document.getElementById('installment_total_installments').addEventListener('input', calculatePerInstallment);
+            
+            // Reset form fields
+            document.getElementById('installment_total_amount').value = '';
+            document.getElementById('installment_amount_paid').value = '';
+            document.getElementById('installment_discount').value = '';
+            document.getElementById('installment_remaining_amount').value = '';
+            document.getElementById('installment_per_installment').value = '';
+            document.getElementById('installment_total_installments').value = '';
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('makeInstallmentModal'));
+            modal.show();
+            
+            // If selectedFeeData is provided, pre-select and populate that fee
+            if (selectedFeeData && selectedFeeIndex > 0) {
+                updatedSelect.selectedIndex = selectedFeeIndex;
+                updatedSelect.dispatchEvent(new Event('change'));
+            } else if (updatedSelect.options.length > 1) {
+                // Otherwise, select first fee by default
+                updatedSelect.selectedIndex = 1;
+                updatedSelect.dispatchEvent(new Event('change'));
+            }
+        } else {
+            alert('Student not found or no fee data available.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading student fee data. Please try again.');
+    });
+}
+
+function selectFeeCard(feeTitle, optionIndex) {
+    const feeTitleSelect = document.getElementById('installment_fee_title');
+    feeTitleSelect.selectedIndex = optionIndex;
+    feeTitleSelect.dispatchEvent(new Event('change'));
+}
+
+function calculatePerInstallment() {
+    const remainingAmount = parseFloat(document.getElementById('installment_remaining_amount').value || 0);
+    const totalInstallments = parseInt(document.getElementById('installment_total_installments').value || 1);
+    
+    if (totalInstallments > 0 && remainingAmount > 0) {
+        const perInstallment = remainingAmount / totalInstallments;
+        document.getElementById('installment_per_installment').value = perInstallment.toFixed(2);
+    } else {
+        document.getElementById('installment_per_installment').value = '0.00';
+    }
+}
+
+function handleInstallmentSubmit(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const studentCode = formData.get('student_code');
+    const feeTitle = formData.get('payment_title');
+    const totalInstallments = parseInt(formData.get('total_installments') || 1);
+    const remainingAmount = parseFloat(document.getElementById('installment_remaining_amount').value || 0);
+    
+    if (!studentCode || !feeTitle || totalInstallments < 1) {
+        alert('Please fill all required fields.');
+        return;
+    }
+    
+    if (remainingAmount <= 0) {
+        alert('Remaining amount must be greater than 0 to create installments.');
+        return;
+    }
+    
+    const perInstallment = remainingAmount / totalInstallments;
+    
+    // Show loading
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Creating...';
+    
+    // Create installments
+    const installmentAmount = perInstallment.toFixed(2);
+    const promises = [];
+    
+    for (let i = 1; i <= totalInstallments; i++) {
+        const installmentFormData = new FormData();
+        installmentFormData.append('_token', formData.get('_token'));
+        installmentFormData.append('student_code', studentCode);
+        installmentFormData.append('payment_title', `${feeTitle}/${i}`);
+        installmentFormData.append('payment_amount', installmentAmount);
+        installmentFormData.append('discount', '0');
+        installmentFormData.append('method', 'Generated');
+        installmentFormData.append('payment_date', new Date().toISOString().split('T')[0]);
+        installmentFormData.append('sms_notification', 'Yes');
+        
+        promises.push(
+            fetch(form.action, {
+                method: 'POST',
+                body: installmentFormData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                }
+            })
+        );
+    }
+    
+    // Execute all installment creation requests
+    Promise.all(promises)
+    .then(responses => {
+        return Promise.all(responses.map(async (response) => {
+            if (!response.ok) {
+                // Try to parse error response
+                let errorData = { success: false, message: 'Request failed' };
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        errorData = await response.json();
+                    } else {
+                        // Try to get text response for debugging
+                        const textResponse = await response.text();
+                        errorData.message = `Server error: ${response.status} ${response.statusText}`;
+                        if (textResponse) {
+                            console.error('Non-JSON error response:', textResponse.substring(0, 200));
+                        }
+                    }
+                } catch (e) {
+                    errorData.message = `Server error: ${response.status} ${response.statusText}. ${e.message}`;
+                }
+                return errorData;
+            }
+            try {
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const textResponse = await response.text();
+                    console.error('Non-JSON response received:', textResponse.substring(0, 200));
+                    return { success: false, message: 'Server returned non-JSON response' };
+                }
+                return await response.json();
+            } catch (e) {
+                console.error('Error parsing JSON:', e);
+                return { success: false, message: 'Invalid response from server: ' + e.message };
+            }
+        }));
+    })
+    .then(results => {
+        const successCount = results.filter(r => r.success !== false).length;
+        const failedResults = results.filter(r => r.success === false);
+        
+        if (successCount === totalInstallments) {
+            alert(`Successfully created ${totalInstallments} installment(s) for ${feeTitle}!`);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('makeInstallmentModal'));
+            modal.hide();
+            // Refresh search results
+            if (window.lastFeeSearch && window.lastFeeSearch.value) {
+                if (window.lastFeeSearch.type === 'name') {
+                    document.getElementById('searchByName').value = window.lastFeeSearch.value;
+                    searchByName();
+                } else if (window.lastFeeSearch.type === 'cnic') {
+                    document.getElementById('searchByCNIC').value = window.lastFeeSearch.value;
+                    searchByCNIC();
+                }
+            }
+        } else {
+            let errorMsg = `Created ${successCount} out of ${totalInstallments} installments.`;
+            if (failedResults.length > 0) {
+                const firstError = failedResults[0];
+                if (firstError.message) {
+                    errorMsg += `\n\nError: ${firstError.message}`;
+                    if (firstError.errors) {
+                        const errorDetails = Object.values(firstError.errors).flat().join(', ');
+                        errorMsg += `\nDetails: ${errorDetails}`;
+                    }
+                }
+            }
+            alert(errorMsg);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error creating installments. Please try again.\n\n' + (error.message || 'Unknown error occurred'));
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
 }
 
 function particularReceipt(studentCode, studentName) {
-    // Redirect to particular receipt page
-    window.open(`{{ route('accounting.particular-receipt', ['student_code' => '']) }}${studentCode}`, '_blank');
+    // Redirect to thermal print particular receipt page
+    const url = `{{ url('/fee-payment/particular-receipt-thermal') }}/${encodeURIComponent(studentCode)}`;
+    window.open(url, '_blank');
 }
 
 // Allow Enter key to trigger search
-function setupAutoSearch(inputId, handler) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-
-    let debounceTimer = null;
-    input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handler();
-        }
-    });
-    input.addEventListener('input', function() {
-        clearTimeout(debounceTimer);
-        const value = input.value.trim();
-        if (!value) return;
-        debounceTimer = setTimeout(() => {
-            handler();
-        }, 400);
-    });
-}
-
-setupAutoSearch('searchByName', searchByName);
-setupAutoSearch('searchByCNIC', searchByCNIC);
-
-// Barcode/scan fallback: capture fast key bursts and trigger search
-let scanBuffer = '';
-let scanResetTimer = null;
-document.addEventListener('keydown', function(e) {
-    const active = document.activeElement;
-    const isTypingField = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+document.getElementById('searchByName')?.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
-        if (!isTypingField && scanBuffer.trim()) {
-            const input = document.getElementById('searchByName');
-            if (input) {
-                input.value = scanBuffer.trim();
-            }
-            searchByName();
-        }
-        scanBuffer = '';
-        clearTimeout(scanResetTimer);
-        return;
-    }
-    if (!isTypingField && e.key.length === 1) {
-        scanBuffer += e.key;
-        clearTimeout(scanResetTimer);
-        scanResetTimer = setTimeout(() => {
-            scanBuffer = '';
-        }, 200);
+        searchByName();
     }
 });
 
-document.getElementById('searchByName')?.focus();
+document.getElementById('searchByCNIC')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchByCNIC();
+    }
+});
+
+// Check for Fee Calculator partial payment data on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const feeCalculatorPayment = sessionStorage.getItem('feeCalculatorPayment');
+    
+    if (feeCalculatorPayment) {
+        try {
+            const paymentData = JSON.parse(feeCalculatorPayment);
+            
+            if (paymentData.students && paymentData.students.length > 0 && paymentData.paymentType === 'partial') {
+                // Show notification
+                const notification = document.createElement('div');
+                notification.className = 'alert alert-info alert-dismissible fade show';
+                notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                notification.innerHTML = `
+                    <strong>Fee Calculator Payment:</strong> Processing partial payment for ${paymentData.students.length} student(s). Total Amount: ${paymentData.totalAmount.toFixed(2)}, Payment Amount: ${paymentData.paymentAmount.toFixed(2)}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(notification);
+                
+                // Auto-search for first student to populate the page
+                if (paymentData.students.length > 0) {
+                    const firstStudent = paymentData.students[0];
+                    const studentCode = firstStudent.student_code || firstStudent.code;
+                    
+                    if (studentCode) {
+                        // Search for the student
+                        document.getElementById('searchByName').value = studentCode;
+                        searchByName();
+                        
+                        // After search completes, open partial payment modal
+                        setTimeout(function() {
+                            // Find the student in search results and trigger partial payment
+                            if (window.feeCalculatorPaymentData) {
+                                // Store payment data globally for use in partial payment modal
+                                window.feeCalculatorPaymentData = paymentData;
+                                
+                                // Process students from Fee Calculator
+                                // Helper function to calculate student total
+                                function calculateStudentTotal(student) {
+                                    return (parseFloat(student.monthly_fee || 0)) + 
+                                           (parseFloat(student.transport_fare || 0)) + 
+                                           (parseFloat(student.admission_fee_amount || 0)) + 
+                                           (parseFloat(student.other_fee_amount || 0));
+                                }
+                                
+                                if (paymentData.students.length === 1) {
+                                    // Single student - open partial payment modal directly
+                                    const student = paymentData.students[0];
+                                    const studentCode = student.student_code || student.code;
+                                    const studentName = student.student_name || student.name;
+                                    
+                                    // Calculate proportional payment amount for this student
+                                    const studentTotal = calculateStudentTotal(student);
+                                    const proportionalAmount = paymentData.totalAmount > 0 
+                                        ? (paymentData.paymentAmount * (studentTotal / paymentData.totalAmount))
+                                        : paymentData.paymentAmount;
+                                    
+                                    takePayment(studentCode, studentName, 'partial', {
+                                        student_code: studentCode,
+                                        student_name: studentName,
+                                        campus: student.campus || '',
+                                        monthly_fee: student.monthly_fee || 0,
+                                        paymentAmount: proportionalAmount,
+                                        totalAmount: studentTotal,
+                                        fee_title: 'Monthly Fee'
+                                    });
+                                } else {
+                                    // Multiple students - open partial payment for first student with proportional amount
+                                    const firstStudent = paymentData.students[0];
+                                    const studentCode = firstStudent.student_code || firstStudent.code;
+                                    const studentName = firstStudent.student_name || firstStudent.name;
+                                    
+                                    // Calculate proportional payment for first student
+                                    const firstStudentTotal = calculateStudentTotal(firstStudent);
+                                    const proportionalAmount = paymentData.totalAmount > 0 
+                                        ? (paymentData.paymentAmount * (firstStudentTotal / paymentData.totalAmount))
+                                        : (paymentData.paymentAmount / paymentData.students.length);
+                                    
+                                    takePayment(studentCode, studentName, 'partial', {
+                                        student_code: studentCode,
+                                        student_name: studentName,
+                                        campus: firstStudent.campus || '',
+                                        monthly_fee: firstStudent.monthly_fee || 0,
+                                        paymentAmount: proportionalAmount,
+                                        totalAmount: firstStudentTotal,
+                                        fee_title: 'Monthly Fee'
+                                    });
+                                }
+                                
+                                // Clear sessionStorage after processing
+                                sessionStorage.removeItem('feeCalculatorPayment');
+                            }
+                        }, 2000);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error processing Fee Calculator payment data:', e);
+            sessionStorage.removeItem('feeCalculatorPayment');
+        }
+    }
+});
 </script>
 @endsection
 

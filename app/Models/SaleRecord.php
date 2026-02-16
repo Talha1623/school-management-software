@@ -20,6 +20,7 @@ class SaleRecord extends Model
         'campus',
         'sale_date',
         'notes',
+        'received_by',
     ];
 
     protected $casts = [

@@ -401,9 +401,9 @@ class StudentVoucherController extends Controller
                         'sort_order' => 2,
                     ]);
                 } else {
-                    // Custom fee - show fee type in description
+                    // Custom fee - show fee type name directly as description
                     $customFees->push([
-                        'description' => "Generate Custom Fee - {$payment->payment_title}",
+                        'description' => $payment->payment_title ?? 'Custom Fee',
                         'amount' => $amount,
                         'sort_order' => 2, // Custom fees after monthly fees
                     ]);

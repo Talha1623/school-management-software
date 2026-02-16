@@ -10,6 +10,14 @@
                 <h4 class="mb-0 fs-16 fw-semibold">Assign Grades - For Particular Test</h4>
             </div>
 
+            @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">check_circle</span>
+                {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            @endif
+
             <!-- Filter Form -->
             <form action="{{ route('test.assign-grades.particular') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
@@ -83,13 +91,23 @@
                 </div>
             </form>
 
-            <!-- Results Table -->
+            <!-- Add Grade Button - Show when filters are applied -->
             @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_subject', 'filter_test']))
+            <div class="mt-3 mb-3">
+                <button type="button" class="btn btn-primary add-grade-btn" data-bs-toggle="modal" data-bs-target="#addGradeModal">
+                    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">add</span>
+                    Add Grade
+                </button>
+            </div>
+            @endif
+
+            <!-- Grade Definitions Table -->
+            @if(isset($gradeDefinitions) && $gradeDefinitions->count() > 0)
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
                         <span class="material-symbols-outlined" style="font-size: 18px;">grade</span>
-                        <span>Assign Grades</span>
+                        <span>Grade Definitions</span>
                     </h5>
                 </div>
 
@@ -99,86 +117,61 @@
                             <thead>
                                 <tr>
                                     <th>#</th>
-                                    <th>Photo</th>
-                                    <th>Student Code</th>
-                                    <th>Student Name</th>
-                                    <th>Class</th>
-                                    <th>Section</th>
-                                    <th>Marks</th>
-                                    <th>Grade</th>
-                                    <th>Remarks</th>
+                                    <th>Grade Name</th>
+                                    <th>Test</th>
+                                    <th>Class/Section</th>
+                                    <th>Subject</th>
+                                    <th>From %</th>
+                                    <th>To %</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse($students as $index => $student)
+                                @foreach($gradeDefinitions as $index => $grade)
                                 <tr>
                                     <td>{{ $index + 1 }}</td>
                                     <td>
-                                        @if($student->photo)
-                                            <img src="{{ asset('storage/' . $student->photo) }}" alt="{{ $student->student_name }}" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">
-                                        @else
-                                            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                                <span class="text-white fw-bold">{{ substr($student->student_name, 0, 1) }}</span>
-                                            </div>
-                                        @endif
+                                        <strong class="text-primary">{{ $grade->name }}</strong>
                                     </td>
-                                    <td>{{ $student->student_code ?? 'N/A' }}</td>
+                                    <td>{{ $grade->for_test }}</td>
                                     <td>
-                                        <strong class="text-primary">{{ $student->student_name }}</strong>
+                                        {{ $grade->class }}@if($grade->section) / {{ $grade->section }}@endif
                                     </td>
-                                    <td>{{ $student->class }}</td>
+                                    <td>{{ $grade->subject ?? 'N/A' }}</td>
+                                    <td>{{ number_format($grade->from_percentage, 2) }}%</td>
+                                    <td>{{ number_format($grade->to_percentage, 2) }}%</td>
                                     <td>
-                                        <span class="badge bg-info text-white">{{ $student->section ?? 'N/A' }}</span>
-                                    </td>
-                                    <td>
-                                        <input type="number" class="form-control form-control-sm marks-input" data-student-id="{{ $student->id }}" placeholder="Marks" min="0" max="100" step="0.01" style="width: 100px; display: inline-block;">
-                                    </td>
-                                    <td>
-                                        <select class="form-select form-select-sm grade-select" data-student-id="{{ $student->id }}" style="width: 100px; display: inline-block;">
-                                            <option value="">Select Grade</option>
-                                            <option value="A+">A+</option>
-                                            <option value="A">A</option>
-                                            <option value="B+">B+</option>
-                                            <option value="B">B</option>
-                                            <option value="C+">C+</option>
-                                            <option value="C">C</option>
-                                            <option value="D">D</option>
-                                            <option value="F">F</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <input type="text" class="form-control form-control-sm remarks-input" data-student-id="{{ $student->id }}" placeholder="Remarks" style="width: 150px; display: inline-block;">
-                                    </td>
-                                    <td>
-                                        <button type="button" class="btn btn-sm btn-success save-grade-btn" data-student-id="{{ $student->id }}" style="font-size: 11px; padding: 4px 8px;">
-                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">save</span>
-                                            Save
-                                        </button>
+                                        <form action="{{ route('test.assign-grades.particular.delete', $grade->id) }}" method="POST" style="display: inline-block;" onsubmit="return confirm('Are you sure you want to delete this grade definition?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input type="hidden" name="filter_campus" value="{{ $filterCampus }}">
+                                            <input type="hidden" name="filter_class" value="{{ $filterClass }}">
+                                            <input type="hidden" name="filter_section" value="{{ $filterSection }}">
+                                            <input type="hidden" name="filter_subject" value="{{ $filterSubject }}">
+                                            <input type="hidden" name="filter_test" value="{{ $filterTest }}">
+                                            <button type="submit" class="btn btn-sm btn-danger" style="font-size: 11px; padding: 4px 8px;">
+                                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">delete</span>
+                                                Delete
+                                            </button>
+                                        </form>
                                     </td>
                                 </tr>
-                                @empty
-                                <tr>
-                                    <td colspan="10" class="text-center py-4">
-                                        <div class="d-flex flex-column align-items-center">
-                                            <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
-                                            <p class="text-muted mt-2 mb-0">No students found</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                                @endforelse
+                                @endforeach
                             </tbody>
-                            @if($students->count() > 0)
                             <tfoot>
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="9" class="text-end">Total Students:</td>
-                                    <td>{{ $students->count() }}</td>
+                                    <td colspan="7" class="text-end">Total Grades:</td>
+                                    <td>{{ $gradeDefinitions->count() }}</td>
                                 </tr>
                             </tfoot>
-                            @endif
                         </table>
                     </div>
                 </div>
+            </div>
+            @elseif(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_subject', 'filter_test']))
+            <div class="text-center py-5">
+                <span class="material-symbols-outlined text-muted" style="font-size: 64px;">inbox</span>
+                <p class="text-muted mt-3 mb-0">No grade definitions found. Click "Add Grade" to create grade definitions.</p>
             </div>
             @else
             <div class="text-center py-5">
@@ -186,6 +179,126 @@
                 <p class="text-muted mt-3 mb-0">Please apply filters to view students and assign grades</p>
             </div>
             @endif
+        </div>
+    </div>
+</div>
+
+<!-- Add Grade Modal -->
+<div class="modal fade" id="addGradeModal" tabindex="-1" aria-labelledby="addGradeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                <h5 class="modal-title text-white" id="addGradeModalLabel">
+                    <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">add</span>
+                    Add Grade Definition
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addGradeForm" action="{{ route('test.assign-grades.particular.store-grade') }}" method="POST">
+                @csrf
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <!-- Campus -->
+                        <div class="col-md-6">
+                            <label for="modal_campus" class="form-label fs-12 fw-semibold" style="color: #003471;">Campus <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="modal_campus" name="campus" required style="height: 32px;">
+                                <option value="">Select Campus</option>
+                                @foreach($campuses as $campus)
+                                    @php
+                                        $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                    @endphp
+                                    <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <!-- Name (Grade Name) -->
+                        <div class="col-md-6">
+                            <label for="modal_name" class="form-label fs-12 fw-semibold" style="color: #003471;">Name (Grade) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="modal_name" 
+                                   name="name" placeholder="e.g., A+, A, B+, etc." required style="height: 32px;">
+                        </div>
+
+                        <!-- From % -->
+                        <div class="col-md-6">
+                            <label for="modal_from_percentage" class="form-label fs-12 fw-semibold" style="color: #003471;">From % <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control form-control-sm" id="modal_from_percentage" 
+                                   name="from_percentage" min="0" max="100" step="0.01" required style="height: 32px;">
+                        </div>
+
+                        <!-- To % -->
+                        <div class="col-md-6">
+                            <label for="modal_to_percentage" class="form-label fs-12 fw-semibold" style="color: #003471;">To % <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control form-control-sm" id="modal_to_percentage" 
+                                   name="to_percentage" min="0" max="100" step="0.01" required style="height: 32px;">
+                        </div>
+
+                        <!-- For Test -->
+                        <div class="col-md-6">
+                            <label for="modal_for_test" class="form-label fs-12 fw-semibold" style="color: #003471;">For Test <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="modal_for_test" name="for_test" required style="height: 32px;">
+                                <option value="">Select Test</option>
+                                @foreach($tests as $testName)
+                                    <option value="{{ $testName }}" {{ $filterTest == $testName ? 'selected' : '' }}>{{ $testName }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <!-- Class -->
+                        <div class="col-md-6">
+                            <label for="modal_class" class="form-label fs-12 fw-semibold" style="color: #003471;">Class <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="modal_class" name="class" required style="height: 32px;">
+                                <option value="">Select Class</option>
+                                @foreach($classes as $className)
+                                    <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <!-- Section -->
+                        <div class="col-md-6">
+                            <label for="modal_section" class="form-label fs-12 fw-semibold" style="color: #003471;">Section</label>
+                            <select class="form-select form-select-sm" id="modal_section" name="section" style="height: 32px;">
+                                <option value="">Select Section</option>
+                                @if($filterClass)
+                                    @foreach($sections as $sectionName)
+                                        <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
+                                    @endforeach
+                                @endif
+                            </select>
+                        </div>
+
+                        <!-- Subject -->
+                        <div class="col-md-6">
+                            <label for="modal_subject" class="form-label fs-12 fw-semibold" style="color: #003471;">Subject</label>
+                            <select class="form-select form-select-sm" id="modal_subject" name="subject" style="height: 32px;">
+                                <option value="">Select Subject</option>
+                                @foreach($subjects as $subjectName)
+                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <!-- Session -->
+                        <div class="col-md-6">
+                            <label for="modal_session" class="form-label fs-12 fw-semibold" style="color: #003471;">Session <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="modal_session" name="session" required style="height: 32px;">
+                                <option value="">Select Session</option>
+                                @foreach($sessions as $sessionName)
+                                    <option value="{{ $sessionName }}">{{ $sessionName }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">save</span>
+                        Add Grade
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -202,6 +315,22 @@
     background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
+}
+
+.add-grade-btn {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.add-grade-btn:hover {
+    background: linear-gradient(135deg, #20c997 0%, #28a745 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+    color: white;
 }
 
 .default-table-area {
@@ -252,57 +381,73 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load sections when class changes
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const modalClassSelect = document.getElementById('modal_class');
+    const modalSectionSelect = document.getElementById('modal_section');
 
     if (classSelect && sectionSelect) {
-        function loadSections(selectedClass) {
+        function loadSections(selectedClass, targetSelect) {
             if (selectedClass) {
-                sectionSelect.disabled = false;
-                sectionSelect.innerHTML = '<option value="">Loading...</option>';
+                if (targetSelect) targetSelect.disabled = false;
+                if (targetSelect) targetSelect.innerHTML = '<option value="">Loading...</option>';
                 
                 fetch(`{{ route('test.assign-grades.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`)
                     .then(response => response.json())
                     .then(data => {
-                        sectionSelect.innerHTML = '<option value="">All Sections</option>';
-                        data.sections.forEach(section => {
-                            const option = document.createElement('option');
-                            option.value = section;
-                            option.textContent = section;
-                            @if($filterSection)
-                            if (section === '{{ $filterSection }}') {
-                                option.selected = true;
-                            }
-                            @endif
-                            sectionSelect.appendChild(option);
-                        });
+                        if (targetSelect) {
+                            targetSelect.innerHTML = '<option value="">All Sections</option>';
+                            data.sections.forEach(section => {
+                                const option = document.createElement('option');
+                                option.value = section;
+                                option.textContent = section;
+                                @if($filterSection)
+                                if (section === '{{ $filterSection }}') {
+                                    option.selected = true;
+                                }
+                                @endif
+                                targetSelect.appendChild(option);
+                            });
+                        }
                         
                         // Load subjects after sections are loaded
                         loadSubjects();
                     })
                     .catch(error => {
                         console.error('Error loading sections:', error);
-                        sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                        if (targetSelect) targetSelect.innerHTML = '<option value="">Error loading sections</option>';
                         loadSubjects();
                     });
             } else {
-                sectionSelect.disabled = true;
-                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                if (targetSelect) {
+                    targetSelect.disabled = true;
+                    targetSelect.innerHTML = '<option value="">All Sections</option>';
+                }
                 loadSubjects();
             }
         }
 
-        classSelect.addEventListener('change', function() {
-            loadSections(this.value);
-        });
+        if (classSelect) {
+            classSelect.addEventListener('change', function() {
+                loadSections(this.value, sectionSelect);
+            });
+        }
+
+        if (modalClassSelect) {
+            modalClassSelect.addEventListener('change', function() {
+                loadSections(this.value, modalSectionSelect);
+            });
+        }
 
         // Load sections on page load if class is already selected
         @if($filterClass)
-        loadSections('{{ $filterClass }}');
+        loadSections('{{ $filterClass }}', sectionSelect);
         @endif
     }
     
     // Function to load subjects dynamically
     const campusSelect = document.getElementById('filter_campus');
     const subjectSelect = document.getElementById('filter_subject');
+    const modalCampusSelect = document.getElementById('modal_campus');
+    const modalSubjectSelect = document.getElementById('modal_subject');
     
     function loadSubjects() {
         const campus = campusSelect ? campusSelect.value : '';
@@ -379,51 +524,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(loadSubjects, 1000);
     @endif
 
-    // Auto-calculate grade based on marks
-    document.querySelectorAll('.marks-input').forEach(function(input) {
-        input.addEventListener('input', function() {
-            const marks = parseFloat(this.value);
-            const studentId = this.getAttribute('data-student-id');
-            const gradeSelect = document.querySelector('.grade-select[data-student-id="' + studentId + '"]');
-            
-            if (!isNaN(marks) && gradeSelect) {
-                let grade = '';
-                if (marks >= 90) grade = 'A+';
-                else if (marks >= 80) grade = 'A';
-                else if (marks >= 70) grade = 'B+';
-                else if (marks >= 60) grade = 'B';
-                else if (marks >= 50) grade = 'C+';
-                else if (marks >= 40) grade = 'C';
-                else if (marks >= 33) grade = 'D';
-                else grade = 'F';
-                
-                gradeSelect.value = grade;
-            }
-        });
-    });
-
-    // Save grade button click handler
-    document.querySelectorAll('.save-grade-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            const studentId = this.getAttribute('data-student-id');
-            const marksInput = document.querySelector('.marks-input[data-student-id="' + studentId + '"]');
-            const gradeSelect = document.querySelector('.grade-select[data-student-id="' + studentId + '"]');
-            const remarksInput = document.querySelector('.remarks-input[data-student-id="' + studentId + '"]');
-            
-            const marks = marksInput ? marksInput.value : '';
-            const grade = gradeSelect ? gradeSelect.value : '';
-            const remarks = remarksInput ? remarksInput.value : '';
-            
-            if (!marks || !grade) {
-                alert('Please enter marks and select a grade');
-                return;
-            }
-            
-            // Here you can add AJAX call to save the grade
-            // For now, just show a success message
-            alert('Grade saved successfully for student ID: ' + studentId);
-        });
-    });
 });
 </script>
 @endsection

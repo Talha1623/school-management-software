@@ -6,6 +6,7 @@ use App\Models\ParticularExamGrade;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Exam;
+use App\Models\Campus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -21,9 +22,22 @@ class ParticularExamGradeController extends Controller
         $filterExam = $request->get('filter_exam');
         $filterSession = $request->get('filter_session');
 
+        // Get campuses from Campus model first (primary source)
+        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+        
+        // Also get campuses from ClassModel and Section as fallback
         $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
         $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        $campuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+        
+        // Merge all campuses and get unique values
+        $campuses = $campusesFromModel
+            ->merge($campusesFromClasses)
+            ->merge($campusesFromSections)
+            ->unique()
+            ->sort()
+            ->values();
+        
+        // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }

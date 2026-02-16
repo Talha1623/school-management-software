@@ -861,7 +861,7 @@ function printReceipt() {
                 paymentType: 'partial'
             }));
             
-            // Redirect to payment page
+            // Redirect to accounting fee payment page
             window.location.href = `{{ route('accounting.direct-payment.student') }}`;
         }
     }

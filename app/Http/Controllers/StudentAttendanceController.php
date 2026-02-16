@@ -161,6 +161,17 @@ class StudentAttendanceController extends Controller
         if ($filterClass && $filterDate) {
             $studentsQuery = Student::query();
             
+            // Exclude passout students first
+            $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
+            $studentsQuery->where(function($q) use ($passoutClasses) {
+                $q->whereNotNull('class')
+                    ->where('class', '!=', '')
+                    ->where(function($subQ) use ($passoutClasses) {
+                        // Class should not match any passout value
+                        $subQ->whereRaw("LOWER(TRIM(COALESCE(class, ''))) NOT IN ('" . implode("', '", array_map('strtolower', $passoutClasses)) . "')");
+                    });
+            });
+            
             // Use case-insensitive matching for class (same as API)
             if ($filterClass) {
                 $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
@@ -362,6 +373,65 @@ class StudentAttendanceController extends Controller
         }
 
         return response()->json(['classes' => $classes]);
+    }
+
+    /**
+     * Bulk update student attendance.
+     */
+    public function bulkUpdate(Request $request)
+    {
+        $validated = $request->validate([
+            'student_ids' => ['required', 'array'],
+            'student_ids.*' => ['required', 'exists:students,id'],
+            'attendance_date' => ['required', 'date'],
+            'status' => ['required', 'in:Present,Absent,Holiday,Sunday,Leave,N/A'],
+        ]);
+
+        $studentIds = $validated['student_ids'];
+        $attendanceDate = $validated['attendance_date'];
+        $status = $validated['status'];
+
+        $updatedCount = 0;
+        $errors = [];
+
+        foreach ($studentIds as $studentId) {
+            try {
+                $student = Student::findOrFail($studentId);
+
+                // Create or update attendance
+                StudentAttendance::updateOrCreate(
+                    [
+                        'student_id' => $studentId,
+                        'attendance_date' => $attendanceDate,
+                    ],
+                    [
+                        'status' => $status,
+                        'campus' => $student->campus,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                    ]
+                );
+
+                $updatedCount++;
+            } catch (\Exception $e) {
+                $errors[] = "Failed to update student ID {$studentId}: " . $e->getMessage();
+            }
+        }
+
+        if (count($errors) > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Some students could not be updated.',
+                'errors' => $errors,
+                'updated_count' => $updatedCount,
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully marked {$updatedCount} students as {$status}.",
+            'updated_count' => $updatedCount,
+        ]);
     }
 
     /**

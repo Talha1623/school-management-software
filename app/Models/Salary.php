@@ -24,6 +24,7 @@ class Salary extends Model
         'salary_generated',
         'amount_paid',
         'loan_repayment',
+        'discount',
         'status',
     ];
 
@@ -39,6 +40,7 @@ class Salary extends Model
         'salary_generated' => 'decimal:2',
         'amount_paid' => 'decimal:2',
         'loan_repayment' => 'decimal:2',
+        'discount' => 'decimal:2',
     ];
 
     /**

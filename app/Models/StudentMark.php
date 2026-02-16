@@ -18,6 +18,7 @@ class StudentMark extends Model
         'section',
         'subject',
         'marks_obtained',
+        'grade',
         'total_marks',
         'passing_marks',
         'teacher_remarks',

@@ -10,6 +10,7 @@ use App\Models\FeeType;
 use App\Models\Student;
 use App\Models\StudentPayment;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Carbon\Carbon;
@@ -93,7 +94,8 @@ class CustomFeeController extends Controller
         $selectedStudentIds = $request->input('selected_students', []);
 
         // Determine redirect route based on which route was used (accountant or accounting)
-        $redirectRoute = request()->route()->getName() === 'accountant.generate-custom-fee.store' 
+        $isAccountantRoute = request()->route()->getName() === 'accountant.generate-custom-fee.store';
+        $redirectRoute = $isAccountantRoute 
             ? 'accountant.generate-custom-fee' 
             : 'accounting.generate-custom-fee';
         
@@ -138,6 +140,7 @@ class CustomFeeController extends Controller
         
         $generatedCount = 0;
         $skippedCount = 0;
+        $generatedStudentCodes = [];
         
         foreach ($students as $student) {
             // Skip if student doesn't have student_code
@@ -146,15 +149,27 @@ class CustomFeeController extends Controller
                 continue;
             }
             
-            // Check if fee already exists for this student and fee type
-            $existingFee = StudentPayment::where('student_code', $student->student_code)
+            // Check if unpaid fee already exists for this student and fee type
+            // Only skip if there's an unpaid fee (method = 'Generated' means unpaid)
+            $existingGeneratedFee = StudentPayment::where('student_code', $student->student_code)
                 ->where('payment_title', $paymentTitle)
                 ->where('method', 'Generated')
                 ->first();
             
-            if ($existingFee) {
-                $skippedCount++;
-                continue;
+            if ($existingGeneratedFee) {
+                // Check if this fee has been paid
+                $totalGenerated = (float) ($existingGeneratedFee->payment_amount ?? 0) - (float) ($existingGeneratedFee->discount ?? 0);
+                $totalPaid = StudentPayment::where('student_code', $student->student_code)
+                    ->where('payment_title', $paymentTitle)
+                    ->where('method', '!=', 'Generated')
+                    ->sum(\DB::raw('COALESCE(payment_amount, 0)'));
+                
+                // Only skip if there's an unpaid balance
+                if ($totalGenerated > $totalPaid) {
+                    $skippedCount++;
+                    continue;
+                }
+                // If fee is fully paid, allow generating a new one
             }
             
             // Get accountant name based on guard
@@ -179,6 +194,7 @@ class CustomFeeController extends Controller
                 'accountant' => $accountantName,
             ]);
             
+            $generatedStudentCodes[] = $student->student_code;
             $generatedCount++;
         }
 
@@ -205,6 +221,26 @@ class CustomFeeController extends Controller
         return redirect()
             ->route($redirectRoute)
             ->with('success', $message);
+    }
+
+    /**
+     * Get fee types by campus (AJAX)
+     */
+    public function getFeeTypesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+
+        $query = FeeType::query();
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        $feeTypes = $query->orderBy('fee_name', 'asc')
+            ->pluck('fee_name')
+            ->unique()
+            ->values();
+
+        return response()->json(['fee_types' => $feeTypes]);
     }
 
     /**

@@ -138,44 +138,106 @@
                     </div>
                 </div>
 
-                <!-- Students List -->
+                <!-- Students List - Separate Table for Each Category -->
                 @if($students->count() > 0)
-                <div class="table-responsive">
-                    <table class="table table-hover behavior-table" id="studentsList">
-                        <thead>
-                            <tr>
-                                <th style="width: 5%;">#</th>
-                                <th style="width: 25%;">Student Code</th>
-                                <th style="width: 25%;">Student Name</th>
-                                <th style="width: 25%;">Parent Name</th>
-                                <th style="width: 20%;" class="text-center">Behavior Points</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($students as $student)
-                                @php
-                                    $studentId = $student->student_code ?? $student->gr_number ?? ($loop->iteration + 2000);
-                                    $parentName = $student->father_name ?? 'N/A';
-                                @endphp
-                                <tr class="student-item" data-student-id="{{ $student->id }}" data-student-name="{{ strtolower($student->student_name) }}" data-student-code="{{ strtolower($student->student_code ?? '') }}">
-                                    <td>{{ $loop->iteration }}</td>
-                                    <td><strong>{{ $studentId }}</strong></td>
-                                    <td>{{ $student->student_name }}</td>
-                                    <td>{{ $parentName }}</td>
-                                    <td>
-                                        <div class="d-flex gap-2 justify-content-center align-items-center">
-                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-2" data-student-id="{{ $student->id }}" data-points="-2" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&minus;2</button>
-                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-1" data-student-id="{{ $student->id }}" data-points="-1" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&minus;1</button>
-                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-zero" data-student-id="{{ $student->id }}" data-points="0" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">0</button>
-                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-1" data-student-id="{{ $student->id }}" data-points="1" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&plus;1</button>
-                                            <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-2" data-student-id="{{ $student->id }}" data-points="2" data-type="{{ $filterType }}" data-class="{{ $filterClass }}" data-section="{{ $filterSection ?? '' }}" data-campus="{{ $campusName ?? 'Main Campus' }}" data-date="{{ $filterDate }}">&plus;2</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
+                    @foreach($categories as $categoryIndex => $category)
+                        <div class="category-table-section mb-4">
+                            <div class="card mb-2" style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;">
+                                <div class="card-body p-2">
+                                    <h5 class="mb-0 fw-semibold text-center" style="color: #003471; font-size: 16px;">
+                                        {{ $category }}
+                                    </h5>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover behavior-table category-specific-table" id="category-table-{{ $categoryIndex }}" data-category="{{ $category }}">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 4%;">#</th>
+                                            <th style="width: 15%;">Student Code</th>
+                                            <th style="width: 25%;">Student Name</th>
+                                            <th style="width: 20%;">Parent Name</th>
+                                            <th style="width: 36%;" class="text-center">Behavior Points</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($students as $student)
+                                            @php
+                                                $studentId = $student->student_code ?? $student->gr_number ?? ($loop->iteration + 2000);
+                                                $parentName = $student->father_name ?? 'N/A';
+                                                // Get existing behavior record for this student and category
+                                                $existingRecord = \App\Models\BehaviorRecord::where('student_id', $student->id)
+                                                    ->where('type', $filterType)
+                                                    ->where('category', $category)
+                                                    ->whereDate('date', $filterDate)
+                                                    ->first();
+                                                $isCategorySelected = $existingRecord && $existingRecord->category == $category;
+                                            @endphp
+                                            <tr class="student-item category-row" 
+                                                data-student-id="{{ $student->id }}" 
+                                                data-category="{{ $category }}"
+                                                data-student-name="{{ strtolower($student->student_name) }}" 
+                                                data-student-code="{{ strtolower($student->student_code ?? '') }}">
+                                                <td>{{ $loop->iteration }}</td>
+                                                <td><strong>{{ $studentId }}</strong></td>
+                                                <td>{{ $student->student_name }}</td>
+                                                <td>{{ $parentName }}</td>
+                                                <td>
+                                                    <div class="d-flex gap-2 justify-content-center align-items-center">
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-2" 
+                                                                data-student-id="{{ $student->id }}" 
+                                                                data-category="{{ $category }}"
+                                                                data-points="-2" 
+                                                                data-type="{{ $filterType }}" 
+                                                                data-class="{{ $filterClass }}" 
+                                                                data-section="{{ $filterSection ?? '' }}" 
+                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-date="{{ $filterDate }}">&minus;2</button>
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-1" 
+                                                                data-student-id="{{ $student->id }}" 
+                                                                data-category="{{ $category }}"
+                                                                data-points="-1" 
+                                                                data-type="{{ $filterType }}" 
+                                                                data-class="{{ $filterClass }}" 
+                                                                data-section="{{ $filterSection ?? '' }}" 
+                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-date="{{ $filterDate }}">&minus;1</button>
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-zero" 
+                                                                data-student-id="{{ $student->id }}" 
+                                                                data-category="{{ $category }}"
+                                                                data-points="0" 
+                                                                data-type="{{ $filterType }}" 
+                                                                data-class="{{ $filterClass }}" 
+                                                                data-section="{{ $filterSection ?? '' }}" 
+                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-date="{{ $filterDate }}">0</button>
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-1" 
+                                                                data-student-id="{{ $student->id }}" 
+                                                                data-category="{{ $category }}"
+                                                                data-points="1" 
+                                                                data-type="{{ $filterType }}" 
+                                                                data-class="{{ $filterClass }}" 
+                                                                data-section="{{ $filterSection ?? '' }}" 
+                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-date="{{ $filterDate }}">&plus;1</button>
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-2" 
+                                                                data-student-id="{{ $student->id }}" 
+                                                                data-category="{{ $category }}"
+                                                                data-points="2" 
+                                                                data-type="{{ $filterType }}" 
+                                                                data-class="{{ $filterClass }}" 
+                                                                data-section="{{ $filterSection ?? '' }}" 
+                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-date="{{ $filterDate }}">&plus;2</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endforeach
                 @else
                 <div class="text-center py-5">
                     <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">school</span>
@@ -412,6 +474,18 @@
 .behavior-table tbody td {
     padding: 15px;
     vertical-align: middle;
+}
+
+/* Category Table Section Styling */
+.category-table-section {
+    margin-bottom: 30px;
+}
+
+.category-table-section .card {
+    margin-bottom: 10px;
+}
+
+    vertical-align: middle;
     border-right: 1px solid #dee2e6;
     border-bottom: 1px solid #dee2e6;
     font-size: 14px;
@@ -456,6 +530,25 @@
     cursor: not-allowed;
     transform: none;
 }
+
+.category-select {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    background-color: white;
+    cursor: pointer;
+}
+
+.category-select:focus {
+    border-color: #003471;
+    box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+    outline: none;
+}
+
+.category-select:hover {
+    border-color: #003471;
+}
+
 </style>
 
 <script>
@@ -513,9 +606,16 @@ function loadClassesByCampus(campus, selectedClass = '') {
         });
 }
 
+// Load and update categories dynamically when campus changes
+function updateCategoriesDisplay(campus) {
+    // Categories are now displayed in separate tables, so no dynamic update needed
+    // The page will reload when campus changes via filter form
+}
+
 campusSelect?.addEventListener('change', function() {
     const campusValue = this.value;
     loadClassesByCampus(campusValue, '');
+    updateCategoriesDisplay(campusValue);
 });
 
 classSelect?.addEventListener('change', function() {
@@ -567,8 +667,49 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedClass = classSelect?.dataset?.selectedClass || '';
     if (campusSelect) {
         loadClassesByCampus(selectedCampus, selectedClass);
+        updateCategoriesDisplay(selectedCampus);
+    }
+    
+    // Initialize behavior buttons
+    document.querySelectorAll('.behavior-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            markBehavior(this);
+        });
+    });
+    
+    // Initialize mark all buttons
+    document.querySelectorAll('.mark-all-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const points = this.getAttribute('data-points');
+            
+            // Find all visible behavior buttons with matching points across all category tables
+            const allBehaviorBtns = document.querySelectorAll('.category-specific-table .behavior-btn[data-points="' + points + '"]');
+            
+            if (allBehaviorBtns.length === 0) {
+                alert('No students found to mark.');
+                return;
+            }
+            
+            // Mark all buttons
+            allBehaviorBtns.forEach(behaviorBtn => {
+                markBehavior(behaviorBtn);
+            });
+            
+            // Show feedback
+            const btnText = this.textContent.trim();
+            console.log(`Marked ${allBehaviorBtns.length} student(s) with ${btnText}`);
+        });
+    });
+    
+    // Attach event listener to Save button
+    const saveBtn = document.getElementById('saveAllBehaviorBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+            saveAllBehaviorRecords();
+        });
     }
 });
+
 
 function clearSearch() {
     document.getElementById('searchInput').value = '';
@@ -577,7 +718,7 @@ function clearSearch() {
 
 function filterStudents() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-    const studentItems = document.querySelectorAll('.student-item');
+    const studentItems = document.querySelectorAll('.student-item.category-row');
     
     studentItems.forEach(item => {
         const studentName = item.getAttribute('data-student-name') || '';
@@ -594,21 +735,35 @@ function filterStudents() {
 // Search functionality
 document.getElementById('searchInput')?.addEventListener('input', filterStudents);
 
-// Mark All functionality
-document.querySelectorAll('.mark-all-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        const points = this.getAttribute('data-points');
-        const behaviorBtns = document.querySelectorAll(`.behavior-btn[data-points="${points}"]`);
-        
-        // Mark all buttons
-        behaviorBtns.forEach(behaviorBtn => {
-            markBehavior(behaviorBtn);
-        });
-    });
-});
 
-// Store behavior data temporarily
-let behaviorData = {};
+// Store behavior data temporarily - use array to allow multiple records per student
+let behaviorData = [];
+
+// Get category for student from table row or button
+function getCategoryForStudent(studentId, button) {
+    // First try to get from button's data attribute
+    const categoryFromButton = button.getAttribute('data-category');
+    if (categoryFromButton) {
+        return categoryFromButton;
+    }
+    
+    // Fallback: get from table row
+    const row = button.closest('.category-row');
+    if (row) {
+        const categoryFromRow = row.getAttribute('data-category');
+        if (categoryFromRow) {
+            return categoryFromRow;
+        }
+    }
+    
+    // Last fallback: get from table
+    const table = button.closest('.category-specific-table');
+    if (table) {
+        return table.getAttribute('data-category') || '';
+    }
+    
+    return '';
+}
 
 // Individual behavior button click - store data temporarily
 function markBehavior(button) {
@@ -619,11 +774,23 @@ function markBehavior(button) {
     const section = button.getAttribute('data-section');
     const campus = button.getAttribute('data-campus');
     const date = button.getAttribute('data-date');
+    const category = getCategoryForStudent(studentId, button);
     
-    // Store behavior data
-    behaviorData[studentId] = {
+    if (!category) {
+        console.error('Category not found for student:', studentId);
+        return;
+    }
+    
+    // Check if record already exists for this student + category combination
+    // If exists, update it; otherwise add new record
+    const existingIndex = behaviorData.findIndex(record => 
+        record.student_id == studentId && record.category === category
+    );
+    
+    const recordData = {
         student_id: studentId,
         type: type,
+        category: category,
         points: points,
         class: classValue,
         section: section,
@@ -631,24 +798,36 @@ function markBehavior(button) {
         date: date
     };
     
+    if (existingIndex !== -1) {
+        // Update existing record for same student + category
+        behaviorData[existingIndex] = recordData;
+        console.log('Updated behavior record:', { studentId, category, points, totalRecords: behaviorData.length });
+    } else {
+        // Add new record for different student or category
+        behaviorData.push(recordData);
+        console.log('Added new behavior record:', { studentId, category, points, totalRecords: behaviorData.length });
+    }
+    
     // Visual feedback - highlight selected button
     const studentItem = button.closest('.student-item');
-    const allButtons = studentItem.querySelectorAll('.behavior-btn');
-    allButtons.forEach(btn => {
-        btn.style.opacity = '0.5';
-        btn.style.transform = 'scale(1)';
-    });
-    button.style.opacity = '1';
-    button.style.transform = 'scale(1.1)';
-    button.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+    if (studentItem) {
+        const allButtons = studentItem.querySelectorAll('.behavior-btn');
+        allButtons.forEach(btn => {
+            btn.style.opacity = '0.5';
+            btn.style.transform = 'scale(1)';
+            btn.style.boxShadow = 'none';
+        });
+        button.style.opacity = '1';
+        button.style.transform = 'scale(1.1)';
+        button.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+    }
 }
 
 // Save all behavior records
 function saveAllBehaviorRecords() {
     const saveBtn = document.getElementById('saveAllBehaviorBtn');
-    const behaviorRecords = Object.values(behaviorData);
     
-    if (behaviorRecords.length === 0) {
+    if (behaviorData.length === 0) {
         alert('Please mark behavior for at least one student before saving.');
         return;
     }
@@ -665,7 +844,7 @@ function saveAllBehaviorRecords() {
     let savedCount = 0;
     let errorCount = 0;
     
-    Promise.all(behaviorRecords.map((record, index) => {
+    Promise.all(behaviorData.map((record, index) => {
         console.log('Saving record:', index + 1, record);
         return fetch('{{ route("student-behavior.recording.store") }}', {
             method: 'POST',
@@ -689,6 +868,19 @@ function saveAllBehaviorRecords() {
             console.log('Save response:', data);
             if (data.success) {
                 savedCount++;
+                
+                // Visual feedback for saved record
+                if (data.success && record.category) {
+                    const studentId = record.student_id;
+                    const category = record.category;
+                    const row = document.querySelector(`.category-row[data-student-id="${studentId}"][data-category="${category}"]`);
+                    if (row) {
+                        row.style.backgroundColor = '#d4edda';
+                        setTimeout(() => {
+                            row.style.backgroundColor = '';
+                        }, 2000);
+                    }
+                }
             } else {
                 console.error('Save failed:', data.message, data.errors);
                 errorCount++;
@@ -706,7 +898,7 @@ function saveAllBehaviorRecords() {
             saveBtn.style.background = 'linear-gradient(135deg, #198754 0%, #20c997 100%)';
             
             // Clear behavior data
-            behaviorData = {};
+            behaviorData = [];
             
             // Reset button styles
             setTimeout(() => {
@@ -721,22 +913,6 @@ function saveAllBehaviorRecords() {
     });
 }
 
-// Attach event listeners to behavior buttons
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.behavior-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            markBehavior(this);
-        });
-    });
-    
-    // Attach event listener to Save button
-    const saveBtn = document.getElementById('saveAllBehaviorBtn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function() {
-            saveAllBehaviorRecords();
-        });
-    }
-});
 </script>
 @endsection
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\SaleRecord;
+use App\Models\Campus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +21,21 @@ class PointOfSaleController extends Controller
         // Get all products for barcode scanning
         $products = Product::orderBy('product_name', 'asc')->get();
         
-        return view('stock.point-of-sale', compact('products'));
+        // Get campuses dynamically
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            // Fallback: get from products
+            $campuses = Product::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->map(function($campusName) {
+                    return (object)['campus_name' => $campusName];
+                })
+                ->sortBy('campus_name')
+                ->values();
+        }
+        
+        return view('stock.point-of-sale', compact('products', 'campuses'));
     }
 
     /**
@@ -29,6 +44,7 @@ class PointOfSaleController extends Controller
     public function searchProduct(Request $request)
     {
         $barcode = $request->input('barcode');
+        $campus = $request->input('campus');
         
         if (empty($barcode)) {
             return response()->json([
@@ -37,10 +53,18 @@ class PointOfSaleController extends Controller
             ]);
         }
 
-        // Search by product code (since barcode field doesn't exist in Product model)
-        $product = Product::where('product_code', $barcode)
-            ->orWhere('product_name', 'like', '%' . $barcode . '%')
-            ->first();
+        // Search by product code with campus filter
+        $query = Product::where(function($q) use ($barcode) {
+            $q->where('product_code', $barcode)
+              ->orWhere('product_name', 'like', '%' . $barcode . '%');
+        });
+        
+        // Filter by campus if provided
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        $product = $query->first();
 
         if ($product) {
             return response()->json([
@@ -51,13 +75,14 @@ class PointOfSaleController extends Controller
                     'product_code' => $product->product_code,
                     'price' => $product->sale_price ?? 0,
                     'stock' => $product->total_stock ?? 0,
+                    'campus' => $product->campus ?? 'N/A',
                 ]
             ]);
         }
 
         return response()->json([
             'success' => false,
-            'message' => 'Product not found'
+            'message' => 'Product not found' . ($campus ? ' in selected campus' : '')
         ]);
     }
 
@@ -82,13 +107,26 @@ class PointOfSaleController extends Controller
 
             $saleDate = now()->toDateString();
             
-            // Get campus from admin or accountant
+            // Get logged-in user's name for "Received By" field
+            $receivedBy = 'System';
             if (Auth::guard('admin')->check()) {
-                $campus = Auth::guard('admin')->user()->admin_of ?? 'Main Campus';
+                $admin = Auth::guard('admin')->user();
+                $receivedBy = $admin->name ?? 'Admin';
             } elseif (Auth::guard('accountant')->check()) {
-                $campus = Auth::guard('accountant')->user()->campus ?? 'Main Campus';
-            } else {
-                $campus = 'Main Campus';
+                $accountant = Auth::guard('accountant')->user();
+                $receivedBy = $accountant->name ?? 'Accountant';
+            }
+            
+            // Use campus from form, fallback to user's campus
+            $campus = $validated['campus'] ?? 'Main Campus';
+            if (empty($campus) || $campus === 'Select Campus') {
+                if (Auth::guard('admin')->check()) {
+                    $campus = Auth::guard('admin')->user()->admin_of ?? 'Main Campus';
+                } elseif (Auth::guard('accountant')->check()) {
+                    $campus = Auth::guard('accountant')->user()->campus ?? 'Main Campus';
+                } else {
+                    $campus = 'Main Campus';
+                }
             }
 
             $savedRecords = [];
@@ -122,6 +160,7 @@ class PointOfSaleController extends Controller
                     'campus' => $campus,
                     'sale_date' => $saleDate,
                     'notes' => 'Buyer: ' . $validated['buyer_name'],
+                    'received_by' => $receivedBy,
                 ]);
                 
                 $savedRecords[] = $saleRecord->id;

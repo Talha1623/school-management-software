@@ -25,7 +25,10 @@ return new class extends Migration
             $table->timestamps();
             
             // Indexes for faster queries
-            $table->index(['campus', 'class', 'section', 'file_type']);
+            // Indexes for faster queries (single column indexes for MyISAM compatibility)
+            $table->index('campus');
+            $table->index('class');
+            $table->index('file_type');
         });
     }
 

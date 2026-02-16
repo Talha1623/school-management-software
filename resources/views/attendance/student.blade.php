@@ -128,6 +128,26 @@
             <!-- Students Table - Only show when filters are applied -->
             @if(request('filter_class'))
             <div class="mt-3">
+                <!-- Bulk Action Buttons -->
+                <div class="mb-2 d-flex gap-2 justify-content-center">
+                    <button type="button" class="btn btn-sm text-white" style="background-color: #28a745; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Present')" title="Mark All as Present">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check_circle</span>
+                        Mark All Present
+                    </button>
+                    <button type="button" class="btn btn-sm text-white" style="background-color: #dc3545; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Absent')" title="Mark All as Absent">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">cancel</span>
+                        Mark All Absent
+                    </button>
+                    <button type="button" class="btn btn-sm text-white" style="background-color: #ffc107; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Holiday')" title="Mark All as Holiday">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event</span>
+                        Mark All Holiday
+                    </button>
+                    <button type="button" class="btn btn-sm text-white" style="background-color: #17a2b8; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Sunday')" title="Mark All as Sunday">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
+                        Mark All Sunday
+                    </button>
+                </div>
+                
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
                         <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
@@ -675,6 +695,81 @@ function updateDashboardStats() {
         const channel = new BroadcastChannel('attendance-updates');
         channel.postMessage({ type: 'updateAttendanceStats' });
     }
+}
+
+// Bulk attendance marking function
+function markAllAttendance(status) {
+    if (!confirm(`Are you sure you want to mark all students as "${status}"?`)) {
+        return;
+    }
+    
+    // Get all student IDs from the table
+    const studentRows = document.querySelectorAll('tbody tr');
+    const studentIds = [];
+    
+    studentRows.forEach(row => {
+        const buttons = row.querySelectorAll('.status-btn');
+        if (buttons.length > 0) {
+            // Extract student ID from the onclick attribute
+            const onclickAttr = buttons[0].getAttribute('onclick');
+            if (onclickAttr) {
+                const match = onclickAttr.match(/updateAttendance\((\d+),/);
+                if (match && match[1]) {
+                    studentIds.push(parseInt(match[1]));
+                }
+            }
+        }
+    });
+    
+    if (studentIds.length === 0) {
+        alert('No students found to update.');
+        return;
+    }
+    
+    // Get attendance date
+    const attendanceDate = document.getElementById('filter_date').value || '{{ request('filter_date', date('Y-m-d')) }}';
+    
+    // Show loading state
+    const buttons = document.querySelectorAll('.btn-sm');
+    buttons.forEach(btn => btn.disabled = true);
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
+                      document.querySelector('input[name="_token"]')?.value;
+    
+    // Make bulk update request
+    fetch('{{ route("attendance.student.bulk-update") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+            student_ids: studentIds,
+            attendance_date: attendanceDate,
+            status: status
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update dashboard if it's open in another tab/window
+            updateDashboardStats();
+            
+            // Reload the page to show updated status
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.message || 'Failed to update attendance'));
+            buttons.forEach(btn => btn.disabled = false);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating attendance. Please try again.');
+        buttons.forEach(btn => btn.disabled = false);
+    });
 }
 </script>
 @endsection

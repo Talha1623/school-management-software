@@ -34,11 +34,14 @@
         <thead>
             <tr>
                 <th>#</th>
-                <th>Emp. ID</th>
+                <th>Emp. Code</th>
                 <th>Name</th>
+                <th>Father/Husband</th>
                 <th>Designation</th>
-                <th>Present</th>
-                <th>Absent</th>
+                <th>Present Days</th>
+                <th>Absent Days</th>
+                <th>Late Arrivals</th>
+                <th>Percentage</th>
             </tr>
         </thead>
         <tbody>
@@ -48,13 +51,16 @@
                     <td>{{ $index + 1 }}</td>
                     <td>{{ $staff->emp_id ?? 'N/A' }}</td>
                     <td>{{ $staff->name ?? 'N/A' }}</td>
+                    <td>{{ $staff->father_husband_name ?? 'N/A' }}</td>
                     <td>{{ $staff->designation ?? 'N/A' }}</td>
                     <td>{{ $row['present'] ?? 0 }}</td>
                     <td>{{ $row['absent'] ?? 0 }}</td>
+                    <td>{{ $row['late'] ?? 0 }}</td>
+                    <td>{{ number_format($row['percentage'] ?? 0, 2) }}%</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="empty">No staff summary found.</td>
+                    <td colspan="9" class="empty">No staff summary found.</td>
                 </tr>
             @endforelse
         </tbody>

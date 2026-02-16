@@ -58,12 +58,22 @@ class ProgressTrackingController extends Controller
                     $currentYearPoints = $currentYearRecords->sum('points');
                     $lastYearPoints = $lastYearRecords->sum('points');
                     
-                    // Group by type for summary table
+                    // Group by type and include categories for summary table
                     $behaviorSummary = $behaviorRecords->groupBy('type')->map(function($records, $type) {
+                        // Group categories within this type
+                        $categories = $records->groupBy('category')->map(function($categoryRecords, $category) {
+                            return [
+                                'category' => $category ?: 'N/A',
+                                'points' => $categoryRecords->sum('points'),
+                                'count' => $categoryRecords->count()
+                            ];
+                        })->values()->toArray();
+                        
                         return [
                             'type' => $type,
                             'points' => $records->sum('points'),
-                            'count' => $records->count()
+                            'count' => $records->count(),
+                            'categories' => $categories
                         ];
                     })->values()->toArray();
                     

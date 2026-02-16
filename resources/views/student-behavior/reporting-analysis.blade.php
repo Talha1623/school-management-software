@@ -56,6 +56,24 @@
                             @endforeach
                         </select>
                     </div>
+                    <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6" id="month_selector_container" style="display: none;">
+                        <label for="filter_month" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Month</label>
+                        <select id="filter_month" name="month" class="form-select form-select-sm" style="height: 32px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 12px;">
+                            <option value="">Select Month</option>
+                            <option value="01" {{ date('m') == '01' ? 'selected' : '' }}>January</option>
+                            <option value="02" {{ date('m') == '02' ? 'selected' : '' }}>February</option>
+                            <option value="03" {{ date('m') == '03' ? 'selected' : '' }}>March</option>
+                            <option value="04" {{ date('m') == '04' ? 'selected' : '' }}>April</option>
+                            <option value="05" {{ date('m') == '05' ? 'selected' : '' }}>May</option>
+                            <option value="06" {{ date('m') == '06' ? 'selected' : '' }}>June</option>
+                            <option value="07" {{ date('m') == '07' ? 'selected' : '' }}>July</option>
+                            <option value="08" {{ date('m') == '08' ? 'selected' : '' }}>August</option>
+                            <option value="09" {{ date('m') == '09' ? 'selected' : '' }}>September</option>
+                            <option value="10" {{ date('m') == '10' ? 'selected' : '' }}>October</option>
+                            <option value="11" {{ date('m') == '11' ? 'selected' : '' }}>November</option>
+                            <option value="12" {{ date('m') == '12' ? 'selected' : '' }}>December</option>
+                        </select>
+                    </div>
                     <div class="col-xl-2 col-lg-2 col-md-4 col-sm-6">
                         <button type="submit" class="btn btn-sm w-100 generate-report-btn" style="height: 32px; border-radius: 6px; padding: 0 10px;">
                             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
@@ -104,6 +122,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const reportTypeSelect = document.getElementById('filter_report_type');
+    const monthSelectorContainer = document.getElementById('month_selector_container');
+    const monthSelect = document.getElementById('filter_month');
 
     function resetSections() {
         sectionSelect.innerHTML = '<option value="">Select Section (Optional)</option>';
@@ -200,6 +221,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (campusSelect) {
         loadClassesByCampus(campusSelect.value);
+    }
+
+    // Show/hide month selector based on report type
+    function toggleMonthSelector() {
+        const selectedReportType = reportTypeSelect ? reportTypeSelect.value : '';
+        if (selectedReportType === 'monthly-behavior-report') {
+            if (monthSelectorContainer) {
+                monthSelectorContainer.style.display = 'block';
+                if (monthSelect) {
+                    monthSelect.required = true;
+                }
+            }
+        } else {
+            if (monthSelectorContainer) {
+                monthSelectorContainer.style.display = 'none';
+                if (monthSelect) {
+                    monthSelect.required = false;
+                    monthSelect.value = '';
+                }
+            }
+        }
+    }
+
+    // Check on page load
+    toggleMonthSelector();
+
+    // Listen for report type changes
+    if (reportTypeSelect) {
+        reportTypeSelect.addEventListener('change', toggleMonthSelector);
     }
 });
 </script>

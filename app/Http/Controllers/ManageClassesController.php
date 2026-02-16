@@ -7,9 +7,15 @@ use App\Models\Campus;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\StudentPayment;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ManageClassesController extends Controller
 {
@@ -445,6 +451,440 @@ class ManageClassesController extends Controller
         
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Verify credentials before passout action.
+     */
+    public function verifyPassout(Request $request, ClassModel $class_model): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        $email = $request->input('email');
+        $password = $request->input('password');
+
+        // Try admin guard first
+        $admin = \App\Models\AdminRole::where('email', $email)->first();
+        
+        if ($admin && Hash::check($password, $admin->password)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Verification successful.',
+            ]);
+        }
+
+        // Try accountant guard
+        $accountant = \App\Models\Accountant::where('email', $email)->first();
+        
+        if ($accountant && Hash::check($password, $accountant->password)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Verification successful.',
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid email or password. Please try again.',
+        ], 401);
+    }
+
+    /**
+     * Passout all students from a class.
+     */
+    public function passout(Request $request, ClassModel $class_model)
+    {
+        // Check if user is authenticated (admin or accountant)
+        if (!Auth::guard('admin')->check() && !Auth::guard('accountant')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication required. Please login.',
+            ], 401);
+        }
+
+        // Normalize class name and campus for comparison
+        $className = strtolower(trim($class_model->class_name));
+        $classCampus = $class_model->campus ? strtolower(trim($class_model->campus)) : null;
+        
+        // Find all students in this class
+        $studentsQuery = Student::whereNotNull('class')
+            ->where('class', '!=', '')
+            ->whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [$className]);
+        
+        // If class has a campus, match students from that campus OR students with no campus set
+        if ($classCampus) {
+            $studentsQuery->where(function($query) use ($classCampus) {
+                $query->whereNull('campus')
+                    ->orWhere('campus', '')
+                    ->orWhereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$classCampus]);
+            });
+        }
+        
+        $students = $studentsQuery->get();
+        
+        if ($students->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No students found in this class to passout.',
+            ], 404);
+        }
+        
+        // Update all students' class to "Passout" and store original class
+        $updatedCount = 0;
+        foreach ($students as $student) {
+            // Store original class and section before passout
+            if ($student->class && strtolower(trim($student->class)) !== 'passout') {
+                $student->previous_class = $student->class;
+            }
+            if ($student->section) {
+                $student->previous_section = $student->section;
+            }
+            $student->class = 'Passout';
+            $student->section = null; // Clear section when passing out
+            $student->save();
+            $updatedCount++;
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully passed out {$updatedCount} student(s) from class '{$class_model->class_name}'.",
+            'count' => $updatedCount,
+        ]);
+    }
+
+    /**
+     * Transfer students from one campus to another.
+     */
+    public function transfer(Request $request, ClassModel $class_model): JsonResponse
+    {
+        $request->validate([
+            'from_campus' => 'required|string',
+            'to_campus' => 'required|string',
+            'class' => 'nullable|string',
+            'section' => 'nullable|string',
+            'move_dues' => 'nullable|boolean',
+            'move_payments' => 'nullable|boolean',
+            'notify_admin' => 'nullable|boolean',
+        ]);
+
+        $fromCampus = trim($request->input('from_campus'));
+        $toCampus = trim($request->input('to_campus'));
+        $normalizedToCampus = $this->resolveCampusName($toCampus); // Normalize campus name
+        $newClass = $request->input('class') ? trim($request->input('class')) : null;
+        $newSection = $request->input('section') ? trim($request->input('section')) : null;
+        $moveDues = $request->input('move_dues') == '1' || $request->boolean('move_dues', false);
+        $movePayments = $request->input('move_payments') == '1' || $request->boolean('move_payments', false);
+        $notifyAdmin = $request->input('notify_admin') == '1' || $request->boolean('notify_admin', false);
+
+        if (strtolower($fromCampus) === strtolower($normalizedToCampus)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'From Campus and To Campus cannot be the same.',
+            ], 400);
+        }
+
+        // Find all students from the source campus (transfer all students from campus)
+        $studentsQuery = Student::whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower(trim($fromCampus))]);
+        
+        // Exclude passout students
+        $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
+        $studentsQuery->where(function($q) use ($passoutClasses) {
+            $q->whereNull('class')
+              ->orWhere('class', '')
+              ->orWhere(function($subQ) use ($passoutClasses) {
+                  $subQ->whereRaw("LOWER(TRIM(COALESCE(class, ''))) NOT IN ('" . implode("', '", array_map('strtolower', $passoutClasses)) . "')");
+              });
+        });
+        
+        $students = $studentsQuery->get();
+        
+        if ($students->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No students found in the source campus to transfer.',
+            ], 404);
+        }
+
+        $transferredCount = 0;
+        $updatedStudents = [];
+        $oldStudentCodes = []; // Store old codes for payment updates
+        $newStudentCodes = []; // Store new codes mapping (old_code => new_code)
+
+        foreach ($students as $student) {
+            $oldCode = $student->student_code;
+            $oldStudentCodes[] = $oldCode;
+            
+            // Update campus (use normalized campus name)
+            $student->campus = $normalizedToCampus;
+            
+            // Update class if provided
+            if ($newClass) {
+                $student->class = $newClass;
+            }
+            
+            // Update section if provided
+            if ($newSection !== null) {
+                $student->section = $newSection;
+            }
+            
+            // Generate new student code based on new campus (only if campus actually changed)
+            if (strtolower(trim($fromCampus)) !== strtolower(trim($normalizedToCampus))) {
+                $newCode = $this->generateNextStudentCode($normalizedToCampus);
+                $student->student_code = $newCode;
+                $newStudentCodes[$oldCode] = $newCode; // Map old code to new code
+            }
+            
+            $student->save();
+            $transferredCount++;
+            $updatedStudents[] = $student->id;
+        }
+
+        // Update student_payments with new student codes if campus changed
+        if (!empty($newStudentCodes)) {
+            foreach ($newStudentCodes as $oldCode => $newCode) {
+                // Update all payment records (both dues and payments) with new student code and campus
+                DB::table('student_payments')
+                    ->where('student_code', $oldCode)
+                    ->update([
+                        'student_code' => $newCode,
+                        'campus' => $normalizedToCampus
+                    ]);
+            }
+        } else {
+            // If no code change (same campus transfer), just update campus in payments if requested
+            $studentCodes = $students->pluck('student_code')->filter()->toArray();
+            
+            // Move dues if requested
+            if ($moveDues && !empty($studentCodes)) {
+                // Update payment records (dues are unpaid fees, which are in student_payments with method='Generated')
+                DB::table('student_payments')
+                    ->whereIn('student_code', $studentCodes)
+                    ->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower(trim($fromCampus))])
+                    ->where('method', 'Generated')
+                    ->update(['campus' => $normalizedToCampus]);
+            }
+
+            // Move payments if requested
+            if ($movePayments && !empty($studentCodes)) {
+                // Update payment records (actual payments)
+                DB::table('student_payments')
+                    ->whereIn('student_code', $studentCodes)
+                    ->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower(trim($fromCampus))])
+                    ->where('method', '!=', 'Generated')
+                    ->update(['campus' => $normalizedToCampus]);
+            }
+        }
+
+        // Notify admin if requested
+        if ($notifyAdmin) {
+            // Log the transfer action for admin notification
+            Log::info('Student Transfer Completed', [
+                'from_campus' => $fromCampus,
+                'to_campus' => $normalizedToCampus,
+                'transferred_count' => $transferredCount,
+                'move_dues' => $moveDues,
+                'move_payments' => $movePayments,
+                'initiated_by' => Auth::guard('admin')->check() ? Auth::guard('admin')->user()->name : (Auth::guard('accountant')->check() ? Auth::guard('accountant')->user()->name : 'System'),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully transferred {$transferredCount} student(s) from '{$fromCampus}' to '{$normalizedToCampus}'.",
+            'count' => $transferredCount,
+        ]);
+    }
+
+    /**
+     * Get classes by campus (AJAX endpoint)
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+
+        if ($classes->isEmpty()) {
+            $classesFromStudents = Student::whereNotNull('class');
+            if ($campus) {
+                $classesFromStudents->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classesFromStudents = $classesFromStudents->distinct()->pluck('class')->sort()->values();
+            $classes = $classesFromStudents->isEmpty()
+                ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                : $classesFromStudents;
+        }
+
+        $classes = $classes->map(function($class) {
+            return trim((string) $class);
+        })->filter(function($class) {
+            return $class !== '';
+        })->unique()->sort()->values();
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    /**
+     * Get sections by class (AJAX endpoint)
+     */
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $class = $request->get('class');
+        $campus = $request->get('campus');
+
+        if (!$class) {
+            return response()->json(['sections' => []]);
+        }
+
+        $sectionsQuery = Section::whereNotNull('name')
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+
+        if ($sections->isEmpty()) {
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section');
+            if ($campus) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $subjectsQuery->distinct()->pluck('section')->sort()->values();
+        }
+
+        return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Generate next student code per campus (e.g., ST1-001, ST2-001)
+     */
+    private function generateNextStudentCode(?string $campus): string
+    {
+        $prefix = $this->resolveCampusCodePrefix($campus);
+
+        $students = Student::where('student_code', 'like', $prefix . '-%')
+            ->whereNotNull('student_code')
+            ->pluck('student_code')
+            ->toArray();
+
+        if (empty($students)) {
+            return $prefix . '-001';
+        }
+
+        $maxNumber = 0;
+        foreach ($students as $code) {
+            if (preg_match('/^' . preg_quote($prefix, '/') . '-(\d+)$/i', $code, $matches)) {
+                $number = (int) $matches[1];
+                $maxNumber = max($maxNumber, $number);
+            }
+        }
+
+        return $prefix . '-' . str_pad($maxNumber + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Resolve campus code prefix (e.g., ST1, ST2) from campus name
+     */
+    private function resolveCampusCodePrefix(?string $campus): string
+    {
+        $campus = trim((string) $campus);
+        if ($campus !== '') {
+            $campusRecord = Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($campus)])->first();
+            if ($campusRecord && !empty($campusRecord->code_prefix)) {
+                return strtoupper(trim($campusRecord->code_prefix));
+            }
+
+            // Fallback: if campus name contains digits, use ST + digits
+            if (preg_match('/(\d+)/', $campus, $matches)) {
+                $prefix = 'ST' . $matches[1];
+                // Save it to campus record for future use
+                if ($campusRecord) {
+                    $campusRecord->code_prefix = $prefix;
+                    $campusRecord->save();
+                }
+                return strtoupper($prefix);
+            }
+
+            // If no code_prefix and no digits in name, find next available campus number
+            $usedCampusNumbers = [];
+            
+            // Check from existing campuses with code_prefix
+            $campusesWithPrefix = Campus::whereNotNull('code_prefix')
+                ->where('code_prefix', 'like', 'ST%')
+                ->get();
+            
+            foreach ($campusesWithPrefix as $campusWithPrefix) {
+                if (preg_match('/^ST(\d+)$/i', $campusWithPrefix->code_prefix, $matches)) {
+                    $campusNum = (int) $matches[1];
+                    $usedCampusNumbers[] = $campusNum;
+                }
+            }
+            
+            // Also check from student codes to find any used campus numbers
+            $studentCodes = Student::whereNotNull('student_code')
+                ->where('student_code', 'like', 'ST%-%')
+                ->pluck('student_code')
+                ->toArray();
+            
+            // Also check from payment codes
+            $paymentCodes = StudentPayment::whereNotNull('student_code')
+                ->where('student_code', 'like', 'ST%-%')
+                ->pluck('student_code')
+                ->toArray();
+            
+            $allCodes = array_unique(array_merge($studentCodes, $paymentCodes));
+            
+            foreach ($allCodes as $code) {
+                if (preg_match('/^ST(\d+)-(\d+)$/i', $code, $matches)) {
+                    $campusNum = (int) $matches[1];
+                    if (!in_array($campusNum, $usedCampusNumbers)) {
+                        $usedCampusNumbers[] = $campusNum;
+                    }
+                }
+            }
+            
+            // Find next sequential campus number
+            $nextCampusNumber = 1;
+            if (!empty($usedCampusNumbers)) {
+                $maxCampusNumber = max($usedCampusNumbers);
+                $nextCampusNumber = $maxCampusNumber + 1;
+            }
+            $prefix = 'ST' . $nextCampusNumber;
+            
+            // Save it to campus record for future use
+            if ($campusRecord) {
+                $campusRecord->code_prefix = $prefix;
+                $campusRecord->save();
+            }
+            
+            return strtoupper($prefix);
+        }
+
+        // If no campus provided, return ST (shouldn't happen in normal flow)
+        return 'ST';
+    }
+
+    /**
+     * Resolve campus name from Campus table to ensure consistency
+     */
+    private function resolveCampusName(?string $campus): string
+    {
+        $campus = trim((string) $campus);
+        if ($campus === '') {
+            return $campus;
+        }
+
+        $record = Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($campus)])->first();
+        return $record ? ($record->campus_name ?? $campus) : $campus;
     }
 }
 

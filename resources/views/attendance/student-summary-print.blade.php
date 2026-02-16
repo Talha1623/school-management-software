@@ -38,6 +38,7 @@
                 <th>Student Code</th>
                 <th>Present</th>
                 <th>Absent</th>
+                <th>Leave</th>
             </tr>
         </thead>
         <tbody>
@@ -49,10 +50,11 @@
                     <td>{{ $student->student_code ?? 'N/A' }}</td>
                     <td>{{ $row['present'] ?? 0 }}</td>
                     <td>{{ $row['absent'] ?? 0 }}</td>
+                    <td>{{ $row['leave'] ?? 0 }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="5" class="empty">No student summary found.</td>
+                    <td colspan="6" class="empty">No student summary found.</td>
                 </tr>
             @endforelse
         </tbody>

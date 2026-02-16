@@ -17,6 +17,7 @@ class Section extends Model
         'nick_name',
         'class',
         'teacher',
+        'teacher_type',
         'session',
     ];
 }

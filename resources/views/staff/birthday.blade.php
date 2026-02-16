@@ -61,31 +61,40 @@
                     <table class="table table-sm table-hover" id="staffBirthdayTable" style="margin-bottom: 0; white-space: nowrap;">
                         <thead>
                             <tr>
-                                <th style="padding: 12px 15px; font-size: 14px;">Picture</th>
-                                <th style="padding: 12px 15px; font-size: 14px;">Name</th>
-                                <th style="padding: 12px 15px; font-size: 14px;">Father/Husband</th>
-                                <th style="padding: 12px 15px; font-size: 14px;">Birthday</th>
-                                <th style="padding: 12px 15px; font-size: 14px;">Status</th>
-                                <th style="padding: 12px 15px; font-size: 14px;">Wish</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Picture</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Staff</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Father/Husband</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Campus</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Designation</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Birthday</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Status</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Birthday Card</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Wish</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($staff as $index => $member)
                                 <tr>
-                                    <td style="padding: 12px 15px; font-size: 14px;">
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         @if($member['picture'])
-                                            <img src="{{ $member['picture'] }}" alt="Staff" class="rounded-circle" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #e9ecef;">
+                                            <img src="{{ $member['picture'] }}" alt="Staff" class="rounded-circle" style="width: 32px; height: 32px; object-fit: cover;">
                                         @else
-                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 45px; height: 45px; border: 2px solid #e9ecef;">
-                                                <span class="material-symbols-outlined text-muted" style="font-size: 22px;">person</span>
+                                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                                <span class="material-symbols-outlined text-muted" style="font-size: 16px;">person</span>
                                             </div>
                                         @endif
                                     </td>
-                                    <td style="padding: 12px 15px; font-size: 14px;">
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <strong class="text-primary">{{ $member['name'] ?? 'N/A' }}</strong>
                                     </td>
-                                    <td style="padding: 12px 15px; font-size: 14px;">{{ $member['father_husband'] ?? 'N/A' }}</td>
-                                    <td style="padding: 12px 15px; font-size: 14px;">
+                                    <td style="padding: 8px 12px; font-size: 13px;">{{ $member['father_husband'] ?? 'N/A' }}</td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-primary text-white" style="font-size: 11px;">{{ $member['campus'] ?? 'N/A' }}</span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-secondary text-white" style="font-size: 11px;">{{ $member['designation'] ?? 'N/A' }}</span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
                                         <span class="text-muted">
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
                                             @if(isset($member['birthday']) && $member['birthday'])
@@ -95,27 +104,29 @@
                                             @endif
                                         </span>
                                     </td>
-                                    <td style="padding: 12px 15px; font-size: 14px;">
-                                        @php
-                                            $statusClass = match($member['status'] ?? '') {
-                                                'Today' => 'bg-success',
-                                                'Upcoming' => 'bg-info',
-                                                'Past' => 'bg-secondary',
-                                                default => 'bg-secondary'
-                                            };
-                                        @endphp
-                                        <span class="badge {{ $statusClass }} text-white" style="font-size: 11px;">{{ $member['status'] ?? 'N/A' }}</span>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        @if(($member['status'] ?? '') === 'Today')
+                                            <span class="status-pill status-pill-today">Today is their birthday</span>
+                                        @else
+                                            <span class="status-pill status-pill-muted">Today is their birthday</span>
+                                        @endif
                                     </td>
-                                    <td style="padding: 12px 15px; font-size: 14px;">
-                                        @php
-                                            $wishClass = ($member['wish'] ?? '') === 'Sent' ? 'bg-success' : 'bg-warning';
-                                        @endphp
-                                        <span class="badge {{ $wishClass }} text-white" style="font-size: 11px;">{{ $member['wish'] ?? 'Pending' }}</span>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <a href="{{ route('staff.birthday.card.print', ['staff' => $member['id'], 'auto_print' => 1]) }}" target="_blank" class="action-pill action-pill-card">
+                                            <span class="material-symbols-outlined">card_giftcard</span>
+                                            <span>Print Birthday Card</span>
+                                        </a>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <button type="button" class="action-pill action-pill-wish action-btn-wish" data-phone="{{ $member['phone'] ?? '' }}">
+                                            <span class="material-symbols-outlined">send</span>
+                                            <span>Click To Wish</span>
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-5">
+                                    <td colspan="9" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No staff birthdays found.</p>
                                     </td>
@@ -200,7 +211,7 @@
         transform: translateY(0);
     }
 
-    /* Table Styling */
+    /* Table Compact Styling */
     .default-table-area table {
         margin-bottom: 0;
         border-spacing: 0;
@@ -213,14 +224,78 @@
     }
     
     .default-table-area table thead th {
-        padding: 12px 15px;
-        font-size: 14px;
+        padding: 5px 10px;
+        font-size: 12px;
         font-weight: 600;
         vertical-align: middle;
-        line-height: 1.5;
+        line-height: 1.3;
+        height: 32px;
         white-space: nowrap;
         border: 1px solid #dee2e6;
         background-color: #f8f9fa;
+    }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+    }
+
+    .status-pill-today {
+        background: #28a745;
+        color: #fff;
+    }
+
+    .status-pill-muted {
+        background: #6c757d;
+        color: #fff;
+    }
+
+    .action-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .action-pill .material-symbols-outlined {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .action-pill-card {
+        background: #0d6efd;
+        border-color: #0b5ed7;
+    }
+
+    .action-pill-wish {
+        background: #ff9800;
+        border-color: #f57c00;
+    }
+
+    .action-pill:hover,
+    .action-pill:focus,
+    .status-pill:hover,
+    .status-pill:focus {
+        transform: none;
+        box-shadow: none;
+        filter: none;
+        text-decoration: none;
+        color: #fff;
     }
     
     .default-table-area table thead th:first-child {
@@ -232,10 +307,10 @@
     }
     
     .default-table-area table tbody td {
-        padding: 12px 15px;
-        font-size: 14px;
+        padding: 5px 10px;
+        font-size: 12px;
         vertical-align: middle;
-        line-height: 1.5;
+        line-height: 1.4;
         border: 1px solid #dee2e6;
     }
     
@@ -251,23 +326,39 @@
         border-bottom: 1px solid #dee2e6;
     }
     
-    .default-table-area table thead th:first-child,
-    .default-table-area table tbody td:first-child {
-        padding-left: 15px;
-    }
-    
-    .default-table-area table thead th:last-child,
-    .default-table-area table tbody td:last-child {
-        padding-right: 15px;
+    .default-table-area table tbody tr {
+        height: 36px;
     }
     
     .default-table-area table tbody tr:first-child td {
         border-top: none;
     }
     
+    .default-table-area .table-responsive {
+        padding: 0;
+        margin-top: 0;
+    }
+    
+    .default-table-area {
+        margin-top: 0 !important;
+    }
+    
+    .default-table-area table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
     .default-table-area .badge {
         font-size: 11px;
-        padding: 4px 8px;
+        padding: 3px 6px;
+        font-weight: 500;
+    }
+    
+    .default-table-area .material-symbols-outlined {
+        font-size: 13px !important;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
     }
 
     @media print {
@@ -288,6 +379,22 @@
 </style>
 
 <script>
+function normalizePhone(raw) {
+    return (raw || '').replace(/[^\d]/g, '');
+}
+
+document.addEventListener('click', function(event) {
+    const button = event.target.closest('.action-btn-wish');
+    if (!button) return;
+    const phoneRaw = button.getAttribute('data-phone') || '';
+    const phone = normalizePhone(phoneRaw);
+    if (!phone) {
+        alert('Staff phone not available for this member.');
+        return;
+    }
+    window.open(`https://wa.me/${phone}`, '_blank');
+});
+
 function printStaffTable() {
     const printWindow = window.open('', '_blank');
     const table = document.getElementById('staffBirthdayTable');
@@ -315,5 +422,6 @@ function printStaffTable() {
     printWindow.document.close();
     printWindow.print();
 }
+
 </script>
 @endsection

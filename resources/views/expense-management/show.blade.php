@@ -93,18 +93,6 @@
                     </div>
                     <div class="col-md-12">
                         <div class="detail-box">
-                            <div class="detail-label">Description</div>
-                            <div class="detail-value">{{ $managementExpense->description ?? 'N/A' }}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="detail-box">
-                            <div class="detail-label">Notify Admin</div>
-                            <div class="detail-value">{{ $managementExpense->notify_admin ? 'Yes' : 'No' }}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="detail-box">
                             <div class="detail-label">Invoice/Receipt</div>
                             @if($managementExpense->invoice_receipt)
                                 <div class="detail-value">

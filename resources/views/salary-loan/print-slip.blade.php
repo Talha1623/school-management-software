@@ -224,22 +224,27 @@
                         <td>Salary Generated</td>
                         <td style="text-align: right;">{{ number_format($salary->salary_generated ?? 0, 2) }}</td>
                     </tr>
-                    <tr>
-                        <td>Amount Paid</td>
-                        <td style="text-align: right; color: green; font-weight: bold;">{{ number_format($salary->amount_paid ?? 0, 2) }}</td>
-                    </tr>
                     @if($salary->loan_repayment > 0)
                     <tr>
-                        <td>Loan Repayment</td>
-                        <td style="text-align: right; color: red;">{{ number_format($salary->loan_repayment ?? 0, 2) }}</td>
+                        <td>Loan Repayment (Deducted)</td>
+                        <td style="text-align: right; color: red;">- {{ number_format($salary->loan_repayment ?? 0, 2) }}</td>
+                    </tr>
+                    <tr>
+                        <td>Net Amount After Loan Deduction</td>
+                        <td style="text-align: right; font-weight: bold;">{{ number_format(($salary->salary_generated ?? 0) - ($salary->loan_repayment ?? 0), 2) }}</td>
                     </tr>
                     @endif
                     <tr class="total-row">
-                        <td>Net Amount</td>
-                        <td style="text-align: right; font-size: 16px; color: #003471;">
-                            {{ number_format(($salary->amount_paid ?? 0) - ($salary->loan_repayment ?? 0), 2) }}
+                        <td>Amount Paid</td>
+                        <td style="text-align: right; color: green; font-weight: bold; font-size: 16px;">{{ number_format($salary->amount_paid ?? 0, 2) }}</td>
+                    </tr>
+                    @if($salary->loan_repayment > 0)
+                    <tr>
+                        <td colspan="2" style="text-align: center; color: #666; font-style: italic; font-size: 11px; padding-top: 10px;">
+                            Note: Loan repayment of {{ number_format($salary->loan_repayment ?? 0, 2) }} has been deducted from your salary.
                         </td>
                     </tr>
+                    @endif
                 </tbody>
             </table>
         </div>

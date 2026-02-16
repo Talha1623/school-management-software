@@ -5,6 +5,77 @@
 @section('content')
 <div class="row">
     <div class="col-12">
+        <!-- Summary Cards Section -->
+        <div class="row mb-3">
+            <div class="col-md-3 mb-3">
+                <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
+                    <div class="card-body p-3" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Total Parents</h6>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $totalParents ?? 0 }}</h3>
+                            </div>
+                            <span class="material-symbols-outlined text-white" style="font-size: 32px;">groups</span>
+                        </div>
+                        <a href="{{ route('parent.info-request.all-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            View Report
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
+                    <div class="card-body p-3" style="background: linear-gradient(135deg, #28a745 0%, #218838 100%);">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Parents with Credit</h6>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $parentsWithCredit ?? 0 }}</h3>
+                            </div>
+                            <span class="material-symbols-outlined text-white" style="font-size: 32px;">payments</span>
+                        </div>
+                        <a href="{{ route('parent.info-request.parent-credit.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            View Report
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
+                    <div class="card-body p-3" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Defaulter Parents</h6>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $defaulterParents ?? 0 }}</h3>
+                            </div>
+                            <span class="material-symbols-outlined text-white" style="font-size: 32px;">report</span>
+                        </div>
+                        <a href="{{ route('parent.info-request.defaulter-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            View Report
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
+                    <div class="card-body p-3" style="background: linear-gradient(135deg, #fd7e14 0%, #e86800 100%);">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Linked Students</h6>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $totalLinkedStudents ?? 0 }}</h3>
+                            </div>
+                            <span class="material-symbols-outlined text-white" style="font-size: 32px;">account_tree</span>
+                        </div>
+                        <a href="{{ route('parent.info-request.family-tree.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            View Report
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Printable Parent Info Reports Section -->
         <div class="card border-0 shadow-sm" style="border-radius: 8px; overflow: hidden;">
             <!-- Header -->
@@ -16,82 +87,66 @@
             
             <!-- Content Area -->
             <div class="card-body p-3">
-                <!-- Reports List in 2 Columns -->
-                <div class="row g-3">
-                    <!-- Column 1 -->
-                    <div class="col-md-6">
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Reports List -->
                         <div class="report-list">
                             <!-- All Parents -->
-                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
-                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">groups</span>
-                                            All Parents
-                                        </h6>
-                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">Complete list of parents with linked students.</p>
-                                    </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">All Parents</h6>
+                                    <p class="mb-0 text-muted" style="font-size: 12px;">Complete list of parents with linked students.</p>
                                 </div>
-                                <a href="{{ route('parent.info-request.all-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm w-100 mt-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
+                                <a href="{{ route('parent.info-request.all-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print Report
+                                    Print
                                 </a>
                             </div>
                             
                             <!-- Parent Credit Report -->
-                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
-                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">payments</span>
-                                            Parent Credit Report
-                                        </h6>
-                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">Total paid amounts grouped by parent.</p>
-                                    </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Parent Credit Report</h6>
+                                    <p class="mb-0 text-muted" style="font-size: 12px;">Total paid amounts grouped by parent.</p>
                                 </div>
-                                <a href="{{ route('parent.info-request.parent-credit.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm w-100 mt-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
+                                <a href="{{ route('parent.info-request.parent-credit.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print Report
+                                    Print
                                 </a>
                             </div>
                             
                             <!-- Family Tree Report -->
-                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
-                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">account_tree</span>
-                                            Family Tree Report
-                                        </h6>
-                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">Parent with linked students list.</p>
-                                    </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Family Tree Report</h6>
+                                    <p class="mb-0 text-muted" style="font-size: 12px;">Parent with linked students list.</p>
                                 </div>
-                                <a href="{{ route('parent.info-request.family-tree.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm w-100 mt-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
+                                <a href="{{ route('parent.info-request.family-tree.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print Report
+                                    Print
+                                </a>
+                            </div>
+                            
+                            <!-- Defaulter Parents Report -->
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Defaulter Parents Report</h6>
+                                    <p class="mb-0 text-muted" style="font-size: 12px;">Parents with outstanding dues.</p>
+                                </div>
+                                <a href="{{ route('parent.info-request.defaulter-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                    Print
                                 </a>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Column 2 -->
-                    <div class="col-md-6">
-                        <div class="report-list">
-                            <!-- Defaulter Parents Report -->
-                            <div class="report-item p-3 mb-3 rounded-8 border" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-color: #e9ecef !important; transition: all 0.3s ease;">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1 fw-semibold d-flex align-items-center gap-2" style="color: #003471; font-size: 14px;">
-                                            <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">report</span>
-                                            Defaulter Parents Report
-                                        </h6>
-                                        <p class="mb-0 text-muted" style="font-size: 12px; margin-top: 4px;">Parents with outstanding dues.</p>
-                                    </div>
-                                </div>
-                                <a href="{{ route('parent.info-request.defaulter-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm w-100 mt-2" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print Report
-                                </a>
+                    <!-- Illustration -->
+                    <div class="col-md-4 d-flex align-items-center justify-content-center">
+                        <div class="text-center">
+                            <div>
+                                <span class="material-symbols-outlined" style="font-size: 60px; color: #ddd;">family_restroom</span>
+                                <span class="material-symbols-outlined" style="font-size: 60px; color: #0d6efd; margin-left: -15px;">print</span>
                             </div>
                         </div>
                     </div>
@@ -109,19 +164,15 @@
 </div>
 
 <style>
-    .report-item {
+    .report-list .btn-light {
         transition: all 0.3s ease;
+        border: 1px solid #dee2e6;
     }
     
-    .report-item:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 52, 113, 0.15) !important;
-        border-color: #003471 !important;
-    }
-    
-    .report-item .btn:hover {
+    .report-list .btn-light:hover {
+        background-color: #f8f9fa !important;
+        border-color: #adb5bd;
         transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
     }
     
     .card {

@@ -24,8 +24,10 @@ return new class extends Migration
             // Unique constraint to prevent duplicate entries for same subject, date, class, section
             $table->unique(['subject_id', 'date', 'class', 'section'], 'unique_homework_diary');
             
-            // Indexes for faster queries
-            $table->index(['campus', 'class', 'section', 'date']);
+            // Indexes for faster queries (single column indexes for MyISAM compatibility)
+            $table->index('campus');
+            $table->index('class');
+            $table->index('date');
         });
     }
 

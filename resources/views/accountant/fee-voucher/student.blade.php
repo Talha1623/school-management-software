@@ -19,14 +19,25 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; color: #003471;">location_on</span>
                                 </span>
-                                <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
-                                    <option value="">Select Campus</option>
-                                    @foreach($campuses as $campus)
-                                        <option value="{{ $campus->campus_name ?? $campus }}" {{ ($filterCampus ?? '') === ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
-                                            {{ $campus->campus_name ?? $campus }}
-                                        </option>
-                                    @endforeach
-                                </select>
+                                @if(!empty($filterCampus) && $campuses->count() == 1)
+                                    <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;" disabled>
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}" selected>
+                                                {{ $campus->campus_name ?? $campus }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <input type="hidden" name="campus" value="{{ $filterCampus }}">
+                                @else
+                                    <select class="form-select form-select-sm" name="campus" id="campus" style="height: 38px;">
+                                        <option value="">Select Campus</option>
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}" {{ ($filterCampus ?? '') === ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                                {{ $campus->campus_name ?? $campus }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                @endif
                             </div>
                         </div>
 

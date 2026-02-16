@@ -59,8 +59,12 @@ class AdmissionController extends Controller
         // Get transport routes
         $transportRoutes = Transport::orderBy('route_name', 'asc')->pluck('route_name')->unique()->values();
 
-        // Get fee types
-        $feeTypes = FeeType::orderBy('fee_name', 'asc')->pluck('fee_name')->unique()->values();
+        // Get fee types (filtered by campus if selected)
+        $feeTypesQuery = FeeType::query();
+        if ($selectedCampus) {
+            $feeTypesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($selectedCampus))]);
+        }
+        $feeTypes = $feeTypesQuery->orderBy('fee_name', 'asc')->pluck('fee_name')->unique()->values();
 
         return view('admission.admit-student', compact('campuses', 'classes', 'sections', 'nextStudentCode', 'transportRoutes', 'feeTypes'));
     }
@@ -108,6 +112,26 @@ class AdmissionController extends Controller
             ->values();
 
         return response()->json(['routes' => $routes]);
+    }
+
+    /**
+     * Get fee types by campus (AJAX)
+     */
+    public function getFeeTypesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+
+        $query = FeeType::query();
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        $feeTypes = $query->orderBy('fee_name', 'asc')
+            ->pluck('fee_name')
+            ->unique()
+            ->values();
+
+        return response()->json(['fee_types' => $feeTypes]);
     }
 
     /**
@@ -164,10 +188,89 @@ class AdmissionController extends Controller
 
             // Fallback: if campus name contains digits, use ST + digits
             if (preg_match('/(\d+)/', $campus, $matches)) {
-                return 'ST' . $matches[1];
+                $prefix = 'ST' . $matches[1];
+                // Save it to campus record for future use
+                if ($campusRecord) {
+                    $campusRecord->code_prefix = $prefix;
+                    $campusRecord->save();
+                }
+                return strtoupper($prefix);
             }
+
+            // If no code_prefix and no digits in name, find next available campus number
+            // IMPORTANT: Check both existing campuses AND student/payment codes to avoid reusing deleted campus numbers
+            $usedCampusNumbers = [];
+            
+            // Check from existing campuses with code_prefix (only active campuses, not deleted)
+            $campusesWithPrefix = Campus::whereNotNull('code_prefix')
+                ->where('code_prefix', 'like', 'ST%')
+                ->get();
+            
+            foreach ($campusesWithPrefix as $campusWithPrefix) {
+                if (preg_match('/^ST(\d+)$/i', $campusWithPrefix->code_prefix, $matches)) {
+                    $campusNum = (int) $matches[1];
+                    $usedCampusNumbers[] = $campusNum;
+                }
+            }
+            
+            // Also check from student codes to find any used campus numbers (even if campus is deleted)
+            $studentCodes = Student::whereNotNull('student_code')
+                ->where('student_code', 'like', 'ST%-%')
+                ->pluck('student_code')
+                ->toArray();
+            
+            // Also check from payment codes (covers deleted students/campuses)
+            // This is CRITICAL: Payment codes preserve history even after campus/student deletion
+            $paymentCodes = StudentPayment::whereNotNull('student_code')
+                ->where('student_code', 'like', 'ST%-%')
+                ->distinct()
+                ->pluck('student_code')
+                ->toArray();
+            
+            $allCodes = array_unique(array_merge($studentCodes, $paymentCodes));
+            
+            // Extract campus numbers from all codes
+            foreach ($allCodes as $code) {
+                $code = trim($code);
+                if (empty($code)) continue;
+                
+                // Match pattern ST1-001, ST2-001, etc. to extract campus number
+                if (preg_match('/^ST(\d+)-(\d+)$/i', $code, $matches)) {
+                    $campusNum = (int) $matches[1];
+                    if ($campusNum > 0 && !in_array($campusNum, $usedCampusNumbers)) {
+                        $usedCampusNumbers[] = $campusNum;
+                    }
+                }
+            }
+            
+            // Sort used numbers for easier debugging
+            sort($usedCampusNumbers);
+            
+            // IMPORTANT: If no codes found but we have existing campuses, ensure we don't reuse
+            // This handles the case where campus was deleted but no student/payment codes exist
+            if (empty($allCodes) && !empty($campusesWithPrefix)) {
+                // Already handled by existing campuses check above
+            }
+            
+            // Find next sequential campus number (always use max + 1, never reuse deleted numbers)
+            $nextCampusNumber = 1;
+            if (!empty($usedCampusNumbers)) {
+                $maxCampusNumber = max($usedCampusNumbers);
+                // Always use next sequential number after max (no gaps, no reuse)
+                $nextCampusNumber = $maxCampusNumber + 1;
+            }
+            $prefix = 'ST' . $nextCampusNumber;
+            
+            // Save it to campus record for future use
+            if ($campusRecord) {
+                $campusRecord->code_prefix = $prefix;
+                $campusRecord->save();
+            }
+            
+            return strtoupper($prefix);
         }
 
+        // If no campus provided, return ST (shouldn't happen in normal flow)
         return 'ST';
     }
 
@@ -464,7 +567,7 @@ class AdmissionController extends Controller
         
         // Add validation for parent password if creating parent account
         if ($createParentAccount && !$existingParentAccount) {
-            $rules['parent_password'] = ['required', 'string', 'min:6'];
+            $rules['parent_password'] = ['nullable', 'string', 'min:6'];
             $rules['father_email'] = ['required', 'email', 'max:255', 'unique:parent_accounts,email'];
         }
 
@@ -539,10 +642,13 @@ class AdmissionController extends Controller
         // 2. No existing parent account found
         if ($createParentAccount && !$existingParentAccount) {
             // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
+            // Default password is "parent" if not provided
+            $parentPassword = !empty($validated['parent_password']) ? $validated['parent_password'] : 'parent';
+            
             $parentAccount = ParentAccount::create([
                 'name' => $validated['father_name'],
                 'email' => $validated['father_email'],
-                'password' => $validated['parent_password'], // Model will hash it automatically
+                'password' => $parentPassword, // Model will hash it automatically
                 'phone' => $validated['father_phone'] ?? null,
                 'whatsapp' => $validated['whatsapp_number'] ?? null,
                 'id_card_number' => $validated['father_id_card'] ?? null,
@@ -1059,7 +1165,7 @@ class AdmissionController extends Controller
                                 $parentAccount = ParentAccount::create([
                                     'name' => $studentData['father_name'],
                                     'email' => $parentEmail,
-                                    'password' => $studentData['father_id_card'] ?? 'password123',
+                                    'password' => $studentData['father_id_card'] ?? 'parent',
                                     'phone' => $studentData['father_phone'] ?? null,
                                     'id_card_number' => $studentData['father_id_card'] ?? null,
                                     'address' => $studentData['home_address'] ?? null,
@@ -1181,7 +1287,7 @@ class AdmissionController extends Controller
                             $parentAccount = ParentAccount::create([
                                 'name' => $studentData['father_name'],
                                 'email' => $parentEmail,
-                                'password' => $studentData['father_id_card'] ?? 'password123', // Model will hash it automatically
+                                'password' => $studentData['father_id_card'] ?? 'parent', // Model will hash it automatically
                                 'phone' => $studentData['father_phone'] ?? null,
                                 'id_card_number' => $studentData['father_id_card'] ?? null,
                                 'address' => $studentData['home_address'] ?? null,
@@ -1322,6 +1428,107 @@ class AdmissionController extends Controller
             'activeStudents',
             'deactivatedStudents'
         ));
+    }
+
+    /**
+     * Show today's admissions report.
+     */
+    public function reportToday(Request $request): View
+    {
+        // Check for print parameter - accept both boolean and string '1'
+        $isPrint = $request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1);
+        
+        // Get students admitted today
+        $students = Student::whereDate('admission_date', today())
+            ->orderBy('admission_date', 'desc')
+            ->orderBy('student_name', 'asc')
+            ->get();
+        
+        return view('admission.report-today', compact('students', 'isPrint'));
+    }
+
+    /**
+     * Show monthly admissions report.
+     */
+    public function reportMonthly(Request $request): View
+    {
+        $isPrint = $request->boolean('print');
+        
+        // Get students admitted this month
+        $students = Student::whereYear('admission_date', now()->year)
+            ->whereMonth('admission_date', now()->month)
+            ->orderBy('admission_date', 'desc')
+            ->orderBy('student_name', 'asc')
+            ->get();
+        
+        return view('admission.report-monthly', compact('students', 'isPrint'));
+    }
+
+    /**
+     * Show yearly admissions report.
+     */
+    public function reportYearly(Request $request): View
+    {
+        // Check for print parameter - accept both boolean and string '1'
+        $isPrint = $request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1);
+        
+        // Get students admitted this year
+        $students = Student::whereYear('admission_date', now()->year)
+            ->orderBy('admission_date', 'desc')
+            ->orderBy('student_name', 'asc')
+            ->get();
+        
+        return view('admission.report-yearly', compact('students', 'isPrint'));
+    }
+
+    /**
+     * Show admission forms report.
+     */
+    public function reportForms(Request $request): View
+    {
+        // Check for print parameter - accept both boolean and string '1'
+        $isPrint = $request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1);
+        
+        // Get filter values
+        $filterCampus = $request->get('filter_campus');
+        $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+        
+        // Get all students with admission forms
+        $query = Student::whereNotNull('admission_date');
+        
+        // Apply filters
+        if ($filterCampus) {
+            $query->where('campus', $filterCampus);
+        }
+        if ($filterClass) {
+            $query->where('class', $filterClass);
+        }
+        if ($filterSection) {
+            $query->where('section', $filterSection);
+        }
+        
+        $students = $query->orderBy('admission_date', 'desc')
+            ->orderBy('student_name', 'asc')
+            ->get();
+        
+        // Get campuses, classes, sections for filters
+        $campuses = Student::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
+        $classes = Student::whereNotNull('class')->distinct()->pluck('class')->sort()->values();
+        $sections = Student::whereNotNull('section')->distinct()->pluck('section')->sort()->values();
+        
+        return view('admission.report-forms', compact('students', 'isPrint', 'campuses', 'classes', 'sections', 'filterCampus', 'filterClass', 'filterSection'));
+    }
+
+    /**
+     * Show blank admission form.
+     */
+    public function reportBlank(Request $request): View
+    {
+        // Check for print parameter - accept both boolean and string '1', default to true for blank form
+        $isPrint = !$request->has('print') || ($request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1));
+        
+        return view('admission.report-blank', compact('isPrint'));
     }
 }
 

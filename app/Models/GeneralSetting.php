@@ -19,6 +19,10 @@ class GeneralSetting extends Model
         'school_email',
         'currency',
         'timezone',
+        'logo',
+        'system_name',
+        'bio_token',
+        'campus_id',
     ];
 
     public static function getSettings(): self

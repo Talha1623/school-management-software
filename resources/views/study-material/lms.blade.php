@@ -154,9 +154,9 @@
                                                     YouTube Link
                                                 </a>
                                             @elseif($material->file_path)
-                                                <a href="{{ route('study-material.view-file', $material->id) }}" target="_blank" class="text-primary text-decoration-none">
-                                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">file_present</span>
-                                                    View File
+                                                <a href="{{ route('study-material.download-file', $material->id) }}" class="text-primary text-decoration-none" download>
+                                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">download</span>
+                                                    Download File
                                                 </a>
                                             @else
                                                 <span class="text-muted">N/A</span>
@@ -730,9 +730,10 @@ function viewMaterial(button, materialId) {
             <span>${youtubeUrl}</span>
         </a>`;
     } else if (fileUrl) {
-        fileUrlElement.innerHTML = `<a href="${fileUrl}" target="_blank" class="text-primary text-decoration-none d-inline-flex align-items-center gap-2">
-            <span class="material-symbols-outlined" style="font-size: 18px;">file_present</span>
-            <span>View File</span>
+        const downloadUrl = fileUrl.replace('/view-file', '/download-file');
+        fileUrlElement.innerHTML = `<a href="${downloadUrl}" download class="text-primary text-decoration-none d-inline-flex align-items-center gap-2">
+            <span class="material-symbols-outlined" style="font-size: 18px;">download</span>
+            <span>Download File</span>
         </a>`;
     } else {
         fileUrlElement.textContent = '-';
@@ -772,10 +773,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (classSelect && sectionSelect) {
         classSelect.addEventListener('change', function() {
             const selectedClass = this.value;
+            const selectedCampus = campusSelect ? campusSelect.value : '';
             if (selectedClass) {
-                loadSections(selectedClass, campusSelect ? campusSelect.value : '');
+                loadSections(selectedClass, selectedCampus);
                 // Also load subjects
-                loadSubjects(selectedClass, sectionSelect.value);
+                loadSubjects(selectedClass, sectionSelect.value, selectedCampus);
             } else {
                 sectionSelect.innerHTML = '<option value="">Select Section</option>';
                 sectionSelect.disabled = true;
@@ -790,8 +792,21 @@ document.addEventListener('DOMContentLoaded', function() {
         sectionSelect.addEventListener('change', function() {
             const selectedSection = this.value;
             const selectedClass = classSelect ? classSelect.value : '';
+            const selectedCampus = campusSelect ? campusSelect.value : '';
             if (selectedClass) {
-                loadSubjects(selectedClass, selectedSection);
+                loadSubjects(selectedClass, selectedSection, selectedCampus);
+            }
+        });
+    }
+
+    // Load subjects when campus changes
+    if (campusSelect && subjectSelect) {
+        campusSelect.addEventListener('change', function() {
+            const selectedCampus = this.value;
+            const selectedClass = classSelect ? classSelect.value : '';
+            const selectedSection = sectionSelect ? sectionSelect.value : '';
+            if (selectedClass) {
+                loadSubjects(selectedClass, selectedSection, selectedCampus);
             }
         });
     }
@@ -888,7 +903,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    function loadSubjects(selectedClass, selectedSection) {
+    function loadSubjects(selectedClass, selectedSection, selectedCampus) {
         if (!subjectSelect) return;
         
         if (!selectedClass) {
@@ -902,6 +917,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const params = new URLSearchParams();
         params.append('class', selectedClass);
+        if (selectedCampus) {
+            params.append('campus', selectedCampus);
+        }
         if (selectedSection) {
             params.append('section', selectedSection);
         }

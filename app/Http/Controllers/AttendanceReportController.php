@@ -249,12 +249,33 @@ class AttendanceReportController extends Controller
                 $studentsQuery = Student::query();
                 
                 $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
-                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
-                $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
                 
-                if ($filterSection) {
-                    $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+                // Apply campus filter - case-insensitive comparison with NULL handling
+                if ($campusName) {
+                    $studentsQuery->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower(trim($campusName))]);
                 }
+                
+                // Apply class filter - case-insensitive comparison with NULL handling
+                if ($filterClass) {
+                    $studentsQuery->whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($filterClass))]);
+                }
+                
+                // Apply section filter if provided - case-insensitive comparison with NULL handling
+                if ($filterSection) {
+                    $studentsQuery->whereRaw('LOWER(TRIM(COALESCE(section, ""))) = ?', [strtolower(trim($filterSection))]);
+                }
+                
+                // Exclude passout students - ensure class is not in passout list
+                $passoutClasses = array_map('strtolower', [
+                    'passout',
+                    'pass out',
+                    'passed out',
+                    'passedout',
+                    'graduated',
+                    'graduate',
+                    'alumni',
+                ]);
+                $studentsQuery->whereRaw("LOWER(TRIM(class)) NOT IN ('" . implode("', '", $passoutClasses) . "')");
                 
                 $students = $studentsQuery->orderBy('student_code', 'asc')
                     ->orderBy('student_name', 'asc')
@@ -267,14 +288,17 @@ class AttendanceReportController extends Controller
             $monthName = $date->format('F');
 
             // Fetch actual attendance data from attendance table
-            $studentIds = $students->pluck('id');
+            $studentIds = $students->pluck('id')->toArray();
             
             // Get attendance for the entire month - use whereYear and whereMonth for reliable matching
-            $attendances = StudentAttendance::whereIn('student_id', $studentIds)
-                ->whereYear('attendance_date', $filterYear)
-                ->whereMonth('attendance_date', $filterMonth)
-                ->get()
-                ->groupBy('student_id');
+            $attendances = collect();
+            if (!empty($studentIds)) {
+                $attendances = StudentAttendance::whereIn('student_id', $studentIds)
+                    ->whereYear('attendance_date', $filterYear)
+                    ->whereMonth('attendance_date', $filterMonth)
+                    ->get()
+                    ->groupBy('student_id');
+            }
             
             // Build attendance data array for each student
             foreach ($students as $student) {

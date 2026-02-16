@@ -2,7 +2,11 @@
 <div class="sidebar-area" id="sidebar-area">
     <div class="logo position-relative d-flex align-items-center justify-content-between">
         <a href="{{ Auth::guard('staff')->check() ? route('staff.dashboard') : route('dashboard') }}" class="d-block text-decoration-none position-relative">
-            <img src="{{ asset('assets/images/Full Logo_SMS.png') }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
+            @php
+                $settings = \App\Models\GeneralSetting::getSettings();
+                $logoUrl = $settings->logo ? asset('storage/' . $settings->logo) : asset('assets/images/Full Logo_SMS.png');
+            @endphp
+            <img src="{{ $logoUrl }}" alt="logo-icon" style="max-width: 180px; max-height: 50px; object-fit: contain;">
         </a> 
         <button class="sidebar-burger-menu-close bg-transparent py-3 border-0 opacity-0 z-n1 position-absolute top-50 end-0 translate-middle-y" id="sidebar-burger-menu-close">
             <span class="border-1 d-block for-dark-burger" style="border-bottom: 1px solid #475569; height: 1px; width: 25px; transform: rotate(45deg);"></span>
@@ -1046,6 +1050,12 @@
                                     </li>
                                 </ul>
                             </li>
+                            <li class="menu-item">
+                                <a href="{{ route('test.reports') }}" class="menu-link {{ request()->routeIs('test.reports*') ? 'active' : '' }}">
+                                    <span class="material-symbols-outlined menu-icon">description</span>
+                                    <span class="title">Test Reports</span>
+                                </a>
+                            </li>
                         </ul>
                     </li>
                     <li class="menu-item">
@@ -1409,6 +1419,12 @@
                         </ul>
                     </li>
                     <li class="menu-item">
+                        <a href="{{ route('biometric-device.manage') }}" class="menu-link {{ request()->routeIs('biometric-device*') ? 'active' : '' }}">
+                            <span class="material-symbols-outlined menu-icon">fingerprint</span>
+                            <span class="title">Manage Biometric Device</span>
+                        </a>
+                    </li>
+                    <li class="menu-item">
                         <a href="javascript:void(0);" class="menu-link menu-toggle {{ request()->routeIs('website-management*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">language</span>
                             <span class="title">Website Management</span>
@@ -1465,6 +1481,11 @@
                             <li class="menu-item">
                                 <a href="{{ route('thermal-printer.setting') }}" class="menu-link {{ request()->routeIs('thermal-printer*') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
                                     Thermal Printer Setting
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="{{ route('settings.biometric-attendance') }}" class="menu-link {{ request()->routeIs('settings.biometric-attendance*') ? 'active' : '' }}" onclick="preventSidebarClose(event)">
+                                    Biometric Att. Setting
                                 </a>
                             </li>
                         </ul>
@@ -1611,7 +1632,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Check if we're on Settings page (General Settings, Automation, SMS, Email, Payment, Exam, Thermal Printer)
+    // Check if we're on Settings page (General Settings, Automation, SMS, Email, Payment, Exam, Thermal Printer, Biometric Attendance)
     const isSettingsPage = window.location.pathname.includes('/settings/') || 
                            window.location.pathname.includes('/thermal-printer');
     

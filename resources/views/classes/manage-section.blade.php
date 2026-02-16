@@ -205,7 +205,9 @@
                                 <th>Nick Name</th>
                                 <th>Class</th>
                                 <th>Teacher</th>
+                                <th>Teacher Type</th>
                                 <th>Session</th>
+                                <th>Passout</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
@@ -230,7 +232,28 @@
                                             <span class="text-muted">{{ $section->teacher ?? 'N/A' }}</span>
                                         </td>
                                         <td>
+                                            @if($section->teacher_type)
+                                                @if(strtolower($section->teacher_type) == 'full time')
+                                                    <span class="badge bg-success text-white" style="font-size: 12px; padding: 4px 8px;">Full Time</span>
+                                                @elseif(strtolower($section->teacher_type) == 'per hour')
+                                                    <span class="badge bg-warning text-dark" style="font-size: 12px; padding: 4px 8px;">Per Hour</span>
+                                                @elseif(strtolower($section->teacher_type) == 'per lecture')
+                                                    <span class="badge bg-info text-white" style="font-size: 12px; padding: 4px 8px;">Per Lecture</span>
+                                                @else
+                                                    <span class="badge bg-secondary text-white" style="font-size: 12px; padding: 4px 8px;">{{ $section->teacher_type }}</span>
+                                                @endif
+                                            @else
+                                                <span class="text-muted">N/A</span>
+                                            @endif
+                                        </td>
+                                        <td>
                                             <span class="badge bg-warning text-dark" style="font-size: 12px; padding: 4px 8px;">{{ $section->session ?? 'N/A' }}</span>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-warning" title="Mark as Passout" onclick="passoutSection({{ $section->id }}, '{{ addslashes($section->name) }}', '{{ addslashes($section->class) }}', '{{ addslashes($section->campus) }}')" style="display: inline-flex; align-items: center; gap: 4px;">
+                                                <span class="material-symbols-outlined" style="color: white; font-size: 14px;">school</span>
+                                                <span style="font-size: 11px; color: white;">Passout</span>
+                                            </button>
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1 align-items-center">
@@ -249,7 +272,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="text-center text-muted py-5">
+                                        <td colspan="10" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No sections found.</p>
                                         </td>
@@ -257,7 +280,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-5">
+                                    <td colspan="10" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No sections found.</p>
                                     </td>
@@ -356,8 +379,22 @@
                                 <select class="form-select section-input" name="teacher" id="teacher" style="border: none; border-left: 1px solid #e0e7ff;">
                                     <option value="">Select Teacher</option>
                                     @foreach($teachers as $teacher)
-                                        <option value="{{ $teacher->name }}" data-campus="{{ $teacher->campus ?? '' }}">{{ $teacher->name }}</option>
+                                        <option value="{{ $teacher->name }}" data-campus="{{ $teacher->campus ?? '' }}" data-salary-type="{{ strtolower($teacher->salary_type ?? '') }}">{{ $teacher->name }}</option>
                                     @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Teacher Type</label>
+                            <div class="input-group input-group-sm section-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 15px;">work</span>
+                                </span>
+                                <select class="form-select section-input" name="teacher_type" id="teacher_type" style="border: none; border-left: 1px solid #e0e7ff;">
+                                    <option value="">Select Teacher Type</option>
+                                    <option value="per hour">Per Hour</option>
+                                    <option value="per lecture">Per Lecture</option>
+                                    <option value="full time">Full Time</option>
                                 </select>
                             </div>
                         </div>
@@ -388,6 +425,57 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Passout Verification Modal -->
+<div class="modal fade" id="passoutVerificationModal" tabindex="-1" aria-labelledby="passoutVerificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="passoutVerificationModalLabel" style="color: white;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">lock</span>
+                    <span>Verification Required</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning mb-3" style="font-size: 12px;">
+                    <strong>Security Check:</strong> Please enter your login credentials to proceed with passout action.
+                </div>
+                <div id="verificationError" class="alert alert-danger" style="display: none; font-size: 12px;"></div>
+                <form id="verificationForm" onsubmit="event.preventDefault(); verifyAndPassout();">
+                    <div class="mb-3">
+                        <label for="verificationEmail" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Email</label>
+                        <div class="input-group">
+                            <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">email</span>
+                            </span>
+                            <input type="email" class="form-control" id="verificationEmail" placeholder="Enter your email" required autocomplete="email">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="verificationPassword" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">lock</span>
+                            </span>
+                            <input type="password" class="form-control" id="verificationPassword" placeholder="Enter your password" required autocomplete="current-password" onkeypress="if(event.key === 'Enter') { event.preventDefault(); verifyAndPassout(); }">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+                <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-sm py-2 px-4 rounded-8" id="verifyPassoutBtn" onclick="verifyAndPassout()" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">verified</span>
+                    Verify & Proceed
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -746,7 +834,19 @@
     }
     
     .default-table-area .btn-primary .material-symbols-outlined,
-    .default-table-area .btn-danger .material-symbols-outlined {
+    .default-table-area .btn-danger .material-symbols-outlined,
+    .default-table-area .btn-warning .material-symbols-outlined {
+        color: white !important;
+    }
+    
+    .default-table-area .btn-warning {
+        background-color: #ff9800 !important;
+        border-color: #ff9800 !important;
+    }
+    
+    .default-table-area .btn-warning:hover {
+        background-color: #f57c00 !important;
+        border-color: #f57c00 !important;
         color: white !important;
     }
 </style>
@@ -836,6 +936,36 @@ function filterTeacherOptions(campusValue, selectedTeacher = '') {
     if (!teacherSelect.value || teacherSelect.selectedOptions[0]?.disabled) {
         teacherSelect.value = '';
     }
+
+    // Auto-select teacher type based on selected teacher's salary_type
+    const teacherTypeSelect = document.getElementById('teacher_type');
+    if (teacherTypeSelect && teacherSelect.value) {
+        const selectedOption = teacherSelect.options[teacherSelect.selectedIndex];
+        if (selectedOption && selectedOption.value) {
+            const salaryType = selectedOption.getAttribute('data-salary-type') || '';
+            let teacherType = '';
+            
+            // Map salary_type to teacher_type
+            if (salaryType === 'per hour') {
+                teacherType = 'per hour';
+            } else if (salaryType === 'lecture') {
+                teacherType = 'per lecture';
+            } else if (salaryType === 'full time' || salaryType === '') {
+                teacherType = 'full time';
+            }
+            
+            // Set teacher_type dropdown value
+            if (teacherType) {
+                teacherTypeSelect.value = teacherType;
+            } else {
+                teacherTypeSelect.value = '';
+            }
+        } else {
+            teacherTypeSelect.value = '';
+        }
+    } else if (teacherTypeSelect && !teacherSelect.value) {
+        teacherTypeSelect.value = '';
+    }
 }
 
 // Reset form when opening modal for new section
@@ -858,12 +988,13 @@ function resetForm() {
 }
 
 // Edit section function
-function editSection(id, campus, name, nickName, className, teacher, session) {
+function editSection(id, campus, name, nickName, className, teacher, teacherType, session) {
     document.getElementById('campus').value = campus;
     document.getElementById('name').value = name;
     document.getElementById('nick_name').value = nickName || '';
     loadClassesByCampus('class', campus, className);
     filterTeacherOptions(campus, teacher || '');
+    document.getElementById('teacher_type').value = teacherType || '';
     document.getElementById('session').value = session || '';
     document.getElementById('sectionForm').action = "{{ url('classes/manage-section') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
@@ -897,6 +1028,38 @@ document.addEventListener('DOMContentLoaded', function() {
         campusSelect.addEventListener('change', function() {
             loadClassesByCampus('class', this.value);
             filterTeacherOptions(this.value);
+        });
+    }
+
+    // Auto-select teacher type based on selected teacher's salary_type
+    const teacherSelect = document.getElementById('teacher');
+    const teacherTypeSelect = document.getElementById('teacher_type');
+    if (teacherSelect && teacherTypeSelect) {
+        teacherSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                const salaryType = selectedOption.getAttribute('data-salary-type') || '';
+                let teacherType = '';
+                
+                // Map salary_type to teacher_type
+                if (salaryType === 'per hour') {
+                    teacherType = 'per hour';
+                } else if (salaryType === 'lecture') {
+                    teacherType = 'per lecture';
+                } else if (salaryType === 'full time' || salaryType === '') {
+                    teacherType = 'full time';
+                }
+                
+                // Set teacher_type dropdown value
+                if (teacherType) {
+                    teacherTypeSelect.value = teacherType;
+                } else {
+                    teacherTypeSelect.value = '';
+                }
+            } else {
+                // If no teacher selected, clear teacher_type
+                teacherTypeSelect.value = '';
+            }
         });
     }
 });
@@ -992,6 +1155,128 @@ function printTable() {
     window.print();
     document.body.innerHTML = originalContents;
     window.location.reload();
+}
+
+// Store passout data for verification
+let pendingPassoutData = null;
+
+// Passout section function
+function passoutSection(id, sectionName, className, campus) {
+    // Store passout data
+    pendingPassoutData = { id, sectionName, className, campus };
+    
+    // Show verification modal
+    const modal = new bootstrap.Modal(document.getElementById('passoutVerificationModal'));
+    document.getElementById('verificationEmail').value = '';
+    document.getElementById('verificationPassword').value = '';
+    document.getElementById('verificationError').textContent = '';
+    document.getElementById('verificationError').style.display = 'none';
+    modal.show();
+}
+
+// Verify and proceed with passout
+function verifyAndPassout() {
+    const email = document.getElementById('verificationEmail').value.trim();
+    const password = document.getElementById('verificationPassword').value;
+    
+    if (!email || !password) {
+        document.getElementById('verificationError').textContent = 'Please enter both email and password.';
+        document.getElementById('verificationError').style.display = 'block';
+        return;
+    }
+    
+    // Show loading state
+    const verifyBtn = document.getElementById('verifyPassoutBtn');
+    const originalBtnText = verifyBtn.innerHTML;
+    verifyBtn.disabled = true;
+    verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Verifying...';
+    
+    // Verify credentials
+    fetch(`{{ url('classes/manage-section') }}/${pendingPassoutData.id}/verify-passout`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            email: email,
+            password: password
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('passoutVerificationModal'));
+            modal.hide();
+            
+            // Proceed with passout
+            proceedWithPassout();
+        } else {
+            document.getElementById('verificationError').textContent = data.message || 'Invalid credentials. Please try again.';
+            document.getElementById('verificationError').style.display = 'block';
+            verifyBtn.disabled = false;
+            verifyBtn.innerHTML = originalBtnText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('verificationError').textContent = 'An error occurred during verification. Please try again.';
+        document.getElementById('verificationError').style.display = 'block';
+        verifyBtn.disabled = false;
+        verifyBtn.innerHTML = originalBtnText;
+    });
+}
+
+// Proceed with passout after verification
+function proceedWithPassout() {
+    if (!pendingPassoutData) return;
+    
+    const { id, sectionName, className, campus } = pendingPassoutData;
+    
+    if (!confirm(`Are you sure you want to passout all students from section "${sectionName}" of class "${className}" in campus "${campus}"?\n\nThis will mark all students in this section as "Passout" and clear their sections.`)) {
+        pendingPassoutData = null;
+        return;
+    }
+    
+    // Show loading state
+    const btn = document.querySelector(`button[onclick*="passoutSection(${id}"]`);
+    if (btn) {
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Processing...';
+        
+        // Make AJAX request
+        fetch(`{{ url('classes/manage-section') }}/${id}/passout`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message || 'Students passed out successfully!');
+                window.location.reload();
+            } else {
+                alert(data.message || 'Error: ' + (data.error || 'Failed to passout students'));
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while passing out students. Please try again.');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+    }
+    
+    pendingPassoutData = null;
 }
 </script>
 @endsection

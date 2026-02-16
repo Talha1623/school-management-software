@@ -13,6 +13,7 @@ class BehaviorRecord extends Model
         'student_id',
         'student_name',
         'type',
+        'category',
         'points',
         'class',
         'section',

@@ -217,6 +217,79 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Check for Fee Calculator partial payment data
+    const feeCalculatorPayment = sessionStorage.getItem('feeCalculatorPayment');
+    if (feeCalculatorPayment) {
+        try {
+            const paymentData = JSON.parse(feeCalculatorPayment);
+            if (paymentData.students && paymentData.students.length > 0 && paymentData.paymentType === 'partial') {
+                // Show notification
+                const notification = document.createElement('div');
+                notification.className = 'alert alert-info alert-dismissible fade show';
+                notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                notification.innerHTML = `
+                    <strong>Fee Calculator Payment:</strong> Processing partial payment for ${paymentData.students.length} student(s). Total Amount: ${paymentData.totalAmount.toFixed(2)}, Payment Amount: ${paymentData.paymentAmount.toFixed(2)}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(notification);
+                
+                // Auto-populate form with first student's data
+                if (paymentData.students.length > 0) {
+                    const firstStudent = paymentData.students[0];
+                    const studentCode = firstStudent.student_code || firstStudent.code;
+                    
+                    // Helper function to calculate student total
+                    function calculateStudentTotal(student) {
+                        return (parseFloat(student.monthly_fee || 0)) + 
+                               (parseFloat(student.transport_fare || 0)) + 
+                               (parseFloat(student.admission_fee_amount || 0)) + 
+                               (parseFloat(student.other_fee_amount || 0));
+                    }
+                    
+                    // Calculate proportional payment amount for this student
+                    const studentTotal = calculateStudentTotal(firstStudent);
+                    const proportionalAmount = paymentData.totalAmount > 0 
+                        ? (paymentData.paymentAmount * (studentTotal / paymentData.totalAmount))
+                        : (paymentData.paymentAmount / paymentData.students.length);
+                    
+                    // Populate form fields
+                    setTimeout(function() {
+                        const studentCodeInput = document.getElementById('student_code');
+                        const campusSelect = document.getElementById('campus');
+                        const paymentTitleInput = document.getElementById('payment_title');
+                        const paymentAmountInput = document.getElementById('payment_amount');
+                        
+                        if (studentCodeInput && studentCode) {
+                            studentCodeInput.value = studentCode;
+                            // Trigger student search
+                            if (studentCodeInput.dispatchEvent) {
+                                studentCodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        }
+                        
+                        if (campusSelect && firstStudent.campus) {
+                            campusSelect.value = firstStudent.campus;
+                        }
+                        
+                        if (paymentTitleInput) {
+                            paymentTitleInput.value = firstStudent.fee_title || 'Monthly Fee';
+                        }
+                        
+                        if (paymentAmountInput) {
+                            paymentAmountInput.value = proportionalAmount.toFixed(2);
+                        }
+                        
+                        // Clear sessionStorage after processing
+                        sessionStorage.removeItem('feeCalculatorPayment');
+                    }, 500);
+                }
+            }
+        } catch (e) {
+            console.error('Error processing Fee Calculator payment data:', e);
+            sessionStorage.removeItem('feeCalculatorPayment');
+        }
+    }
+    
     const urlParams = new URLSearchParams(window.location.search);
     const studentCode = urlParams.get('student_code');
     const studentCodeInput = document.getElementById('student_code');
@@ -265,7 +338,11 @@ document.addEventListener('DOMContentLoaded', function() {
         studentName.className = 'text-info';
         studentInfo.style.display = 'block';
 
-        fetch(`{{ route('accounting.get-student-by-code') }}?student_code=${encodeURIComponent(code)}`, {
+        // Get selected campus
+        const selectedCampus = campusSelect ? campusSelect.value : '';
+        const campusParam = selectedCampus ? `&campus=${encodeURIComponent(selectedCampus)}` : '';
+
+        fetch(`{{ route('accounting.get-student-by-code') }}?student_code=${encodeURIComponent(code)}${campusParam}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -312,6 +389,14 @@ document.addEventListener('DOMContentLoaded', function() {
         searchTimer = setTimeout(() => {
             fetchStudentDetails(code);
         }, 500);
+    });
+
+    // Re-search when campus changes
+    campusSelect.addEventListener('change', function() {
+        const code = studentCodeInput.value.trim();
+        if (code) {
+            fetchStudentDetails(code);
+        }
     });
 
     generatedFeeSelect.addEventListener('change', function() {

@@ -352,7 +352,7 @@
                         @foreach($voucher['pending_fees'] as $fee)
                             <tr>
                                 <td>{{ $fee['description'] }}</td>
-                                <td class="amount">{{ number_format($fee['amount'], 0) }}</td>
+                                <td class="amount">{{ number_format($fee['amount'], 2) }}</td>
                             </tr>
                         @endforeach
                     @else

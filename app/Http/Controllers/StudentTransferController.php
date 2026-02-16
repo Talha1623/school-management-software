@@ -9,6 +9,7 @@ use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\DB;
 
 class StudentTransferController extends Controller
 {
@@ -190,23 +191,77 @@ class StudentTransferController extends Controller
 
         $fromCampus = $student->campus;
         $normalizedToCampus = $this->resolveCampusName($validated['to_campus']);
+        $oldClass = $student->class;
+        
         // Update campus
         $student->campus = $normalizedToCampus;
         
         // Update class if provided
         if ($request->filled('class')) {
-            $student->class = trim((string) $validated['class']);
+            $newClass = trim((string) $validated['class']);
+            $student->class = $newClass;
+            
+            // If class changed, clear section (since sections are class-specific)
+            // This prevents students from appearing in Behavior Recording with wrong class/section combination
+            if (strtolower(trim($oldClass ?? '')) !== strtolower(trim($newClass))) {
+                $student->section = null;
+            }
         }
 
         // If campus changed, generate new campus-wise student code
+        $oldStudentCode = $student->student_code;
         if (!empty($normalizedToCampus) && trim((string) $fromCampus) !== trim((string) $normalizedToCampus)) {
-            $student->student_code = $this->generateNextStudentCode($normalizedToCampus);
+            $newStudentCode = $this->generateNextStudentCode($normalizedToCampus);
+            $student->student_code = $newStudentCode;
         }
 
+        // Ensure campus is saved correctly
         $student->save();
+        
+        // Verify the save was successful
+        $student->refresh();
+        
+        // Log for debugging
+        \Log::info('Student Transfer Completed', [
+            'student_id' => $student->id,
+            'student_code' => $student->student_code,
+            'student_name' => $student->student_name,
+            'old_campus' => $fromCampus,
+            'new_campus' => $student->campus,
+            'normalized_to_campus' => $normalizedToCampus,
+            'old_class' => $oldClass,
+            'new_class' => $student->class,
+            'section' => $student->section,
+            'parent_account_id' => $student->parent_account_id,
+            'father_name' => $student->father_name,
+        ]);
 
-        // TODO: Move dues if move_dues is yes
-        // TODO: Move payments if move_payments is yes
+        // Update student_payments with new student code if campus changed
+        if (!empty($normalizedToCampus) && trim((string) $fromCampus) !== trim((string) $normalizedToCampus) && $oldStudentCode !== $student->student_code) {
+            // Update all payment records (both dues and payments) with new student code and campus
+            DB::table('student_payments')
+                ->where('student_code', $oldStudentCode)
+                ->update([
+                    'student_code' => $student->student_code,
+                    'campus' => $normalizedToCampus
+                ]);
+        } else {
+            // If no code change, just update campus in payments if requested
+            if ($request->input('move_dues') === 'yes') {
+                DB::table('student_payments')
+                    ->where('student_code', $student->student_code)
+                    ->where('method', 'Generated')
+                    ->update(['campus' => $normalizedToCampus]);
+            }
+            
+            if ($request->input('move_payments') === 'yes') {
+                DB::table('student_payments')
+                    ->where('student_code', $student->student_code)
+                    ->where('method', '!=', 'Generated')
+                    ->update(['campus' => $normalizedToCampus]);
+            }
+        }
+
         // TODO: Send notification if notify_parent is yes
 
         return redirect()
@@ -250,11 +305,76 @@ class StudentTransferController extends Controller
                 return strtoupper(trim($campusRecord->code_prefix));
             }
 
+            // Fallback: if campus name contains digits, use ST + digits
             if (preg_match('/(\d+)/', $campus, $matches)) {
-                return 'ST' . $matches[1];
+                $prefix = 'ST' . $matches[1];
+                // Save it to campus record for future use
+                if ($campusRecord) {
+                    $campusRecord->code_prefix = $prefix;
+                    $campusRecord->save();
+                }
+                return strtoupper($prefix);
             }
+
+            // If no code_prefix and no digits in name, find next available campus number
+            // IMPORTANT: Check both existing campuses AND student/payment codes to avoid reusing deleted campus numbers
+            $usedCampusNumbers = [];
+            
+            // Check from existing campuses with code_prefix (only active campuses, not deleted)
+            $campusesWithPrefix = \App\Models\Campus::whereNotNull('code_prefix')
+                ->where('code_prefix', 'like', 'ST%')
+                ->get();
+            
+            foreach ($campusesWithPrefix as $campusWithPrefix) {
+                if (preg_match('/^ST(\d+)$/i', $campusWithPrefix->code_prefix, $matches)) {
+                    $campusNum = (int) $matches[1];
+                    $usedCampusNumbers[] = $campusNum;
+                }
+            }
+            
+            // Also check from student codes to find any used campus numbers (even if campus is deleted)
+            $studentCodes = \App\Models\Student::whereNotNull('student_code')
+                ->where('student_code', 'like', 'ST%-%')
+                ->pluck('student_code')
+                ->toArray();
+            
+            // Also check from payment codes (covers deleted students/campuses)
+            $paymentCodes = \App\Models\StudentPayment::whereNotNull('student_code')
+                ->where('student_code', 'like', 'ST%-%')
+                ->pluck('student_code')
+                ->toArray();
+            
+            $allCodes = array_unique(array_merge($studentCodes, $paymentCodes));
+            
+            foreach ($allCodes as $code) {
+                // Match pattern ST1-001, ST2-001, etc. to extract campus number
+                if (preg_match('/^ST(\d+)-(\d+)$/i', $code, $matches)) {
+                    $campusNum = (int) $matches[1];
+                    if (!in_array($campusNum, $usedCampusNumbers)) {
+                        $usedCampusNumbers[] = $campusNum;
+                    }
+                }
+            }
+            
+            // Find next sequential campus number (always use max + 1, never reuse deleted numbers)
+            $nextCampusNumber = 1;
+            if (!empty($usedCampusNumbers)) {
+                $maxCampusNumber = max($usedCampusNumbers);
+                // Always use next sequential number after max (no gaps, no reuse)
+                $nextCampusNumber = $maxCampusNumber + 1;
+            }
+            $prefix = 'ST' . $nextCampusNumber;
+            
+            // Save it to campus record for future use
+            if ($campusRecord) {
+                $campusRecord->code_prefix = $prefix;
+                $campusRecord->save();
+            }
+            
+            return strtoupper($prefix);
         }
 
+        // If no campus provided, return ST (shouldn't happen in normal flow)
         return 'ST';
     }
 

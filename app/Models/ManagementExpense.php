@@ -19,6 +19,7 @@ class ManagementExpense extends Model
         'invoice_receipt',
         'date',
         'notify_admin',
+        'created_by',
     ];
 
     protected $casts = [

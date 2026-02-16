@@ -452,6 +452,355 @@ class AccountantController extends Controller
     }
 
     /**
+     * Search student by name or code (filtered by accountant's campus)
+     */
+    public function searchStudent(Request $request)
+    {
+        $search = $request->get('search');
+        
+        if (!$search) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Search term is required'
+            ], 400);
+        }
+        
+        // Get accountant's assigned campus
+        $accountantCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            $accountantCampus = $accountant->campus;
+        }
+        
+        $searchLower = strtolower(trim($search));
+        
+        // Search students by name or code
+        $query = \App\Models\Student::where(function($query) use ($search, $searchLower) {
+                $query->whereRaw('LOWER(student_name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhere('student_code', 'like', "%{$search}%")
+                      ->orWhere('gr_number', 'like', "%{$search}%");
+            });
+        
+        // Filter by accountant's campus if assigned
+        if ($accountantCampus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
+        }
+        
+        $matchedStudents = $query->select('id', 'student_name', 'student_code', 'father_name', 'father_id_card', 'parent_account_id', 'class', 'section', 'campus', 'monthly_fee')
+            ->orderBy('student_name', 'asc')
+            ->limit(50)
+            ->get();
+
+        $students = $matchedStudents->map(function ($student) {
+            return (object) [
+                'id' => $student->id,
+                'student_name' => $student->student_name,
+                'student_code' => $student->student_code,
+                'father_name' => $student->father_name,
+                'class' => $student->class,
+                'section' => $student->section,
+                'campus' => $student->campus,
+                'monthly_fee' => $student->monthly_fee,
+            ];
+        });
+        
+        return response()->json([
+            'success' => true,
+            'students' => $students->map(function ($student) {
+                $generatedFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                    ->where('method', 'Generated')
+                    ->get();
+                $paidFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                    ->where('method', '!=', 'Generated')
+                    ->get();
+
+                $pendingFees = [];
+                $feeRows = [];
+                $totalDue = 0;
+                $generatedByTitle = $generatedFees->groupBy('payment_title');
+                $paidByTitle = $paidFees->groupBy('payment_title');
+
+                // Collect all installment titles and their base fee titles
+                $installmentBaseTitles = [];
+                foreach ($generatedByTitle as $title => $items) {
+                    if (preg_match('/^(.+)\/\d+$/', $title, $matches)) {
+                        $baseTitle = $matches[1];
+                        $installmentBaseTitles[$baseTitle] = true;
+                    }
+                }
+
+                foreach ($generatedByTitle as $title => $items) {
+                    $latestGenerated = $items->sortByDesc('id')->first();
+                    $isInstallment = preg_match('/\/\d+$/', $title);
+                    
+                    if (!$isInstallment && isset($installmentBaseTitles[$title])) {
+                        continue;
+                    }
+                    
+                    $generatedAmount = $items->sum(function ($item) {
+                        return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
+                    });
+                    $generatedLate = $items->sum(function ($item) {
+                        return (float) ($item->late_fee ?? 0);
+                    });
+                    $paidDiscount = $paidByTitle->get($title, collect())->sum(function ($item) {
+                        return (float) ($item->discount ?? 0);
+                    });
+                    $paidAmount = $paidByTitle->get($title, collect())->sum(function ($item) {
+                        return (float) ($item->payment_amount ?? 0) + (float) ($item->discount ?? 0);
+                    });
+                    $paidLate = $paidByTitle->get($title, collect())->sum(function ($item) {
+                        return (float) ($item->late_fee ?? 0);
+                    });
+
+                    $totalGenerated = $generatedAmount;
+                    $totalPaid = $paidAmount + $paidLate;
+                    $remainingAmount = max(0, $generatedAmount - $paidAmount);
+                    $remainingLate = max(0, $generatedLate - $paidLate);
+                    $remainingTotal = $remainingAmount + $remainingLate;
+
+                    if ($remainingTotal > 0) {
+                        $feeRows[] = [
+                            'title' => $title,
+                            'total' => round($totalGenerated, 2),
+                            'discount' => round($paidDiscount, 2),
+                            'late_fee' => round($generatedLate, 2),
+                            'paid' => round($totalPaid, 2),
+                            'due' => round($remainingTotal, 2),
+                            'amount' => round($remainingAmount, 2),
+                            'remaining_late' => round($remainingLate, 2),
+                            'generated_id' => $latestGenerated ? $latestGenerated->id : null,
+                            'is_installment' => $isInstallment,
+                        ];
+                        $pendingFees[] = [
+                            'title' => $title,
+                            'amount' => round($remainingAmount, 2),
+                            'late_fee' => round($remainingLate, 2),
+                            'total' => round($remainingTotal, 2),
+                        ];
+                        $totalDue += $remainingTotal;
+                    }
+                }
+
+                $processedTitles = collect($feeRows)->pluck('title')->toArray();
+                $installmentPayments = $paidFees->filter(function ($payment) use ($processedTitles) {
+                    $title = $payment->payment_title ?? '';
+                    return preg_match('/\/\d+$/', $title) && !in_array($title, $processedTitles);
+                })->map(function ($payment) {
+                    return [
+                        'title' => $payment->payment_title,
+                        'total' => round((float) ($payment->payment_amount ?? 0), 2),
+                        'discount' => round((float) ($payment->discount ?? 0), 2),
+                        'late_fee' => round((float) ($payment->late_fee ?? 0), 2),
+                        'paid' => round((float) ($payment->payment_amount ?? 0) + (float) ($payment->discount ?? 0), 2),
+                        'due' => 0,
+                        'amount' => 0,
+                        'remaining_late' => 0,
+                        'generated_id' => null,
+                        'is_installment' => true,
+                    ];
+                })->values()->toArray();
+
+                $feeRows = array_merge($feeRows, $installmentPayments);
+
+                return [
+                    'id' => $student->id,
+                    'student_name' => $student->student_name,
+                    'student_code' => $student->student_code,
+                    'father_name' => $student->father_name,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                    'monthly_fee' => $student->monthly_fee,
+                    'has_unpaid' => $totalDue > 0,
+                    'unpaid_amount' => round($totalDue, 2),
+                    'pending_fees' => $pendingFees,
+                    'fee_rows' => $feeRows,
+                ];
+            })
+        ]);
+    }
+
+    /**
+     * Search student by CNIC / Parent ID (filtered by accountant's campus)
+     */
+    public function searchStudentByCNIC(Request $request)
+    {
+        $cnic = $request->get('cnic');
+        
+        if (!$cnic) {
+            return response()->json([
+                'success' => false,
+                'message' => 'CNIC / Parent ID is required'
+            ], 400);
+        }
+        
+        // Get accountant's assigned campus
+        $accountantCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            $accountantCampus = $accountant->campus;
+        }
+        
+        // Clean and normalize the input CNIC
+        $cleanedCnic = trim($cnic);
+        $normalizedInputCnic = str_replace(['-', ' ', '_', '.'], '', strtolower($cleanedCnic));
+        
+        // Find parent account by ID card number
+        $parentAccount = \App\Models\ParentAccount::where(function($query) use ($normalizedInputCnic, $cleanedCnic) {
+            $query->whereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", "")) = ?', [$normalizedInputCnic])
+                  ->orWhereRaw('LOWER(TRIM(id_card_number)) = LOWER(TRIM(?))', [$cleanedCnic]);
+        })->first();
+        
+        // Get students by father_id_card
+        $studentsQuery = \App\Models\Student::where(function($query) use ($normalizedInputCnic, $cleanedCnic) {
+            $query->whereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", "")) = ?', [$normalizedInputCnic])
+                  ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [$cleanedCnic])
+                  ->orWhere('father_id_card', $cleanedCnic);
+        });
+        
+        // Filter by accountant's campus if assigned
+        if ($accountantCampus) {
+            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
+        }
+        
+        $studentsByFatherIdCard = $studentsQuery->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+            ->get();
+        
+        // If parent account exists, also get students connected via parent_account_id
+        $studentsByParentAccount = collect();
+        if ($parentAccount) {
+            $parentAccountQuery = \App\Models\Student::where('parent_account_id', $parentAccount->id);
+            
+            // Filter by accountant's campus if assigned
+            if ($accountantCampus) {
+                $parentAccountQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
+            }
+            
+            $studentsByParentAccount = $parentAccountQuery->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'transport_fare', 'generate_other_fee', 'other_fee_amount', 'generate_admission_fee', 'admission_fee_amount')
+                ->get();
+        }
+        
+        // Merge both collections and remove duplicates
+        $students = $studentsByParentAccount->merge($studentsByFatherIdCard)->unique('id')->sortBy('student_name')->values();
+        
+        return response()->json([
+            'success' => true,
+            'students' => $students->map(function ($student) {
+                $generatedFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                    ->where('method', 'Generated')
+                    ->get();
+                $paidFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                    ->where('method', '!=', 'Generated')
+                    ->get();
+
+                $pendingFees = [];
+                $feeRows = [];
+                $totalDue = 0;
+                $generatedByTitle = $generatedFees->groupBy('payment_title');
+                $paidByTitle = $paidFees->groupBy('payment_title');
+
+                $installmentBaseTitles = [];
+                foreach ($generatedByTitle as $title => $items) {
+                    if (preg_match('/^(.+)\/\d+$/', $title, $matches)) {
+                        $baseTitle = $matches[1];
+                        $installmentBaseTitles[$baseTitle] = true;
+                    }
+                }
+
+                foreach ($generatedByTitle as $title => $items) {
+                    $latestGenerated = $items->sortByDesc('id')->first();
+                    $isInstallment = preg_match('/\/\d+$/', $title);
+                    
+                    if (!$isInstallment && isset($installmentBaseTitles[$title])) {
+                        continue;
+                    }
+                    
+                    $generatedAmount = $items->sum(function ($item) {
+                        return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
+                    });
+                    $generatedLate = $items->sum(function ($item) {
+                        return (float) ($item->late_fee ?? 0);
+                    });
+                    $paidDiscount = $paidByTitle->get($title, collect())->sum(function ($item) {
+                        return (float) ($item->discount ?? 0);
+                    });
+                    $paidAmount = $paidByTitle->get($title, collect())->sum(function ($item) {
+                        return (float) ($item->payment_amount ?? 0) + (float) ($item->discount ?? 0);
+                    });
+                    $paidLate = $paidByTitle->get($title, collect())->sum(function ($item) {
+                        return (float) ($item->late_fee ?? 0);
+                    });
+
+                    $totalGenerated = $generatedAmount;
+                    $totalPaid = $paidAmount + $paidLate;
+                    $remainingAmount = max(0, $generatedAmount - $paidAmount);
+                    $remainingLate = max(0, $generatedLate - $paidLate);
+                    $remainingTotal = $remainingAmount + $remainingLate;
+
+                    if ($remainingTotal > 0) {
+                        $feeRows[] = [
+                            'title' => $title,
+                            'total' => round($totalGenerated, 2),
+                            'discount' => round($paidDiscount, 2),
+                            'late_fee' => round($generatedLate, 2),
+                            'paid' => round($totalPaid, 2),
+                            'due' => round($remainingTotal, 2),
+                            'amount' => round($remainingAmount, 2),
+                            'remaining_late' => round($remainingLate, 2),
+                            'generated_id' => $latestGenerated ? $latestGenerated->id : null,
+                            'is_installment' => $isInstallment,
+                        ];
+                        $pendingFees[] = [
+                            'title' => $title,
+                            'amount' => round($remainingAmount, 2),
+                            'late_fee' => round($remainingLate, 2),
+                            'total' => round($remainingTotal, 2),
+                        ];
+                        $totalDue += $remainingTotal;
+                    }
+                }
+
+                $processedTitles = collect($feeRows)->pluck('title')->toArray();
+                $installmentPayments = $paidFees->filter(function ($payment) use ($processedTitles) {
+                    $title = $payment->payment_title ?? '';
+                    return preg_match('/\/\d+$/', $title) && !in_array($title, $processedTitles);
+                })->map(function ($payment) {
+                    return [
+                        'title' => $payment->payment_title,
+                        'total' => round((float) ($payment->payment_amount ?? 0), 2),
+                        'discount' => round((float) ($payment->discount ?? 0), 2),
+                        'late_fee' => round((float) ($payment->late_fee ?? 0), 2),
+                        'paid' => round((float) ($payment->payment_amount ?? 0) + (float) ($payment->discount ?? 0), 2),
+                        'due' => 0,
+                        'amount' => 0,
+                        'remaining_late' => 0,
+                        'generated_id' => null,
+                        'is_installment' => true,
+                    ];
+                })->values()->toArray();
+
+                $feeRows = array_merge($feeRows, $installmentPayments);
+
+                return [
+                    'id' => $student->id,
+                    'student_name' => $student->student_name,
+                    'student_code' => $student->student_code,
+                    'father_name' => $student->father_name ?? '',
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                    'monthly_fee' => $student->monthly_fee,
+                    'has_unpaid' => $totalDue > 0,
+                    'unpaid_amount' => round($totalDue, 2),
+                    'pending_fees' => $pendingFees,
+                    'fee_rows' => $feeRows,
+                ];
+            })
+        ]);
+    }
+
+    /**
      * Accountant Pages - Family Fee Calculator
      */
     public function familyFeeCalculator(): View
@@ -868,15 +1217,375 @@ class AccountantController extends Controller
             }
         }
         
+        // Filter campuses based on logged-in accountant's assigned campus
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && $accountant->campus) {
+                // Filter to show only the accountant's assigned campus
+                $campuses = $campuses->filter(function ($campus) use ($accountant) {
+                    $campusName = $campus->campus_name ?? $campus;
+                    return $campusName === $accountant->campus;
+                })->values();
+            }
+        }
+        
         return view('accountant.fee-type', compact('feeTypes', 'campuses'));
     }
 
     /**
      * Accountant Pages - Parents Credit System
      */
-    public function parentsCreditSystem(): View
+    public function parentsCreditSystem(Request $request): View
     {
-        return view('accountant.parents-credit-system');
+        // Get accountant's assigned campus
+        $accountantCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            $accountantCampus = $accountant->campus;
+        }
+        
+        // Get parent IDs that have students in the accountant's campus
+        $parentIdsInCampus = collect();
+        if ($accountantCampus) {
+            $parentIdsInCampus = \App\Models\Student::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))])
+                ->whereNotNull('parent_account_id')
+                ->distinct()
+                ->pluck('parent_account_id');
+        }
+        
+        // Ensure every parent account has an advance fee record (only for accountant's campus if assigned)
+        $parentsQuery = \App\Models\ParentAccount::select('id', 'name', 'email', 'phone', 'id_card_number');
+        if ($accountantCampus && $parentIdsInCampus->isNotEmpty()) {
+            $parentsQuery->whereIn('id', $parentIdsInCampus);
+        }
+        $parents = $parentsQuery->get();
+        
+        foreach ($parents as $parent) {
+            \App\Models\AdvanceFee::firstOrCreate(
+                ['parent_id' => (string) $parent->id],
+                [
+                    'name' => $parent->name,
+                    'email' => $parent->email,
+                    'phone' => $parent->phone,
+                    'id_card_number' => $parent->id_card_number,
+                    'available_credit' => 0,
+                    'increase' => 0,
+                    'decrease' => 0,
+                    'childs' => 0,
+                ]
+            );
+        }
+
+        $query = \App\Models\AdvanceFee::query();
+        
+        // Filter by accountant's campus - only show parents who have students in that campus
+        if ($accountantCampus && $parentIdsInCampus->isNotEmpty()) {
+            $query->whereIn('parent_id', $parentIdsInCampus);
+        }
+        
+        // Search functionality
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(id_card_number) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+        
+        $perPage = $request->get('per_page', 10);
+        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
+        
+        $advanceFees = $query->orderBy('name')->paginate($perPage)->withQueryString();
+        
+        // Get children count for each parent (only count children in accountant's campus)
+        foreach ($advanceFees as $advanceFee) {
+            if ($advanceFee->parent_id) {
+                $childrenQuery = \App\Models\Student::where('parent_account_id', $advanceFee->parent_id);
+                if ($accountantCampus) {
+                    $childrenQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
+                }
+                $childrenCount = $childrenQuery->count();
+                $advanceFee->children_count = $childrenCount;
+            } else {
+                $advanceFee->children_count = 0;
+            }
+        }
+        
+        return view('accountant.parents-credit-system', compact('advanceFees'));
+    }
+    
+    /**
+     * Show a single advance fee record (for AJAX)
+     */
+    public function showAdvanceFee($id)
+    {
+        $advanceFee = \App\Models\AdvanceFee::findOrFail($id);
+        return response()->json($advanceFee);
+    }
+    
+    /**
+     * Get connected students for advance fee record
+     */
+    public function getConnectedStudents($id)
+    {
+        // Get accountant's assigned campus
+        $accountantCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            $accountantCampus = $accountant->campus;
+        }
+        
+        $advanceFee = \App\Models\AdvanceFee::findOrFail($id);
+        $students = collect();
+
+        if (!empty($advanceFee->parent_id) && ctype_digit((string) $advanceFee->parent_id)) {
+            $parentAccount = \App\Models\ParentAccount::find((int) $advanceFee->parent_id);
+            if ($parentAccount) {
+                $parentStudents = $parentAccount->students;
+                // Filter by accountant's campus if assigned
+                if ($accountantCampus) {
+                    $parentStudents = $parentStudents->filter(function($student) use ($accountantCampus) {
+                        return strtolower(trim($student->campus ?? '')) === strtolower(trim($accountantCampus));
+                    });
+                }
+                $students = $students->merge($parentStudents);
+            }
+        }
+
+        if (!empty($advanceFee->id_card_number)) {
+            $studentsByCardQuery = \App\Models\Student::where('father_id_card', $advanceFee->id_card_number);
+            // Filter by accountant's campus if assigned
+            if ($accountantCampus) {
+                $studentsByCardQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
+            }
+            $students = $students->merge($studentsByCardQuery->get());
+        }
+
+        $students = $students->unique('id')->values();
+
+        return response()->json([
+            'students' => $students->map(function ($student) {
+                return [
+                    'id' => $student->id,
+                    'student_name' => $student->student_name,
+                    'student_code' => $student->student_code,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                ];
+            }),
+        ]);
+    }
+    
+    /**
+     * Update advance fee credit (increase/decrease)
+     */
+    public function updateAdvanceFeeCredit(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'increase' => ['nullable', 'numeric', 'min:0'],
+            'decrease' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $advanceFee = \App\Models\AdvanceFee::findOrFail($id);
+        
+        $currentCredit = (float) ($advanceFee->available_credit ?? 0);
+        $currentIncrease = (float) ($advanceFee->increase ?? 0);
+        $currentDecrease = (float) ($advanceFee->decrease ?? 0);
+        
+        if (isset($validated['increase']) && $validated['increase'] > 0) {
+            $increaseAmount = (float) $validated['increase'];
+            $advanceFee->available_credit = $currentCredit + $increaseAmount;
+            $advanceFee->increase = $currentIncrease + $increaseAmount;
+        }
+        
+        if (isset($validated['decrease']) && $validated['decrease'] > 0) {
+            $decreaseAmount = (float) $validated['decrease'];
+            $advanceFee->available_credit = max(0, $currentCredit - $decreaseAmount);
+            $advanceFee->decrease = $currentDecrease + $decreaseAmount;
+        }
+
+        $advanceFee->save();
+
+        return redirect()
+            ->route('accountant.parents-credit-system')
+            ->with('success', 'Credit updated successfully!');
+    }
+    
+    /**
+     * Export parents credit system to Excel, CSV, or PDF
+     */
+    public function exportParentsCreditSystem(Request $request, string $format)
+    {
+        // Get accountant's assigned campus
+        $accountantCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            $accountantCampus = $accountant->campus;
+        }
+        
+        // Get parent IDs that have students in the accountant's campus
+        $parentIdsInCampus = collect();
+        if ($accountantCampus) {
+            $parentIdsInCampus = \App\Models\Student::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))])
+                ->whereNotNull('parent_account_id')
+                ->distinct()
+                ->pluck('parent_account_id');
+        }
+        
+        $query = \App\Models\AdvanceFee::query();
+        
+        // Filter by accountant's campus - only show parents who have students in that campus
+        if ($accountantCampus && $parentIdsInCampus->isNotEmpty()) {
+            $query->whereIn('parent_id', $parentIdsInCampus);
+        }
+        
+        // Apply search filter if present
+        if ($request->has('search') && $request->search) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(id_card_number) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+        
+        $advanceFees = $query->orderBy('name')->get();
+        
+        // Get children count for each parent (only count children in accountant's campus)
+        foreach ($advanceFees as $advanceFee) {
+            if ($advanceFee->parent_id) {
+                $childrenQuery = \App\Models\Student::where('parent_account_id', $advanceFee->parent_id);
+                if ($accountantCampus) {
+                    $childrenQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
+                }
+                $childrenCount = $childrenQuery->count();
+                $advanceFee->children_count = $childrenCount;
+            } else {
+                $advanceFee->children_count = 0;
+            }
+        }
+        
+        switch ($format) {
+            case 'excel':
+                return $this->exportParentsCreditExcel($advanceFees);
+            case 'csv':
+                return $this->exportParentsCreditCSV($advanceFees);
+            case 'pdf':
+                return $this->exportParentsCreditPDF($advanceFees);
+            default:
+                return redirect()->route('accountant.parents-credit-system')
+                    ->with('error', 'Invalid export format!');
+        }
+    }
+    
+    /**
+     * Export to Excel (CSV format for Excel compatibility)
+     */
+    private function exportParentsCreditExcel($advanceFees)
+    {
+        $filename = 'parents_credit_system_' . date('Y-m-d_His') . '.csv';
+        
+        $headers = [
+            'Content-Type' => 'application/vnd.ms-excel',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        $callback = function() use ($advanceFees) {
+            $file = fopen('php://output', 'w');
+            
+            // Add BOM for UTF-8
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+            
+            fputcsv($file, ['Parent ID', 'Name', 'Email', 'Phone', 'ID Card Number', 'Available Credit', 'Increase', 'Decrease', 'Children']);
+            
+            foreach ($advanceFees as $fee) {
+                $childrenCount = $fee->parent_id ? \App\Models\Student::where('parent_account_id', $fee->parent_id)->count() : 0;
+                fputcsv($file, [
+                    $fee->parent_id ?? 'N/A',
+                    $fee->name ?? 'N/A',
+                    $fee->email ?? 'N/A',
+                    $fee->phone ?? 'N/A',
+                    $fee->id_card_number ?? 'N/A',
+                    number_format((float)($fee->available_credit ?? 0), 2),
+                    number_format((float)($fee->increase ?? 0), 2),
+                    number_format((float)($fee->decrease ?? 0), 2),
+                    $childrenCount,
+                ]);
+            }
+            
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+    
+    /**
+     * Export to CSV
+     */
+    private function exportParentsCreditCSV($advanceFees)
+    {
+        $filename = 'parents_credit_system_' . date('Y-m-d_His') . '.csv';
+        
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        $callback = function() use ($advanceFees) {
+            $file = fopen('php://output', 'w');
+            
+            fputcsv($file, ['Parent ID', 'Name', 'Email', 'Phone', 'ID Card Number', 'Available Credit', 'Increase', 'Decrease', 'Children']);
+            
+            foreach ($advanceFees as $fee) {
+                $childrenCount = $fee->parent_id ? \App\Models\Student::where('parent_account_id', $fee->parent_id)->count() : 0;
+                fputcsv($file, [
+                    $fee->parent_id ?? 'N/A',
+                    $fee->name ?? 'N/A',
+                    $fee->email ?? 'N/A',
+                    $fee->phone ?? 'N/A',
+                    $fee->id_card_number ?? 'N/A',
+                    number_format((float)($fee->available_credit ?? 0), 2),
+                    number_format((float)($fee->increase ?? 0), 2),
+                    number_format((float)($fee->decrease ?? 0), 2),
+                    $childrenCount,
+                ]);
+            }
+            
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+    
+    /**
+     * Export to PDF
+     */
+    private function exportParentsCreditPDF($advanceFees)
+    {
+        // Get children count for each parent
+        foreach ($advanceFees as $advanceFee) {
+            if ($advanceFee->parent_id) {
+                $childrenCount = \App\Models\Student::where('parent_account_id', $advanceFee->parent_id)->count();
+                $advanceFee->children_count = $childrenCount;
+            } else {
+                $advanceFee->children_count = 0;
+            }
+        }
+        
+        $html = view('accountant.parents-credit-system-pdf', compact('advanceFees'))->render();
+        
+        return response($html)
+            ->header('Content-Type', 'text/html');
     }
 
     /**
@@ -938,49 +1647,109 @@ class AccountantController extends Controller
     /**
      * Store student payment for accountant.
      */
-    public function storeStudentPayment(Request $request): RedirectResponse
+    public function storeStudentPayment(Request $request)
     {
-        $validated = $request->validate([
-            'campus' => ['nullable', 'string', 'max:255'],
-            'student_code' => ['required', 'string', 'max:255'],
-            'payment_title' => ['required', 'string', 'max:255'],
-            'payment_amount' => ['required', 'numeric', 'min:0'],
-            'discount' => ['nullable', 'numeric', 'min:0'],
-            'method' => ['required', 'string', 'max:255'],
-            'payment_date' => ['nullable', 'date'],
-            'generated_id' => ['nullable', 'integer'],
-        ]);
-
-        // Set payment date to today if not provided
-        if (!isset($validated['payment_date'])) {
-            $validated['payment_date'] = now()->toDateString();
-        }
-
-        if (!empty($validated['generated_id'])) {
-            $generatedFee = \App\Models\StudentPayment::where('id', $validated['generated_id'])
-                ->where('student_code', $validated['student_code'])
-                ->where('method', 'Generated')
-                ->first();
-            if ($generatedFee && $generatedFee->payment_title) {
-                $validated['payment_title'] = $generatedFee->payment_title;
+        try {
+            try {
+                $validated = $request->validate([
+                    'campus' => ['nullable', 'string', 'max:255'],
+                    'student_code' => ['required', 'string', 'max:255'],
+                    'payment_title' => ['required', 'string', 'max:255'],
+                    'payment_amount' => ['required', 'numeric', 'min:0'],
+                    'discount' => ['nullable', 'numeric', 'min:0'],
+                    'method' => ['required', 'string', 'max:255'],
+                    'payment_date' => ['nullable', 'date'],
+                    'generated_id' => ['nullable', 'integer'],
+                    'sms_notification' => ['nullable', 'string', 'in:Yes,No'],
+                ]);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Validation failed',
+                        'errors' => $e->errors()
+                    ], 422);
+                }
+                throw $e;
             }
+
+            // Set payment date to today if not provided
+            if (!isset($validated['payment_date'])) {
+                $validated['payment_date'] = now()->toDateString();
+            }
+
+            // Check if this is an installment (payment_title contains /number pattern)
+            $isInstallment = preg_match('/\/\d+$/', $validated['payment_title']);
+            
+            // For installments, skip existing fee check
+            if (!$isInstallment && !empty($validated['generated_id'])) {
+                $generatedFee = \App\Models\StudentPayment::where('id', $validated['generated_id'])
+                    ->where('student_code', $validated['student_code'])
+                    ->where('method', 'Generated')
+                    ->first();
+                if ($generatedFee && $generatedFee->payment_title) {
+                    $validated['payment_title'] = $generatedFee->payment_title;
+                }
+            }
+
+            // Add default values
+            if (!isset($validated['sms_notification'])) {
+                $validated['sms_notification'] = 'Yes';
+            }
+            $validated['late_fee'] = 0;
+            
+            // Add accountant if available
+            if (auth()->check()) {
+                $validated['accountant'] = auth()->user()->name ?? null;
+            }
+
+            // Get student for response
+            $student = \App\Models\Student::where('student_code', $validated['student_code'])->first();
+
+            // Create payment record
+            $payment = \App\Models\StudentPayment::create($validated);
+
+            $successMessage = 'Payment recorded successfully!';
+
+            // If request is AJAX or expects JSON, return JSON response
+            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => true,
+                    'message' => $successMessage,
+                    'payment' => [
+                        'id' => $payment->id,
+                        'student_code' => $payment->student_code,
+                        'student_name' => $student->student_name ?? null,
+                        'father_name' => $student->father_name ?? null,
+                        'class' => $student->class ?? null,
+                        'section' => $student->section ?? null,
+                        'payment_title' => $payment->payment_title,
+                        'payment_amount' => (float) ($payment->payment_amount ?? 0),
+                        'discount' => (float) ($payment->discount ?? 0),
+                        'late_fee' => (float) ($payment->late_fee ?? 0),
+                        'payment_date' => $payment->payment_date ? \Carbon\Carbon::parse($payment->payment_date)->format('d-m-Y h:i:s A') : null,
+                        'accountant' => $payment->accountant ?? null,
+                    ],
+                ]);
+            }
+
+            return redirect()
+                ->route('accountant.direct-payment.student')
+                ->with('success', $successMessage);
+        } catch (\Exception $e) {
+            // Catch any unexpected exceptions and return JSON response
+            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                \Log::error('Error in AccountantController@storeStudentPayment: ' . $e->getMessage(), [
+                    'exception' => $e,
+                    'request_data' => $request->all()
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error creating payment: ' . $e->getMessage()
+                ], 500);
+            }
+            throw $e;
         }
-
-        // Add default values
-        $validated['sms_notification'] = 'Yes';
-        $validated['late_fee'] = 0;
-        
-        // Add accountant if available
-        if (auth()->check()) {
-            $validated['accountant'] = auth()->user()->name ?? null;
-        }
-
-        // Create payment record
-        \App\Models\StudentPayment::create($validated);
-
-        return redirect()
-            ->route('accountant.direct-payment.student')
-            ->with('success', 'Payment recorded successfully!');
     }
 
     /**
@@ -989,17 +1758,28 @@ class AccountantController extends Controller
     public function getStudentByCode(Request $request)
     {
         $studentCode = $request->get('student_code');
+        $campus = $request->get('campus');
         
         if (!$studentCode) {
             return response()->json(['success' => false, 'message' => 'Student code is required']);
         }
 
-        $student = \App\Models\Student::where('student_code', $studentCode)->first();
+        $studentQuery = \App\Models\Student::where('student_code', $studentCode);
+        
+        // Filter by campus if provided
+        if ($campus && trim($campus) !== '') {
+            $studentQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        $student = $studentQuery->first();
         
         if (!$student) {
+            $message = $campus && trim($campus) !== '' 
+                ? 'Student not found with this code in the selected campus'
+                : 'Student not found with this code';
             return response()->json([
                 'success' => false,
-                'message' => 'Student not found with this code'
+                'message' => $message
             ]);
         }
 
@@ -1242,27 +2022,46 @@ class AccountantController extends Controller
      */
     public function studentVouchers(Request $request): View
     {
-        // Get campuses
-        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
-        if ($campuses->isEmpty()) {
-            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
-            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
-            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-            $campuses = collect();
-            foreach ($allCampuses as $campusName) {
-                $campuses->push((object)['campus_name' => $campusName]);
+        // Get default campus from logged-in accountant
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+        
+        $filterCampus = $request->get('campus', $defaultCampus);
+        
+        // Get campuses - if filterCampus is set, show only that campus
+        if (!empty($filterCampus)) {
+            $campuses = \App\Models\Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower(trim($filterCampus))])
+                ->orderBy('campus_name', 'asc')
+                ->get();
+            
+            if ($campuses->isEmpty()) {
+                // If not found in Campus table, create a collection with the campus name
+                $campuses = collect();
+                $campuses->push((object)['campus_name' => $filterCampus]);
+            }
+        } else {
+            // Get all campuses if no filter
+            $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+            if ($campuses->isEmpty()) {
+                $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
+                    ->distinct()
+                    ->pluck('campus')
+                    ->sort()
+                    ->values();
+                $campusesFromSections = \App\Models\Section::whereNotNull('campus')
+                    ->distinct()
+                    ->pluck('campus')
+                    ->sort()
+                    ->values();
+                $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+                $campuses = collect();
+                foreach ($allCampuses as $campusName) {
+                    $campuses->push((object)['campus_name' => $campusName]);
+                }
             }
         }
-
-        $filterCampus = $request->get('campus');
 
         // Get classes (campus-wise)
         $classes = collect();
@@ -1601,8 +2400,33 @@ class AccountantController extends Controller
         // Use the same PointOfSaleController logic
         $products = \App\Models\Product::orderBy('product_name', 'asc')->get();
         
+        // Get campuses dynamically
+        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            // Fallback: get from products
+            $campuses = \App\Models\Product::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->map(function($campusName) {
+                    return (object)['campus_name' => $campusName];
+                })
+                ->sortBy('campus_name')
+                ->values();
+        }
+        
+        // Filter campuses based on logged-in accountant's assigned campus
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && $accountant->campus) {
+                $campuses = $campuses->filter(function ($campus) use ($accountant) {
+                    $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                    return $campusName === $accountant->campus;
+                })->values();
+            }
+        }
+        
         // Return view with accountant layout - we'll use a shared partial
-        return view('accountant.point-of-sale', compact('products'));
+        return view('accountant.point-of-sale', compact('products', 'campuses'));
     }
 
     /**
@@ -1680,6 +2504,15 @@ class AccountantController extends Controller
         // Use the same ProductController logic
         $query = \App\Models\Product::query();
         
+        // Filter by accountant's assigned campus
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+            if ($defaultCampus) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($defaultCampus))]);
+            }
+        }
+        
         // Search functionality
         if ($request->filled('search')) {
             $search = trim($request->search);
@@ -1699,9 +2532,15 @@ class AccountantController extends Controller
         $products = $query->orderBy('product_name')->paginate($perPage)->withQueryString();
 
         // Get categories for dropdown (with campus for filtering)
-        $categories = \App\Models\StockCategory::whereNotNull('category_name')
-            ->whereNotNull('campus')
-            ->orderBy('category_name')
+        $categoriesQuery = \App\Models\StockCategory::whereNotNull('category_name')
+            ->whereNotNull('campus');
+        
+        // Filter categories by accountant's assigned campus
+        if ($defaultCampus) {
+            $categoriesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($defaultCampus))]);
+        }
+        
+        $categories = $categoriesQuery->orderBy('category_name')
             ->get(['category_name', 'campus']);
 
         // Get campuses
@@ -1725,6 +2564,17 @@ class AccountantController extends Controller
             $campuses = collect();
             foreach ($allCampuses as $campusName) {
                 $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        // Filter campuses based on logged-in accountant's assigned campus
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && $accountant->campus) {
+                $campuses = $campuses->filter(function ($campus) use ($accountant) {
+                    $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
+                    return $campusName === $accountant->campus;
+                })->values();
             }
         }
         

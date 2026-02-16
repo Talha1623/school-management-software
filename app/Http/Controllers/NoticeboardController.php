@@ -216,5 +216,13 @@ class NoticeboardController extends Controller
         return response($html)
             ->header('Content-Type', 'text/html');
     }
+
+    /**
+     * Print thermal receipt for noticeboard.
+     */
+    public function print(Noticeboard $noticeboard): View
+    {
+        return view('school.noticeboard-print', compact('noticeboard'));
+    }
 }
 

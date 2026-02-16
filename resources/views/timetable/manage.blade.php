@@ -56,7 +56,7 @@
                             </div>
 
                             <!-- Section Filter -->
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Section
                                 </label>
@@ -70,8 +70,25 @@
                                 </select>
                             </div>
 
+                            <!-- Day Filter -->
+                            <div class="col-md-2">
+                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
+                                    Day
+                                </label>
+                                <select class="form-select form-select-sm" name="filter_day" id="filter_day">
+                                    <option value="">All Days</option>
+                                    <option value="Monday" {{ request('filter_day') == 'Monday' ? 'selected' : '' }}>Monday</option>
+                                    <option value="Tuesday" {{ request('filter_day') == 'Tuesday' ? 'selected' : '' }}>Tuesday</option>
+                                    <option value="Wednesday" {{ request('filter_day') == 'Wednesday' ? 'selected' : '' }}>Wednesday</option>
+                                    <option value="Thursday" {{ request('filter_day') == 'Thursday' ? 'selected' : '' }}>Thursday</option>
+                                    <option value="Friday" {{ request('filter_day') == 'Friday' ? 'selected' : '' }}>Friday</option>
+                                    <option value="Saturday" {{ request('filter_day') == 'Saturday' ? 'selected' : '' }}>Saturday</option>
+                                    <option value="Sunday" {{ request('filter_day') == 'Sunday' ? 'selected' : '' }}>Sunday</option>
+                                </select>
+                            </div>
+
                             <!-- Filter Button -->
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <button type="submit" class="btn btn-sm w-100 filter-btn">
                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_list</span>
                                     <span>Filter</span>
@@ -87,7 +104,7 @@
             </div>
 
             <!-- Table Toolbar -->
-            @if(request('filter_campus') || request('filter_class') || request('filter_section'))
+            @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_day'))
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                 <!-- Left Side -->
                 <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -116,6 +133,24 @@
                         </button>
                     </div>
                 </div>
+            </div>
+
+            <!-- Print Header (Hidden by default, shown in print) -->
+            <div class="print-header" style="display: none;">
+                <h3>{{ config('app.name', 'ICMS') }}</h3>
+                <h4>Timetable Management</h4>
+                <p>{{ config('app.address', 'Defence View') }}</p>
+                <p>Phone: {{ config('app.phone', '+923316074246') }} | Email: {{ config('app.email', 'arainabdurrehman3@gmail.com') }}</p>
+                @if(request('filter_campus') || request('filter_class') || request('filter_section') || request('filter_day'))
+                    <p>
+                        <strong>Filters:</strong>
+                        @if(request('filter_campus')) Campus: {{ request('filter_campus') }} @endif
+                        @if(request('filter_class')) | Class: {{ request('filter_class') }} @endif
+                        @if(request('filter_section')) | Section: {{ request('filter_section') }} @endif
+                        @if(request('filter_day')) | Day: {{ request('filter_day') }} @endif
+                    </p>
+                @endif
+                <p>Generated: {{ date('d-m-Y H:i:s') }}</p>
             </div>
 
             <!-- Table Header -->
@@ -158,6 +193,18 @@
                                         </td>
                                         <td>
                                             <strong class="text-dark">{{ $timetable->subject }}</strong>
+                                            @if(isset($timetable->assigned_teacher) && $timetable->assigned_teacher)
+                                                <div class="mt-1">
+                                                    <small class="text-muted d-flex align-items-center" style="font-size: 10px;">
+                                                        <span class="material-symbols-outlined me-1" style="font-size: 12px;">person</span>
+                                                        <span style="color: #28a745;">{{ $timetable->assigned_teacher }}</span>
+                                                    </small>
+                                                </div>
+                                            @elseif(!isset($timetable->assigned_teacher) && strpos($timetable->subject, '[') !== 0)
+                                                <div class="mt-1">
+                                                    <small class="text-muted" style="font-size: 10px; color: #dc3545;">No teacher assigned</small>
+                                                </div>
+                                            @endif
                                         </td>
                                         <td>
                                             <span class="badge bg-success text-white" style="font-size: 12px; padding: 4px 8px;">{{ $timetable->day }}</span>
@@ -172,6 +219,9 @@
                                             <div class="d-flex gap-1">
                                                 <a href="{{ route('timetable.edit', $timetable) }}" class="btn btn-sm btn-primary" title="Edit">
                                                     <span class="material-symbols-outlined" style="font-size: 16px; color: white;">edit</span>
+                                                </a>
+                                                <a href="{{ route('timetable.terminal-print', $timetable) }}" class="btn btn-sm btn-success" title="Terminal Print" target="_blank">
+                                                    <span class="material-symbols-outlined" style="font-size: 16px; color: white;">print</span>
                                                 </a>
                                                 <form action="{{ route('timetable.destroy', $timetable) }}" method="POST" class="d-inline timetable-delete-form" data-timetable-id="{{ $timetable->id }}">
                                                     @csrf
@@ -353,6 +403,16 @@
         background-color: #bb2d3b;
         border-color: #b02a37;
     }
+    
+    .btn-success {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+    
+    .btn-success:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
+    }
 
     /* Export Buttons Styling */
     .export-btn {
@@ -396,9 +456,99 @@
     }
 
     @media print {
+        body {
+            background: white !important;
+        }
+        
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+        }
+        
         .filter-section,
-        .export-buttons {
+        .export-buttons,
+        .btn,
+        .pagination,
+        .d-flex.gap-1,
+        .d-flex.justify-content-between,
+        .alert {
             display: none !important;
+        }
+        
+        .default-table-area {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        .default-table-area table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+        }
+        
+        .default-table-area table thead {
+            display: table-header-group !important;
+            background-color: #f8f9fa !important;
+        }
+        
+        .default-table-area table thead th {
+            background-color: #f8f9fa !important;
+            color: #000 !important;
+            border: 1px solid #000 !important;
+            padding: 8px !important;
+            font-size: 12px !important;
+        }
+        
+        .default-table-area table tbody tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+        }
+        
+        .default-table-area table tbody td {
+            border: 1px solid #000 !important;
+            padding: 6px !important;
+            font-size: 11px !important;
+        }
+        
+        .badge {
+            border: 1px solid #000 !important;
+            padding: 2px 6px !important;
+            font-size: 10px !important;
+        }
+        
+        /* Print Header */
+        .print-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #000;
+        }
+        
+        .print-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .print-header p {
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        
+        /* Print Footer */
+        @page {
+            margin: 1cm;
+        }
+        
+        .print-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            padding: 10px;
+            border-top: 1px solid #000;
         }
     }
 </style>
@@ -411,7 +561,21 @@
     }
 
     function printTable() {
+        // Show print header
+        const printHeader = document.querySelector('.print-header');
+        if (printHeader) {
+            printHeader.style.display = 'block';
+        }
+        
+        // Trigger print
         window.print();
+        
+        // Hide print header after print dialog closes
+        setTimeout(() => {
+            if (printHeader) {
+                printHeader.style.display = 'none';
+            }
+        }, 1000);
     }
 
     function getCsrfToken() {

@@ -210,14 +210,24 @@
             </div>
             @if($salary->loan_repayment > 0)
             <div class="amount-row">
-                <span class="amount-label">Loan Repayment:</span>
+                <span class="amount-label">Loan Repayment (Deducted):</span>
                 <span class="info-value" style="color: #dc3545;">- ₹{{ number_format($salary->loan_repayment ?? 0, 2) }}</span>
+            </div>
+            <div class="amount-row">
+                <span class="amount-label">Net Amount After Loan Deduction:</span>
+                <span class="info-value" style="font-weight: bold;">₹{{ number_format(($salary->salary_generated ?? 0) - ($salary->loan_repayment ?? 0), 2) }}</span>
             </div>
             @endif
             <div class="amount-row" style="border-top: 2px solid #003471; margin-top: 15px; padding-top: 15px;">
                 <span class="amount-label">Amount Paid:</span>
                 <span class="amount-value">₹{{ number_format($salary->amount_paid ?? 0, 2) }}</span>
             </div>
+            @if($salary->loan_repayment > 0)
+            <div class="amount-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+                <span class="amount-label">Note:</span>
+                <span class="info-value" style="font-style: italic;">Loan repayment of ₹{{ number_format($salary->loan_repayment ?? 0, 2) }} has been deducted from your salary.</span>
+            </div>
+            @endif
         </div>
         
         <div style="text-align: center;">

@@ -86,6 +86,15 @@ class HomeworkDiaryController extends Controller
         $classes = $this->getClassesForCampus(null, $staff);
         $filterClasses = $filterCampus ? $this->getClassesForCampus($filterCampus, $staff) : $classes;
 
+        // Get active campuses list
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+
         // Get sections (filtered by class if provided)
         // Filter by teacher's assigned subjects if teacher
         $sections = collect();
@@ -94,6 +103,16 @@ class HomeworkDiaryController extends Controller
                 // Get sections from teacher's assigned subjects for this class
                 $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+                
+                // Filter by active campuses only
+                if (!empty($activeCampuses)) {
+                    $assignedSubjectsQuery->where(function($q) use ($activeCampuses) {
+                        foreach ($activeCampuses as $activeCampus) {
+                            $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                        }
+                    });
+                }
+                
                 if ($filterCampus) {
                     $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
                 }
@@ -102,6 +121,16 @@ class HomeworkDiaryController extends Controller
                 // Get sections from teacher's assigned sections for this class
                 $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+                
+                // Filter by active campuses only
+                if (!empty($activeCampuses)) {
+                    $assignedSectionsQuery->where(function($q) use ($activeCampuses) {
+                        foreach ($activeCampuses as $activeCampus) {
+                            $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                        }
+                    });
+                }
+                
                 if ($filterCampus) {
                     $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
                 }
@@ -120,9 +149,19 @@ class HomeworkDiaryController extends Controller
                     ->sort()
                     ->values();
             } else {
-                // For non-teachers, get all sections
+                // For non-teachers, get all sections from active campuses only
                 $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
                     ->whereNotNull('name');
+                
+                // Filter by active campuses only
+                if (!empty($activeCampuses)) {
+                    $sectionsQuery->where(function($q) use ($activeCampuses) {
+                        foreach ($activeCampuses as $activeCampus) {
+                            $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                        }
+                    });
+                }
+                
                 if ($filterCampus) {
                     $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
                 }
@@ -131,6 +170,16 @@ class HomeworkDiaryController extends Controller
                 if ($sections->isEmpty()) {
                     $sectionsFromSubjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
                         ->whereNotNull('section');
+                    
+                    // Filter by active campuses only
+                    if (!empty($activeCampuses)) {
+                        $sectionsFromSubjectsQuery->where(function($q) use ($activeCampuses) {
+                            foreach ($activeCampuses as $activeCampus) {
+                                $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                            }
+                        });
+                    }
+                    
                     if ($filterCampus) {
                         $sectionsFromSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
                     }
@@ -147,6 +196,15 @@ class HomeworkDiaryController extends Controller
             $subjectsQuery = Subject::query();
             
             $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $subjectsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
             
             // Exact match with case-insensitive comparison and trim whitespace
             $subjectsQuery->where(function($query) use ($campusName, $filterClass, $filterSection) {
@@ -202,6 +260,20 @@ class HomeworkDiaryController extends Controller
             return response()->json(['sections' => []]);
         }
         
+        // Get active campuses list
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // If campus is specified, verify it's active
+        if ($campus && !in_array(strtolower(trim($campus)), $activeCampuses)) {
+            return response()->json(['sections' => []]);
+        }
+        
         $staff = Auth::guard('staff')->user();
         $sections = collect();
         
@@ -210,6 +282,16 @@ class HomeworkDiaryController extends Controller
             // Get sections from teacher's assigned subjects for this class
             $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $assignedSubjectsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
@@ -218,6 +300,16 @@ class HomeworkDiaryController extends Controller
             // Get sections from teacher's assigned sections for this class
             $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $assignedSectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
@@ -236,9 +328,19 @@ class HomeworkDiaryController extends Controller
                 ->sort()
                 ->values();
         } else {
-            // For non-teachers, get all sections
+            // For non-teachers, get all sections from active campuses only
             $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                 ->whereNotNull('name');
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $sectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
@@ -248,6 +350,16 @@ class HomeworkDiaryController extends Controller
                 // Try from subjects table with case-insensitive matching
                 $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                     ->whereNotNull('section');
+                
+                // Filter by active campuses only
+                if (!empty($activeCampuses)) {
+                    $subjectsQuery->where(function($q) use ($activeCampuses) {
+                        foreach ($activeCampuses as $activeCampus) {
+                            $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                        }
+                    });
+                }
+                
                 if ($campus) {
                     $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
                 }
@@ -281,11 +393,41 @@ class HomeworkDiaryController extends Controller
         $isTeacher = $staff && $staff->isTeacher();
         $teacherName = $isTeacher ? strtolower(trim($staff->name ?? '')) : null;
 
+        // Get active campuses list
+        $activeCampuses = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // If campus is specified, verify it's active
+        if ($campus && !in_array($campusLower, $activeCampuses)) {
+            return collect();
+        }
+
         $classes = collect();
 
         if ($isTeacher && $teacherName) {
             $subjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
             $sectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $subjectsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+                
+                $sectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
                 $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
@@ -302,9 +444,20 @@ class HomeworkDiaryController extends Controller
 
         if ($classes->isEmpty()) {
             $classQuery = ClassModel::whereNotNull('class_name');
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $classQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $classQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
             }
+            
             $classModelClasses = $classQuery->distinct()->pluck('class_name')
                 ->map(fn($class) => trim((string) $class))
                 ->filter(fn($class) => $class !== '')
@@ -319,6 +472,21 @@ class HomeworkDiaryController extends Controller
 
             $sectionClasses = Section::whereNotNull('class');
             $subjectClasses = Subject::whereNotNull('class');
+            
+            // Filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $sectionClasses->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+                $subjectClasses->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+            
             if ($campus) {
                 $sectionClasses->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
                 $subjectClasses->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
