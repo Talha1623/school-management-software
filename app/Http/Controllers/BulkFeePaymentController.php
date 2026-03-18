@@ -9,25 +9,46 @@ use App\Models\StudentPayment;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class BulkFeePaymentController extends Controller
 {
     public function index(): View
     {
-        $campuses = Student::whereNotNull('campus')
-            ->distinct()
-            ->pluck('campus')
-            ->sort()
+        // Get campuses from Campus model first (primary source)
+        $campuses = \App\Models\Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
             ->values();
-
-        $campuses = $campuses
-            ->merge(\App\Models\Campus::whereNotNull('campus_name')->pluck('campus_name'))
-            ->merge(ClassModel::whereNotNull('campus')->distinct()->pluck('campus'))
-            ->merge(Section::whereNotNull('campus')->distinct()->pluck('campus'))
-            ->unique()
-            ->sort()
-            ->values();
+        
+        // If no campuses found in Campus model, get from other sources
+        if ($campuses->isEmpty()) {
+            $campusesFromStudents = Student::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campuses = $campusesFromStudents
+                ->merge($campusesFromClasses)
+                ->merge($campusesFromSections)
+                ->unique()
+                ->sort()
+                ->values();
+        }
 
         // Filter campuses for accountant
         $isAccountantRoute = request()->route()->getName() === 'accountant.bulk-fee-payment';
@@ -129,11 +150,11 @@ class BulkFeePaymentController extends Controller
             $paidBase = StudentPayment::where('student_code', $payment->student_code)
                 ->where('payment_title', $payment->payment_title)
                 ->where('method', '!=', 'Generated')
-                ->sum(\DB::raw('COALESCE(payment_amount,0) + COALESCE(discount,0)'));
+                ->sum(DB::raw('COALESCE(payment_amount,0) + COALESCE(discount,0)'));
             $paidLate = StudentPayment::where('student_code', $payment->student_code)
                 ->where('payment_title', $payment->payment_title)
                 ->where('method', '!=', 'Generated')
-                ->sum(\DB::raw('COALESCE(late_fee,0)'));
+                ->sum(DB::raw('COALESCE(late_fee,0)'));
 
             $remainingAmount = max($amount - (float) $paidBase, 0);
             $remainingLate = max($lateFee - (float) $paidLate, 0);

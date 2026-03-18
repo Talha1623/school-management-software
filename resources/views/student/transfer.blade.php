@@ -61,16 +61,25 @@
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Class <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select form-select-sm" name="class" id="class" required onchange="loadStudents('class')" disabled>
+                                <select class="form-select form-select-sm" name="class" id="class" required onchange="loadSectionsForTransfer()" disabled>
                                     <option value="">Select Campus First</option>
-                                    @foreach($classes as $class)
-                                        <option value="{{ $class }}">{{ $class }}</option>
-                                    @endforeach
                                 </select>
                             </div>
 
+                            <!-- Section -->
+                            <div class="col-md-3">
+                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
+                                    Section
+                                </label>
+                                <select class="form-select form-select-sm" name="section" id="section" disabled>
+                                    <option value="">Select Class First</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 align-items-end mt-2">
                             <!-- Student Code -->
-                            <div class="col-md-3 position-relative">
+                            <div class="col-md-12 position-relative">
                                 <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">
                                     Student Code <span class="text-danger">*</span>
                                 </label>
@@ -262,16 +271,26 @@ function loadClassesByCampus(campusValue) {
 
 function loadClassesByToCampus(campusValue) {
     const classSelect = document.getElementById('class');
+    const sectionSelect = document.getElementById('section');
+    
     if (!classSelect) return;
 
     if (!campusValue) {
         classSelect.innerHTML = '<option value="">Select Campus First</option>';
         classSelect.disabled = true;
+        if (sectionSelect) {
+            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+            sectionSelect.disabled = true;
+        }
         return;
     }
 
     classSelect.innerHTML = '<option value="">Loading classes...</option>';
     classSelect.disabled = true;
+    if (sectionSelect) {
+        sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+        sectionSelect.disabled = true;
+    }
 
     fetch(`{{ route('student.transfer.get-classes-by-campus') }}?campus=${encodeURIComponent(campusValue)}`)
         .then(response => response.json())
@@ -296,6 +315,51 @@ function loadClassesByToCampus(campusValue) {
             console.error('Error loading classes:', error);
             classSelect.innerHTML = '<option value="">Error loading classes</option>';
             classSelect.disabled = true;
+        });
+}
+
+function loadSectionsForTransfer() {
+    const classSelect = document.getElementById('class');
+    const sectionSelect = document.getElementById('section');
+    const toCampusSelect = document.getElementById('to_campus');
+    
+    if (!classSelect || !sectionSelect) return;
+    
+    const classValue = classSelect.value;
+    const campusValue = toCampusSelect ? toCampusSelect.value : '';
+    
+    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+    
+    if (!classValue) {
+        sectionSelect.disabled = true;
+        return;
+    }
+    
+    sectionSelect.disabled = true;
+    sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
+    
+    const query = `class=${encodeURIComponent(classValue)}&campus=${encodeURIComponent(campusValue || '')}`;
+    fetch(`{{ route('admission.get-sections') }}?${query}`)
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            if (data.sections && data.sections.length > 0) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section.name || section;
+                    option.textContent = section.name || section;
+                    sectionSelect.appendChild(option);
+                });
+                sectionSelect.disabled = false;
+            } else {
+                sectionSelect.innerHTML = '<option value="">No sections found</option>';
+                sectionSelect.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading sections:', error);
+            sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+            sectionSelect.disabled = false;
         });
 }
 
@@ -371,6 +435,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (campusValue) {
         loadClassesByCampus(campusValue);
         loadStudentsByClass();
+    }
+});
+
+// Reload sections when campus changes (if class is already selected)
+document.getElementById('to_campus')?.addEventListener('change', function() {
+    const classSelect = document.getElementById('class');
+    if (classSelect && classSelect.value) {
+        loadSectionsForTransfer();
     }
 });
 

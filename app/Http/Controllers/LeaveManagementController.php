@@ -6,9 +6,11 @@ use App\Models\Leave;
 use App\Models\Staff;
 use App\Models\Student;
 use App\Models\ParentAccount;
+use App\Models\StudentAttendance;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Carbon\Carbon;
 
 class LeaveManagementController extends Controller
 {
@@ -188,7 +190,64 @@ class LeaveManagementController extends Controller
                 ->with('error', 'Please select either a staff member or a student.');
         }
 
+        $oldStatus = $leave->status;
         $leave->update($validated);
+
+        // If leave is approved and it's a student leave, update attendance to 'Leave' status
+        // This will automatically reflect in teacher's class attendance
+        // Updates attendance for ALL dates from from_date to to_date (inclusive)
+        if ($validated['status'] === 'Approved' && !empty($validated['student_id'])) {
+            $student = Student::findOrFail($validated['student_id']);
+            
+            // Parse dates and ensure proper format
+            $fromDate = Carbon::parse($validated['from_date'])->startOfDay();
+            $toDate = Carbon::parse($validated['to_date'])->endOfDay();
+
+            // Update attendance for all dates in the leave period (from_date to to_date inclusive)
+            $currentDate = $fromDate->copy();
+            $updatedCount = 0;
+            
+            while ($currentDate->lte($toDate)) {
+                StudentAttendance::updateOrCreate(
+                    [
+                        'student_id' => $validated['student_id'],
+                        'attendance_date' => $currentDate->format('Y-m-d'),
+                    ],
+                    [
+                        'status' => 'Leave',
+                        'campus' => $student->campus,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                        'remarks' => 'Leave approved: ' . ($validated['leave_reason'] ?? ''),
+                    ]
+                );
+                $currentDate->addDay();
+                $updatedCount++;
+            }
+        }
+        // If leave status changed from Approved to Rejected/Pending, remove Leave status from attendance
+        elseif ($oldStatus === 'Approved' && $validated['status'] !== 'Approved' && !empty($validated['student_id'])) {
+            $fromDate = Carbon::parse($validated['from_date']);
+            $toDate = Carbon::parse($validated['to_date']);
+
+            // Remove Leave status from attendance (set to N/A if it was only marked for leave)
+            $currentDate = $fromDate->copy();
+            while ($currentDate->lte($toDate)) {
+                $attendance = StudentAttendance::where('student_id', $validated['student_id'])
+                    ->whereDate('attendance_date', $currentDate->format('Y-m-d'))
+                    ->where('status', 'Leave')
+                    ->first();
+                
+                if ($attendance) {
+                    // If attendance was only marked as Leave (no other reason), set to N/A
+                    // Otherwise, keep the existing status
+                    if (empty($attendance->remarks) || strpos($attendance->remarks, 'Leave approved') === 0) {
+                        $attendance->update(['status' => 'N/A', 'remarks' => null]);
+                    }
+                }
+                $currentDate->addDay();
+            }
+        }
 
         return redirect()
             ->route('leave-management')

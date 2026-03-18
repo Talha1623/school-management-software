@@ -69,6 +69,11 @@ class JobInquiryController extends Controller
             'applied_for_designation' => ['nullable', 'string', 'max:255'],
             'salary_type' => ['nullable', 'string', 'max:255'],
             'salary_demand' => ['nullable', 'numeric', 'min:0'],
+            'salary' => ['nullable', 'numeric', 'min:0'],
+            'absent_fees' => ['nullable', 'numeric', 'min:0'],
+            'late_fees' => ['nullable', 'numeric', 'min:0'],
+            'early_exit_fees' => ['nullable', 'numeric', 'min:0'],
+            'free_absent' => ['nullable', 'integer', 'min:0', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'home_address' => ['nullable', 'string'],
             'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
@@ -93,7 +98,21 @@ class JobInquiryController extends Controller
     {
         // If request wants JSON (for edit modal), return JSON
         if ($request->wantsJson() || $request->ajax()) {
-            return response()->json($job_inquiry);
+            // Format dates properly for the edit form
+            $inquiryData = $job_inquiry->toArray();
+            
+            // Format birthday date (YYYY-MM-DD format for date input)
+            if ($job_inquiry->birthday) {
+                try {
+                    $inquiryData['birthday'] = \Carbon\Carbon::parse($job_inquiry->birthday)->format('Y-m-d');
+                } catch (\Exception $e) {
+                    $inquiryData['birthday'] = null;
+                }
+            } else {
+                $inquiryData['birthday'] = null;
+            }
+            
+            return response()->json($inquiryData);
         }
         
         // Otherwise return view
@@ -364,10 +383,10 @@ class JobInquiryController extends Controller
                 'joining_date' => now(), // Set joining date as today
                 'marital_status' => $job_inquiry->marital_status,
                 'salary_type' => $salaryType,
-                'salary' => $job_inquiry->salary ?? $job_inquiry->salary_demand,
-                'absent_fees' => $job_inquiry->absent_fees,
-                'late_fees' => $job_inquiry->late_fees,
-                'early_exit_fees' => $job_inquiry->early_exit_fees,
+                'salary' => $job_inquiry->salary ?? 0, // Use only salary field, not salary_demand
+                'absent_fees' => $job_inquiry->absent_fees ?? null,
+                'late_fees' => $job_inquiry->late_fees ?? null,
+                'early_exit_fees' => $job_inquiry->early_exit_fees ?? null,
                 'free_absent' => $job_inquiry->free_absent ?? 0,
                 'email' => $email,
                 'password' => 'staff', // Default password

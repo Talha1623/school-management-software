@@ -7,6 +7,8 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Exam;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -22,14 +24,35 @@ class ParticularExamGradeController extends Controller
         $filterExam = $request->get('filter_exam');
         $filterSession = $request->get('filter_session');
 
-        // Get campuses from Campus model first (primary source)
+        // Get active campuses from Campus model first (primary source)
         $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
         
-        // Also get campuses from ClassModel and Section as fallback
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+        // Get active campuses list for filtering
+        $activeCampuses = $campusesFromModel
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
         
-        // Merge all campuses and get unique values
+        // Also get campuses from ClassModel and Section, but only if they exist in Campus model
+        $campusesFromClasses = ClassModel::whereNotNull('campus')
+            ->whereNotNull('class_name') // Only active classes
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        $campusesFromSections = Section::whereNotNull('campus')
+            ->whereNotNull('name') // Only active sections
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        // Merge all campuses and get unique values (only active campuses)
         $campuses = $campusesFromModel
             ->merge($campusesFromClasses)
             ->merge($campusesFromSections)
@@ -37,24 +60,35 @@ class ParticularExamGradeController extends Controller
             ->sort()
             ->values();
         
-        // Fallback to default campuses if none found
-        if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-        }
+        // Convert to collection of objects with campus_name property
+        $campuses = $campuses->map(function($campus) {
+            return (object)['campus_name' => $campus];
+        });
 
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
-        $examsQuery = Exam::query();
+        // Exams: only for selected campus (and session). Case-insensitive match. Show exams in dropdown only when campus is selected.
+        // Only show exams for active campuses
+        $exams = collect();
         if ($filterCampus) {
-            $examsQuery->where('campus', $filterCampus);
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $examsQuery = Exam::query()->whereNotNull('exam_name')
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+                if ($filterSession) {
+                    $examsQuery->whereRaw('LOWER(TRIM(session)) = ?', [strtolower(trim($filterSession))]);
+                }
+                $exams = $examsQuery->distinct()->pluck('exam_name')->sort()->values();
+            }
         }
-        if ($filterSession) {
-            $examsQuery->where('session', $filterSession);
-        }
-        $exams = $examsQuery->whereNotNull('exam_name')->distinct()->pluck('exam_name')->sort()->values();
 
         $showResults = $filterCampus || $filterExam || $filterSession;
         $grades = collect();
@@ -82,6 +116,43 @@ class ParticularExamGradeController extends Controller
             'grades',
             'showResults'
         ));
+    }
+
+    /**
+     * Get exams by campus (and optional session) for AJAX dropdown.
+     */
+    public function getExamsByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        if (!$campus || !is_string($campus)) {
+            return response()->json(['exams' => []]);
+        }
+        $campus = trim($campus);
+        $campusLower = strtolower($campus);
+        
+        // Get active campuses list for filtering
+        $activeCampuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // Verify campus is active
+        if (!in_array($campusLower, $activeCampuses)) {
+            return response()->json(['exams' => []]);
+        }
+        
+        $session = $request->get('session');
+        $query = Exam::query()->whereNotNull('exam_name')
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+        if ($session && is_string($session) && trim($session) !== '') {
+            $query->whereRaw('LOWER(TRIM(session)) = ?', [strtolower(trim($session))]);
+        }
+        $exams = $query->distinct()->pluck('exam_name')->sort()->values();
+        return response()->json(['exams' => $exams]);
     }
 
     /**

@@ -848,10 +848,9 @@ function transferClass(id, fromCampus) {
     document.getElementById('movePayments').value = '0';
     document.getElementById('notifyAdmin').value = '1';
     
-    // Load classes for selected from campus
-    if (fromCampus) {
-        loadClassesForCampus(fromCampus, 'transferClass');
-    }
+    // Disable Class and Section until To Campus is selected
+    document.getElementById('transferClass').disabled = true;
+    document.getElementById('transferSection').disabled = true;
     
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('transferModal'));
@@ -861,7 +860,14 @@ function transferClass(id, fromCampus) {
 // Load classes based on campus
 function loadClassesForCampus(campus, targetSelectId) {
     if (!campus) {
-        document.getElementById(targetSelectId).innerHTML = '<option value="">Select Class (Optional)</option>';
+        const selectElement = document.getElementById(targetSelectId);
+        selectElement.innerHTML = '<option value="">Select Class (Optional)</option>';
+        selectElement.disabled = true;
+        // Also clear and disable section
+        if (targetSelectId === 'transferClass') {
+            document.getElementById('transferSection').innerHTML = '<option value="">Select Section (Optional)</option>';
+            document.getElementById('transferSection').disabled = true;
+        }
         return;
     }
     
@@ -1192,12 +1198,12 @@ function printTable() {
 
 // Add event listeners for dynamic dropdowns in transfer modal
 document.addEventListener('DOMContentLoaded', function() {
-    const fromCampusSelect = document.getElementById('fromCampus');
+    const toCampusSelect = document.getElementById('toCampus');
     const transferClassSelect = document.getElementById('transferClass');
     
-    // When From Campus changes, load classes
-    if (fromCampusSelect) {
-        fromCampusSelect.addEventListener('change', function() {
+    // When To Campus changes, load classes (since we're transferring TO that campus)
+    if (toCampusSelect) {
+        toCampusSelect.addEventListener('change', function() {
             const campus = this.value;
             loadClassesForCampus(campus, 'transferClass');
             // Clear section when campus changes
@@ -1205,11 +1211,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // When Class changes, load sections
+    // When Class changes, load sections based on To Campus
     if (transferClassSelect) {
         transferClassSelect.addEventListener('change', function() {
             const className = this.value;
-            const campus = fromCampusSelect ? fromCampusSelect.value : '';
+            const campus = toCampusSelect ? toCampusSelect.value : '';
             loadSectionsForClass(className, campus, 'transferSection');
         });
     }

@@ -35,11 +35,8 @@
                 </div>
                 <div class="col-md-3">
                     <label for="filter_fee_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Fee Type</label>
-                    <select class="form-select form-select-sm" id="filter_fee_type" style="height: 32px;">
-                        <option value="">All</option>
-                        @foreach($feeTypes as $feeType)
-                            <option value="{{ $feeType }}">{{ $feeType }}</option>
-                        @endforeach
+                    <select class="form-select form-select-sm" id="filter_fee_type" style="height: 32px;" disabled>
+                        <option value="">Select Campus First</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -149,10 +146,53 @@ document.addEventListener('DOMContentLoaded', function() {
         sectionSelect.disabled = true;
     }
 
+    function loadFeeTypesByCampus(campus) {
+        const feeTypeSelect = document.getElementById('filter_fee_type');
+        if (!feeTypeSelect) {
+            return;
+        }
+
+        if (!campus || campus === '') {
+            feeTypeSelect.innerHTML = '<option value="">Select Campus First</option>';
+            feeTypeSelect.disabled = true;
+            return;
+        }
+
+        feeTypeSelect.innerHTML = '<option value="">All</option>';
+        feeTypeSelect.disabled = false;
+
+        fetch(`{{ route('accountant.custom-fee.get-fee-types-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.fee_types && data.fee_types.length > 0) {
+                data.fee_types.forEach(feeType => {
+                    const option = document.createElement('option');
+                    option.value = feeType;
+                    option.textContent = feeType;
+                    feeTypeSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading fee types:', error);
+        });
+    }
+
     function loadClassesForCampus() {
         const campus = campusSelect.value;
 
         resetClassesAndSections();
+        loadFeeTypesByCampus(campus);
 
         if (!campus) {
             return;
@@ -202,7 +242,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     campusSelect.addEventListener('change', loadClassesForCampus);
     
-    // Auto-load classes if campus is already selected (e.g., from accountant's default campus)
+    // Auto-load classes and fee types if campus is already selected (e.g., from accountant's default campus)
     if (campusSelect.value) {
         loadClassesForCampus();
     }

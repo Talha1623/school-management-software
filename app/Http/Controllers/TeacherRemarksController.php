@@ -8,6 +8,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use App\Models\StudentMark;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -340,11 +341,14 @@ class TeacherRemarksController extends Controller
             }
         }
 
-        // Get sessions
+        // Get sessions (from tests + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Test::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         // Get Class/Section combinations - only from existing classes (not deleted) and filter by teacher if teacher

@@ -9,6 +9,7 @@ use App\Models\Section;
 use App\Models\Student;
 use App\Models\StudentPayment;
 use App\Models\AdvanceFee;
+use App\Models\StudentDiscount;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -188,20 +189,45 @@ class MonthlyFeeController extends Controller
                 $accountantName = auth()->guard('admin')->user()->name ?? 'System';
             }
             
+            // Get student discount
+            $studentDiscounts = StudentDiscount::where('student_code', $student->student_code)->get();
+            $totalStudentDiscount = $studentDiscounts->sum(function($discount) {
+                return (float) ($discount->discount_amount ?? 0);
+            });
+            
+            // Calculate late fee (check if due date has passed)
+            $calculatedLateFee = $isLateFeeApplicable ? $lateFeeAmount : 0;
+            
+            // Calculate actual amount to pay: monthly_fee - discount + late_fee
+            $monthlyFeeAmount = (float) $student->monthly_fee;
+            
             // Create fee record for this student
-            StudentPayment::create([
+            $generatedFee = StudentPayment::create([
                 'campus' => $student->campus ?? $validated['campus'],
                 'student_code' => $student->student_code,
                 'payment_title' => $paymentTitle,
-                'payment_amount' => (float) $student->monthly_fee,
-                'discount' => 0,
+                'payment_amount' => $monthlyFeeAmount,
+                'discount' => round($totalStudentDiscount, 2),
                 'method' => 'Generated', // Indicates this is a generated fee, not actual payment
                 'payment_date' => $dueDate->format('Y-m-d'), // Due date (will be updated when payment is made)
                 'sms_notification' => 'Yes',
-                'late_fee' => $isLateFeeApplicable ? $lateFeeAmount : 0,
+                'late_fee' => $calculatedLateFee,
                 'accountant' => $accountantName,
             ]);
 
+            // Apply advance fee if available
+            // Recalculate late fee in case due date has passed since generation
+            // Use the actual late_fee from the generated fee record, or recalculate if due date passed
+            $actualLateFee = (float) ($generatedFee->late_fee ?? $calculatedLateFee);
+            
+            // If due date has passed and late fee should apply, ensure it's included
+            if ($lateFeeAmount > 0 && Carbon::today()->greaterThan($dueDate)) {
+                $actualLateFee = max($actualLateFee, $lateFeeAmount);
+            }
+            
+            // Calculate actual amount to pay: monthly_fee - discount + late_fee
+            $actualAmountToPay = max(0, $monthlyFeeAmount - $totalStudentDiscount) + $actualLateFee;
+            
             $advanceFee = null;
             if (!empty($student->parent_account_id)) {
                 $advanceFee = AdvanceFee::where('parent_id', (string) $student->parent_account_id)->first();
@@ -210,18 +236,19 @@ class MonthlyFeeController extends Controller
                 $advanceFee = AdvanceFee::where('id_card_number', $student->father_id_card)->first();
             }
             if ($advanceFee && (float) $advanceFee->available_credit > 0) {
-                $applyAmount = min((float) $advanceFee->available_credit, (float) $student->monthly_fee);
+                // Apply advance fee to the actual amount to pay (after discount, including late fee)
+                $applyAmount = min((float) $advanceFee->available_credit, $actualAmountToPay);
                 if ($applyAmount > 0) {
                     StudentPayment::create([
                         'campus' => $student->campus ?? $validated['campus'],
                         'student_code' => $student->student_code,
                         'payment_title' => $paymentTitle,
-                        'payment_amount' => $applyAmount,
-                        'discount' => 0,
+                        'payment_amount' => $applyAmount, // Amount paid from advance fee (after discount, including late fee)
+                        'discount' => 0, // Discount is already in generated fee record
                         'method' => 'Advance Fee',
                         'payment_date' => Carbon::now()->format('Y-m-d'),
                         'sms_notification' => 'Yes',
-                        'late_fee' => 0,
+                        'late_fee' => $actualLateFee, // Use actual late fee from generated fee record
                         'accountant' => $accountantName,
                     ]);
 

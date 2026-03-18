@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\StudentPayment;
 use App\Models\Student;
 use App\Models\ManagementExpense;
+use App\Models\Campus;
+use App\Models\ClassModel;
+use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -64,12 +67,26 @@ class FeePaymentController extends Controller
             ->limit(10)
             ->get();
         
+        // Get campuses for Partial Payment modal
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
+            
+            $campuses = collect();
+            foreach ($allCampuses as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
         return view('fee-payment', compact(
             'unpaidInvoices',
             'incomeToday',
             'expenseToday',
             'balanceToday',
-            'latestPayments'
+            'latestPayments',
+            'campuses'
         ));
     }
 }

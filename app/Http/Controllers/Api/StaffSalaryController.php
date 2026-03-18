@@ -77,10 +77,14 @@ class StaffSalaryController extends Controller
             ];
 
             // Get all salary records for this staff for the selected year
+            // Handle both string and integer year formats
             $salaries = Salary::where('staff_id', $targetStaffId)
-                ->where('year', $year)
+                ->where(function($query) use ($year) {
+                    $query->where('year', $year)
+                          ->orWhere('year', (string) $year);
+                })
                 ->get()
-                ->keyBy('salary_month');
+                ->keyBy('salary_month'); // Key by month name (e.g., "March", "April")
 
             // Prepare monthly data for all 12 months
             $monthlyData = [];
@@ -98,7 +102,71 @@ class StaffSalaryController extends Controller
             ];
 
             foreach ($monthNames as $monthNum => $monthName) {
-                $salary = $salaries->get($monthNum);
+                // Database stores salary_month as month name (e.g., "March"), not month number
+                // So we need to lookup by month name, not month number
+                $salary = $salaries->get($monthName);
+                
+                // Also try with month number formats for backward compatibility
+                // (in case some records use month numbers)
+                if (!$salary) {
+                    $monthNumStr = (string) $monthNum;
+                    $salary = $salaries->get($monthNumStr);
+                    
+                    // Try without leading zero (e.g., "1" instead of "01")
+                    if (!$salary && strlen($monthNumStr) == 2 && substr($monthNumStr, 0, 1) == '0') {
+                        $salary = $salaries->get((string)(int)$monthNumStr);
+                    }
+                    
+                    // Try with leading zero (e.g., "01" instead of "1")
+                    if (!$salary && strlen($monthNumStr) == 1) {
+                        $salary = $salaries->get(str_pad($monthNumStr, 2, '0', STR_PAD_LEFT));
+                    }
+                }
+                
+                // Always fetch fresh from database for each month to ensure latest data
+                // This is important because salary payments can be updated at any time
+                $salary = Salary::where('staff_id', $targetStaffId)
+                    ->where(function($query) use ($year) {
+                        $query->where('year', $year)
+                              ->orWhere('year', (string) $year);
+                    })
+                    ->where(function($query) use ($monthName, $monthNum) {
+                        $query->where('salary_month', $monthName)
+                              ->orWhere('salary_month', $monthNum)
+                              ->orWhere('salary_month', str_pad($monthNum, 2, '0', STR_PAD_LEFT))
+                              ->orWhere('salary_month', (string)(int)$monthNum);
+                    })
+                    ->first();
+                
+                // Calculate status based on amount_paid and salary_generated
+                // If salary is generated but not paid, status should be "Pending"
+                // If salary is paid (amount_paid >= salary_generated), status should be "Paid"
+                $status = null;
+                if ($salary) {
+                    $salaryGenerated = (float) $salary->salary_generated;
+                    $amountPaid = (float) $salary->amount_paid;
+                    
+                    // Always calculate status based on payment, even if status field exists
+                    // This ensures status is always accurate based on current payment state
+                    if ($salaryGenerated > 0) {
+                        // Round to 2 decimals for comparison to avoid floating point issues
+                        $salaryGeneratedRounded = round($salaryGenerated, 2);
+                        $amountPaidRounded = round($amountPaid, 2);
+                        
+                        if ($amountPaidRounded >= $salaryGeneratedRounded) {
+                            $status = 'Paid';
+                        } elseif ($amountPaidRounded > 0) {
+                            $status = 'Issued'; // Partial payment
+                        } else {
+                            $status = 'Pending'; // Generated but not paid
+                        }
+                    } elseif ($amountPaid > 0) {
+                        // If amount_paid > 0 but salary_generated = 0, it's likely a payment without generation
+                        $status = 'Issued';
+                    } else {
+                        $status = null; // Not generated yet
+                    }
+                }
                 
                 $monthData = [
                     'month' => $monthName,
@@ -113,7 +181,7 @@ class StaffSalaryController extends Controller
                     'salary_generated' => $salary ? (float) $salary->salary_generated : 0,
                     'amount_paid' => $salary ? (float) $salary->amount_paid : 0,
                     'loan_repayment' => $salary ? (float) $salary->loan_repayment : 0,
-                    'status' => $salary ? $salary->status : null,
+                    'status' => $status,
                 ];
 
                 // Add to yearly totals

@@ -644,14 +644,31 @@ class ManageClassesController extends Controller
 
         // Update student_payments with new student codes if campus changed
         if (!empty($newStudentCodes)) {
+            // When student codes change (campus changed), update payments conditionally based on move_dues and move_payments
             foreach ($newStudentCodes as $oldCode => $newCode) {
-                // Update all payment records (both dues and payments) with new student code and campus
+                // Always update student_code (required for data integrity)
+                // But conditionally update campus based on move_dues and move_payments
+                
+                // Update student_code for all records
                 DB::table('student_payments')
                     ->where('student_code', $oldCode)
-                    ->update([
-                        'student_code' => $newCode,
-                        'campus' => $normalizedToCampus
-                    ]);
+                    ->update(['student_code' => $newCode]);
+                
+                // Update campus for dues (Generated fees) only if move_dues is true
+                if ($moveDues) {
+                    DB::table('student_payments')
+                        ->where('student_code', $newCode)
+                        ->where('method', 'Generated')
+                        ->update(['campus' => $normalizedToCampus]);
+                }
+                
+                // Update campus for payments (non-Generated) only if move_payments is true
+                if ($movePayments) {
+                    DB::table('student_payments')
+                        ->where('student_code', $newCode)
+                        ->where('method', '!=', 'Generated')
+                        ->update(['campus' => $normalizedToCampus]);
+                }
             }
         } else {
             // If no code change (same campus transfer), just update campus in payments if requested

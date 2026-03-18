@@ -39,12 +39,15 @@
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
                             @foreach($campuses as $campus)
-                                <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
                             @endforeach
                         </select>
                     </div>
 
-                    <!-- Exam -->
+                    <!-- Exam (only shows exams for selected campus after Filter) -->
                     <div class="col-md-3">
                         <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam</label>
                         <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;">
@@ -53,6 +56,9 @@
                                 <option value="{{ $examName }}" {{ request('filter_exam') == $examName ? 'selected' : '' }}>{{ $examName }}</option>
                             @endforeach
                         </select>
+                        @if(!$filterCampus)
+                            <small class="text-muted">Select campus and apply filter to see exams</small>
+                        @endif
                     </div>
 
                     <!-- Session -->
@@ -170,7 +176,10 @@
                                 <select class="form-control grade-input" name="campus" id="campus" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus }}">{{ $campus }}</option>
+                                        @php
+                                            $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                        @endphp
+                                        <option value="{{ $campusName }}">{{ $campusName }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -219,10 +228,8 @@
                                 </span>
                                 <select class="form-control grade-input" name="for_exam" id="for_exam" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Exam/Test</option>
-                                    @foreach($exams as $examName)
-                                        <option value="{{ $examName }}">{{ $examName }}</option>
-                                    @endforeach
                                 </select>
+                                <small class="text-muted d-block mt-1">Select campus first to load exams</small>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -368,37 +375,89 @@
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const campusSelect = document.getElementById('filter_campus');
-    const sessionSelect = document.getElementById('filter_session');
-    const examSelect = document.getElementById('filter_exam');
-
-    function loadExams() {
-        const campus = campusSelect.value;
-        const session = sessionSelect.value;
-        
-        examSelect.innerHTML = '<option value="">Loading...</option>';
-        
-        const params = new URLSearchParams();
-        if (campus) params.append('campus', campus);
-        if (session) params.append('session', session);
-        
-        fetch(`{{ route('exam.grades.get-exams') }}?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => {
-                examSelect.innerHTML = '<option value="">All Exams</option>';
-                data.forEach(exam => {
-                    examSelect.innerHTML += `<option value="${exam}">${exam}</option>`;
-                });
-            })
-            .catch(error => {
-                console.error('Error loading exams:', error);
-                examSelect.innerHTML = '<option value="">Error loading exams</option>';
+// Load exams for selected campus (filter form or modal). Only that campus's exams.
+function loadExamsForFilter(campus, session, targetSelectId, emptyOptionText) {
+    const examSelect = document.getElementById(targetSelectId);
+    if (!examSelect) return;
+    examSelect.innerHTML = '<option value="">' + (emptyOptionText || 'Loading...') + '</option>';
+    if (!campus || campus.trim() === '') {
+        examSelect.innerHTML = '<option value="">' + (emptyOptionText || 'All Exams') + '</option>';
+        return;
+    }
+    const params = new URLSearchParams();
+    params.append('campus', campus.trim());
+    if (session && session.trim() !== '') params.append('session', session.trim());
+    fetch(`{{ route('exam.grades.get-exams') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            examSelect.innerHTML = '<option value="">' + (emptyOptionText || 'All Exams') + '</option>';
+            (Array.isArray(data) ? data : []).forEach(exam => {
+                const opt = document.createElement('option');
+                opt.value = exam;
+                opt.textContent = exam;
+                examSelect.appendChild(opt);
             });
+        })
+        .catch(() => {
+            examSelect.innerHTML = '<option value="">' + (emptyOptionText || 'All Exams') + '</option>';
+        });
+}
+
+// Load exams in Add/Edit Grade modal by campus (particular endpoint returns { exams: [] })
+function loadExamsForModal(campus, session, callback) {
+    const forExamSelect = document.getElementById('for_exam');
+    if (!forExamSelect) return;
+    forExamSelect.innerHTML = '<option value="">Loading...</option>';
+    if (!campus || campus.trim() === '') {
+        forExamSelect.innerHTML = '<option value="">Select Exam/Test</option>';
+        if (callback) callback();
+        return;
+    }
+    const params = new URLSearchParams();
+    params.append('campus', campus.trim());
+    if (session && session.trim() !== '') params.append('session', session.trim());
+    fetch(`{{ route('exam.grades.particular.get-exams-by-campus') }}?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            forExamSelect.innerHTML = '<option value="">Select Exam/Test</option>';
+            (data.exams || []).forEach(exam => {
+                const opt = document.createElement('option');
+                opt.value = exam;
+                opt.textContent = exam;
+                forExamSelect.appendChild(opt);
+            });
+            if (callback) callback();
+        })
+        .catch(() => {
+            forExamSelect.innerHTML = '<option value="">Select Exam/Test</option>';
+            if (callback) callback();
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const filterCampusSelect = document.getElementById('filter_campus');
+    const filterSessionSelect = document.getElementById('filter_session');
+    const filterExamSelect = document.getElementById('filter_exam');
+    if (filterCampusSelect && filterExamSelect) {
+        function onFilterCampusOrSessionChange() {
+            loadExamsForFilter(filterCampusSelect.value, filterSessionSelect ? filterSessionSelect.value : '', 'filter_exam', 'All Exams');
+        }
+        filterCampusSelect.addEventListener('change', onFilterCampusOrSessionChange);
+        if (filterSessionSelect) filterSessionSelect.addEventListener('change', onFilterCampusOrSessionChange);
     }
 
-    campusSelect.addEventListener('change', loadExams);
-    sessionSelect.addEventListener('change', loadExams);
+    const modalCampusSelect = document.getElementById('campus');
+    const modalSessionSelect = document.getElementById('session');
+    if (modalCampusSelect && document.getElementById('for_exam')) {
+        modalCampusSelect.addEventListener('change', function() {
+            loadExamsForModal(this.value, modalSessionSelect ? modalSessionSelect.value : '');
+        });
+        if (modalSessionSelect) {
+            modalSessionSelect.addEventListener('change', function() {
+                if (modalCampusSelect.value) loadExamsForModal(modalCampusSelect.value, this.value);
+            });
+        }
+    }
 });
 
 function resetForm() {
@@ -406,13 +465,18 @@ function resetForm() {
     document.getElementById('gradeForm').action = "{{ route('exam.grades.particular.store') }}";
     document.getElementById('methodField').innerHTML = '';
     document.getElementById('gradeModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">grade</span><span>Add New Grade</span>';
+    document.getElementById('for_exam').innerHTML = '<option value="">Select Exam/Test</option>';
 
     const filterCampus = "{{ $filterCampus ?? '' }}";
     const filterExam = "{{ $filterExam ?? '' }}";
     const filterSession = "{{ $filterSession ?? '' }}";
 
-    if (filterCampus) document.getElementById('campus').value = filterCampus;
-    if (filterExam) document.getElementById('for_exam').value = filterExam;
+    if (filterCampus) {
+        document.getElementById('campus').value = filterCampus;
+        loadExamsForModal(filterCampus, filterSession, function() {
+            if (filterExam) document.getElementById('for_exam').value = filterExam;
+        });
+    }
     if (filterSession) document.getElementById('session').value = filterSession;
 }
 
@@ -422,11 +486,14 @@ function editGrade(id, campus, name, fromPercentage, toPercentage, gradePoints, 
     document.getElementById('from_percentage').value = fromPercentage;
     document.getElementById('to_percentage').value = toPercentage;
     document.getElementById('grade_points').value = gradePoints;
-    document.getElementById('for_exam').value = forExam;
     document.getElementById('session').value = session;
     document.getElementById('gradeForm').action = "{{ url('/exam/grades/particular') }}/" + id;
     document.getElementById('methodField').innerHTML = '@method("PUT")';
     document.getElementById('gradeModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px;">edit</span><span>Edit Grade</span>';
+
+    loadExamsForModal(campus, session, function() {
+        document.getElementById('for_exam').value = forExam || '';
+    });
 
     const modal = new bootstrap.Modal(document.getElementById('gradeModal'));
     modal.show();

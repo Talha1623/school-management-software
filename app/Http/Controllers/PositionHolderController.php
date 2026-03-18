@@ -198,20 +198,29 @@ class PositionHolderController extends Controller
         $gradeDefinitions = collect();
         if ($filterCampus && $filterTest) {
             // Try to get from ParticularTestGrade first (more specific)
-            $particularGrades = ParticularTestGrade::where('campus', $filterCampus)
-                ->where('for_test', $filterTest);
-            
-            if ($filterClass) {
-                $particularGrades->where('class', $filterClass);
+            try {
+                $particularGrades = ParticularTestGrade::where('campus', $filterCampus)
+                    ->where('for_test', $filterTest);
+                
+                if ($filterClass) {
+                    $particularGrades->where('class', $filterClass);
+                }
+                if ($filterSection) {
+                    $particularGrades->where('section', $filterSection);
+                }
+                if ($filterSubject) {
+                    $particularGrades->where('subject', $filterSubject);
+                }
+                
+                $gradeDefinitions = $particularGrades->orderBy('from_percentage', 'desc')->get();
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Table doesn't exist - return empty collection
+                if (str_contains($e->getMessage(), "doesn't exist")) {
+                    $gradeDefinitions = collect();
+                } else {
+                    throw $e;
+                }
             }
-            if ($filterSection) {
-                $particularGrades->where('section', $filterSection);
-            }
-            if ($filterSubject) {
-                $particularGrades->where('subject', $filterSubject);
-            }
-            
-            $gradeDefinitions = $particularGrades->orderBy('from_percentage', 'desc')->get();
         }
         
         // If no particular test grades found, use CombinedResultGrade

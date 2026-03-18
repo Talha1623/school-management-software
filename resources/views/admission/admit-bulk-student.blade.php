@@ -37,10 +37,10 @@
                 </div>
             @endif
 
-            @if($errors->any())
+            @if(isset($errors) && (is_object($errors) && method_exists($errors, 'any') ? $errors->any() : (is_array($errors) && count($errors) > 0)))
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     <ul class="mb-0">
-                        @foreach($errors->all() as $error)
+                        @foreach(is_object($errors) && method_exists($errors, 'all') ? $errors->all() : (is_array($errors) ? $errors : []) as $error)
                             <li>{{ $error }}</li>
                         @endforeach
                     </ul>
@@ -176,9 +176,6 @@
                                 </label>
                                 <select class="form-select" id="class" name="class">
                                     <option value="">Select Class</option>
-                                    @foreach($classes as $class)
-                                        <option value="{{ $class }}">{{ $class }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                             <div class="col-md-2 mb-3">
@@ -228,9 +225,6 @@
                                 </label>
                                 <select class="form-select" id="csv_class" name="csv_class">
                                     <option value="">Select Class</option>
-                                    @foreach($classes as $class)
-                                        <option value="{{ $class }}">{{ $class }}</option>
-                                    @endforeach
                                 </select>
                             </div>
                             <div class="col-md-2 mb-3">
@@ -383,41 +377,118 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleInputMethod();
     }
 
-    // Function to load sections
-    function loadSections(classSelectElement, sectionSelectElement) {
+    // Function to load classes for campus (Manual Mode)
+    function loadClassesForCampus(campusValue, classSelectElement) {
+        if (!classSelectElement) return;
+        
+        classSelectElement.innerHTML = '<option value="">Select Class</option>';
+        
+        if (!campusValue || campusValue === '') {
+            return;
+        }
+        
+        fetch(`{{ route('admission.get-classes') }}?campus=${encodeURIComponent(campusValue)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        const option = document.createElement('option');
+                        option.value = className;
+                        option.textContent = className;
+                        classSelectElement.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+            });
+    }
+    
+    // Function to load sections (with campus parameter)
+    function loadSections(classSelectElement, sectionSelectElement, campusSelectElement) {
         if (!classSelectElement || !sectionSelectElement) return;
         
-        classSelectElement.addEventListener('change', function() {
-            const classValue = this.value;
-            if (classValue) {
-                fetch(`{{ route('admission.get-sections') }}?class=${encodeURIComponent(classValue)}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        sectionSelectElement.innerHTML = '<option value="">Select Section</option>';
-                        if (data.sections && data.sections.length > 0) {
-                            data.sections.forEach(section => {
-                                const option = document.createElement('option');
-                                option.value = section.name || section;
-                                option.textContent = section.name || section;
-                                sectionSelectElement.appendChild(option);
-                            });
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error loading sections:', error);
-                    });
-            } else {
-                sectionSelectElement.innerHTML = '<option value="">Select Section</option>';
+        const loadSectionsForClass = function() {
+            const classValue = classSelectElement.value;
+            const campusValue = campusSelectElement ? campusSelectElement.value : '';
+            
+            sectionSelectElement.innerHTML = '<option value="">Select Section</option>';
+            
+            if (!classValue) {
+                return;
+            }
+            
+            const query = `class=${encodeURIComponent(classValue)}&campus=${encodeURIComponent(campusValue || '')}`;
+            fetch(`{{ route('admission.get-sections') }}?${query}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.sections && data.sections.length > 0) {
+                        data.sections.forEach(section => {
+                            const option = document.createElement('option');
+                            option.value = section.name || section;
+                            option.textContent = section.name || section;
+                            sectionSelectElement.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading sections:', error);
+                });
+        };
+        
+        // Load sections when class changes
+        classSelectElement.addEventListener('change', loadSectionsForClass);
+        
+        // Also reload sections when campus changes (if class is already selected)
+        if (campusSelectElement) {
+            campusSelectElement.addEventListener('change', function() {
+                if (classSelectElement.value) {
+                    loadSectionsForClass();
+                }
+            });
+        }
+    }
+    
+    // Campus change handlers for Manual Mode
+    const campusSelect = document.getElementById('campus');
+    if (campusSelect && classSelect) {
+        campusSelect.addEventListener('change', function() {
+            const campusValue = this.value;
+            loadClassesForCampus(campusValue, classSelect);
+            // Clear section when campus changes
+            if (sectionSelect) {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            }
+            // Clear class selection when campus changes
+            if (classSelect) {
+                classSelect.value = '';
+            }
+        });
+    }
+    
+    // Campus change handlers for CSV Mode
+    const csvCampusSelect = document.getElementById('csv_campus');
+    if (csvCampusSelect && csvClassSelect) {
+        csvCampusSelect.addEventListener('change', function() {
+            const campusValue = this.value;
+            loadClassesForCampus(campusValue, csvClassSelect);
+            // Clear section when campus changes
+            if (csvSectionSelect) {
+                csvSectionSelect.innerHTML = '<option value="">Select Section</option>';
+            }
+            // Clear class selection when campus changes
+            if (csvClassSelect) {
+                csvClassSelect.value = '';
             }
         });
     }
 
-    // Load sections for both manual and CSV modes
-    if (classSelect && sectionSelect) {
-        loadSections(classSelect, sectionSelect);
+    // Load sections for both manual and CSV modes (with campus parameter)
+    if (classSelect && sectionSelect && campusSelect) {
+        loadSections(classSelect, sectionSelect, campusSelect);
     }
-    if (csvClassSelect && csvSectionSelect) {
-        loadSections(csvClassSelect, csvSectionSelect);
+    if (csvClassSelect && csvSectionSelect && csvCampusSelect) {
+        loadSections(csvClassSelect, csvSectionSelect, csvCampusSelect);
     }
 
     // Function to generate student forms (only for manual mode)

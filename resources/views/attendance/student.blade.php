@@ -128,24 +128,39 @@
             <!-- Students Table - Only show when filters are applied -->
             @if(request('filter_class'))
             <div class="mt-3">
-                <!-- Bulk Action Buttons -->
-                <div class="mb-2 d-flex gap-2 justify-content-center">
-                    <button type="button" class="btn btn-sm text-white" style="background-color: #28a745; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Present')" title="Mark All as Present">
-                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check_circle</span>
-                        Mark All Present
-                    </button>
-                    <button type="button" class="btn btn-sm text-white" style="background-color: #dc3545; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Absent')" title="Mark All as Absent">
-                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">cancel</span>
-                        Mark All Absent
-                    </button>
-                    <button type="button" class="btn btn-sm text-white" style="background-color: #ffc107; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Holiday')" title="Mark All as Holiday">
-                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event</span>
-                        Mark All Holiday
-                    </button>
-                    <button type="button" class="btn btn-sm text-white" style="background-color: #17a2b8; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Sunday')" title="Mark All as Sunday">
-                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
-                        Mark All Sunday
-                    </button>
+                <!-- Bulk Action Buttons and Notify Section -->
+                <div class="mb-2 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <!-- Bulk Action Buttons -->
+                    <div class="d-flex gap-2 justify-content-center flex-wrap">
+                        <button type="button" class="btn btn-sm text-white" style="background-color: #28a745; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Present')" title="Mark All as Present">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check_circle</span>
+                            Mark All Present
+                        </button>
+                        <button type="button" class="btn btn-sm text-white" style="background-color: #dc3545; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Absent')" title="Mark All as Absent">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">cancel</span>
+                            Mark All Absent
+                        </button>
+                        <button type="button" class="btn btn-sm text-white" style="background-color: #ffc107; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Holiday')" title="Mark All as Holiday">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">event</span>
+                            Mark All Holiday
+                        </button>
+                        <button type="button" class="btn btn-sm text-white" style="background-color: #17a2b8; padding: 4px 12px; font-size: 12px;" onclick="markAllAttendance('Sunday')" title="Mark All as Sunday">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">calendar_today</span>
+                            Mark All Sunday
+                        </button>
+                    </div>
+                    
+                    <!-- Notify Late & Absent Students Section -->
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="material-symbols-outlined" style="font-size: 20px; color: #003471;">notifications</span>
+                            <label class="form-label mb-0 fs-14 fw-semibold" style="color: #003471;">Notify Late & Absent Students:</label>
+                        </div>
+                        <select class="form-select form-select-sm" id="notifyLateAbsent" name="notify_late_absent" style="width: 100px;">
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </div>
                 </div>
                 
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">

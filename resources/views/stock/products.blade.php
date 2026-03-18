@@ -831,19 +831,18 @@ function updateEntriesPerPage(value) {
 
 // Print table
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
+    // Get current search parameter if exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get('search');
     
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Products & Stock List</h3>
-            ${printContents}
-        </div>
-    `;
+    // Build print URL
+    let printUrl = '{{ route("stock.products.print") }}';
+    if (searchParam) {
+        printUrl += '?search=' + encodeURIComponent(searchParam);
+    }
     
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
+    // Open print page in new window
+    window.open(printUrl, '_blank');
 }
 
 // Auto-dismiss toast notifications

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Quiz;
+use App\Models\QuizQuestion;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -86,9 +88,22 @@ class ParentQuizController extends Controller
                 $requestedClass = strtolower(trim($request->get('class')));
                 $requestedSection = strtolower(trim($request->get('section')));
                 
+                // More flexible class matching: "one" should match "Class one", "one", "Class One", etc.
                 $hasStudentInClassSection = $students->contains(function($student) use ($requestedClass, $requestedSection) {
-                    return strtolower(trim($student->class)) === $requestedClass 
-                        && strtolower(trim($student->section)) === $requestedSection;
+                    $studentClass = strtolower(trim($student->class ?? ''));
+                    $studentSection = strtolower(trim($student->section ?? ''));
+                    
+                    // Exact match
+                    if ($studentClass === $requestedClass && $studentSection === $requestedSection) {
+                        return true;
+                    }
+                    
+                    // Flexible match: "one" matches "Class one" or "one" matches "Class One"
+                    $studentClassNormalized = preg_replace('/^(class\s+)?/i', '', $studentClass);
+                    $requestedClassNormalized = preg_replace('/^(class\s+)?/i', '', $requestedClass);
+                    
+                    return $studentClassNormalized === $requestedClassNormalized 
+                        && $studentSection === $requestedSection;
                 });
                 
                 if (!$hasStudentInClassSection) {
@@ -110,9 +125,28 @@ class ParentQuizController extends Controller
                     ], 200);
                 }
                 
-                // Filter quizzes for the requested class and section
-                $query->whereRaw('LOWER(TRIM(for_class)) = ?', [$requestedClass])
+                // Filter quizzes for the requested class and section (flexible matching)
+                // Match "one" with "Class one", "one", "Class One", etc.
+                $query->where(function($q) use ($requestedClass, $requestedSection) {
+                    // Exact match
+                    $q->whereRaw('LOWER(TRIM(for_class)) = ?', [$requestedClass])
                       ->whereRaw('LOWER(TRIM(section)) = ?', [$requestedSection]);
+                    
+                    // Flexible match: remove "class " prefix if present and match
+                    $classWithoutPrefix = preg_replace('/^(class\s+)?/i', '', $requestedClass);
+                    if ($classWithoutPrefix !== $requestedClass) {
+                        $q->orWhere(function($subQ) use ($classWithoutPrefix, $requestedSection) {
+                            $subQ->whereRaw('LOWER(TRIM(for_class)) = ?', [$classWithoutPrefix])
+                                 ->whereRaw('LOWER(TRIM(section)) = ?', [$requestedSection]);
+                        });
+                        // Also try with "Class " prefix
+                        $classWithPrefix = 'class ' . $classWithoutPrefix;
+                        $q->orWhere(function($subQ) use ($classWithPrefix, $requestedSection) {
+                            $subQ->whereRaw('LOWER(TRIM(for_class)) = ?', [$classWithPrefix])
+                                 ->whereRaw('LOWER(TRIM(section)) = ?', [$requestedSection]);
+                        });
+                    }
+                });
                 
                 // Apply campus filter if provided
                 if ($request->filled('campus')) {
@@ -180,6 +214,7 @@ class ParentQuizController extends Controller
                     $query->whereDate('start_date_time', '>=', $request->get('start_date'));
                 } else {
                     // If only start_date is provided, filter for that exact date
+                    // Also include quizzes that started on or before this date (for past quizzes)
                     $query->whereDate('start_date_time', '=', $request->get('start_date'));
                 }
             }
@@ -194,28 +229,66 @@ class ParentQuizController extends Controller
 
             // Order by start date time (upcoming first, then past)
             $quizzes = $query->orderBy('start_date_time', 'desc')->paginate($perPage);
+            
+            // Debug: Log query for troubleshooting (remove in production if needed)
+            // \Log::info('Parent Quiz Query', [
+            //     'sql' => $query->toSql(),
+            //     'bindings' => $query->getBindings(),
+            //     'total_quizzes' => $quizzes->total(),
+            // ]);
 
             // Format quiz data
             $quizzesData = $quizzes->map(function(Quiz $quiz) {
-                return [
+                $now = Carbon::now();
+                $startTime = $quiz->start_date_time;
+                $endTime = $startTime && $quiz->duration_minutes ? $startTime->copy()->addMinutes($quiz->duration_minutes) : null;
+                
+                $isUpcoming = $startTime ? $startTime->isFuture() : false;
+                $isExpired = $endTime ? $endTime->isPast() : false;
+                $isActive = !$isUpcoming && !$isExpired;
+                
+                $quizData = [
                     'id' => $quiz->id,
                     'campus' => $quiz->campus,
-                       'quiz_name' => $quiz->quiz_name,
+                    'quiz_name' => $quiz->quiz_name,
                     'description' => $quiz->description,
                     'for_class' => $quiz->for_class,
                     'section' => $quiz->section,
                     'total_questions' => $quiz->total_questions,
-                    'start_date_time' => $quiz->start_date_time ? $quiz->start_date_time->format('Y-m-d H:i:s') : null,
-                    'start_date' => $quiz->start_date_time ? $quiz->start_date_time->format('Y-m-d') : null,
-                    'start_time' => $quiz->start_date_time ? $quiz->start_date_time->format('H:i:s') : null,
-                    'start_date_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('d M Y') : null,
-                    'start_time_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('h:i A') : null,
-                    'start_date_time_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('d M Y h:i A') : null,
-                    'is_upcoming' => $quiz->start_date_time ? $quiz->start_date_time->isFuture() : false,
-                    'is_past' => $quiz->start_date_time ? $quiz->start_date_time->isPast() : false,
+                    'start_date_time' => $startTime ? $startTime->format('Y-m-d H:i:s') : null,
+                    'start_date' => $startTime ? $startTime->format('Y-m-d') : null,
+                    'start_time' => $startTime ? $startTime->format('H:i:s') : null,
+                    'start_date_formatted' => $startTime ? $startTime->format('d M Y') : null,
+                    'start_time_formatted' => $startTime ? $startTime->format('h:i A') : null,
+                    'start_date_time_formatted' => $startTime ? $startTime->format('d M Y h:i A') : null,
+                    'end_date_time' => $endTime ? $endTime->format('Y-m-d H:i:s') : null,
+                    'end_date_time_formatted' => $endTime ? $endTime->format('d M Y h:i A') : null,
+                    'duration_minutes' => $quiz->duration_minutes ?? null,
+                    'is_upcoming' => $isUpcoming,
+                    'is_active' => $isActive,
+                    'is_expired' => $isExpired,
+                    'is_past' => $startTime ? $startTime->isPast() : false,
                     'created_at' => $quiz->created_at ? $quiz->created_at->format('Y-m-d H:i:s') : null,
                     'updated_at' => $quiz->updated_at ? $quiz->updated_at->format('Y-m-d H:i:s') : null,
                 ];
+                
+                // Add marks if quiz is expired
+                if ($isExpired) {
+                    $questions = $quiz->questions()->orderBy('question_number')->get();
+                    $quizData['marks'] = $questions->map(function (QuizQuestion $q) {
+                        return [
+                            'question_number' => $q->question_number,
+                            'question' => $q->question,
+                            'answers' => [
+                                ['answer' => $q->answer1, 'marks' => (int) ($q->marks1 ?? 0)],
+                                ['answer' => $q->answer2, 'marks' => (int) ($q->marks2 ?? 0)],
+                                ['answer' => $q->answer3, 'marks' => (int) ($q->marks3 ?? 0)],
+                            ],
+                        ];
+                    })->values();
+                }
+                
+                return $quizData;
             });
 
             return response()->json([
@@ -303,6 +376,15 @@ class ParentQuizController extends Controller
                 ], 403);
             }
 
+            // Calculate quiz timing
+            $now = Carbon::now();
+            $startTime = $quiz->start_date_time;
+            $endTime = $startTime && $quiz->duration_minutes ? $startTime->copy()->addMinutes($quiz->duration_minutes) : null;
+            
+            $isUpcoming = $startTime ? $startTime->isFuture() : false;
+            $isExpired = $endTime ? $endTime->isPast() : false;
+            $isActive = !$isUpcoming && !$isExpired;
+            
             // Format quiz data
             $quizData = [
                 'id' => $quiz->id,
@@ -312,17 +394,38 @@ class ParentQuizController extends Controller
                 'for_class' => $quiz->for_class,
                 'section' => $quiz->section,
                 'total_questions' => $quiz->total_questions,
-                'start_date_time' => $quiz->start_date_time ? $quiz->start_date_time->format('Y-m-d H:i:s') : null,
-                'start_date' => $quiz->start_date_time ? $quiz->start_date_time->format('Y-m-d') : null,
-                'start_time' => $quiz->start_date_time ? $quiz->start_date_time->format('H:i:s') : null,
-                'start_date_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('d M Y') : null,
-                'start_time_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('h:i A') : null,
-                'start_date_time_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('d M Y h:i A') : null,
-                'is_upcoming' => $quiz->start_date_time ? $quiz->start_date_time->isFuture() : false,
-                'is_past' => $quiz->start_date_time ? $quiz->start_date_time->isPast() : false,
+                'start_date_time' => $startTime ? $startTime->format('Y-m-d H:i:s') : null,
+                'start_date' => $startTime ? $startTime->format('Y-m-d') : null,
+                'start_time' => $startTime ? $startTime->format('H:i:s') : null,
+                'start_date_formatted' => $startTime ? $startTime->format('d M Y') : null,
+                'start_time_formatted' => $startTime ? $startTime->format('h:i A') : null,
+                'start_date_time_formatted' => $startTime ? $startTime->format('d M Y h:i A') : null,
+                'end_date_time' => $endTime ? $endTime->format('Y-m-d H:i:s') : null,
+                'end_date_time_formatted' => $endTime ? $endTime->format('d M Y h:i A') : null,
+                'duration_minutes' => $quiz->duration_minutes ?? null,
+                'is_upcoming' => $isUpcoming,
+                'is_active' => $isActive,
+                'is_expired' => $isExpired,
+                'is_past' => $startTime ? $startTime->isPast() : false,
                 'created_at' => $quiz->created_at ? $quiz->created_at->format('Y-m-d H:i:s') : null,
                 'updated_at' => $quiz->updated_at ? $quiz->updated_at->format('Y-m-d H:i:s') : null,
             ];
+            
+            // Add marks if quiz is expired
+            if ($isExpired) {
+                $questions = $quiz->questions()->orderBy('question_number')->get();
+                $quizData['marks'] = $questions->map(function (QuizQuestion $q) {
+                    return [
+                        'question_number' => $q->question_number,
+                        'question' => $q->question,
+                        'answers' => [
+                            ['answer' => $q->answer1, 'marks' => (int) ($q->marks1 ?? 0)],
+                            ['answer' => $q->answer2, 'marks' => (int) ($q->marks2 ?? 0)],
+                            ['answer' => $q->answer3, 'marks' => (int) ($q->marks3 ?? 0)],
+                        ],
+                    ];
+                })->values();
+            }
 
             return response()->json([
                 'success' => true,
@@ -427,7 +530,15 @@ class ParentQuizController extends Controller
 
             // Format quiz data
             $quizzesData = $quizzes->map(function(Quiz $quiz) {
-                return [
+                $now = Carbon::now();
+                $startTime = $quiz->start_date_time;
+                $endTime = $startTime && $quiz->duration_minutes ? $startTime->copy()->addMinutes($quiz->duration_minutes) : null;
+                
+                $isUpcoming = $startTime ? $startTime->isFuture() : false;
+                $isExpired = $endTime ? $endTime->isPast() : false;
+                $isActive = !$isUpcoming && !$isExpired;
+                
+                $quizData = [
                     'id' => $quiz->id,
                     'campus' => $quiz->campus,
                     'quiz_name' => $quiz->quiz_name,
@@ -435,17 +546,40 @@ class ParentQuizController extends Controller
                     'for_class' => $quiz->for_class,
                     'section' => $quiz->section,
                     'total_questions' => $quiz->total_questions,
-                    'start_date_time' => $quiz->start_date_time ? $quiz->start_date_time->format('Y-m-d H:i:s') : null,
-                    'start_date' => $quiz->start_date_time ? $quiz->start_date_time->format('Y-m-d') : null,
-                    'start_time' => $quiz->start_date_time ? $quiz->start_date_time->format('H:i:s') : null,
-                    'start_date_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('d M Y') : null,
-                    'start_time_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('h:i A') : null,
-                    'start_date_time_formatted' => $quiz->start_date_time ? $quiz->start_date_time->format('d M Y h:i A') : null,
-                    'is_upcoming' => $quiz->start_date_time ? $quiz->start_date_time->isFuture() : false,
-                    'is_past' => $quiz->start_date_time ? $quiz->start_date_time->isPast() : false,
+                    'start_date_time' => $startTime ? $startTime->format('Y-m-d H:i:s') : null,
+                    'start_date' => $startTime ? $startTime->format('Y-m-d') : null,
+                    'start_time' => $startTime ? $startTime->format('H:i:s') : null,
+                    'start_date_formatted' => $startTime ? $startTime->format('d M Y') : null,
+                    'start_time_formatted' => $startTime ? $startTime->format('h:i A') : null,
+                    'start_date_time_formatted' => $startTime ? $startTime->format('d M Y h:i A') : null,
+                    'end_date_time' => $endTime ? $endTime->format('Y-m-d H:i:s') : null,
+                    'end_date_time_formatted' => $endTime ? $endTime->format('d M Y h:i A') : null,
+                    'duration_minutes' => $quiz->duration_minutes ?? null,
+                    'is_upcoming' => $isUpcoming,
+                    'is_active' => $isActive,
+                    'is_expired' => $isExpired,
+                    'is_past' => $startTime ? $startTime->isPast() : false,
                     'created_at' => $quiz->created_at ? $quiz->created_at->format('Y-m-d H:i:s') : null,
                     'updated_at' => $quiz->updated_at ? $quiz->updated_at->format('Y-m-d H:i:s') : null,
                 ];
+                
+                // Add marks if quiz is expired
+                if ($isExpired) {
+                    $questions = $quiz->questions()->orderBy('question_number')->get();
+                    $quizData['marks'] = $questions->map(function (QuizQuestion $q) {
+                        return [
+                            'question_number' => $q->question_number,
+                            'question' => $q->question,
+                            'answers' => [
+                                ['answer' => $q->answer1, 'marks' => (int) ($q->marks1 ?? 0)],
+                                ['answer' => $q->answer2, 'marks' => (int) ($q->marks2 ?? 0)],
+                                ['answer' => $q->answer3, 'marks' => (int) ($q->marks3 ?? 0)],
+                            ],
+                        ];
+                    })->values();
+                }
+                
+                return $quizData;
             });
 
             return response()->json([

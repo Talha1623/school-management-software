@@ -227,7 +227,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Fetch fee types for the selected campus
         fetch(`{{ route('accounting.custom-fee.get-fee-types-by-campus') }}?campus=${encodeURIComponent(campus)}`)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.fee_types && data.fee_types.length > 0) {
                     data.fee_types.forEach(feeType => {
@@ -403,7 +408,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
             

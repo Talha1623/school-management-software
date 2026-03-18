@@ -22,25 +22,63 @@ class ManagementExpenseController extends Controller
     {
         $query = ManagementExpense::query();
         
-        // Search functionality
-        if ($request->filled('search')) {
-            $search = trim($request->search);
-            if (!empty($search)) {
-                $searchLower = strtolower($search);
-                $query->where(function($q) use ($search, $searchLower) {
-                    $q->whereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
-                      ->orWhereRaw('LOWER(category) LIKE ?', ["%{$searchLower}%"])
-                      ->orWhereRaw('LOWER(title) LIKE ?', ["%{$searchLower}%"])
-                      ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                      ->orWhereRaw('LOWER(method) LIKE ?', ["%{$searchLower}%"]);
-                });
-            }
+        $hasFilters = false;
+        
+        // Filter by Campus
+        if ($request->filled('filter_campus')) {
+            $campus = trim($request->filter_campus);
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            $hasFilters = true;
         }
         
-        $perPage = $request->get('per_page', 10);
-        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
+        // Filter by Category
+        if ($request->filled('filter_category')) {
+            $category = trim($request->filter_category);
+            $query->whereRaw('LOWER(TRIM(category)) = ?', [strtolower($category)]);
+            $hasFilters = true;
+        }
         
-        $expenses = $query->orderBy('date', 'desc')->paginate($perPage)->withQueryString();
+        // Filter by Month
+        if ($request->filled('filter_month')) {
+            $month = $request->filter_month;
+            $query->whereYear('date', substr($month, 0, 4))
+                  ->whereMonth('date', substr($month, 5, 2));
+            $hasFilters = true;
+        }
+        
+        // If no filters applied, return empty collection
+        if (!$hasFilters) {
+            $expenses = new \Illuminate\Pagination\LengthAwarePaginator(
+                collect([]),
+                0,
+                $request->get('per_page', 10),
+                $request->get('page', 1)
+            );
+            $expenses->withQueryString();
+        } else {
+            // Search functionality (only if filters are applied)
+            if ($request->filled('search')) {
+                $search = trim($request->search);
+                if (!empty($search)) {
+                    $searchLower = strtolower($search);
+                    $query->where(function($q) use ($search, $searchLower) {
+                        $q->whereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                          ->orWhereRaw('LOWER(category) LIKE ?', ["%{$searchLower}%"])
+                          ->orWhereRaw('LOWER(title) LIKE ?', ["%{$searchLower}%"])
+                          ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
+                          ->orWhereRaw('LOWER(method) LIKE ?', ["%{$searchLower}%"]);
+                    });
+                }
+            }
+            
+            $perPage = $request->get('per_page', 10);
+            $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
+            
+            // Order by date (desc) and category
+            $expenses = $query->orderBy('date', 'desc')
+                              ->orderBy('category', 'asc')
+                              ->paginate($perPage)->withQueryString();
+        }
         
         // Get campuses from Campus model
         $campuses = Campus::orderBy('campus_name', 'asc')->get();

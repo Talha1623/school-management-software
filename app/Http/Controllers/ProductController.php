@@ -7,6 +7,7 @@ use App\Models\StockCategory;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -266,10 +267,38 @@ class ProductController extends Controller
      */
     private function exportPDF($products)
     {
-        $html = view('stock.products-pdf', compact('products'))->render();
+        $settings = GeneralSetting::getSettings();
+        $html = view('stock.products-pdf', compact('products', 'settings'))->render();
         
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Print products list
+     */
+    public function print(Request $request): View
+    {
+        $query = Product::query();
+        
+        // Apply search filter if present
+        if ($request->has('search') && $request->search) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(product_name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(product_code) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(category) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+        
+        $products = $query->orderBy('product_name')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('stock.products-print', compact('products', 'settings'));
     }
 }
 

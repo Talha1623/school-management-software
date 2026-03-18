@@ -29,6 +29,19 @@
                 <!-- Left Side -->
                 <div class="d-flex align-items-center gap-3 flex-wrap">
                     <div class="d-flex align-items-center gap-2">
+                        <label for="campusFilter" class="mb-0 fs-13 fw-medium text-dark">Campus:</label>
+                        <select id="campusFilter" class="form-select form-select-sm" style="width: auto; min-width: 150px;" onchange="filterByCampus(this.value)">
+                            <option value="">All Campuses</option>
+                            @if(isset($campuses) && $campuses->count() > 0)
+                                @foreach($campuses as $campus)
+                                    <option value="{{ $campus->campus_name ?? $campus }}" {{ request('campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                        {{ $campus->campus_name ?? $campus }}
+                                    </option>
+                                @endforeach
+                            @endif
+                        </select>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
                         <label for="entriesPerPage" class="mb-0 fs-13 fw-medium text-dark">Show:</label>
                         <select id="entriesPerPage" class="form-select form-select-sm" style="width: auto; min-width: 70px;" onchange="updateEntriesPerPage(this.value)">
                             <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
@@ -43,11 +56,20 @@
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <!-- Export Buttons -->
                     <div class="d-flex gap-2">
-                        <a href="{{ route('salary-loan.manage-salaries.export', ['format' => 'excel']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                        @php
+                            $exportParams = '';
+                            if (request('campus')) {
+                                $exportParams .= (strpos($exportParams, '?') === false ? '?' : '&') . 'campus=' . urlencode(request('campus'));
+                            }
+                            if (request('search')) {
+                                $exportParams .= (strpos($exportParams, '?') === false ? '?' : '&') . 'search=' . urlencode(request('search'));
+                            }
+                        @endphp
+                        <a href="{{ route('salary-loan.manage-salaries.export', ['format' => 'excel']) }}{{ $exportParams }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
                             <span>Excel</span>
                         </a>
-                        <a href="{{ route('salary-loan.manage-salaries.export', ['format' => 'pdf']) }}{{ request()->has('search') ? '?search=' . request('search') : '' }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                        <a href="{{ route('salary-loan.manage-salaries.export', ['format' => 'pdf']) }}{{ $exportParams }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
                             <span>PDF</span>
                         </a>
@@ -86,12 +108,22 @@
                 </h5>
             </div>
 
-            <!-- Search Results Info -->
-            @if(request('search'))
+            <!-- Filter Results Info -->
+            @if(request('search') || request('campus'))
                 <div class="search-results-info">
-                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">search</span>
-                    <strong>Search Results:</strong> Showing results for "<strong>{{ request('search') }}</strong>"
+                    @if(request('search'))
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">search</span>
+                        <strong>Search:</strong> "<strong>{{ request('search') }}</strong>"
+                    @endif
+                    @if(request('campus'))
+                        @if(request('search'))
+                            <span class="mx-2">|</span>
+                        @endif
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">location_on</span>
+                        <strong>Campus:</strong> "<strong>{{ request('campus') }}</strong>"
+                    @endif
                     @if(isset($salaries))
+                        <span class="mx-2">|</span>
                         ({{ $salaries->total() }} {{ Str::plural('result', $salaries->total()) }} found)
                     @endif
                     <a href="{{ route('salary-loan.manage-salaries') }}" class="text-decoration-none ms-2" style="color: #003471;">
@@ -160,6 +192,26 @@
                                                     {{ $salary->staff->salary_type ?? 'full time' }}
                                                 </span>
                                             </div>
+                                            @php
+                                                $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
+                                                $isPerHour = $salaryType === 'per hour';
+                                            @endphp
+                                            @if($isPerHour && isset($salary->total_hours))
+                                                @php
+                                                    $totalHours = $salary->total_hours ?? 0;
+                                                @endphp
+                                                <div style="margin-top: 4px; font-size: 11px; color: #003471; line-height: 1.6;">
+                                                    <div><strong>Hours:</strong> {{ number_format($totalHours, 2) }} hrs</div>
+                                                    <div><strong>Classes:</strong> {{ $salary->total_classes ?? 0 }}</div>
+                                                    <div style="margin-top: 3px; padding: 4px 6px; background-color: #e8f5e9; border-radius: 4px; border-left: 3px solid #28a745;">
+                                                        <strong style="color: #28a745; font-size: 10px;">
+                                                            {{ number_format($salary->basic, 2) }} × {{ number_format($totalHours, 2) }}
+                                                            <br>
+                                                            = {{ number_format($salary->salary_generated, 2) }}
+                                                        </strong>
+                                                    </div>
+                                                </div>
+                                            @endif
                                         </td>
                                         <td>
                                             <strong class="text-success">{{ number_format($salary->salary_generated, 2) }}</strong>
@@ -172,22 +224,29 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Make Payment" onclick="openPaymentModal({{ $salary->id }})">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">payments</span>
-                                                </button>
-                                                @if($salary->status == 'Paid' && $salary->amount_paid > 0)
-                                                    <button type="button" class="btn btn-sm px-2 py-0 btn-success" title="Print Receipt" onclick="printPaymentReceipt({{ $salary->id }})">
-                                                        <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; cursor: pointer;">Paid</span>
+                                                @if($salary->status != 'Paid')
+                                                    <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit Salary" onclick="openEditModal({{ $salary->id }})">
+                                                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                     </button>
-                                                @else
+                                                    <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Make Payment" onclick="openPaymentModal({{ $salary->id }})">
+                                                        <span class="material-symbols-outlined" style="font-size: 14px; color: white;">payments</span>
+                                                    </button>
+                                                @endif
+                                                @if($salary->status == 'Pending')
                                                     <form action="{{ route('salary-loan.manage-salaries.status', $salary->id) }}" method="POST" class="d-inline">
                                                         @csrf
                                                         @method('PUT')
                                                         <input type="hidden" name="status" value="Paid">
                                                         <button type="submit" class="btn btn-sm px-2 py-0 btn-warning" title="Click to mark as Paid">
-                                                            <span class="badge bg-warning text-dark" style="font-size: 11px; padding: 4px 8px;">Pending</span>
+                                                            <span class="badge bg-warning text-dark" style="font-size: 11px; padding: 4px 8px; cursor: pointer;">Pending</span>
                                                         </button>
                                                     </form>
+                                                @elseif($salary->status == 'Paid')
+                                                    <button type="button" class="btn btn-sm px-2 py-0 btn-success" title="Print Receipt" onclick="printPaymentReceipt({{ $salary->id }})">
+                                                        <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; cursor: pointer;">Paid</span>
+                                                    </button>
+                                                @else
+                                                    <span class="badge bg-info text-white" style="font-size: 11px; padding: 4px 8px;">Issued</span>
                                                 @endif
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-0" title="Delete" onclick="if(confirm('Are you sure you want to delete this salary record?')) { document.getElementById('delete-form-{{ $salary->id }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
@@ -225,6 +284,90 @@
                     {{ $salaries->links() }}
                 </div>
             @endif
+        </div>
+    </div>
+</div>
+
+<!-- Edit Salary Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border-radius: 12px 12px 0 0; border: none; padding: 20px;">
+                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="editModalLabel" style="color: white !important;">
+                    <span class="material-symbols-outlined" style="font-size: 20px; color: white !important;">edit</span>
+                    <span style="color: white !important;">Edit Salary</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editForm" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="modal-body p-4" style="background-color: #f8f9fa;">
+                    <div class="row g-3">
+                        <!-- Employee Name (Readonly) -->
+                        <div class="col-md-12">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Employee</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">person</span>
+                                </span>
+                                <input type="text" class="form-control" id="edit_employee" name="employee" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
+                            </div>
+                        </div>
+
+                        <!-- Present Days -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Present Days <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
+                                </span>
+                                <input type="number" class="form-control" id="edit_present" name="present" step="1" min="0" required style="height: 38px;" oninput="calculateEditSalary()">
+                            </div>
+                        </div>
+
+                        <!-- Absent Days -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Absent Days <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">cancel</span>
+                                </span>
+                                <input type="number" class="form-control" id="edit_absent" name="absent" step="1" min="0" required style="height: 38px;" oninput="calculateEditSalary()">
+                            </div>
+                        </div>
+
+                        <!-- Late Days -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Late Days <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">schedule</span>
+                                </span>
+                                <input type="number" class="form-control" id="edit_late" name="late" step="1" min="0" required style="height: 38px;" oninput="calculateEditSalary()">
+                            </div>
+                        </div>
+
+                        <!-- Generated Salary -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Generated Salary <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
+                                </span>
+                                <input type="number" class="form-control" id="edit_salary_generated" name="salary_generated" step="0.01" min="0" required style="height: 38px;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; border-radius: 0 0 12px 12px; padding: 15px 20px;">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" style="border-radius: 6px;">Cancel</button>
+                    <button type="submit" class="btn btn-sm" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white; border: none; border-radius: 6px; padding: 6px 20px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
+                        Update Salary
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -715,6 +858,21 @@
 </style>
 
 <script>
+// Filter by Campus
+function filterByCampus(campus) {
+    const url = new URL(window.location.href);
+    
+    if (campus) {
+        url.searchParams.set('campus', campus);
+    } else {
+        url.searchParams.delete('campus');
+    }
+    
+    url.searchParams.set('page', '1');
+    
+    window.location.href = url.toString();
+}
+
 // Search functionality
 function performSearch() {
     const searchInput = document.getElementById('searchInput');
@@ -754,6 +912,7 @@ function clearSearch() {
     const url = new URL(window.location.href);
     url.searchParams.delete('search');
     url.searchParams.set('page', '1');
+    // Keep campus filter when clearing search
     
     const searchInput = document.getElementById('searchInput');
     searchInput.disabled = true;
@@ -897,10 +1056,127 @@ function openPaymentModal(salaryId) {
     });
 }
 
+// Open Edit Modal
+function openEditModal(salaryId) {
+    // Fetch salary data
+    fetch(`{{ url('/salary-loan/manage-salaries') }}/${salaryId}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Set form action
+        document.getElementById('editForm').action = `{{ url('/salary-loan/manage-salaries') }}/${salaryId}`;
+        
+        // Populate form fields
+        document.getElementById('edit_employee').value = data.staff?.name || 'N/A';
+        document.getElementById('edit_present').value = data.present || 0;
+        document.getElementById('edit_absent').value = data.absent || 0;
+        document.getElementById('edit_late').value = data.late || 0;
+        document.getElementById('edit_salary_generated').value = parseFloat(data.salary_generated || 0).toFixed(2);
+        
+        // Store original values for calculation
+        const editModal = document.getElementById('editModal');
+        editModal.setAttribute('data-basic', data.basic || 0);
+        editModal.setAttribute('data-salary-type', data.staff?.salary_type || 'full time');
+        editModal.setAttribute('data-late-fees', data.staff?.late_fees || 500);
+        editModal.setAttribute('data-absent-fees', data.staff?.absent_fees || null);
+        editModal.setAttribute('data-free-absent', data.staff?.free_absent || 0);
+        editModal.setAttribute('data-year', data.year || new Date().getFullYear());
+        editModal.setAttribute('data-month', data.salary_month || '');
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('editModal'));
+        modal.show();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading salary data');
+    });
+}
+
+// Calculate Generated Salary when editing Present/Absent/Late days
+function calculateEditSalary() {
+    const editModal = document.getElementById('editModal');
+    const basic = parseFloat(editModal.getAttribute('data-basic') || 0);
+    const salaryType = (editModal.getAttribute('data-salary-type') || 'full time').toLowerCase();
+    const present = parseInt(document.getElementById('edit_present').value || 0);
+    const absent = parseInt(document.getElementById('edit_absent').value || 0);
+    const late = parseInt(document.getElementById('edit_late').value || 0);
+    const lateFeesPerLate = parseFloat(editModal.getAttribute('data-late-fees') || 500);
+    const absentFeesPerAbsent = editModal.getAttribute('data-absent-fees');
+    const freeAbsent = parseInt(editModal.getAttribute('data-free-absent') || 0);
+    const year = parseInt(editModal.getAttribute('data-year') || new Date().getFullYear());
+    const monthName = editModal.getAttribute('data-month') || '';
+    
+    let calculatedSalary = 0;
+    
+    // Get month number
+    const monthNames = {
+        'January': 1, 'February': 2, 'March': 3, 'April': 4,
+        'May': 5, 'June': 6, 'July': 7, 'August': 8,
+        'September': 9, 'October': 10, 'November': 11, 'December': 12
+    };
+    const month = monthNames[monthName] || new Date().getMonth() + 1;
+    
+    if (salaryType === 'per hour') {
+        // For per hour: present_days * basic
+        calculatedSalary = present * basic;
+    } else if (salaryType === 'lecture') {
+        // For lecture type, salary is based on lectures, not days
+        // Keep the current salary_generated as is for lecture type
+        calculatedSalary = parseFloat(document.getElementById('edit_salary_generated').value || 0);
+    } else {
+        // For full time: basic - (absent deductions) - (late deductions)
+        // Calculate deductible absents
+        const deductibleAbsents = Math.max(0, absent - freeAbsent);
+        
+        // Calculate days in month
+        let daysInMonth = 30;
+        try {
+            const date = new Date(year, month - 1, 1);
+            daysInMonth = new Date(year, month, 0).getDate();
+        } catch (e) {
+            daysInMonth = 30;
+        }
+        
+        const dailyRate = daysInMonth > 0 ? (basic / daysInMonth) : 0;
+        
+        // Late deduction
+        const lateDeduction = lateFeesPerLate * late;
+        
+        // Absent deduction
+        let absentDeduction = 0;
+        if (absentFeesPerAbsent !== null && absentFeesPerAbsent !== 'null') {
+            absentDeduction = parseFloat(absentFeesPerAbsent) * deductibleAbsents;
+        } else {
+            absentDeduction = dailyRate * deductibleAbsents;
+        }
+        
+        calculatedSalary = Math.max(0, basic - absentDeduction - lateDeduction);
+    }
+    
+    // Update the generated salary field
+    document.getElementById('edit_salary_generated').value = calculatedSalary.toFixed(2);
+}
+
 // Print Payment Receipt
 function printPaymentReceipt(salaryId) {
     // Open print receipt in new window
     window.open(`{{ url('/salary-loan/manage-salaries') }}/${salaryId}/print-receipt`, '_blank');
 }
+
+// Auto-open thermal receipt print window if payment was made and status became Paid
+@if(session('print_receipt_id'))
+    window.onload = function() {
+        setTimeout(function() {
+            const receiptId = {{ session('print_receipt_id') }};
+            const printUrl = '{{ url("/salary-loan/manage-salaries") }}/' + receiptId + '/print-receipt-thermal';
+            window.open(printUrl, '_blank');
+        }, 500);
+    };
+@endif
 </script>
 @endsection

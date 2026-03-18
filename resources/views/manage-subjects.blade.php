@@ -1115,19 +1115,24 @@ function clearSearch() {
 
 // Print table
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
+    // Get current filter/search parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const filterParams = {};
     
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Subjects List</h3>
-            ${printContents}
-        </div>
-    `;
+    if (urlParams.get('filter_campus')) filterParams.filter_campus = urlParams.get('filter_campus');
+    if (urlParams.get('filter_class')) filterParams.filter_class = urlParams.get('filter_class');
+    if (urlParams.get('filter_section')) filterParams.filter_section = urlParams.get('filter_section');
+    if (urlParams.get('search')) filterParams.search = urlParams.get('search');
     
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
+    // Build print URL
+    let printUrl = '{{ route("manage-subjects.print") }}';
+    const queryString = new URLSearchParams(filterParams).toString();
+    if (queryString) {
+        printUrl += '?' + queryString;
+    }
+    
+    // Open print page in new window
+    window.open(printUrl, '_blank');
 }
 </script>
 @endsection

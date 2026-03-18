@@ -27,8 +27,6 @@ class SalarySettingController extends Controller
         $validated = $request->validate([
             'late_arrival_time' => ['required', 'string'],
             'early_exit_time' => ['nullable', 'string'],
-            'free_absents' => ['required', 'integer', 'min:0'],
-            'leave_deduction' => ['required', 'in:Yes,No'],
         ]);
 
         // Convert time format from "08:00 AM" to "08:00:00"

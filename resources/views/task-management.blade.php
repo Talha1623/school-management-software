@@ -214,8 +214,8 @@
                                             <span class="text-muted">N/A</span>
                                         @endif
                                     </td>
-                                    <td style="padding: 12px 15px; font-size: 14px;">
-                                        <div class="dropdown">
+                                    <td style="padding: 12px 15px; font-size: 14px; position: relative;">
+                                        <div class="dropdown dropup" style="position: relative;">
                                             @php
                                                 $status = $task->status ?? 'Pending';
                                                 $statusColors = [
@@ -226,11 +226,11 @@
                                                 ];
                                                 $statusClass = $statusColors[$status] ?? 'status-pending';
                                             @endphp
-                                            <button class="status-btn {{ $statusClass }}" type="button" id="statusDropdown{{ $task->id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <button class="status-btn {{ $statusClass }}" type="button" id="statusDropdown{{ $task->id }}" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-popper="static" data-bs-offset="0,5" aria-expanded="false">
                                                 <span class="status-text">{{ $status }}</span>
-                                                <span class="material-symbols-outlined status-icon">arrow_drop_down</span>
+                                                <span class="material-symbols-outlined status-icon">arrow_drop_up</span>
                                             </button>
-                                            <ul class="dropdown-menu status-dropdown-menu" aria-labelledby="statusDropdown{{ $task->id }}">
+                                            <ul class="dropdown-menu dropdown-menu-end status-dropdown-menu" aria-labelledby="statusDropdown{{ $task->id }}">
                                                 <li><a class="dropdown-item status-option" href="#" onclick="updateTaskStatus({{ $task->id }}, 'Pending'); return false;">
                                                     <span class="status-indicator status-pending-indicator"></span>
                                                     <span>Pending</span>
@@ -247,6 +247,19 @@
                                                     <span class="status-indicator status-completed-indicator"></span>
                                                     <span>Mark as Complete</span>
                                                 </a></li>
+                                                @if(!isset($isStaffTeacher) || !$isStaffTeacher)
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li>
+                                                    <form action="{{ route('task-management.destroy', $task) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this task?');">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="dropdown-item status-option text-danger" style="border: none; background: none; width: 100%; text-align: left; padding: 6px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11px;">
+                                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: #dc3545;">delete</span>
+                                                            <span>Delete Task</span>
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                @endif
                                             </ul>
                                         </div>
                                     </td>
@@ -772,23 +785,49 @@
         color: #fff;
     }
 
-    /* Dropdown Menu Styling */
+    /* Dropdown Menu Styling - opens upward (dropup) so it doesn't go below */
     .status-dropdown-menu {
-        min-width: 160px;
-        padding: 4px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        min-width: 140px;
+        max-width: 160px;
+        padding: 2px;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         border: 1px solid #e9ecef;
+        z-index: 9999 !important;
+        position: absolute !important;
+        bottom: 100% !important;
+        top: auto !important;
+        right: 0 !important;
+        left: auto !important;
+        margin-bottom: 5px !important;
+        transform: none !important;
+    }
+    
+    /* Ensure dropdown container doesn't clip */
+    .table-responsive {
+        overflow: visible !important;
+    }
+    
+    table {
+        overflow: visible !important;
+    }
+    
+    td {
+        overflow: visible !important;
     }
 
     .status-option {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        font-size: 12px;
-        border-radius: 6px;
+        gap: 6px;
+        padding: 6px 10px;
+        font-size: 11px;
+        border-radius: 4px;
         transition: all 0.2s ease;
+        margin: 1px 0;
+    }
+    
+    .status-dropdown-menu .dropdown-divider {
         margin: 2px 0;
     }
 
@@ -798,8 +837,8 @@
     }
 
     .status-indicator {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
         display: inline-block;
         flex-shrink: 0;
@@ -959,7 +998,7 @@ function updateTaskStatus(taskId, status) {
             // Add new status class
             button.classList.add(statusClasses[data.status]);
             // Update text
-            button.innerHTML = `<span class="status-text">${data.status}</span><span class="material-symbols-outlined status-icon">arrow_drop_down</span>`;
+            button.innerHTML = `<span class="status-text">${data.status}</span><span class="material-symbols-outlined status-icon">arrow_drop_up</span>`;
             button.disabled = false;
             
             // Close dropdown
@@ -996,6 +1035,44 @@ document.addEventListener('DOMContentLoaded', function() {
         sidebarArea.classList.remove('sidebar-hide');
         sidebarArea.classList.add('sidebar-show');
     }
+    
+    // Ensure dropdown appears right next to button
+    const dropdownElements = document.querySelectorAll('.status-btn[data-bs-toggle="dropdown"]');
+    dropdownElements.forEach(function(dropdown) {
+        dropdown.addEventListener('show.bs.dropdown', function(e) {
+            const dropdownMenu = this.nextElementSibling;
+            if (dropdownMenu && dropdownMenu.classList.contains('status-dropdown-menu')) {
+                // Reset any previous positioning
+                dropdownMenu.style.position = '';
+                dropdownMenu.style.top = '';
+                dropdownMenu.style.bottom = '';
+                dropdownMenu.style.left = '';
+                dropdownMenu.style.right = '';
+                dropdownMenu.style.transform = '';
+                dropdownMenu.style.marginBottom = '';
+                
+                // Let Bootstrap handle positioning naturally, but ensure it's above
+                setTimeout(function() {
+                    // Force it to appear above (dropup behavior)
+                    const rect = dropdown.getBoundingClientRect();
+                    const menuRect = dropdownMenu.getBoundingClientRect();
+                    
+                    // If menu is below button, move it above
+                    if (menuRect.top > rect.top) {
+                        dropdownMenu.style.position = 'absolute';
+                        dropdownMenu.style.bottom = '100%';
+                        dropdownMenu.style.top = 'auto';
+                        dropdownMenu.style.right = '0';
+                        dropdownMenu.style.left = 'auto';
+                        dropdownMenu.style.marginBottom = '5px';
+                        dropdownMenu.style.transform = 'none';
+                    }
+                    
+                    dropdownMenu.style.zIndex = '9999';
+                }, 10);
+            }
+        });
+    });
     
     // Prevent auto-close on window resize
     window.addEventListener('resize', function() {

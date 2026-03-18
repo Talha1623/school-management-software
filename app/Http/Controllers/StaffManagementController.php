@@ -272,7 +272,24 @@ class StaffManagementController extends Controller
     {
         // If request wants JSON (for edit modal), return JSON
         if ($request->wantsJson() || $request->ajax()) {
-            return response()->json($staff);
+            // Format dates properly for the edit form
+            $staffData = $staff->toArray();
+            
+            // Format birthday date (YYYY-MM-DD format for date input)
+            if ($staff->birthday) {
+                $staffData['birthday'] = $staff->birthday->format('Y-m-d');
+            } else {
+                $staffData['birthday'] = null;
+            }
+            
+            // Format joining_date (YYYY-MM-DD format for date input)
+            if ($staff->joining_date) {
+                $staffData['joining_date'] = $staff->joining_date->format('Y-m-d');
+            } else {
+                $staffData['joining_date'] = null;
+            }
+            
+            return response()->json($staffData);
         }
         
         // Otherwise return view

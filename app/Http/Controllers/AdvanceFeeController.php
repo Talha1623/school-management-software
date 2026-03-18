@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Models\ParentAccount;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class AdvanceFeeController extends Controller
@@ -16,10 +17,12 @@ class AdvanceFeeController extends Controller
      */
     public function index(Request $request): View
     {
-        // Ensure every parent account has an advance fee record
+        // Ensure all existing parent accounts have AdvanceFee records
+        // This syncs Parent Accounts List with Manage Advance Fee
         $parents = ParentAccount::select('id', 'name', 'email', 'phone', 'id_card_number')->get();
         foreach ($parents as $parent) {
-            AdvanceFee::firstOrCreate(
+            // Use firstOrCreate to avoid duplicates, but also update if parent info changed
+            $advanceFee = AdvanceFee::firstOrCreate(
                 ['parent_id' => (string) $parent->id],
                 [
                     'name' => $parent->name,
@@ -32,9 +35,69 @@ class AdvanceFeeController extends Controller
                     'childs' => 0,
                 ]
             );
+            
+            // Update parent info if it changed (but preserve available_credit, increase, decrease)
+            if ($advanceFee->name !== $parent->name || 
+                $advanceFee->email !== $parent->email || 
+                $advanceFee->phone !== $parent->phone || 
+                $advanceFee->id_card_number !== $parent->id_card_number) {
+                $advanceFee->update([
+                    'name' => $parent->name,
+                    'email' => $parent->email,
+                    'phone' => $parent->phone,
+                    'id_card_number' => $parent->id_card_number,
+                ]);
+            }
         }
-
+        
+        // Query only non-deleted records (exclude soft-deleted if column exists)
         $query = AdvanceFee::query();
+        if (Schema::hasColumn('advance_fees', 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        
+        // Get all existing parent IDs for filtering
+        $existingParentIds = ParentAccount::pluck('id')->map(function($id) {
+            return (string) $id;
+        })->toArray();
+        
+        // Get unique parent_ids (to avoid duplicates)
+        // For each parent_id, get only the latest record
+        $uniqueParentIdsQuery = AdvanceFee::whereNotNull('parent_id')
+            ->where('parent_id', '!=', '')
+            ->whereIn('parent_id', $existingParentIds);
+        
+        if (Schema::hasColumn('advance_fees', 'deleted_at')) {
+            $uniqueParentIdsQuery->whereNull('deleted_at');
+        }
+        
+        $uniqueParentIds = $uniqueParentIdsQuery
+            ->select('parent_id', \DB::raw('MAX(id) as max_id'))
+            ->groupBy('parent_id')
+            ->pluck('max_id')
+            ->toArray();
+        
+        // Show advance fee records that are:
+        // 1. Latest record for each parent_id (from Parent Accounts List), OR
+        // 2. Have students with matching id_card_number (from bulk upload) and no parent_id
+        $query->where(function($q) use ($uniqueParentIds, $existingParentIds) {
+            // Latest record for each parent_id
+            $q->whereIn('id', $uniqueParentIds)
+              // OR id_card_number has at least one existing student (from bulk upload) and no parent_id
+              ->orWhere(function($subQ) use ($existingParentIds) {
+                  $subQ->where(function($cardQ) {
+                      $cardQ->whereNull('parent_id')
+                            ->orWhere('parent_id', '=', '');
+                  })
+                  ->whereExists(function($studentQuery) {
+                      $studentQuery->select(\DB::raw(1))
+                          ->from('students')
+                          ->whereColumn('students.father_id_card', 'advance_fees.id_card_number')
+                          ->whereNotNull('advance_fees.id_card_number')
+                          ->where('advance_fees.id_card_number', '!=', '');
+                  });
+              });
+        });
         
         // Search functionality
         if ($request->filled('search')) {
@@ -55,6 +118,29 @@ class AdvanceFeeController extends Controller
         $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
         
         $advanceFees = $query->orderBy('name')->paginate($perPage)->withQueryString();
+        
+        // Calculate children count dynamically for each advance fee
+        foreach ($advanceFees as $advanceFee) {
+            $childrenCount = 0;
+            
+            // Count children by parent_id (only if parent exists)
+            if (!empty($advanceFee->parent_id) && in_array($advanceFee->parent_id, $existingParentIds)) {
+                $childrenCount += Student::where('parent_account_id', $advanceFee->parent_id)->count();
+            }
+            
+            // Count children by id_card_number (avoid double counting)
+            if (!empty($advanceFee->id_card_number)) {
+                $childrenByCard = Student::where('father_id_card', $advanceFee->id_card_number);
+                if (!empty($advanceFee->parent_id) && in_array($advanceFee->parent_id, $existingParentIds)) {
+                    // Exclude students already counted by parent_id
+                    $childrenByCard->where('parent_account_id', '!=', $advanceFee->parent_id);
+                }
+                $childrenCount += $childrenByCard->count();
+            }
+            
+            // Set children count dynamically
+            $advanceFee->childs = $childrenCount;
+        }
         
         return view('accounting.manage-advance-fee', compact('advanceFees'));
     }
@@ -185,7 +271,31 @@ class AdvanceFeeController extends Controller
      */
     public function export(Request $request, string $format)
     {
+        // Query only non-deleted records for export
         $query = AdvanceFee::query();
+        
+        // Get all existing parent IDs for filtering
+        $existingParentIds = ParentAccount::pluck('id')->map(function($id) {
+            return (string) $id;
+        })->toArray();
+        
+        // Show only manually added advance fee records (same logic as index)
+        $query->where(function($q) use ($existingParentIds) {
+            // Either parent_id exists in parent_accounts table (manually linked)
+            $q->where(function($subQ) use ($existingParentIds) {
+                $subQ->whereIn('parent_id', $existingParentIds)
+                      ->whereNotNull('parent_id')
+                      ->where('parent_id', '!=', '');
+            })
+              // OR id_card_number has at least one existing student (manually added via id_card)
+              ->orWhereExists(function($subQuery) {
+                  $subQuery->select(\DB::raw(1))
+                      ->from('students')
+                      ->whereColumn('students.father_id_card', 'advance_fees.id_card_number')
+                      ->whereNotNull('advance_fees.id_card_number')
+                      ->where('advance_fees.id_card_number', '!=', '');
+              });
+        });
         
         // Apply search filter if present
         if ($request->has('search') && $request->search) {
@@ -203,6 +313,29 @@ class AdvanceFeeController extends Controller
         }
         
         $advanceFees = $query->orderBy('name')->get();
+        
+        // Calculate children count dynamically for each advance fee in exports
+        foreach ($advanceFees as $advanceFee) {
+            $childrenCount = 0;
+            
+            // Count children by parent_id
+            if (!empty($advanceFee->parent_id)) {
+                $childrenCount += Student::where('parent_account_id', $advanceFee->parent_id)->count();
+            }
+            
+            // Count children by id_card_number (avoid double counting)
+            if (!empty($advanceFee->id_card_number)) {
+                $childrenByCard = Student::where('father_id_card', $advanceFee->id_card_number);
+                if (!empty($advanceFee->parent_id)) {
+                    // Exclude students already counted by parent_id
+                    $childrenByCard->where('parent_account_id', '!=', $advanceFee->parent_id);
+                }
+                $childrenCount += $childrenByCard->count();
+            }
+            
+            // Set children count dynamically
+            $advanceFee->childs = $childrenCount;
+        }
         
         switch ($format) {
             case 'excel':

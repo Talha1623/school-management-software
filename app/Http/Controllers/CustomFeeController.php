@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class CustomFeeController extends Controller
@@ -136,7 +137,7 @@ class CustomFeeController extends Controller
         // Generate fee for each selected student
         $paymentTitle = $validated['fee_type'];
         $amount = (float) $validated['amount'];
-        $dueDate = Carbon::now()->addDays(15); // Default due date
+        $dueDate = Carbon::now()->addDays((int) 15); // Default due date
         
         $generatedCount = 0;
         $skippedCount = 0;
@@ -162,7 +163,7 @@ class CustomFeeController extends Controller
                 $totalPaid = StudentPayment::where('student_code', $student->student_code)
                     ->where('payment_title', $paymentTitle)
                     ->where('method', '!=', 'Generated')
-                    ->sum(\DB::raw('COALESCE(payment_amount, 0)'));
+                    ->sum(DB::raw('COALESCE(payment_amount, 0)'));
                 
                 // Only skip if there's an unpaid balance
                 if ($totalGenerated > $totalPaid) {
@@ -298,7 +299,12 @@ class CustomFeeController extends Controller
         }
         
         if ($section) {
-            $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            // Include students with matching section OR null section (for transferred students)
+            $studentsQuery->where(function($query) use ($section) {
+                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+                      ->orWhereNull('section')
+                      ->orWhere('section', '');
+            });
         }
 
         $students = $studentsQuery->orderBy('student_code', 'asc')->get();

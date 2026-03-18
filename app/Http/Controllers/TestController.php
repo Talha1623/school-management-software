@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use App\Models\StudentMark;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -281,11 +282,17 @@ class TestController extends Controller
             $testTypes = collect(['Quiz', 'Mid Term', 'Final Term', 'Assignment', 'Project', 'Oral Test']);
         }
 
-        // Get sessions
-        $sessions = Test::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        // Get sessions: Running Session from General Settings first, then sessions from tests
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
+        $sessionsFromTests = Test::whereNotNull('session')->distinct()->pluck('session')->sort()->values()->filter();
+        $sessions = collect();
+        if ($runningSession) {
+            $sessions = $sessions->push($runningSession);
+        }
+        $sessions = $sessions->merge($sessionsFromTests)->unique()->values();
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
         }
         
         return view('test.list', compact('tests', 'campuses', 'classes', 'sections', 'subjects', 'testTypes', 'sessions'));
@@ -364,6 +371,25 @@ class TestController extends Controller
             'result_status' => $test->result_status,
             'message' => $test->result_status ? 'Result declared successfully!' : 'Result status reset successfully!'
         ]);
+    }
+
+    /**
+     * Get classes by campus (AJAX). Only classes that exist in classes table for that campus (no deleted).
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        if (!$campus || !is_string($campus)) {
+            return response()->json(['classes' => []]);
+        }
+        $campus = trim($campus);
+        $classes = ClassModel::whereNotNull('class_name')
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)])
+            ->distinct()
+            ->pluck('class_name')
+            ->sort()
+            ->values();
+        return response()->json(['classes' => $classes]);
     }
 
     /**

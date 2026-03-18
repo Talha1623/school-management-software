@@ -101,6 +101,194 @@
         }
     });
     </script>
+    
+    <!-- AJAX Navigation - Prevent Page Reload and Preloader -->
+    <script>
+    (function() {
+        'use strict';
+        
+        // Function to handle AJAX navigation
+        function handleAjaxNavigation(href, e) {
+            // Skip if no href or external link
+            if (!href || (href.startsWith('http') && !href.includes(window.location.hostname))) {
+                return false;
+            }
+            
+            // Skip if it's a form submission link or special action
+            if (href.includes('logout') || href.includes('export') || href.includes('print') || href.includes('download') || 
+                href.includes('pdf') || href.includes('excel') || href.includes('csv') || href.includes('logout')) {
+                return false; // Allow normal navigation for these
+            }
+            
+            // Skip anchor links, javascript links, and blank targets
+            if (href.startsWith('#') || href.startsWith('javascript:') || href === '') {
+                return false;
+            }
+            
+            // Prevent default navigation
+            if (e) {
+                e.preventDefault();
+            }
+            
+            // Don't show preloader for AJAX navigation (only show on initial page load/login)
+            // Ensure preloader is hidden
+            const preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.style.display = 'none';
+            }
+            
+            // Fetch the new page content via AJAX
+            fetch(href, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'text/html',
+                },
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.text();
+            })
+            .then(html => {
+                // Create a temporary DOM element to parse the HTML
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Extract the main content
+                const newContent = doc.querySelector('.main-content-container');
+                const newTitle = doc.querySelector('title');
+                
+                if (newContent) {
+                    // Update the main content area
+                    const currentContent = document.querySelector('.main-content-container');
+                    if (currentContent) {
+                        currentContent.innerHTML = newContent.innerHTML;
+                    }
+                    
+                    // Update page title
+                    if (newTitle) {
+                        document.title = newTitle.textContent;
+                    }
+                    
+                    // Update URL without reload
+                    window.history.pushState({path: href}, '', href);
+                    
+                    // Re-initialize any scripts that need to run on page load
+                    // Trigger custom event for page change
+                    window.dispatchEvent(new Event('pagechange'));
+                    
+                    // Re-run any inline scripts in the new content
+                    const scripts = newContent.querySelectorAll('script');
+                    scripts.forEach(function(oldScript) {
+                        const newScript = document.createElement('script');
+                        Array.from(oldScript.attributes).forEach(attr => {
+                            newScript.setAttribute(attr.name, attr.value);
+                        });
+                        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                        document.body.appendChild(newScript);
+                        oldScript.parentNode.removeChild(oldScript);
+                    });
+                } else {
+                    // Fallback to normal navigation if content not found
+                    window.location.href = href;
+                }
+            })
+            .catch(error => {
+                console.error('Navigation error:', error);
+                // Fallback to normal navigation on error
+                window.location.href = href;
+            });
+            
+            return true;
+        }
+        
+        // Intercept all navigation links when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Function to attach listeners to links
+            function attachLinkListeners() {
+                // Intercept all internal navigation links (sidebar, header, content area)
+                const allLinks = document.querySelectorAll('a[href]:not([href^="#"]):not([href^="javascript:"]):not([target="_blank"]):not([href^="mailto:"]):not([href^="tel:"])');
+                
+                allLinks.forEach(function(link) {
+                    // Skip if already has AJAX listener
+                    if (link.dataset.ajaxListener === 'true') {
+                        return;
+                    }
+                    
+                    link.dataset.ajaxListener = 'true';
+                    
+                    link.addEventListener('click', function(e) {
+                        const href = this.getAttribute('href');
+                        if (handleAjaxNavigation(href, e)) {
+                            // Navigation handled by AJAX
+                        }
+                    });
+                });
+            }
+            
+            // Attach listeners initially
+            attachLinkListeners();
+            
+            // Re-attach listeners after AJAX navigation (for dynamically added links)
+            window.addEventListener('pagechange', function() {
+                setTimeout(attachLinkListeners, 100);
+            });
+        });
+        
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', function(e) {
+            if (e.state && e.state.path) {
+                handleAjaxNavigation(e.state.path, null);
+            }
+        });
+        
+        // Ensure preloader is hidden after initial page load
+        window.addEventListener('load', function() {
+            const preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.style.display = 'none';
+            }
+        });
+        
+        // Prevent preloader from showing on any navigation
+        // Override any code that tries to show preloader
+        const originalPreloaderShow = function() {
+            const preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.style.display = 'none';
+            }
+        };
+        
+        // Monitor and hide preloader continuously (only for navigation, not initial load)
+        let isInitialLoad = true;
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                isInitialLoad = false;
+            }, 1000);
+        });
+        
+        // Hide preloader on any navigation event
+        document.addEventListener('click', function(e) {
+            if (!isInitialLoad) {
+                const preloader = document.getElementById('preloader');
+                if (preloader) {
+                    preloader.style.display = 'none';
+                }
+            }
+        }, true);
+        
+        // Also hide preloader when AJAX navigation completes
+        window.addEventListener('pagechange', function() {
+            const preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.style.display = 'none';
+            }
+        });
+    })();
+    </script>
 </body>
 </html>
 

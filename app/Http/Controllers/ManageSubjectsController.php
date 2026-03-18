@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
 use App\Models\Staff;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -502,10 +503,68 @@ class ManageSubjectsController extends Controller
      */
     private function exportPDF($subjects)
     {
-        $html = view('manage-subjects-pdf', compact('subjects'))->render();
+        $settings = GeneralSetting::getSettings();
+        $html = view('manage-subjects-pdf', compact('subjects', 'settings'))->render();
         
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Print subjects list
+     */
+    public function print(Request $request): View
+    {
+        $query = Subject::query();
+        
+        // Filter out subjects with deleted classes
+        $existingClassNames = ClassModel::whereNotNull('class_name')->pluck('class_name')->map(function($name) {
+            return strtolower(trim($name));
+        })->toArray();
+        
+        if (!empty($existingClassNames)) {
+            $query->where(function($q) use ($existingClassNames) {
+                foreach ($existingClassNames as $className) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                }
+            });
+        } else {
+            $query->whereRaw('1 = 0');
+        }
+        
+        // Apply filters
+        if ($request->filled('filter_campus')) {
+            $query->where('campus', $request->filter_campus);
+        }
+        
+        if ($request->filled('filter_class')) {
+            $query->where('class', $request->filter_class);
+        }
+        
+        if ($request->filled('filter_section')) {
+            $query->where('section', $request->filter_section);
+        }
+        
+        // Apply search filter if present
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(class) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(section) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(subject_name) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(teacher) LIKE ?', ["%{$searchLower}%"])
+                      ->orWhereRaw('LOWER(session) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+        
+        $subjects = $query->orderBy('campus')->orderBy('class')->orderBy('section')->orderBy('subject_name')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('manage-subjects-print', compact('subjects', 'settings'));
     }
 }
 

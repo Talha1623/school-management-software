@@ -47,11 +47,12 @@
             width: calc(33.33% - 7px);
             min-height: auto;
             padding: 12mm;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             position: relative;
             page-break-inside: avoid;
             margin-bottom: 10px;
-            border: 1px solid #ddd;
+            border: 2px solid #003471;
+            border-radius: 4px;
         }
         
         @media print {
@@ -71,8 +72,11 @@
         .header {
             text-align: center;
             margin-bottom: 12px;
-            border-bottom: 2px solid #000;
-            padding-bottom: 6px;
+            border-bottom: 2px solid #003471;
+            padding-bottom: 8px;
+            background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+            padding: 10px;
+            border-radius: 4px;
         }
         
         .school-name {
@@ -80,7 +84,26 @@
             font-weight: bold;
             margin-bottom: 2px;
             letter-spacing: 0.5px;
-            color: #000;
+            color: #003471;
+            text-transform: uppercase;
+        }
+        
+        .school-address {
+            font-size: 10px;
+            color: #555;
+            margin-top: 3px;
+            line-height: 1.3;
+        }
+        
+        .school-contact {
+            font-size: 9px;
+            color: #666;
+            margin-top: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
         
         .parent-copy {
@@ -91,6 +114,10 @@
             font-weight: bold;
             font-size: 11px;
             letter-spacing: 1px;
+            background: #fff;
+            padding: 4px 8px;
+            border: 2px solid #dc3545;
+            border-radius: 3px;
         }
         
         .student-info {
@@ -100,10 +127,15 @@
         .info-row {
             display: flex;
             justify-content: space-between;
-            padding: 3px 0;
-            border-bottom: 1px dotted #999;
+            padding: 4px 0;
+            border-bottom: 1px dotted #ccc;
             font-size: 11px;
-            line-height: 1.5;
+            line-height: 1.6;
+            transition: background-color 0.2s;
+        }
+        
+        .info-row:hover {
+            background-color: #f8f9fa;
         }
         
         .info-label {
@@ -123,19 +155,24 @@
         .barcode {
             text-align: center;
             margin: 8px 0;
-            padding: 6px;
-            background: #f9f9f9;
-            border: 1px solid #ddd;
+            padding: 8px;
+            background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+            border: 2px solid #003471;
+            border-radius: 4px;
             font-size: 11px;
             font-family: 'Courier New', monospace;
             letter-spacing: 2px;
+            font-weight: bold;
+            color: #003471;
         }
         
         .bank-details {
             margin: 8px 0;
-            padding: 6px;
-            background: #f0f0f0;
-            border: 1px solid #ddd;
+            padding: 8px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-left: 3px solid #003471;
+            border-radius: 3px;
             font-size: 10px;
             line-height: 1.6;
         }
@@ -157,7 +194,7 @@
         }
         
         .fee-table th {
-            background-color: #003471;
+            background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
             color: white;
             font-weight: bold;
             text-align: center;
@@ -301,7 +338,23 @@
             <div class="parent-copy">{{ $copyLabel }}</div>
             
             <div class="header">
-                <div class="school-name">ROYAL GRAMMAR SCHOOL</div>
+                <div class="school-name">{{ $settings->school_name ?? 'School Name' }}</div>
+                @if($settings->address)
+                <div class="school-address">{{ $settings->address }}</div>
+                @endif
+                @if($settings->school_phone || $settings->school_email)
+                <div class="school-contact">
+                    @if($settings->school_phone)
+                    <span>Phone: {{ $settings->school_phone }}</span>
+                    @endif
+                    @if($settings->school_phone && $settings->school_email)
+                    <span> | </span>
+                    @endif
+                    @if($settings->school_email)
+                    <span>Email: {{ $settings->school_email }}</span>
+                    @endif
+                </div>
+                @endif
             </div>
 
             <div class="student-info">

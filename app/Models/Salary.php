@@ -25,6 +25,8 @@ class Salary extends Model
         'amount_paid',
         'loan_repayment',
         'discount',
+        'bonus_amount',
+        'deduction_amount',
         'status',
     ];
 
@@ -41,6 +43,8 @@ class Salary extends Model
         'amount_paid' => 'decimal:2',
         'loan_repayment' => 'decimal:2',
         'discount' => 'decimal:2',
+        'bonus_amount' => 'decimal:2',
+        'deduction_amount' => 'decimal:2',
     ];
 
     /**

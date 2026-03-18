@@ -1187,6 +1187,7 @@ function editStaff(id) {
             const modalLabel = document.getElementById('staffModalLabel');
             modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">person_add</span><span style="color: white;">Edit Staff</span>';
             
+            // Basic Information
             document.getElementById('name').value = data.name || '';
             document.getElementById('father_husband_name').value = data.father_husband_name || '';
             document.getElementById('campus').value = data.campus || '';
@@ -1200,13 +1201,57 @@ function editStaff(id) {
             empIdField.style.backgroundColor = '#f8f9fa';
             empIdField.style.cursor = 'not-allowed';
             
+            // Contact Information
             document.getElementById('phone').value = data.phone || '';
             document.getElementById('whatsapp').value = data.whatsapp || '';
             document.getElementById('cnic').value = data.cnic || '';
+            document.getElementById('email').value = data.email || '';
+            
+            // Personal Information
             document.getElementById('qualification').value = data.qualification || '';
-            document.getElementById('birthday').value = data.birthday || '';
-            document.getElementById('joining_date').value = data.joining_date || '';
+            
+            // Format dates properly (handle both date objects and strings)
+            let birthdayValue = '';
+            if (data.birthday) {
+                if (typeof data.birthday === 'string') {
+                    // If it's already in YYYY-MM-DD format, use it directly
+                    if (data.birthday.match(/^\d{4}-\d{2}-\d{2}/)) {
+                        birthdayValue = data.birthday.split(' ')[0];
+                    } else {
+                        // Try to parse other date formats
+                        const date = new Date(data.birthday);
+                        if (!isNaN(date.getTime())) {
+                            birthdayValue = date.toISOString().split('T')[0];
+                        }
+                    }
+                } else if (data.birthday.date) {
+                    birthdayValue = data.birthday.date.split(' ')[0];
+                }
+            }
+            document.getElementById('birthday').value = birthdayValue || '';
+            
+            let joiningDateValue = '';
+            if (data.joining_date) {
+                if (typeof data.joining_date === 'string') {
+                    // If it's already in YYYY-MM-DD format, use it directly
+                    if (data.joining_date.match(/^\d{4}-\d{2}-\d{2}/)) {
+                        joiningDateValue = data.joining_date.split(' ')[0];
+                    } else {
+                        // Try to parse other date formats
+                        const date = new Date(data.joining_date);
+                        if (!isNaN(date.getTime())) {
+                            joiningDateValue = date.toISOString().split('T')[0];
+                        }
+                    }
+                } else if (data.joining_date.date) {
+                    joiningDateValue = data.joining_date.date.split(' ')[0];
+                }
+            }
+            document.getElementById('joining_date').value = joiningDateValue || '';
+            
             document.getElementById('marital_status').value = data.marital_status || '';
+            
+            // Salary Information
             document.getElementById('salary_type').value = data.salary_type || '';
             document.getElementById('salary').value = data.salary || '';
             document.getElementById('absent_fees').value = data.absent_fees || '';
@@ -1214,14 +1259,17 @@ function editStaff(id) {
             document.getElementById('early_exit_fees').value = data.early_exit_fees || '';
             document.getElementById('free_absent').value = data.free_absent || '0';
             
-            // Update fields based on salary type
-            toggleFeesFields();
-            document.getElementById('email').value = data.email || '';
+            // Address
             document.getElementById('home_address').value = data.home_address || '';
+            
+            // Password (leave blank in edit mode)
             document.getElementById('password').value = '';
             document.getElementById('password').required = false;
             document.getElementById('passwordRequired').style.display = 'none';
             document.getElementById('passwordHint').style.display = 'block';
+            
+            // Update fields based on salary type
+            toggleFeesFields();
             
             new bootstrap.Modal(document.getElementById('staffModal')).show();
         })
@@ -1630,7 +1678,7 @@ function toggleFeesFields() {
     const lateFees = document.getElementById('late_fees');
     const earlyExitFees = document.getElementById('early_exit_fees');
     
-    // Disable fields for per lecture and per hour
+    // Disable all fields for per lecture and per hour
     if (salaryType === 'lecture' || salaryType === 'per hour') {
         absentFees.disabled = true;
         absentFees.style.backgroundColor = '#f8f9fa';
@@ -1646,8 +1694,22 @@ function toggleFeesFields() {
         earlyExitFees.style.backgroundColor = '#f8f9fa';
         earlyExitFees.style.cursor = 'not-allowed';
         earlyExitFees.value = '';
+    } else if (salaryType === 'full time') {
+        // For full time: disable Absent Fees, enable Late Fees and Early Exit Fees
+        absentFees.disabled = true;
+        absentFees.style.backgroundColor = '#f8f9fa';
+        absentFees.style.cursor = 'not-allowed';
+        absentFees.value = '';
+        
+        lateFees.disabled = false;
+        lateFees.style.backgroundColor = '';
+        lateFees.style.cursor = '';
+        
+        earlyExitFees.disabled = false;
+        earlyExitFees.style.backgroundColor = '';
+        earlyExitFees.style.cursor = '';
     } else {
-        // Enable fields for full time
+        // Enable all fields when no salary type is selected
         absentFees.disabled = false;
         absentFees.style.backgroundColor = '';
         absentFees.style.cursor = '';

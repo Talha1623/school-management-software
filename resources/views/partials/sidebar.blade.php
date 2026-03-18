@@ -243,7 +243,7 @@
                 </a>
             
                 <ul class="menu-sub">
-                    <li class="menu-item admission-management-item">
+                    <li class="menu-item admission-management-item {{ request()->routeIs('admission*') ? 'open' : '' }}">
                         <a href="javascript:void(0);" class="menu-link menu-toggle admission-management-link {{ request()->routeIs('admission*') ? 'active' : '' }}">
                             <span class="material-symbols-outlined menu-icon">how_to_reg</span>
                             <span class="title">Admission Management</span>
@@ -1736,6 +1736,72 @@ document.addEventListener('DOMContentLoaded', function() {
 .menu-vertical .menu-sub .menu-item .menu-link::before {
     display: none !important;
     content: none !important;
+}
+
+/* Slide nested submenu to the right when opened - like accountant sidebar */
+.menu-vertical .menu-sub .menu-item.open > .menu-sub,
+.menu-vertical .menu-sub .menu-item.open > ul.menu-sub {
+    display: block !important;
+    position: relative;
+    margin-left: 12px !important;
+    padding-left: 10px !important;
+    border-left: 2px solid rgba(0, 52, 113, 0.3) !important;
+    animation: slideRightSubmenu 0.25s ease-out;
+}
+
+@keyframes slideRightSubmenu {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+        margin-left: 0;
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+        margin-left: 12px;
+    }
+}
+
+/* Ensure nested submenus are positioned correctly */
+.menu-vertical .menu-sub .menu-item {
+    position: relative;
+}
+
+.menu-vertical .menu-sub .menu-item .menu-sub {
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto;
+    margin-top: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+/* Smooth transition for menu items */
+.menu-vertical .menu-item .menu-sub {
+    transition: all 0.25s ease;
+}
+
+/* Add visual indicator for nested submenu when open */
+.menu-vertical .menu-sub .menu-item.open > .menu-link {
+    color: #003471;
+    font-weight: 600;
+}
+
+/* Ensure parent menu items show their submenu */
+.menu-vertical .menu-item.open > .menu-sub,
+.menu-vertical .menu-item.open > ul.menu-sub {
+    display: block !important;
+}
+
+/* Additional styling for nested menu items */
+.menu-vertical .menu-sub .menu-item .menu-link {
+    padding-left: 15px;
+    transition: all 0.2s ease;
+}
+
+.menu-vertical .menu-sub .menu-item.open > .menu-link {
+    padding-left: 18px;
 }
 </style>
 

@@ -19,7 +19,10 @@
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
                             @foreach($campuses as $campus)
-                                <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
                             @endforeach
                         </select>
                     </div>

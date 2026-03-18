@@ -37,6 +37,34 @@ class ParentComplaintController extends Controller
 
         return view('parent-complain', compact('complains'));
     }
-}
 
+    /**
+     * Store reply for a parent complaint.
+     */
+    public function reply(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'reply' => ['required', 'string', 'max:5000'],
+            'sms_notification' => ['nullable', 'boolean'],
+        ]);
+
+        $complain = ParentComplaint::findOrFail($id);
+
+        $complain->update([
+            'reply' => $validated['reply'],
+            'reply_date' => now(),
+            'sms_notification' => $request->has('sms_notification') ? true : false,
+            'status' => 'resolved',
+        ]);
+
+        // TODO: Send SMS notification if enabled
+        if ($complain->sms_notification && $complain->phone) {
+            // Add SMS sending logic here
+        }
+
+        return redirect()
+            ->route('parent-complain')
+            ->with('success', 'Reply sent successfully.');
+    }
+}
 

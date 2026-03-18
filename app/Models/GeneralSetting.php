@@ -19,6 +19,7 @@ class GeneralSetting extends Model
         'school_email',
         'currency',
         'timezone',
+        'running_session',
         'logo',
         'system_name',
         'bio_token',

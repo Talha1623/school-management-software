@@ -6,6 +6,7 @@ use App\Models\Student;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -177,9 +178,8 @@ class PrintStudentCardController extends Controller
             ]);
         }
         
-        // Student types (can be extended based on your requirements)
-        // For now, using hardcoded values. If you have a student_type field, fetch from database
-        $types = ['Regular', 'Scholarship', 'Merit', 'VIP'];
+        // Student types - only Active
+        $types = ['Active'];
         
         // If AJAX request, return JSON for sections
         if ($request->ajax() || $request->wantsJson()) {
@@ -202,10 +202,17 @@ class PrintStudentCardController extends Controller
         // This ensures deleted students don't appear in the card
         $this->applySoftDeleteFilter($query);
         
-        // Only include students with valid class (required field)
-        // This ensures only active/added students with class are shown
+        // Only include active students with valid class and admission_date
+        // This ensures only active students are shown
         $query->whereNotNull('class')
-              ->where('class', '!=', '');
+              ->where('class', '!=', '')
+              ->whereNotNull('admission_date');
+        
+        // Exclude passout students
+        $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
+        $query->where(function($q) use ($passoutClasses) {
+            $q->whereRaw("LOWER(TRIM(COALESCE(class, ''))) NOT IN ('" . implode("', '", array_map('strtolower', $passoutClasses)) . "')");
+        });
 
         if ($request->filled('student_id')) {
             $query->where('id', $request->student_id);
@@ -288,15 +295,18 @@ class PrintStudentCardController extends Controller
         // Get filtered students
         $students = $this->getFilteredStudents($request);
         
+        // Get General Settings
+        $settings = GeneralSetting::getSettings();
+        
         // Get design settings from request
         $designSettings = [
-            'accent_color' => $request->get('accent_color', '#5C5C5C'),
-            'secondary_color' => $request->get('secondary_color', '#F08080'),
+            'accent_color' => $request->get('accent_color', '#003471'),
+            'secondary_color' => $request->get('secondary_color', '#004a9e'),
             'gradient_color1' => $request->get('gradient_color1', '#FFFFFF'),
-            'gradient_color2' => $request->get('gradient_color2', '#FFFFFF'),
+            'gradient_color2' => $request->get('gradient_color2', '#F8F9FA'),
             'student_name_color' => $request->get('student_name_color', '#000000'),
-            'student_label_color' => $request->get('student_label_color', '#000000'),
-            'details_text_color' => $request->get('details_text_color', '#000000'),
+            'student_label_color' => $request->get('student_label_color', '#003471'),
+            'details_text_color' => $request->get('details_text_color', '#333333'),
             'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
             'orientation' => $request->get('orientation', 'portrait'),
             'show_monogram' => $request->get('show_monogram', 'yes'),
@@ -304,7 +314,7 @@ class PrintStudentCardController extends Controller
             'border_style' => $request->get('border_style', 'rounded'),
         ];
         
-        return view('id-card.print-student-card-print', compact('students', 'designSettings'));
+        return view('id-card.print-student-card-print', compact('students', 'designSettings', 'settings'));
     }
 }
 

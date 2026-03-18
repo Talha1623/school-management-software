@@ -33,28 +33,17 @@ class StudentAttendanceController extends Controller
             }
 
             // Optional filter: specific student_id (must be the authenticated student)
+            // If student_id is provided but doesn't match authenticated student, ignore it and show class attendance
+            $useStudentId = false;
             if ($request->filled('student_id')) {
                 $studentId = (int) $request->student_id;
                 
                 // Verify the student_id belongs to authenticated student
-                if ($studentId !== $student->id) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'You are not allowed to view this student\'s attendance.',
-                        'data' => null,
-                        'token' => null,
-                    ], 403);
+                // Use loose comparison to handle type differences (int vs string)
+                if ((int)$studentId == (int)$student->id) {
+                    $useStudentId = true;
                 }
-                
-                // If student_id is provided, date is also required
-                if (!$request->filled('date')) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Date is required when student_id is provided',
-                        'data' => null,
-                        'token' => null,
-                    ], 400);
-                }
+                // If doesn't match, we'll ignore student_id and show class attendance instead
             }
 
             // Validate required parameters
@@ -91,9 +80,9 @@ class StudentAttendanceController extends Controller
                 ], 400);
             }
 
-            // If student_id is provided, return that student's attendance with monthly summary
+            // If student_id is provided and matches authenticated student, return that student's attendance with monthly summary
             $targetStudent = $student; // Default to authenticated student
-            if ($request->filled('student_id')) {
+            if ($useStudentId) {
                 $targetStudentId = (int) $request->student_id;
                 
                 // Get the specific student

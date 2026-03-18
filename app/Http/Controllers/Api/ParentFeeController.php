@@ -45,23 +45,52 @@ class ParentFeeController extends Controller
         // Aggregate payments per student_code for the selected year
         $studentCodes = $students->pluck('student_code')->filter()->values();
 
+        // Get paid payments (exclude "Generated" method payments)
         $paymentsByCode = collect();
         if ($studentCodes->isNotEmpty()) {
             $paymentsByCode = StudentPayment::whereIn('student_code', $studentCodes)
+                ->where('method', '!=', 'Generated') // Only actual paid payments, exclude generated fees
                 ->whereYear('payment_date', $feeYear)
                 ->get()
                 ->groupBy('student_code');
         }
 
-        $data = $students->map(function ($student) use ($paymentsByCode, $feeYear) {
+        // Get generated fees (method = 'Generated')
+        $generatedFeesByCode = collect();
+        if ($studentCodes->isNotEmpty()) {
+            $generatedFeesByCode = StudentPayment::whereIn('student_code', $studentCodes)
+                ->where('method', '=', 'Generated') // Only generated fees
+                ->whereYear('payment_date', $feeYear)
+                ->get()
+                ->groupBy('student_code');
+        }
+
+        $data = $students->map(function ($student) use ($paymentsByCode, $generatedFeesByCode, $feeYear) {
             $code = $student->student_code;
+            
+            // Get paid payments
             $payments = $code && $paymentsByCode->has($code)
                 ? $paymentsByCode->get($code)
                 : collect();
 
+            // Get generated fees
+            $generatedFees = $code && $generatedFeesByCode->has($code)
+                ? $generatedFeesByCode->get($code)
+                : collect();
+
+            // Calculate paid amount from actual paid payments (method != 'Generated')
             $paid = (float) $payments->sum('payment_amount');
             $discount = (float) $payments->sum('discount');
             $lateFee = (float) $payments->sum('late_fee');
+
+            // Calculate generated fees amount
+            // Generated amount = payment_amount - discount + late_fee (for generated records)
+            $generatedAmount = (float) $generatedFees->sum(function($fee) {
+                $amount = (float) ($fee->payment_amount ?? 0);
+                $discount = (float) ($fee->discount ?? 0);
+                $lateFee = (float) ($fee->late_fee ?? 0);
+                return max(0, $amount - $discount) + $lateFee;
+            });
 
             $initialAmount = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
             $dueAmount = max($initialAmount - $paid - $discount + $lateFee, 0.0);
@@ -76,6 +105,7 @@ class ParentFeeController extends Controller
                 'fee_year' => $feeYear,
                 // base fee from admit student (monthly_fee)
                 'initial_amount' => $initialAmount,
+                'generated_amount' => round($generatedAmount, 2), // Total generated fees amount
                 'paid' => $paid,
                 'discount' => $discount,
                 'late_fee' => $lateFee,

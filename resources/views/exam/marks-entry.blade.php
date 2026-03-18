@@ -24,14 +24,14 @@
                 </div>
             @endif
 
-            <!-- Filter Form -->
+            <!-- Filter Form - Flow: Campus → Class → Section → Exam → Subject -->
             <form action="{{ route('exam.marks-entry') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
-                    <!-- Campus -->
+                    <!-- 1. Campus -->
                     <div class="col-md-2">
                         <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
-                            <option value="">All Campuses</option>
+                            <option value="">Select Campus</option>
                             @foreach($campuses as $campus)
                                 @php
                                     $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
@@ -41,38 +41,25 @@
                         </select>
                     </div>
 
-                    <!-- Exam -->
+                    <!-- 2. Class (loads when campus selected) -->
                     <div class="col-md-2">
-                        <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam Name</label>
-                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;" {{ !$filterCampus || !$filterClass || !$filterSection ? 'disabled' : '' }}>
-                            <option value="">Select Exam</option>
-                            @if(isset($exams) && $exams->count() > 0)
-                                @foreach($exams as $examName)
-                                    <option value="{{ $examName }}" {{ $filterExam == $examName ? 'selected' : '' }}>{{ $examName }}</option>
+                        <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;" {{ !$filterCampus ? 'disabled' : '' }}>
+                            <option value="">Select Class</option>
+                            @if($filterCampus && ($filterClasses ?? $classes)->isNotEmpty())
+                                @foreach($filterClasses ?? $classes as $className)
+                                    <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
                                 @endforeach
-                            @else
-                                <option value="" disabled>No exams found</option>
                             @endif
                         </select>
                     </div>
 
-                    <!-- Class -->
-                    <div class="col-md-2">
-                        <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
-                            <option value="">All Classes</option>
-                            @foreach(($filterClasses ?? $classes) as $className)
-                                <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <!-- Section -->
+                    <!-- 3. Section (loads when class selected) -->
                     <div class="col-md-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
                         <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;" {{ !$filterClass ? 'disabled' : '' }}>
                             <option value="">Select Section</option>
-                            @if($filterClass)
+                            @if($filterClass && $sections->isNotEmpty())
                                 @foreach($sections as $sectionName)
                                     <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
                                 @endforeach
@@ -80,14 +67,29 @@
                         </select>
                     </div>
 
-                    <!-- Subject -->
+                    <!-- 4. Exam (loads when campus selected) -->
+                    <div class="col-md-2">
+                        <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam</label>
+                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;" {{ !$filterCampus ? 'disabled' : '' }}>
+                            <option value="">Select Exam</option>
+                            @if($filterCampus && isset($exams) && $exams->count() > 0)
+                                @foreach($exams as $examName)
+                                    <option value="{{ $examName }}" {{ $filterExam == $examName ? 'selected' : '' }}>{{ $examName }}</option>
+                                @endforeach
+                            @endif
+                        </select>
+                    </div>
+
+                    <!-- 5. Subject (loads when class + section selected) -->
                     <div class="col-md-2">
                         <label for="filter_subject" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Subject</label>
                         <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;" {{ !$filterClass || !$filterSection ? 'disabled' : '' }}>
                             <option value="">Select Subject</option>
-                            @foreach($subjects as $subjectName)
-                                <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
-                            @endforeach
+                            @if($filterClass && $filterSection && $subjects->isNotEmpty())
+                                @foreach($subjects as $subjectName)
+                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
+                                @endforeach
+                            @endif
                         </select>
                     </div>
 
@@ -317,15 +319,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const sectionSelect = document.getElementById('filter_section');
     const subjectSelect = document.getElementById('filter_subject');
     const examSelect = document.getElementById('filter_exam');
-    const allClassOptions = classSelect ? classSelect.innerHTML : '';
 
+    // Flow: Campus → Class → Section → Exam → Subject
     function loadClasses() {
         if (!classSelect) return;
-
         const campus = campusSelect ? campusSelect.value : '';
         if (!campus) {
-            classSelect.innerHTML = allClassOptions;
-            classSelect.value = '';
+            classSelect.disabled = true;
+            classSelect.innerHTML = '<option value="">Select Class</option>';
             if (sectionSelect) {
                 sectionSelect.disabled = true;
                 sectionSelect.innerHTML = '<option value="">Select Section</option>';
@@ -340,41 +341,42 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             return;
         }
-
+        classSelect.disabled = false;
         classSelect.innerHTML = '<option value="">Loading...</option>';
         fetch(`{{ route('exam.marks-entry.get-classes') }}?campus=${encodeURIComponent(campus)}`)
             .then(response => response.json())
             .then(data => {
-                classSelect.innerHTML = '<option value="">All Classes</option>';
+                classSelect.innerHTML = '<option value="">Select Class</option>';
                 if (data.classes && data.classes.length > 0) {
                     data.classes.forEach(className => {
-                        classSelect.innerHTML += `<option value="${className}">${className}</option>`;
+                        const opt = document.createElement('option');
+                        opt.value = className;
+                        opt.textContent = className;
+                        if (className === '{{ $filterClass }}') opt.selected = true;
+                        classSelect.appendChild(opt);
                     });
                 }
                 @if($filterClass)
-                if (data.classes && data.classes.includes('{{ $filterClass }}')) {
+                if (classSelect.querySelector('option[value="{{ $filterClass }}"]')) {
                     classSelect.value = '{{ $filterClass }}';
                     loadSections(classSelect.value);
                 }
                 @endif
             })
-            .catch(error => {
-                console.error('Error loading classes:', error);
-                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+            .catch(() => {
+                classSelect.innerHTML = '<option value="">Select Class</option>';
             });
     }
 
     function loadExams() {
         if (!examSelect) return;
-
         const campus = campusSelect ? campusSelect.value : '';
         if (!campus) {
             examSelect.disabled = true;
             examSelect.innerHTML = '<option value="">Select Exam</option>';
             return;
         }
-
-        examSelect.disabled = true;
+        examSelect.disabled = false;
         examSelect.innerHTML = '<option value="">Loading...</option>';
         fetch(`{{ route('exam.marks-entry.get-exams') }}?campus=${encodeURIComponent(campus)}`)
             .then(response => response.json())
@@ -385,94 +387,67 @@ document.addEventListener('DOMContentLoaded', function() {
                         const option = document.createElement('option');
                         option.value = exam;
                         option.textContent = exam;
-                        if (exam === '{{ $filterExam }}') {
-                            option.selected = true;
-                        }
+                        if (exam === '{{ $filterExam }}') option.selected = true;
                         examSelect.appendChild(option);
                     });
                 }
-                if (!(classSelect && classSelect.value) || !(sectionSelect && sectionSelect.value)) {
-                    examSelect.disabled = true;
-                } else {
-                    examSelect.disabled = false;
-                }
             })
-            .catch(error => {
-                console.error('Error loading exams:', error);
-                examSelect.innerHTML = '<option value="">Error loading exams</option>';
-                examSelect.disabled = false;
+            .catch(() => {
+                examSelect.innerHTML = '<option value="">Select Exam</option>';
             });
     }
 
-    // Load sections when class changes
+    // Class change → load sections, clear section & subject
     if (classSelect) {
         classSelect.addEventListener('change', function() {
             const selectedClass = this.value;
-            if (selectedClass) {
-                loadSections(selectedClass);
-                // Enable section dropdown
-                if (sectionSelect) {
-                    sectionSelect.disabled = false;
-                }
-            } else {
-                // Disable section, exam, and subject dropdowns if no class selected
-                if (sectionSelect) {
-                    sectionSelect.disabled = true;
-                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
-                }
-                if (subjectSelect) {
-                    subjectSelect.disabled = true;
-                    subjectSelect.innerHTML = '<option value="">Select Subject</option>';
-                }
-                if (examSelect) {
-                    examSelect.disabled = true;
-                }
+            if (sectionSelect) {
+                sectionSelect.disabled = !selectedClass;
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
             }
-            // Also reload subjects when class changes
-            loadSubjects();
+            if (subjectSelect) {
+                subjectSelect.disabled = true;
+                subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+            }
+            if (selectedClass) loadSections(selectedClass);
         });
     }
 
-    // Load subjects when class or section changes
+    // Section change → enable subject, load subjects
     if (sectionSelect) {
         sectionSelect.addEventListener('change', function() {
-            const selectedSection = this.value;
-            if (selectedSection && classSelect && classSelect.value) {
-                // Enable exam and subject dropdowns
-                if (examSelect) {
-                    examSelect.disabled = false;
-                }
-                if (subjectSelect) {
-                    subjectSelect.disabled = false;
-                }
-                loadSubjects();
-            } else {
-                // Disable exam and subject dropdowns if no section selected
-                if (examSelect) {
-                    examSelect.disabled = true;
-                }
-                if (subjectSelect) {
-                    subjectSelect.disabled = true;
-                    subjectSelect.innerHTML = '<option value="">Select Subject</option>';
-                }
+            const hasSection = this.value && classSelect && classSelect.value;
+            if (subjectSelect) {
+                subjectSelect.disabled = !hasSection;
+                if (!hasSection) subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+                else loadSubjects();
             }
         });
     }
 
-    // Load subjects when exam changes
+    // Exam change → reload subjects (for exam timetable filter)
     if (examSelect) {
         examSelect.addEventListener('change', function() {
-            const selectedExam = this.value;
-            if (selectedExam && classSelect && classSelect.value && sectionSelect && sectionSelect.value) {
-                loadSubjects();
-            }
+            if (classSelect && classSelect.value && sectionSelect && sectionSelect.value) loadSubjects();
         });
     }
 
+    // Campus change → load classes & exams, clear class/section/subject
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
             loadClasses();
             loadExams();
+            if (classSelect) {
+                classSelect.value = '';
+                if (sectionSelect) {
+                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                    sectionSelect.disabled = true;
+                }
+                if (subjectSelect) {
+                    subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+                    subjectSelect.disabled = true;
+                }
+            }
         });
     }
 

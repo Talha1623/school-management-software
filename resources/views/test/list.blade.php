@@ -258,10 +258,8 @@
                                 </span>
                                 <select class="form-control test-input" name="for_class" id="for_class" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Class</option>
-                                    @foreach($classes as $className)
-                                        <option value="{{ $className }}">{{ $className }}</option>
-                                    @endforeach
                                 </select>
+                                <small class="text-muted d-block mt-1">Select campus first to load classes</small>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -629,6 +627,7 @@
         font-size: 11px;
         padding: 4px 12px;
         min-height: auto;
+        min-width: 130px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -755,7 +754,8 @@ function resetForm() {
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
         Save Test
     `;
-    // Clear section dropdown
+    // Clear class and section dropdowns (classes load when campus is selected)
+    document.getElementById('for_class').innerHTML = '<option value="">Select Class</option>';
     document.getElementById('section').innerHTML = '<option value="">Select Section</option>';
 }
 
@@ -763,7 +763,6 @@ function resetForm() {
 function editTest(id, campus, testName, forClass, section, subject, testType, description, date, session) {
     document.getElementById('campus').value = campus;
     document.getElementById('test_name').value = testName;
-    document.getElementById('for_class').value = forClass;
     document.getElementById('subject').value = subject;
     document.getElementById('test_type').value = testType;
     document.getElementById('description').value = description;
@@ -780,31 +779,34 @@ function editTest(id, campus, testName, forClass, section, subject, testType, de
         Update Test
     `;
     
-    // Load sections for the selected class
     const sectionSelect = document.getElementById('section');
-    if (forClass) {
-        sectionSelect.innerHTML = '<option value="">Loading...</option>';
-        fetch(`{{ route('test.list.get-sections') }}?class=${encodeURIComponent(forClass)}`)
-            .then(response => response.json())
-            .then(data => {
-                sectionSelect.innerHTML = '<option value="">Select Section</option>';
-                data.sections.forEach(sec => {
-                    const option = document.createElement('option');
-                    option.value = sec;
-                    option.textContent = sec;
-                    if (sec === section) {
-                        option.selected = true;
-                    }
-                    sectionSelect.appendChild(option);
+    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+    
+    // Load classes for this campus first, then set for_class and load sections
+    loadClassesForCampus(campus, function() {
+        document.getElementById('for_class').value = forClass || '';
+        if (forClass) {
+            sectionSelect.innerHTML = '<option value="">Loading...</option>';
+            fetch(`{{ route('test.list.get-sections') }}?class=${encodeURIComponent(forClass)}`)
+                .then(response => response.json())
+                .then(data => {
+                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                    data.sections.forEach(sec => {
+                        const option = document.createElement('option');
+                        option.value = sec;
+                        option.textContent = sec;
+                        if (sec === section) {
+                            option.selected = true;
+                        }
+                        sectionSelect.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading sections:', error);
+                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
                 });
-            })
-            .catch(error => {
-                console.error('Error loading sections:', error);
-                sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
-            });
-    } else {
-        sectionSelect.innerHTML = '<option value="">Select Section</option>';
-    }
+        }
+    });
     
     const modal = new bootstrap.Modal(document.getElementById('testModal'));
     modal.show();
@@ -881,12 +883,52 @@ function printTable() {
     window.location.reload();
 }
 
+// Load classes for selected campus (only classes that exist for that campus)
+function loadClassesForCampus(campus, callback) {
+    const classSelect = document.getElementById('for_class');
+    if (!classSelect) return;
+    classSelect.innerHTML = '<option value="">Loading...</option>';
+    if (!campus) {
+        classSelect.innerHTML = '<option value="">Select Class</option>';
+        if (callback) callback();
+        return;
+    }
+    fetch(`{{ route('test.list.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+        .then(response => response.json())
+        .then(data => {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            if (data.classes && data.classes.length > 0) {
+                data.classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+            }
+            if (callback) callback();
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            if (callback) callback();
+        });
+}
+
 // Load sections when class changes
 document.addEventListener('DOMContentLoaded', function() {
     const classSelect = document.getElementById('for_class');
     const sectionSelect = document.getElementById('section');
     const subjectSelect = document.getElementById('subject');
     const campusSelect = document.getElementById('campus');
+    
+    if (campusSelect && classSelect) {
+        campusSelect.addEventListener('change', function() {
+            const campus = this.value;
+            document.getElementById('for_class').value = '';
+            document.getElementById('section').innerHTML = '<option value="">Select Section</option>';
+            loadClassesForCampus(campus);
+        });
+    }
     
     if (classSelect && sectionSelect) {
         function loadSections(selectedClass) {

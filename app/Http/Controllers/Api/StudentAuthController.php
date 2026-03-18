@@ -75,16 +75,17 @@ class StudentAuthController extends Controller
                 }
             }
 
-            // Check password (B-Form Number)
-            // First check if password matches the stored hashed password
+            // Check password - only check against stored hashed password
+            // Once password is changed, only the new password will work
             $passwordMatches = Hash::check($password, $student->password);
             
-            // If password doesn't match, also check if it matches b_form_number directly
-            // (in case b_form_number was updated but password wasn't)
-            if (!$passwordMatches && !empty($student->b_form_number)) {
+            // Only allow b_form_number fallback if password field is empty (first time login)
+            // If password is set, it means user has changed it, so only use the stored password
+            if (!$passwordMatches && empty($student->password) && !empty($student->b_form_number)) {
+                // Only for first time login when password is not set
                 // Check if the provided password matches the b_form_number
                 if ($password === $student->b_form_number) {
-                    // Update password with b_form_number
+                    // Set password with b_form_number for first time
                     $student->password = $student->b_form_number;
                     $student->save();
                     $student->refresh();
@@ -535,9 +536,37 @@ class StudentAuthController extends Controller
                 ], 400);
             }
 
-            // Update password
-            $student->password = $validated['new_password'];
-            $student->save();
+            // Update password using DB::table to bypass model's setPasswordAttribute 
+            // (which might cause double hashing issues)
+            $hashedPassword = Hash::make($validated['new_password']);
+            
+            $updated = \Illuminate\Support\Facades\DB::table('students')
+                ->where('id', $student->id)
+                ->update([
+                    'password' => $hashedPassword,
+                    'updated_at' => now(),
+                ]);
+
+            if ($updated === 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update password. Student record not found or no changes made.',
+                    'token' => null,
+                ], 500);
+            }
+
+            // Verify password was updated correctly by fetching from database
+            $updatedStudent = \Illuminate\Support\Facades\DB::table('students')
+                ->where('id', $student->id)
+                ->first();
+            
+            if (!$updatedStudent || !Hash::check($validated['new_password'], $updatedStudent->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Password update verification failed. Please try again.',
+                    'token' => null,
+                ], 500);
+            }
 
             return response()->json([
                 'success' => true,

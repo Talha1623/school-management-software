@@ -8,8 +8,11 @@ use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
+use App\Models\Leave;
+use App\Models\StudentAttendance;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Carbon\Carbon;
 
 class TeacherStudentController extends Controller
 {
@@ -125,8 +128,51 @@ class TeacherStudentController extends Controller
             
             $students = $query->latest('admission_date')->paginate($perPage);
             
+            // Get date for attendance check (default: today's date)
+            // If date parameter is provided, use it; otherwise use today's date
+            // Using PHP date() to get server's actual current date (not affected by timezone settings)
+            $attendanceDate = $request->filled('date') 
+                ? Carbon::parse($request->date)->format('Y-m-d') 
+                : date('Y-m-d');
+            
+            // Get all student IDs
+            $studentIds = $students->pluck('id');
+            
+            // Get approved leaves for these students on the attendance date
+            // Check if attendance date falls within leave period (from_date to to_date)
+            // Using Carbon to ensure proper date comparison
+            $attendanceDateCarbon = Carbon::parse($attendanceDate);
+            $approvedLeaves = Leave::whereIn('student_id', $studentIds)
+                ->where('status', 'Approved')
+                ->whereNotNull('student_id')
+                ->where(function($query) use ($attendanceDateCarbon) {
+                    $query->whereDate('from_date', '<=', $attendanceDateCarbon->format('Y-m-d'))
+                          ->whereDate('to_date', '>=', $attendanceDateCarbon->format('Y-m-d'));
+                })
+                ->pluck('student_id')
+                ->unique();
+            
+            // Get attendance records for these students on the attendance date
+            // This includes Leave status that was set when leave was approved
+            $attendances = StudentAttendance::whereIn('student_id', $studentIds)
+                ->whereDate('attendance_date', $attendanceDate)
+                ->pluck('status', 'student_id');
+            
             // Format students data
-            $studentsData = $students->map(function($student) {
+            $studentsData = $students->map(function($student) use ($approvedLeaves, $attendances, $attendanceDate) {
+                $attendanceStatus = 'N/A';
+                
+                // Priority 1: Check if attendance is already marked in StudentAttendance table
+                // This includes "Leave" status that was automatically set when leave was approved
+                if (isset($attendances[$student->id])) {
+                    $attendanceStatus = $attendances[$student->id];
+                }
+                // Priority 2: Check if student has approved leave for this date
+                // This is a fallback in case StudentAttendance record was not created yet
+                elseif ($approvedLeaves->contains($student->id)) {
+                    $attendanceStatus = 'Leave';
+                }
+                
                 return [
                     'id' => $student->id,
                     'student_code' => $student->student_code,
@@ -137,6 +183,8 @@ class TeacherStudentController extends Controller
                     'gender' => $student->gender,
                     'admission_date' => $student->admission_date?->format('Y-m-d'),
                     'photo' => $student->photo ? asset('storage/' . $student->photo) : null,
+                    'attendance_status' => $attendanceStatus,
+                    'attendance_date' => $attendanceDate,
                 ];
             });
             
@@ -152,6 +200,7 @@ class TeacherStudentController extends Controller
                 'success' => true,
                 'message' => $message,
                 'data' => [
+                    'attendance_date' => $attendanceDate, // Current date or provided date
                     'filters' => [
                         'class' => $className ?? null,
                         'section' => $sectionName ?? null,

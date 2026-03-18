@@ -10,6 +10,19 @@
                 <h4 class="mb-0 fs-16 fw-semibold">Tabulation Sheet - For Practical Test</h4>
             </div>
 
+            @if(session('success'))
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    {{ session('success') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+            @if(session('error'))
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    {{ session('error') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+
             <!-- Filter Form -->
             <form action="{{ route('test.tabulation-sheet.practical') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
@@ -105,6 +118,15 @@
                 </div>
 
                 <div class="default-table-area" style="margin-top: 0;">
+                    @if($filterType == 'editable')
+                    <form method="POST" action="{{ route('test.tabulation-sheet.practical.save') }}" id="tabulationSaveForm">
+                        @csrf
+                        <input type="hidden" name="campus" value="{{ $filterCampus }}">
+                        <input type="hidden" name="class" value="{{ $filterClass }}">
+                        <input type="hidden" name="section" value="{{ $filterSection ?? '' }}">
+                        <input type="hidden" name="subject" value="{{ $filterSubject ?? '' }}">
+                        <input type="hidden" name="test_name" value="{{ $filterTest }}">
+                    @endif
                     <div class="table-responsive">
                         <table class="table">
                             <thead>
@@ -151,7 +173,8 @@
                                     </td>
                                     <td>
                                         @if($filterType == 'editable')
-                                            <input type="number" class="form-control form-control-sm marks-input" 
+                                            <input type="hidden" name="marks[{{ $student->id }}][total]" value="{{ $totalMarks }}">
+                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-input" 
                                                    data-student-id="{{ $student->id }}" 
                                                    data-total-marks="{{ $totalMarks }}"
                                                    value="{{ $marksObtained }}" 
@@ -178,7 +201,7 @@
                                     </td>
                                     <td>
                                         @if($filterType == 'editable')
-                                            <textarea class="form-control form-control-sm remarks-input" 
+                                            <textarea name="marks[{{ $student->id }}][remarks]" class="form-control form-control-sm remarks-input" 
                                                       data-student-id="{{ $student->id }}" 
                                                       placeholder="Remarks" rows="1" 
                                                       style="width: 150px; min-width: 150px;">{{ $remarks }}</textarea>
@@ -210,6 +233,17 @@
                             @endif
                         </table>
                     </div>
+                    @if($filterType == 'editable' && $students->count() > 0)
+                    <div class="mt-3 no-print">
+                        <button type="submit" class="btn btn-primary btn-sm px-4 py-2 rounded-8">
+                            <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">save</span>
+                            <span>Save Marks</span>
+                        </button>
+                    </div>
+                    @endif
+                    @if($filterType == 'editable')
+                    </form>
+                    @endif
                 </div>
             </div>
             @else

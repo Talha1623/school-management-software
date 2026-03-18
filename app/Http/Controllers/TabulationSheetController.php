@@ -11,6 +11,7 @@ use App\Models\CombinedResultGrade;
 use App\Models\ParticularTestGrade;
 use App\Models\StudentMark;
 use App\Models\Campus;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -169,20 +170,29 @@ class TabulationSheetController extends Controller
         $gradeDefinitions = collect();
         if ($filterCampus && $filterTest) {
             // Try to get from ParticularTestGrade first (more specific)
-            $particularGrades = ParticularTestGrade::where('campus', $filterCampus)
-                ->where('for_test', $filterTest);
-            
-            if ($filterClass) {
-                $particularGrades->where('class', $filterClass);
+            try {
+                $particularGrades = ParticularTestGrade::where('campus', $filterCampus)
+                    ->where('for_test', $filterTest);
+                
+                if ($filterClass) {
+                    $particularGrades->where('class', $filterClass);
+                }
+                if ($filterSection) {
+                    $particularGrades->where('section', $filterSection);
+                }
+                if ($filterSubject) {
+                    $particularGrades->where('subject', $filterSubject);
+                }
+                
+                $gradeDefinitions = $particularGrades->orderBy('from_percentage', 'desc')->get();
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Table doesn't exist - return empty collection
+                if (str_contains($e->getMessage(), "doesn't exist")) {
+                    $gradeDefinitions = collect();
+                } else {
+                    throw $e;
+                }
             }
-            if ($filterSection) {
-                $particularGrades->where('section', $filterSection);
-            }
-            if ($filterSubject) {
-                $particularGrades->where('subject', $filterSubject);
-            }
-            
-            $gradeDefinitions = $particularGrades->orderBy('from_percentage', 'desc')->get();
         }
         
         // If no particular test grades found, use CombinedResultGrade
@@ -210,6 +220,53 @@ class TabulationSheetController extends Controller
             'filterType'
         ));
     }
+
+    /**
+     * Save marks from tabulation sheet (editable mode).
+     */
+    public function saveMarks(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus' => ['required', 'string', 'max:255'],
+            'class' => ['required', 'string', 'max:255'],
+            'section' => ['nullable', 'string', 'max:255'],
+            'subject' => ['nullable', 'string', 'max:255'],
+            'test_name' => ['required', 'string', 'max:255'],
+            'marks' => ['required', 'array'],
+            'marks.*.obtained' => ['nullable', 'numeric', 'min:0'],
+            'marks.*.total' => ['nullable', 'numeric', 'min:0'],
+            'marks.*.remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        foreach ($validated['marks'] as $studentId => $markData) {
+            StudentMark::updateOrCreate(
+                [
+                    'student_id' => $studentId,
+                    'test_name' => $validated['test_name'],
+                    'campus' => $validated['campus'],
+                    'class' => $validated['class'],
+                    'section' => $validated['section'] ?? null,
+                    'subject' => $validated['subject'] ?? null,
+                ],
+                [
+                    'marks_obtained' => $markData['obtained'] ?? null,
+                    'total_marks' => $markData['total'] ?? null,
+                    'teacher_remarks' => $markData['remarks'] ?? null,
+                ]
+            );
+        }
+
+        return redirect()
+            ->route('test.tabulation-sheet.practical', [
+                'filter_campus' => $validated['campus'],
+                'filter_class' => $validated['class'],
+                'filter_section' => $validated['section'] ?? '',
+                'filter_subject' => $validated['subject'] ?? '',
+                'filter_test' => $validated['test_name'],
+                'filter_type' => 'editable',
+            ])
+            ->with('success', 'Marks saved successfully!');
+    }
     
     /**
      * Calculate grade based on marks and grade definitions
@@ -232,32 +289,31 @@ class TabulationSheetController extends Controller
     }
 
     /**
-     * Get sections by class (AJAX)
+     * Get sections by class (AJAX). Optional campus for combine/practical tabulation.
      */
     public function getSectionsByClass(Request $request): \Illuminate\Http\JsonResponse
     {
         $class = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$class) {
             return response()->json(['sections' => []]);
         }
         
-        // Use case-insensitive matching for class
-        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-            ->whereNotNull('name')
-            ->distinct()
-            ->pluck('name')
-            ->sort()
-            ->values();
+        $sectionQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name');
+        if ($campus) {
+            $sectionQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionQuery->distinct()->pluck('name')->sort()->values();
             
         if ($sections->isEmpty()) {
-            // Try from subjects table with case-insensitive matching
-            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('section')
-                ->distinct()
-                ->pluck('section')
-                ->sort()
-                ->values();
+            $subjectQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section');
+            if ($campus) {
+                $subjectQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $subjectQuery->distinct()->pluck('section')->sort()->values();
         }
 
         return response()->json(['sections' => $sections]);
@@ -324,38 +380,48 @@ class TabulationSheetController extends Controller
     public function combine(Request $request): View
     {
         // Get filter values
+        $filterCampus = $request->get('filter_campus');
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
         $filterTestType = $request->get('filter_test_type');
         $filterFromDate = $request->get('filter_from_date');
         $filterToDate = $request->get('filter_to_date');
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-        
+        // Get campuses for dropdown
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
+            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort();
+            $campuses = $allCampuses->map(fn($c) => (object)['campus_name' => $c]);
+        }
+
+        // Get classes - filter by campus when selected
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($filterCampus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         if ($classes->isEmpty()) {
             $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
         }
 
-        // Get sections - will be loaded dynamically based on class selection
+        // Get sections - will be loaded dynamically based on class selection (and campus if provided)
         $sections = collect();
         if ($filterClass) {
-            // Load sections for the selected class
-            $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name')
-                ->sort()
-                ->values();
-                
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                ->whereNotNull('name');
+            if ($filterCampus) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
             if ($sections->isEmpty()) {
-                // Try from subjects table with case-insensitive matching
-                $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                    ->whereNotNull('section')
-                    ->distinct()
-                    ->pluck('section')
-                    ->sort()
-                    ->values();
+                $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                    ->whereNotNull('section');
+                if ($filterCampus) {
+                    $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                }
+                $sections = $subjectsQuery->distinct()->pluck('section')->sort()->values();
             }
         }
 
@@ -391,21 +457,25 @@ class TabulationSheetController extends Controller
         
         if ($filterClass || $filterSection) {
             $studentsQuery = Student::query();
-            
+            if ($filterCampus) {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
             if ($filterClass) {
-                $studentsQuery->where('class', $filterClass);
+                $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
             }
             if ($filterSection) {
-                $studentsQuery->where('section', $filterSection);
+                $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
             }
-            
             $students = $studentsQuery->orderBy('student_name')->get();
             
             if ($students->isNotEmpty()) {
                 $studentIds = $students->pluck('id');
                 
-                // Get subjects assigned to this class/section
+                // Get subjects assigned to this class/section (and campus if set)
                 $subjectsQuery = Subject::query();
+                if ($filterCampus) {
+                    $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                }
                 if ($filterClass) {
                     $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
                 }
@@ -420,25 +490,28 @@ class TabulationSheetController extends Controller
                 
                 // Get student marks for combine tests
                 $marksQuery = StudentMark::whereIn('student_id', $studentIds);
-                
+                if ($filterCampus) {
+                    $marksQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                }
                 if ($filterClass) {
                     $marksQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
                 }
                 if ($filterSection) {
                     $marksQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
                 }
-                
                 // Filter by test_type if provided - need to join with tests table
                 if ($filterTestType) {
-                    $testNames = Test::where('test_type', $filterTestType)
-                        ->when($filterClass, function($q) use ($filterClass) {
-                            return $q->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($filterClass))]);
-                        })
+                    $testNamesQuery = Test::where('test_type', $filterTestType);
+                    if ($filterCampus) {
+                        $testNamesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                    }
+                    $testNamesQuery->when($filterClass, function($q) use ($filterClass) {
+                        return $q->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($filterClass))]);
+                    })
                         ->when($filterSection, function($q) use ($filterSection) {
                             return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
-                        })
-                        ->distinct()
-                        ->pluck('test_name');
+                        });
+                    $testNames = $testNamesQuery->distinct()->pluck('test_name');
                     
                     if ($testNames->isNotEmpty()) {
                         $marksQuery->whereIn('test_name', $testNames);
@@ -537,6 +610,7 @@ class TabulationSheetController extends Controller
         }
 
         return view('test.tabulation-sheet.combine', compact(
+            'campuses',
             'classes',
             'sections',
             'testTypes',
@@ -545,6 +619,7 @@ class TabulationSheetController extends Controller
             'subjects',
             'studentMarks',
             'gradeDefinitions',
+            'filterCampus',
             'filterClass',
             'filterSection',
             'filterTestType',

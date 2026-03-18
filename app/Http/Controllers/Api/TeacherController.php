@@ -183,11 +183,17 @@ class TeacherController extends Controller
             }
 
             // Get classes and sections from teacher's assigned subjects
+            // IMPORTANT: Only get records where teacher is CURRENTLY assigned (not null/empty)
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
                 ->get();
 
             // Get classes and sections from teacher's assigned sections
+            // IMPORTANT: Only get records where teacher is CURRENTLY assigned (not null/empty)
             $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '')
                 ->get();
 
             // Get unique classes from both sources
@@ -220,6 +226,23 @@ class TeacherController extends Controller
                 }
                 return false;
             })->values();
+            
+            // CRITICAL FIX: Double-check that teacher is STILL assigned to each class
+            // This filters out old assignments that may still exist in Subject/Section tables
+            $allClasses = $allClasses->filter(function($className) use ($teacher, $assignedSubjects, $assignedSections) {
+                // Check if teacher is assigned to this class in Subject table
+                $hasSubjectAssignment = $assignedSubjects->contains(function($subject) use ($className) {
+                    return strtolower(trim($subject->class ?? '')) === strtolower(trim($className));
+                });
+                
+                // Check if teacher is assigned to this class in Section table
+                $hasSectionAssignment = $assignedSections->contains(function($section) use ($className) {
+                    return strtolower(trim($section->class ?? '')) === strtolower(trim($className));
+                });
+                
+                // Only include if teacher has current assignment (either Subject or Section)
+                return $hasSubjectAssignment || $hasSectionAssignment;
+            })->values();
 
             // Build classes with their sections - each section as separate entry
             $classesData = [];
@@ -237,8 +260,11 @@ class TeacherController extends Controller
             
             foreach ($allClasses as $className) {
                 // Get sections from subjects for this class
+                // Note: assignedSubjects already filtered to only include current teacher assignments
                 $sectionsFromSubjects = $assignedSubjects
-                    ->where('class', $className)
+                    ->filter(function($subject) use ($className) {
+                        return strtolower(trim($subject->class ?? '')) === strtolower(trim($className));
+                    })
                     ->pluck('section')
                     ->map(function($section) {
                         return trim($section);
@@ -250,8 +276,11 @@ class TeacherController extends Controller
                     ->values();
 
                 // Get sections from sections table for this class
+                // Note: assignedSections already filtered to only include current teacher assignments
                 $sectionsFromSections = $assignedSections
-                    ->where('class', $className)
+                    ->filter(function($section) use ($className) {
+                        return strtolower(trim($section->class ?? '')) === strtolower(trim($className));
+                    })
                     ->pluck('name')
                     ->map(function($section) {
                         return trim($section);
@@ -282,10 +311,23 @@ class TeacherController extends Controller
                 foreach ($allSections as $section) {
                     $formattedSection = strtolower(trim($className)) . ' ' . strtolower(trim($section));
                     
+                    // Check if teacher is class teacher for this section
+                    // Class teacher is identified by Section model's teacher field matching teacher's name
+                    $sectionRecord = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
+                        ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($section))])
+                        ->first();
+                    
+                    $isClassTeacher = false;
+                    if ($sectionRecord && $sectionRecord->teacher) {
+                        // Check if teacher name matches (case-insensitive)
+                        $isClassTeacher = strtolower(trim($sectionRecord->teacher)) === strtolower(trim($teacher->name ?? ''));
+                    }
+                    
                     $classesData[] = [
                         'class' => $className,
                         'section' => trim($section),
                         'formatted_sections' => $formattedSection,
+                        'is_class_teacher' => $isClassTeacher,
                     ];
                 }
             }

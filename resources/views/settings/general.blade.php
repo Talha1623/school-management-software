@@ -89,11 +89,8 @@
                                 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">Running Session</label>
-                                    <select class="form-select" name="running_session">
-                                        <option value="2024-2025">2024-2025</option>
-                                        <option value="2025-2026">2025-2026</option>
-                                        <option value="2026-2027">2026-2027</option>
-                                    </select>
+                                    <input type="text" class="form-control" name="running_session" placeholder="e.g. 2024-2025, 2025-2026" value="{{ old('running_session', $settings->running_session ?? '') }}">
+                                    <small class="text-muted">Type and add your current session (e.g. 2024-2025)</small>
                                 </div>
                                 
                                 <div class="col-md-6 mb-3">

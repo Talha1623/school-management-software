@@ -160,6 +160,7 @@ class StudentTransferController extends Controller
             'from_campus' => ['nullable', 'string', 'max:255'],
             'to_campus' => ['required', 'string', 'max:255'],
             'class' => ['required', 'string', 'max:255'],
+            'section' => ['nullable', 'string', 'max:255'],
             'student_code' => ['nullable', 'string', 'max:255'],
             'student_id' => ['required', 'integer', 'exists:students,id'],
             'move_dues' => ['nullable', 'string', 'in:yes,no'],
@@ -201,10 +202,15 @@ class StudentTransferController extends Controller
             $newClass = trim((string) $validated['class']);
             $student->class = $newClass;
             
-            // If class changed, clear section (since sections are class-specific)
-            // This prevents students from appearing in Behavior Recording with wrong class/section combination
-            if (strtolower(trim($oldClass ?? '')) !== strtolower(trim($newClass))) {
-                $student->section = null;
+            // Update section if provided
+            if ($request->filled('section') && !empty(trim((string) $validated['section']))) {
+                $student->section = trim((string) $validated['section']);
+            } else {
+                // If class changed and no section provided, clear section (since sections are class-specific)
+                // This prevents students from appearing in Behavior Recording with wrong class/section combination
+                if (strtolower(trim($oldClass ?? '')) !== strtolower(trim($newClass))) {
+                    $student->section = null;
+                }
             }
         }
 
@@ -236,31 +242,61 @@ class StudentTransferController extends Controller
             'father_name' => $student->father_name,
         ]);
 
-        // Update student_payments with new student code if campus changed
-        if (!empty($normalizedToCampus) && trim((string) $fromCampus) !== trim((string) $normalizedToCampus) && $oldStudentCode !== $student->student_code) {
-            // Update all payment records (both dues and payments) with new student code and campus
-            DB::table('student_payments')
-                ->where('student_code', $oldStudentCode)
-                ->update([
-                    'student_code' => $student->student_code,
-                    'campus' => $normalizedToCampus
-                ]);
-        } else {
-            // If no code change, just update campus in payments if requested
-            if ($request->input('move_dues') === 'yes') {
+        // Update student_payments based on move_dues and move_payments settings
+        $moveDues = $request->input('move_dues', 'no') === 'yes';
+        $movePayments = $request->input('move_payments', 'no') === 'yes';
+        
+        // Check if campus changed
+        $campusChanged = !empty($normalizedToCampus) && trim((string) $fromCampus) !== trim((string) $normalizedToCampus);
+        $codeChanged = $oldStudentCode !== $student->student_code;
+        
+        if ($campusChanged && $codeChanged) {
+            // Campus changed and student code changed - update based on move_dues and move_payments
+            if ($moveDues && $movePayments) {
+                // Move both dues and payments
+                DB::table('student_payments')
+                    ->where('student_code', $oldStudentCode)
+                    ->update([
+                        'student_code' => $student->student_code,
+                        'campus' => $normalizedToCampus
+                    ]);
+            } elseif ($moveDues) {
+                // Move only dues (Generated fees)
+                DB::table('student_payments')
+                    ->where('student_code', $oldStudentCode)
+                    ->where('method', 'Generated')
+                    ->update([
+                        'student_code' => $student->student_code,
+                        'campus' => $normalizedToCampus
+                    ]);
+            } elseif ($movePayments) {
+                // Move only payments (non-Generated)
+                DB::table('student_payments')
+                    ->where('student_code', $oldStudentCode)
+                    ->where('method', '!=', 'Generated')
+                    ->update([
+                        'student_code' => $student->student_code,
+                        'campus' => $normalizedToCampus
+                    ]);
+            }
+            // If both are "no", don't update any payment records
+        } elseif ($campusChanged) {
+            // Campus changed but student code didn't change - update campus only if requested
+            if ($moveDues) {
                 DB::table('student_payments')
                     ->where('student_code', $student->student_code)
                     ->where('method', 'Generated')
                     ->update(['campus' => $normalizedToCampus]);
             }
             
-            if ($request->input('move_payments') === 'yes') {
+            if ($movePayments) {
                 DB::table('student_payments')
                     ->where('student_code', $student->student_code)
                     ->where('method', '!=', 'Generated')
                     ->update(['campus' => $normalizedToCampus]);
             }
         }
+        // If campus didn't change, don't update payment records
 
         // TODO: Send notification if notify_parent is yes
 

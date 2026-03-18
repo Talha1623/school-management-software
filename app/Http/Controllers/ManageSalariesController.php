@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Salary;
+use App\Models\Campus;
+use App\Models\Staff;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -14,6 +16,16 @@ class ManageSalariesController extends Controller
     public function index(Request $request): View
     {
         $query = Salary::with('staff');
+        
+        // Campus filter
+        if ($request->filled('campus')) {
+            $campus = trim($request->campus);
+            if (!empty($campus)) {
+                $query->whereHas('staff', function($q) use ($campus) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                });
+            }
+        }
         
         // Search functionality
         if ($request->filled('search')) {
@@ -32,7 +44,59 @@ class ManageSalariesController extends Controller
         
         $salaries = $query->orderBy('created_at', 'desc')->paginate($perPage)->withQueryString();
         
-        return view('salary-loan.manage-salaries', compact('salaries'));
+        // Calculate attendance summary for per hour teachers to show hours
+        $generateController = app(\App\Http\Controllers\GenerateSalaryController::class);
+        $reflection = new \ReflectionClass($generateController);
+        $calculateAttendanceMethod = $reflection->getMethod('calculateAttendanceSummary');
+        $calculateAttendanceMethod->setAccessible(true);
+        
+        $monthNames = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
+        ];
+        
+        // Add hours data to each salary for per hour teachers
+        foreach ($salaries as $salary) {
+            if ($salary->staff) {
+                $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
+                if ($salaryType === 'per hour') {
+                    try {
+                        $monthNumber = (int) ($monthNames[$salary->salary_month] ?? date('m'));
+                        $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
+                        $totalMinutes = $attendanceSummary['total_minutes'] ?? 0;
+                        $totalHours = round($totalMinutes / 60, 2);
+                        $salary->total_hours = $totalHours;
+                        $salary->total_classes = $attendanceSummary['present'] ?? 0;
+                    } catch (\Exception $e) {
+                        $salary->total_hours = 0;
+                        $salary->total_classes = 0;
+                    }
+                } else {
+                    $salary->total_hours = null;
+                    $salary->total_classes = null;
+                }
+            }
+        }
+        
+        // Get campuses for filter dropdown
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            // Get campuses from staff table
+            $campusesFromStaff = Staff::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            // Convert to collection of objects with campus_name property
+            $campuses = collect();
+            foreach ($campusesFromStaff as $campusName) {
+                $campuses->push((object)['campus_name' => $campusName]);
+            }
+        }
+        
+        return view('salary-loan.manage-salaries', compact('salaries', 'campuses'));
     }
 
     /**
@@ -132,63 +196,22 @@ class ManageSalariesController extends Controller
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
         ]);
 
-        // Calculate loan repayment (use provided value or calculate from loans)
+        // Use existing loan repayment from salary (already deducted at generation time)
+        // Do NOT recalculate or deduct loan repayment again
         $loanRepayment = $validated['loan_repayment'] ?? $salary->loan_repayment ?? 0;
-        if ($loanRepayment == 0) {
-            // Calculate loan repayment from approved loans (exclude Completed, Rejected, Pending)
-            $approvedLoans = \App\Models\Loan::where('staff_id', $salary->staff_id)
-                ->where('status', 'Approved')
-                ->get();
-            
-            foreach ($approvedLoans as $loan) {
-                // Only calculate if loan has approved amount and repayment instalments
-                if ($loan->approved_amount && $loan->approved_amount > 0 && $loan->repayment_instalments > 0) {
-                    // Calculate monthly installment: approved_amount / repayment_instalments
-                    $monthlyInstallment = (float) $loan->approved_amount / (int) $loan->repayment_instalments;
-                    $loanRepayment += $monthlyInstallment;
-                }
-            }
-            $loanRepayment = round($loanRepayment, 2);
-        }
 
-        // Recalculate salary generated from base (base + bonus - deduction - discount - loan repayment)
+        // Calculate new salary generated from existing salary_generated (which already has loan deducted)
+        // Only add bonus and subtract deduction - loan is already deducted
         $bonusAmount = $validated['bonus_amount'] ?? 0;
         $deductionAmount = $validated['deduction_amount'] ?? 0;
         
-        // Get month number from salary month name
-        $monthNames = [
-            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
-            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
-            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
-        ];
-        $monthNumber = (int) ($monthNames[$salary->salary_month] ?? date('m'));
-        
-        // Use reflection to access private methods from GenerateSalaryController
-        $generateController = app(\App\Http\Controllers\GenerateSalaryController::class);
-        $reflection = new \ReflectionClass($generateController);
-        
-        // Calculate attendance summary
-        $calculateAttendanceMethod = $reflection->getMethod('calculateAttendanceSummary');
-        $calculateAttendanceMethod->setAccessible(true);
-        $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
-        
-        // Calculate base salary generated (with late/early deductions already applied)
-        $calculateSalaryMethod = $reflection->getMethod('calculateSalaryGenerated');
-        $calculateSalaryMethod->setAccessible(true);
-        $baseSalaryGenerated = $calculateSalaryMethod->invoke($generateController, $salary->staff, $attendanceSummary, 0, (int) $salary->year, $monthNumber);
-        
-        // Calculate fee discount from student payments
-        $calculateDiscountMethod = $reflection->getMethod('calculateFeeDiscount');
-        $calculateDiscountMethod->setAccessible(true);
-        $feeDiscount = $calculateDiscountMethod->invoke($generateController, $salary->staff, (int) $salary->year, $monthNumber);
-        
-        // Subtract discount and loan repayment from salary generated
-        $newSalaryGenerated = max(0, $baseSalaryGenerated + $bonusAmount - $deductionAmount - $feeDiscount - $loanRepayment);
+        // Use existing salary_generated (which already has loan repayment deducted at generation)
+        // Add bonus and subtract deduction only
+        $newSalaryGenerated = max(0, $salary->salary_generated + $bonusAmount - $deductionAmount);
 
-        // Deduct loan repayment from amount_paid automatically
-        // amount_paid entered by user is the gross amount, we deduct loan from it
+        // amount_paid entered by user - do NOT deduct loan again (loan already deducted from salary_generated)
         $enteredAmountPaid = (float) ($validated['amount_paid'] ?? 0);
-        $finalAmountPaid = max(0, $enteredAmountPaid - $loanRepayment);
+        $finalAmountPaid = $enteredAmountPaid;
 
         // Determine status based on fully_paid or amount_paid
         // Note: newSalaryGenerated already has loan repayment deducted
@@ -205,11 +228,22 @@ class ManageSalariesController extends Controller
             'amount_paid' => $finalAmountPaid,
             'loan_repayment' => $loanRepayment,
             'salary_generated' => $newSalaryGenerated,
+            'discount' => 0,
+            'bonus_amount' => $bonusAmount,
+            'deduction_amount' => $deductionAmount,
             'status' => $status,
         ]);
 
         // TODO: Store bonus and deduction details if needed (may require additional table)
         // TODO: Send notification to employee if notify_employee is true
+
+        // If status is Paid and payment was actually made, redirect back to manage-salaries with print flag
+        if ($status === 'Paid' && $finalAmountPaid > 0) {
+            return redirect()
+                ->route('salary-loan.manage-salaries')
+                ->with('success', 'Payment updated successfully. Status changed to Paid.')
+                ->with('print_receipt_id', $salary->id);
+        }
 
         return redirect()
             ->route('salary-loan.manage-salaries')
@@ -227,9 +261,35 @@ class ManageSalariesController extends Controller
 
         $salary->update($validated);
 
+        // Don't auto-print when status is changed manually - only print when actual payment is made
         return redirect()
             ->route('salary-loan.manage-salaries')
             ->with('success', 'Salary status updated successfully!');
+    }
+
+    /**
+     * Update salary details (Present, Absent, Late, Generated Salary).
+     */
+    public function update(Request $request, Salary $salary)
+    {
+        $validated = $request->validate([
+            'present' => ['required', 'integer', 'min:0'],
+            'absent' => ['required', 'integer', 'min:0'],
+            'late' => ['required', 'integer', 'min:0'],
+            'salary_generated' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        // Update the salary record
+        $salary->update([
+            'present' => $validated['present'],
+            'absent' => $validated['absent'],
+            'late' => $validated['late'],
+            'salary_generated' => $validated['salary_generated'],
+        ]);
+
+        return redirect()
+            ->route('salary-loan.manage-salaries')
+            ->with('success', 'Salary updated successfully!');
     }
 
     /**
@@ -250,6 +310,16 @@ class ManageSalariesController extends Controller
     public function export(Request $request, string $format)
     {
         $query = Salary::with('staff');
+        
+        // Apply campus filter if present
+        if ($request->has('campus') && $request->campus) {
+            $campus = trim($request->campus);
+            if (!empty($campus)) {
+                $query->whereHas('staff', function($q) use ($campus) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                });
+            }
+        }
         
         // Apply search filter if present
         if ($request->has('search') && $request->search) {
@@ -379,7 +449,51 @@ class ManageSalariesController extends Controller
     {
         $salary->load('staff');
         
-        return view('salary-loan.print-receipt', compact('salary'));
+        // Calculate attendance summary for displaying hours/lectures
+        $generateController = app(\App\Http\Controllers\GenerateSalaryController::class);
+        $reflection = new \ReflectionClass($generateController);
+        
+        // Get month number
+        $monthNames = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
+        ];
+        $monthNumber = (int) ($monthNames[$salary->salary_month] ?? date('m'));
+        
+        // Calculate attendance summary
+        $calculateAttendanceMethod = $reflection->getMethod('calculateAttendanceSummary');
+        $calculateAttendanceMethod->setAccessible(true);
+        $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
+        
+        return view('salary-loan.print-receipt', compact('salary', 'attendanceSummary'));
+    }
+
+    /**
+     * Print thermal receipt for salary payment
+     */
+    public function printReceiptThermal(Salary $salary)
+    {
+        $salary->load('staff');
+        
+        // Calculate attendance summary for displaying hours/lectures
+        $generateController = app(\App\Http\Controllers\GenerateSalaryController::class);
+        $reflection = new \ReflectionClass($generateController);
+        
+        // Get month number
+        $monthNames = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
+        ];
+        $monthNumber = (int) ($monthNames[$salary->salary_month] ?? date('m'));
+        
+        // Calculate attendance summary
+        $calculateAttendanceMethod = $reflection->getMethod('calculateAttendanceSummary');
+        $calculateAttendanceMethod->setAccessible(true);
+        $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
+        
+        return view('salary-loan.print-receipt-thermal', compact('salary', 'attendanceSummary'));
     }
 }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ParentAccount;
 use App\Models\Student;
 use App\Models\StudentPayment;
+use App\Models\GeneralSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -58,9 +59,12 @@ class ParentAccountController extends Controller
             ->orderBy('name')
             ->get();
 
+        $settings = GeneralSetting::getSettings();
+
         return view('parent.manage-access-print', [
             'parents' => $parents,
             'printedAt' => Carbon::now()->format('d-m-Y H:i'),
+            'settings' => $settings,
         ]);
     }
 
@@ -170,6 +174,21 @@ class ParentAccountController extends Controller
         }
 
         $parent_account->update($validated);
+
+        // Ensure AdvanceFee exists for this parent
+        AdvanceFee::firstOrCreate(
+            ['parent_id' => (string) $parent_account->id],
+            [
+                'name' => $parent_account->name,
+                'email' => $parent_account->email,
+                'phone' => $parent_account->phone,
+                'id_card_number' => $parent_account->id_card_number,
+                'available_credit' => 0,
+                'increase' => 0,
+                'decrease' => 0,
+                'childs' => 0,
+            ]
+        );
 
         return redirect()
             ->route('parent.manage-access')

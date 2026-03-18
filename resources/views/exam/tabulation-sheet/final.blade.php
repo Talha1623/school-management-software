@@ -19,7 +19,10 @@
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
                             @foreach($campuses as $campus)
-                                <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                                @php
+                                    $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+                                @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -202,33 +205,90 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const initialClass = "{{ $filterClass ?? '' }}";
+    const initialCampus = "{{ $filterCampus ?? '' }}";
+
+    function loadClasses() {
+        const campus = campusSelect ? campusSelect.value : '';
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        classSelect.disabled = true;
+
+        fetch(`{{ route('exam.tabulation-sheet.get-classes') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        classSelect.innerHTML += `<option value="${className}">${className}</option>`;
+                    });
+                }
+                classSelect.disabled = false;
+                if (initialClass && data.classes && data.classes.includes(initialClass)) {
+                    classSelect.value = initialClass;
+                    loadSections(initialClass);
+                } else {
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+    }
 
     function loadSections(selectedClass) {
         if (selectedClass) {
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
+            sectionSelect.disabled = true;
             
-            fetch(`{{ route('exam.timetable.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            const campus = campusSelect ? campusSelect.value : '';
+            const params = new URLSearchParams();
+            params.append('class', selectedClass);
+            if (campus) {
+                params.append('campus', campus);
+            }
+            
+            fetch(`{{ route('exam.timetable.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';
                     data.forEach(section => {
                         sectionSelect.innerHTML += `<option value="${section}">${section}</option>`;
                     });
+                    sectionSelect.disabled = false;
                 })
                 .catch(error => {
                     console.error('Error loading sections:', error);
                     sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                    sectionSelect.disabled = false;
                 });
         } else {
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            sectionSelect.disabled = false;
         }
     }
 
-    classSelect.addEventListener('change', function() {
-        loadSections(this.value);
-    });
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses();
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        });
+    }
+
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            loadSections(this.value);
+        });
+    }
+
+    // Load classes on page load if campus is selected
+    if (initialCampus) {
+        loadClasses();
+    }
 });
 
 function printFinalTabulationSheet() {

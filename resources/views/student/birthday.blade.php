@@ -27,8 +27,15 @@
         <div class="card bg-white border border-white rounded-10 p-3">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Student Birthdays</h4>
-                <!-- Export Buttons -->
+                <!-- Action Buttons -->
                 <div class="d-flex gap-2">
+                    @if(isset($students) && $students->count() > 0)
+                        <button type="button" class="btn btn-sm px-3 py-1 wish-all-btn" onclick="wishToAllStudents()" style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); color: white; border: none; border-radius: 6px; font-weight: 500;">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">celebration</span>
+                            <span>Wish to All</span>
+                        </button>
+                    @endif
+                    <!-- Export Buttons -->
                     <a href="{{ route('student.birthday.export', ['format' => 'excel']) }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
                         <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
                         <span>Excel</span>
@@ -205,6 +212,21 @@
         color: white;
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+    }
+    
+    .wish-all-btn {
+        transition: all 0.3s ease;
+    }
+    
+    .wish-all-btn:hover {
+        background: linear-gradient(135deg, #f57c00 0%, #ff9800 100%) !important;
+        color: white !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+    }
+    
+    .wish-all-btn:active {
+        transform: translateY(0);
     }
     
     .export-btn:active {
@@ -420,6 +442,41 @@ function printStudentTable() {
     `);
     printWindow.document.close();
     printWindow.print();
+}
+
+function wishToAllStudents() {
+    // Collect all parent phone numbers from the table
+    const wishButtons = document.querySelectorAll('.action-btn-wish');
+    const phoneNumbers = [];
+    
+    wishButtons.forEach(button => {
+        const phoneRaw = button.getAttribute('data-phone') || '';
+        const phone = normalizePhone(phoneRaw);
+        if (phone && phone.length >= 10) {
+            phoneNumbers.push(phone);
+        }
+    });
+    
+    if (phoneNumbers.length === 0) {
+        alert('No valid parent phone numbers found to send wishes.');
+        return;
+    }
+    
+    // Confirm action
+    const confirmMessage = `Are you sure you want to send birthday wishes to ${phoneNumbers.length} parent(s)? This will open ${phoneNumbers.length} WhatsApp chat(s).`;
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Open WhatsApp chats for each parent with a delay to avoid blocking
+    phoneNumbers.forEach((phone, index) => {
+        setTimeout(() => {
+            window.open(`https://wa.me/${phone}`, '_blank');
+        }, index * 500); // 500ms delay between each window
+    });
+    
+    // Show confirmation
+    alert(`Opening WhatsApp chats for ${phoneNumbers.length} parent(s). Please wait...`);
 }
 
 </script>

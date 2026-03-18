@@ -358,8 +358,20 @@
                         </div>
                     </div>
 
-                    <!-- Save Button -->
-                    <div class="d-flex justify-content-end mb-3">
+                    <!-- Save Button and Notify Section -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <!-- Notify Late & Absent Teachers Section -->
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="material-symbols-outlined" style="font-size: 20px; color: #003471;">notifications</span>
+                                <label class="form-label mb-0 fs-14 fw-semibold" style="color: #003471;">Notify Late & Absent Teachers:</label>
+                            </div>
+                            <select class="form-select form-select-sm" id="notifyLateAbsent" name="notify_late_absent" style="width: 100px;">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                        </div>
+                        <!-- Save Button -->
                         <button type="submit" class="btn btn-lg save-btn">
                             <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">save</span>
                             <span>Save Attendance</span>

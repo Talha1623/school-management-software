@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Schema;
 
 class QuizController extends Controller
 {
@@ -279,22 +280,30 @@ class QuizController extends Controller
      */
     public function getQuestions(Quiz $quiz): JsonResponse
     {
-        $questions = $quiz->questions()->orderBy('question_number')->get();
-        
-        return response()->json([
-            'questions' => $questions->map(function($q) {
-                return [
-                    'question_number' => $q->question_number,
-                    'question' => $q->question,
-                    'answer1' => $q->answer1,
-                    'marks1' => $q->marks1,
-                    'answer2' => $q->answer2,
-                    'marks2' => $q->marks2,
-                    'answer3' => $q->answer3,
-                    'marks3' => $q->marks3,
-                ];
-            })
-        ]);
+        try {
+            if (!Schema::hasTable('quiz_questions')) {
+                return response()->json(['questions' => []]);
+            }
+            
+            $questions = $quiz->questions()->orderBy('question_number')->get();
+            
+            return response()->json([
+                'questions' => $questions->map(function($q) {
+                    return [
+                        'question_number' => $q->question_number,
+                        'question' => $q->question,
+                        'answer1' => $q->answer1,
+                        'marks1' => $q->marks1,
+                        'answer2' => $q->answer2,
+                        'marks2' => $q->marks2,
+                        'answer3' => $q->answer3,
+                        'marks3' => $q->marks3,
+                    ];
+                })
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['questions' => []]);
+        }
     }
 
     /**
@@ -313,23 +322,50 @@ class QuizController extends Controller
             'questions.*.marks3' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        // Delete existing questions
-        $quiz->questions()->delete();
+        // Ensure table exists, create if it doesn't
+        if (!Schema::hasTable('quiz_questions')) {
+            try {
+                $this->createQuizQuestionsTable();
+            } catch (\Exception $e) {
+                return redirect()
+                    ->route('quiz.manage')
+                    ->with('error', 'Quiz questions table does not exist. Please run: php artisan fix:quiz-questions-table');
+            }
+        }
+
+        // Delete existing questions (only if table exists)
+        try {
+            if (Schema::hasTable('quiz_questions')) {
+                $quiz->questions()->delete();
+            }
+        } catch (\Exception $e) {
+            // Table doesn't exist, continue without deleting
+        }
 
         // Create new questions
         foreach ($request->questions as $questionNumber => $questionData) {
             if (!empty($questionData['question']) || !empty($questionData['answer1']) || !empty($questionData['answer2']) || !empty($questionData['answer3'])) {
-                QuizQuestion::create([
-                    'quiz_id' => $quiz->id,
-                    'question_number' => (int) $questionNumber,
-                    'question' => $questionData['question'] ?? '',
-                    'answer1' => $questionData['answer1'] ?? null,
-                    'marks1' => (int) ($questionData['marks1'] ?? 0),
-                    'answer2' => $questionData['answer2'] ?? null,
-                    'marks2' => (int) ($questionData['marks2'] ?? 0),
-                    'answer3' => $questionData['answer3'] ?? null,
-                    'marks3' => (int) ($questionData['marks3'] ?? 0),
-                ]);
+                try {
+                    QuizQuestion::create([
+                        'quiz_id' => $quiz->id,
+                        'question_number' => (int) $questionNumber,
+                        'question' => $questionData['question'] ?? '',
+                        'answer1' => $questionData['answer1'] ?? null,
+                        'marks1' => (int) ($questionData['marks1'] ?? 0),
+                        'answer2' => $questionData['answer2'] ?? null,
+                        'marks2' => (int) ($questionData['marks2'] ?? 0),
+                        'answer3' => $questionData['answer3'] ?? null,
+                        'marks3' => (int) ($questionData['marks3'] ?? 0),
+                    ]);
+                } catch (\Exception $e) {
+                    // If table still doesn't exist, show error
+                    if (str_contains($e->getMessage(), "doesn't exist")) {
+                        return redirect()
+                            ->route('quiz.manage')
+                            ->with('error', 'Quiz questions table does not exist. Please run: php artisan fix:quiz-questions-table');
+                    }
+                    throw $e;
+                }
             }
         }
 
@@ -343,22 +379,71 @@ class QuizController extends Controller
      */
     public function getResult(Quiz $quiz): JsonResponse
     {
-        $questions = $quiz->questions()->orderBy('question_number')->get();
-        
-        return response()->json([
-            'questions' => $questions->map(function($q) {
-                return [
-                    'question_number' => $q->question_number,
-                    'question' => $q->question,
-                    'answer1' => $q->answer1,
-                    'marks1' => $q->marks1,
-                    'answer2' => $q->answer2,
-                    'marks2' => $q->marks2,
-                    'answer3' => $q->answer3,
-                    'marks3' => $q->marks3,
-                ];
-            })
-        ]);
+        try {
+            if (!Schema::hasTable('quiz_questions')) {
+                return response()->json(['questions' => []]);
+            }
+            
+            $questions = $quiz->questions()->orderBy('question_number')->get();
+            
+            return response()->json([
+                'questions' => $questions->map(function($q) {
+                    return [
+                        'question_number' => $q->question_number,
+                        'question' => $q->question,
+                        'answer1' => $q->answer1,
+                        'marks1' => $q->marks1,
+                        'answer2' => $q->answer2,
+                        'marks2' => $q->marks2,
+                        'answer3' => $q->answer3,
+                        'marks3' => $q->marks3,
+                    ];
+                })
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['questions' => []]);
+        }
+    }
+
+    /**
+     * Create quiz_questions table if it doesn't exist.
+     */
+    private function createQuizQuestionsTable(): void
+    {
+        if (Schema::hasTable('quiz_questions')) {
+            return;
+        }
+
+        try {
+            // Try to drop any orphaned table reference first
+            \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=0');
+            \Illuminate\Support\Facades\DB::statement('DROP TABLE IF EXISTS quiz_questions');
+            \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1');
+        } catch (\Exception $e) {
+            // Ignore drop errors
+        }
+
+        // Create the table
+        Schema::create('quiz_questions', function (\Illuminate\Database\Schema\Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('quiz_id');
+            $table->integer('question_number');
+            $table->text('question')->nullable();
+            $table->string('answer1')->nullable();
+            $table->integer('marks1')->default(0);
+            $table->string('answer2')->nullable();
+            $table->integer('marks2')->default(0);
+            $table->string('answer3')->nullable();
+            $table->integer('marks3')->default(0);
+            $table->timestamps();
+        });
+
+        // Add foreign key separately
+        try {
+            \Illuminate\Support\Facades\DB::statement('ALTER TABLE quiz_questions ADD CONSTRAINT quiz_questions_quiz_id_foreign FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE');
+        } catch (\Exception $e) {
+            // Foreign key might already exist or fail, continue
+        }
     }
 }
 

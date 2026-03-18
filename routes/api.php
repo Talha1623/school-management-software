@@ -132,6 +132,16 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         Route::match(['GET', 'POST'], '/quizzes', [App\Http\Controllers\Api\ParentQuizController::class, 'index'])->name('quizzes.index');
         Route::get('/quizzes/all', [App\Http\Controllers\Api\ParentQuizController::class, 'allQuizzes'])->name('quizzes.all');
         Route::get('/quizzes/{id}', [App\Http\Controllers\Api\ParentQuizController::class, 'show'])->name('quizzes.show');
+        
+        // Wallet Routes
+        Route::get('/wallet', [App\Http\Controllers\Api\ParentWalletController::class, 'balance'])->name('wallet.balance');
+        Route::post('/wallet/topup', [App\Http\Controllers\Api\ParentWalletController::class, 'topup'])->name('wallet.topup');
+        Route::post('/wallet/pay', [App\Http\Controllers\Api\ParentWalletController::class, 'pay'])->name('wallet.pay');
+        Route::get('/wallet/history', [App\Http\Controllers\Api\ParentWalletController::class, 'history'])->name('wallet.history');
+        
+        // Fee Voucher Routes
+        Route::get('/fee-vouchers', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'index'])->name('fee-vouchers.index');
+        Route::get('/fee-vouchers/{student_id}', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'show'])->name('fee-vouchers.show');
     });
 });
 
@@ -181,6 +191,12 @@ Route::prefix('student')->name('api.student.')->group(function () {
         Route::get('/homework/today', [App\Http\Controllers\Api\StudentHomeworkController::class, 'today'])->name('homework.today');
         Route::get('/homework/date/{date}', [App\Http\Controllers\Api\StudentHomeworkController::class, 'getByDate'])->name('homework.by-date');
         Route::get('/homework/subjects', [App\Http\Controllers\Api\StudentHomeworkController::class, 'getSubjects'])->name('homework.subjects');
+
+        // Quiz Routes (Student side)
+        Route::match(['GET', 'POST'], '/quizzes', [App\Http\Controllers\Api\StudentQuizController::class, 'index'])->name('quizzes.index');
+        Route::get('/quizzes/{id}', [App\Http\Controllers\Api\StudentQuizController::class, 'show'])->name('quizzes.show');
+        Route::get('/quizzes/{id}/questions', [App\Http\Controllers\Api\StudentQuizController::class, 'questions'])->name('quizzes.questions');
+        Route::get('/quizzes/{id}/marks', [App\Http\Controllers\Api\StudentQuizController::class, 'marks'])->name('quizzes.marks');
         
         // Timetable Routes
         Route::get('/timetable/{student_id}/{date}', [App\Http\Controllers\Api\StudentTimetableController::class, 'getTimetable'])->name('timetable');
@@ -293,6 +309,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/homework-diary/subjects-by-class', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getSubjectsByClass'])->name('homework-diary.subjects-by-class');
         Route::get('/homework-diary/subjects-with-homework', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getSubjectsWithHomework'])->name('homework-diary.subjects-with-homework');
         Route::get('/homework-diary/entries', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getEntries'])->name('homework-diary.entries');
+        Route::get('/homework-diary/students-list', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getStudentsList'])->name('homework-diary.students-list');
         Route::post('/homework-diary/create', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'create'])->name('homework-diary.create');
         Route::post('/homework-diary/create-bulk', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'createBulk'])->name('homework-diary.create-bulk');
         Route::get('/homework-diary/list', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'list'])->name('homework-diary.list');

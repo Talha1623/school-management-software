@@ -51,9 +51,8 @@
                                     Type
                                 </label>
                                 <select class="form-select form-select-sm" name="type" id="type">
-                                    <option value="">All Types</option>
                                     @foreach($types as $type)
-                                        <option value="{{ $type }}" {{ request('type') == $type ? 'selected' : '' }}>{{ $type }}</option>
+                                        <option value="{{ $type }}" {{ request('type') == $type || !request('type') ? 'selected' : '' }}>{{ $type }}</option>
                                     @endforeach
                                 </select>
                             </div>

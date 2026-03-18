@@ -9,6 +9,7 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\CombinedResultGrade;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use App\Models\ParticularTestGrade;
 use App\Models\StudentMark;
 use Illuminate\Http\JsonResponse;
@@ -41,10 +42,15 @@ class AssignGradesController extends Controller
             });
         }
 
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
+        // Get classes - filter by campus if provided, exclude deleted classes
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($filterCampus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         
-        if ($classes->isEmpty()) {
+        // Only show static classes if no campus is selected and no classes exist
+        if ($classes->isEmpty() && !$filterCampus) {
             $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
         }
 
@@ -126,34 +132,47 @@ class AssignGradesController extends Controller
             $tests = collect(['Quiz 1', 'Mid Term', 'Final Term', 'Assignment 1']);
         }
 
-        // Get sessions
+        // Get sessions (from tests + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Test::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         // Query grade definitions based on filters
         $gradeDefinitions = collect();
         if ($filterCampus || $filterClass || $filterSection || $filterSubject || $filterTest) {
-            $gradesQuery = ParticularTestGrade::query();
-            
-            if ($filterCampus) {
-                $gradesQuery->where('campus', $filterCampus);
+            try {
+                $gradesQuery = ParticularTestGrade::query();
+                
+                if ($filterCampus) {
+                    $gradesQuery->where('campus', $filterCampus);
+                }
+                if ($filterClass) {
+                    $gradesQuery->where('class', $filterClass);
+                }
+                if ($filterSection) {
+                    $gradesQuery->where('section', $filterSection);
+                }
+                if ($filterSubject) {
+                    $gradesQuery->where('subject', $filterSubject);
+                }
+                if ($filterTest) {
+                    $gradesQuery->where('for_test', $filterTest);
+                }
+                
+                $gradeDefinitions = $gradesQuery->orderBy('from_percentage', 'desc')->get();
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Table doesn't exist - return empty collection
+                if (str_contains($e->getMessage(), "doesn't exist")) {
+                    $gradeDefinitions = collect();
+                } else {
+                    throw $e;
+                }
             }
-            if ($filterClass) {
-                $gradesQuery->where('class', $filterClass);
-            }
-            if ($filterSection) {
-                $gradesQuery->where('section', $filterSection);
-            }
-            if ($filterSubject) {
-                $gradesQuery->where('subject', $filterSubject);
-            }
-            if ($filterTest) {
-                $gradesQuery->where('for_test', $filterTest);
-            }
-            
-            $gradeDefinitions = $gradesQuery->orderBy('from_percentage', 'desc')->get();
         }
 
         return view('test.assign-grades.particular', compact(
@@ -293,11 +312,14 @@ class AssignGradesController extends Controller
             return is_object($campus) ? ($campus->campus_name ?? '') : $campus;
         })->filter()->unique()->sort()->values();
 
-        // Get sessions
+        // Get sessions (from tests + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Test::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         return view('test.assign-grades.combined', [
@@ -312,29 +334,40 @@ class AssignGradesController extends Controller
     }
 
     /**
-     * Get sections by class (AJAX).
+     * Get sections by class (AJAX) - filter by campus if provided.
      */
     public function getSectionsByClass(Request $request): JsonResponse
     {
         $class = $request->get('class');
+        $campus = $request->get('campus');
         
         if (!$class) {
             return response()->json(['sections' => []]);
         }
         
         // Use case-insensitive matching for class
-        $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-            ->whereNotNull('name')
-            ->distinct()
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereNotNull('name');
+        
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        
+        $sections = $sectionsQuery->distinct()
             ->pluck('name')
             ->sort()
             ->values();
             
         if ($sections->isEmpty()) {
             // Try from subjects table with case-insensitive matching
-            $sections = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('section')
-                ->distinct()
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereNotNull('section');
+            
+            if ($campus) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            
+            $sections = $subjectsQuery->distinct()
                 ->pluck('section')
                 ->sort()
                 ->values();
@@ -396,6 +429,52 @@ class AssignGradesController extends Controller
             ->values();
         
         return response()->json(['subjects' => $subjects]);
+    }
+
+    /**
+     * Get classes by campus (AJAX) - only active classes for selected campus.
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+        
+        return response()->json(['classes' => $classes]);
+    }
+
+    /**
+     * Get tests by filters (AJAX) - only tests for selected campus, class, and subject.
+     */
+    public function getTestsByFilters(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+        $class = $request->get('class');
+        $section = $request->get('section');
+        $subject = $request->get('subject');
+        
+        $testsQuery = Test::whereNotNull('test_name');
+        
+        if ($campus) {
+            $testsQuery->where('campus', $campus);
+        }
+        if ($class) {
+            $testsQuery->where('for_class', $class);
+        }
+        if ($section) {
+            $testsQuery->where('section', $section);
+        }
+        if ($subject) {
+            $testsQuery->where('subject', $subject);
+        }
+        
+        $tests = $testsQuery->distinct()->pluck('test_name')->sort()->values();
+        
+        return response()->json(['tests' => $tests]);
     }
 
     /**

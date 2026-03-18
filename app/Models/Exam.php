@@ -15,10 +15,12 @@ class Exam extends Model
         'description',
         'exam_date',
         'session',
+        'result_status',
     ];
 
     protected $casts = [
         'exam_date' => 'date',
+        'result_status' => 'boolean',
     ];
 }
 

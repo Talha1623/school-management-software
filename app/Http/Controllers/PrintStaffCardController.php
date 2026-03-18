@@ -33,19 +33,10 @@ class PrintStaffCardController extends Controller
             }
         }
         
-        // Get staff types from designation field
-        $staffTypesFromDB = Staff::whereNotNull('designation')
+        // Get staff types from designation field only
+        $staffTypes = Staff::whereNotNull('designation')
             ->distinct()
             ->pluck('designation')
-            ->sort()
-            ->values();
-        
-        // Predefined staff types
-        $predefinedTypes = collect(['Teacher', 'Principal', 'Vice Principal', 'Administrator', 'Accountant', 'Receptionist', 'Security', 'Cleaner']);
-        
-        // Merge and get unique staff types
-        $staffTypes = $predefinedTypes->merge($staffTypesFromDB)
-            ->unique()
             ->sort()
             ->values();
         
@@ -68,7 +59,7 @@ class PrintStaffCardController extends Controller
         }
         
         // Card types
-        $cardTypes = ['Regular', 'VIP', 'Premium'];
+        $cardTypes = ['front/back', 'front', 'back', 'regular'];
         
         return view('id-card.print-staff', compact('campuses', 'staffTypes', 'sessions', 'cardTypes'));
     }

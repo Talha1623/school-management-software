@@ -325,9 +325,6 @@ use Illuminate\Support\Facades\Storage;
                                         </div>
                                         <div class="info-value">
                                             <strong style="color: #dc3545;">Rs. {{ number_format($staff->late_fees ?? 0, 2) }}</strong>
-                                            @if(!$staff->late_fees)
-                                                <span class="badge bg-secondary text-white badge-custom ms-2">Default: 500</span>
-                                            @endif
                                         </div>
                                     </div>
                                 </div>
@@ -339,9 +336,6 @@ use Illuminate\Support\Facades\Storage;
                                         </div>
                                         <div class="info-value">
                                             <strong style="color: #dc3545;">Rs. {{ number_format($staff->absent_fees ?? 0, 2) }}</strong>
-                                            @if(!$staff->absent_fees)
-                                                <span class="badge bg-secondary text-white badge-custom ms-2">Daily Rate</span>
-                                            @endif
                                         </div>
                                     </div>
                                 </div>
@@ -353,9 +347,6 @@ use Illuminate\Support\Facades\Storage;
                                         </div>
                                         <div class="info-value">
                                             <strong style="color: #dc3545;">Rs. {{ number_format($staff->early_exit_fees ?? 0, 2) }}</strong>
-                                            @if(!$staff->early_exit_fees)
-                                                <span class="badge bg-secondary text-white badge-custom ms-2">Default: 1000</span>
-                                            @endif
                                         </div>
                                     </div>
                                 </div>

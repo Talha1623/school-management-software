@@ -91,12 +91,20 @@ class StaffAttendanceController extends Controller
                 ->orderBy('attendance_date', 'asc')
                 ->get();
 
+            // Check if staff is full-time (full-time teachers should count Sunday and Holiday as present)
+            $isFullTime = empty($targetStaff->salary_type) || strtolower(trim($targetStaff->salary_type)) === 'full time';
+            
             // Calculate monthly totals (based on StaffAttendance status values)
             $totalPresent = $monthlyAttendances->where('status', 'Present')->count();
             $totalAbsent = $monthlyAttendances->where('status', 'Absent')->count();
             $totalLeave = $monthlyAttendances->where('status', 'Leave')->count();
             $totalHoliday = $monthlyAttendances->where('status', 'Holiday')->count();
             $totalSunday = $monthlyAttendances->where('status', 'Sunday')->count();
+            
+            // For full-time staff, count Sunday and Holiday as present
+            if ($isFullTime) {
+                $totalPresent += $totalHoliday + $totalSunday;
+            }
             
             // Calculate total hours (for present days with start_time and end_time)
             $totalHours = 0;

@@ -136,6 +136,7 @@
                                 <th>Description</th>
                                 <th>Exam Date</th>
                                 <th>Session</th>
+                                <th>Result Status</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
@@ -153,6 +154,19 @@
                                         <td>{{ $exam->description ? (strlen($exam->description) > 50 ? substr($exam->description, 0, 50) . '...' : $exam->description) : 'N/A' }}</td>
                                         <td>{{ $exam->exam_date->format('d M Y') }}</td>
                                         <td>{{ $exam->session }}</td>
+                                        <td>
+                                            @if($exam->result_status ?? false)
+                                                <button type="button" class="btn btn-sm btn-success px-3 py-1 result-status-btn" id="result-btn-{{ $exam->id }}" data-exam-id="{{ $exam->id }}" onclick="toggleResultStatus({{ $exam->id }})" style="font-size: 11px;">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                                                    <span style="color: white;">Result Declared</span>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-sm btn-warning px-3 py-1 result-status-btn" id="result-btn-{{ $exam->id }}" data-exam-id="{{ $exam->id }}" onclick="toggleResultStatus({{ $exam->id }})" style="font-size: 11px;">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">pending</span>
+                                                    <span style="color: white;">Declare Result</span>
+                                                </button>
+                                            @endif
+                                        </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
                                                 <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editExam({{ $exam->id }}, '{{ addslashes($exam->campus) }}', '{{ addslashes($exam->exam_name) }}', '{{ addslashes($exam->description ?? '') }}', '{{ $exam->exam_date->format('Y-m-d') }}', '{{ addslashes($exam->session) }}')">
@@ -170,7 +184,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-5">
+                                        <td colspan="8" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No exams found.</p>
                                         </td>
@@ -178,7 +192,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
+                                    <td colspan="8" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No exams found.</p>
                                     </td>
@@ -642,6 +656,57 @@
     .error-toast.fade-out {
         animation: slideOutUp 0.3s ease-out forwards;
     }
+    
+    .result-status-btn {
+        font-size: 11px;
+        padding: 4px 12px;
+        min-height: auto;
+        min-width: 130px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        line-height: 1;
+        height: 28px;
+        white-space: nowrap;
+    }
+    
+    .result-status-btn .material-symbols-outlined {
+        font-size: 14px !important;
+        vertical-align: middle;
+        color: white !important;
+        line-height: 1;
+    }
+    
+    .result-status-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    
+    /* Ensure warning button matches Test List exactly */
+    .result-status-btn.btn-warning {
+        background-color: #ffc107 !important;
+        border-color: #ffc107 !important;
+        color: white !important;
+    }
+    
+    .result-status-btn.btn-warning:hover {
+        background-color: #e0a800 !important;
+        border-color: #d39e00 !important;
+        color: white !important;
+    }
+    
+    .result-status-btn.btn-success {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    
+    .result-status-btn.btn-success:hover {
+        background-color: #218838 !important;
+        border-color: #1e7e34 !important;
+        color: white !important;
+    }
 </style>
 
 <script>
@@ -714,6 +779,62 @@ function clearSearch() {
     }
     url.searchParams.delete('page');
     window.location.href = url.toString();
+}
+
+// Toggle result status
+function toggleResultStatus(examId) {
+    const button = document.getElementById('result-btn-' + examId);
+    const originalHTML = button.innerHTML;
+    
+    // Disable button and show loading
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> <span>Processing...</span>';
+    
+    fetch(`{{ url('exam/list') }}/${examId}/toggle-result-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update button based on new status
+            if (data.result_status) {
+                button.className = 'btn btn-sm btn-success px-3 py-1 result-status-btn';
+                button.innerHTML = `
+                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
+                    <span style="color: white;">Result Declared</span>
+                `;
+            } else {
+                button.className = 'btn btn-sm btn-warning px-3 py-1 result-status-btn';
+                button.innerHTML = `
+                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">pending</span>
+                    <span style="color: white;">Declare Result</span>
+                `;
+            }
+            
+            // Show success message
+            if (typeof showToast !== 'undefined') {
+                showToast(data.message, 'success');
+            } else {
+                alert(data.message);
+            }
+        } else {
+            button.innerHTML = originalHTML;
+            alert('Failed to update result status. Please try again.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        button.innerHTML = originalHTML;
+        alert('An error occurred. Please try again.');
+    })
+    .finally(() => {
+        button.disabled = false;
+    });
 }
 
 function printTable() {

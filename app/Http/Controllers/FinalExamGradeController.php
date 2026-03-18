@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Exam;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -58,13 +59,15 @@ class FinalExamGradeController extends Controller
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
 
-        // Get sessions
+        // Get sessions (from exams + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
-        
         return view('exam.grades.final', compact('grades', 'campuses', 'sessions'));
     }
 

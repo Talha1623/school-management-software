@@ -208,18 +208,43 @@
                         <td>Basic Salary</td>
                         <td style="text-align: right;">{{ number_format($salary->basic ?? 0, 2) }}</td>
                     </tr>
-                    <tr>
-                        <td>Present Days</td>
-                        <td style="text-align: right;">{{ $salary->present ?? 0 }}</td>
-                    </tr>
-                    <tr>
-                        <td>Absent Days</td>
-                        <td style="text-align: right;">{{ $salary->absent ?? 0 }}</td>
-                    </tr>
-                    <tr>
-                        <td>Late Arrivals</td>
-                        <td style="text-align: right;">{{ $salary->late ?? 0 }}</td>
-                    </tr>
+                    @php
+                        $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
+                        $isPerHour = $salaryType === 'per hour';
+                        $isPerLecture = $salaryType === 'lecture';
+                    @endphp
+                    @if($isPerHour && isset($attendanceSummary['total_minutes']))
+                        @php
+                            $totalHours = round($attendanceSummary['total_minutes'] / 60, 2);
+                            $totalClasses = $attendanceSummary['present'] ?? 0;
+                        @endphp
+                        <tr>
+                            <td>Total Hours</td>
+                            <td style="text-align: right;">{{ number_format($totalHours, 2) }} hours</td>
+                        </tr>
+                        <tr>
+                            <td>Total Classes</td>
+                            <td style="text-align: right;">{{ $totalClasses }}</td>
+                        </tr>
+                    @elseif($isPerLecture && isset($attendanceSummary['total_lectures']))
+                        <tr>
+                            <td>Total Lectures</td>
+                            <td style="text-align: right;">{{ $attendanceSummary['total_lectures'] }}</td>
+                        </tr>
+                    @else
+                        <tr>
+                            <td>Present Days</td>
+                            <td style="text-align: right;">{{ $salary->present ?? 0 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Absent Days</td>
+                            <td style="text-align: right;">{{ $salary->absent ?? 0 }}</td>
+                        </tr>
+                        <tr>
+                            <td>Late Arrivals</td>
+                            <td style="text-align: right;">{{ $salary->late ?? 0 }}</td>
+                        </tr>
+                    @endif
                     <tr class="total-row">
                         <td>Salary Generated</td>
                         <td style="text-align: right;">{{ number_format($salary->salary_generated ?? 0, 2) }}</td>

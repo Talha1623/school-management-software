@@ -67,7 +67,7 @@
                 
                 <div class="row g-3">
                     <!-- Late Arrival Time -->
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <div class="mb-3" style="min-height: 90px;">
                             <label for="late_arrival_time" class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 14px;">Late Arrival Time</label>
                             <div class="input-group" style="height: 38px;">
@@ -83,7 +83,7 @@
                     </div>
 
                     <!-- Early Exit Time -->
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <div class="mb-3" style="min-height: 90px;">
                             <label for="early_exit_time" class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 14px;">Early Exit Time</label>
                             <div class="input-group" style="height: 38px;">
@@ -98,40 +98,6 @@
                         </div>
                     </div>
 
-                    <!-- Free Absents -->
-                    <div class="col-md-3">
-                        <div class="mb-3" style="min-height: 90px;">
-                            <label for="free_absents" class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 14px;">Free Absents</label>
-                            <div class="input-group" style="height: 38px;">
-                                <input type="number" class="form-control" name="free_absents" id="free_absents" value="{{ $settings->free_absents ?? 2 }}" min="0" required style="height: 38px;">
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; height: 38px;">
-                                    <span class="material-symbols-outlined" style="font-size: 18px;">event_busy</span>
-                                </span>
-                            </div>
-                            <small class="text-muted" style="font-size: 12px; cursor: help; display: block; margin-top: 4px;" title="Do not deduct salary if absents are less or equal to this">
-                                Do not deduct salary if absents are less or equal to this
-                            </small>
-                        </div>
-                    </div>
-
-                    <!-- Leave Deduction -->
-                    <div class="col-md-3">
-                        <div class="mb-3" style="min-height: 90px;">
-                            <label for="leave_deduction" class="form-label mb-2 fw-semibold" style="color: #003471; font-size: 14px;">Leave Deduction</label>
-                            <div class="input-group" style="height: 38px;">
-                                <select class="form-select" name="leave_deduction" id="leave_deduction" required style="height: 38px;">
-                                    <option value="No" {{ ($settings->leave_deduction ?? 'No') == 'No' ? 'selected' : '' }}>No</option>
-                                    <option value="Yes" {{ ($settings->leave_deduction ?? 'No') == 'Yes' ? 'selected' : '' }}>Yes</option>
-                                </select>
-                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471; height: 38px;">
-                                    <span class="material-symbols-outlined" style="font-size: 18px;">arrow_drop_down</span>
-                                </span>
-                            </div>
-                            <small class="text-muted" style="font-size: 12px; cursor: help; display: block; margin-top: 4px;" title="deduct salary for the day if teacher is on leave">
-                                deduct salary for the day if teacher is on leave
-                            </small>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Information Message -->

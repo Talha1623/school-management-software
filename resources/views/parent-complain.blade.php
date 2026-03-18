@@ -158,18 +158,25 @@
                                             </span>
                                         </td>
                                         <td>
-                                            @php
-                                                $statusClass = match(strtolower($complain->status ?? 'pending')) {
-                                                    'resolved' => 'bg-success',
-                                                    'in-progress' => 'bg-warning',
-                                                    'pending' => 'bg-warning',
-                                                    default => 'bg-secondary'
-                                                };
-                                            @endphp
-                                            <span class="badge {{ $statusClass }} text-white" style="font-size: 12px; padding: 4px 8px;">{{ ucfirst($complain->status ?? 'Pending') }}</span>
+                                            @if($complain->reply)
+                                                <span class="badge bg-success text-white" style="font-size: 12px; padding: 4px 8px;">Replied</span>
+                                            @else
+                                                <span class="badge bg-warning text-white" style="font-size: 12px; padding: 4px 8px;">Pending</span>
+                                            @endif
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1 align-items-center">
+                                                <!-- Reply Button with View Icon - Opens popup for reply -->
+                                                @if($complain->reply)
+                                                    <button type="button" class="btn btn-sm btn-info px-2 py-1" title="View/Edit Reply" onclick="openReplyModal({{ $complain->id }}, '{{ addslashes($complain->parent_name ?? 'N/A') }}', '{{ addslashes($complain->subject ?? 'N/A') }}', '{{ addslashes($complain->reply ?? '') }}')">
+                                                        <span class="material-symbols-outlined" style="font-size: 16px; color: white;">visibility</span>
+                                                    </button>
+                                                @else
+                                                    <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Click to Reply" onclick="openReplyModal({{ $complain->id }}, '{{ addslashes($complain->parent_name ?? 'N/A') }}', '{{ addslashes($complain->subject ?? 'N/A') }}', '')">
+                                                        <span class="material-symbols-outlined" style="font-size: 16px; color: white;">visibility</span>
+                                                    </button>
+                                                @endif
+                                                
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this complain?')) { document.getElementById('delete-form-{{ $complain->id ?? $loop->index }}').submit(); }">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
                                                 </button>
@@ -206,6 +213,83 @@
                     {{ $complains->links() }}
                 </div>
             @endif
+        </div>
+    </div>
+</div>
+
+<!-- Reply Modal -->
+<div class="modal fade" id="replyModal" tabindex="-1" aria-labelledby="replyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); color: white;">
+                <h5 class="modal-title" id="replyModalLabel">
+                    <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">reply</span>
+                    Reply to Complaint
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="replyForm" method="POST" action="">
+                @csrf
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" style="color: #003471;">Parent Name</label>
+                        <input type="text" class="form-control" id="modalParentName" readonly style="background-color: #f8f9fa;">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" style="color: #003471;">Subject</label>
+                        <input type="text" class="form-control" id="modalSubject" readonly style="background-color: #f8f9fa;">
+                    </div>
+                    <div class="mb-3">
+                        <label for="replyText" class="form-label fw-semibold" style="color: #003471;">Your Reply <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="replyText" name="reply" rows="5" placeholder="Enter your reply here..." required style="resize: vertical;"></textarea>
+                        <small class="text-muted">Maximum 5000 characters</small>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="smsNotification" name="sms_notification" value="1">
+                            <label class="form-check-label" for="smsNotification" style="color: #003471;">
+                                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">sms</span>
+                                SMS Notification
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">send</span>
+                        Send Reply
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Reply Modal -->
+<div class="modal fade" id="viewReplyModal" tabindex="-1" aria-labelledby="viewReplyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
+                <h5 class="modal-title" id="viewReplyModalLabel">
+                    <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">visibility</span>
+                    View Reply
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="color: #003471;">Reply Date</label>
+                    <input type="text" class="form-control" id="viewReplyDate" readonly style="background-color: #f8f9fa;">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="color: #003471;">Your Reply</label>
+                    <div class="form-control" id="viewReplyText" style="min-height: 150px; background-color: #f8f9fa; white-space: pre-wrap;">...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -509,6 +593,30 @@ function printTable() {
     window.print();
     document.body.innerHTML = originalContents;
     window.location.reload();
+}
+
+// Open reply modal
+function openReplyModal(complainId, parentName, subject, existingReply = '') {
+    document.getElementById('modalParentName').value = parentName;
+    document.getElementById('modalSubject').value = subject;
+    document.getElementById('replyText').value = existingReply;
+    document.getElementById('smsNotification').checked = false;
+    // Construct URL - route is POST /parent-complain/{id}/reply
+    // Use simple relative path
+    const actionUrl = '{{ url("/parent-complain") }}/' + complainId + '/reply';
+    document.getElementById('replyForm').action = actionUrl;
+    
+    const modal = new bootstrap.Modal(document.getElementById('replyModal'));
+    modal.show();
+}
+
+// View reply
+function viewReply(complainId, reply, replyDate) {
+    document.getElementById('viewReplyText').textContent = reply;
+    document.getElementById('viewReplyDate').value = replyDate;
+    
+    const modal = new bootstrap.Modal(document.getElementById('viewReplyModal'));
+    modal.show();
 }
 </script>
 @endsection

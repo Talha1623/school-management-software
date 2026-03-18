@@ -20,6 +20,14 @@ class ParentComplaint extends Model
         'subject',
         'complain',
         'status',
+        'reply',
+        'reply_date',
+        'sms_notification',
+    ];
+
+    protected $casts = [
+        'reply_date' => 'datetime',
+        'sms_notification' => 'boolean',
     ];
 
     public function parentAccount()

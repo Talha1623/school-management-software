@@ -22,6 +22,8 @@ class Quiz extends Model
 
     protected $casts = [
         'start_date_time' => 'datetime',
+        'duration_minutes' => 'integer',
+        'total_questions' => 'integer',
     ];
 
     public function questions()

@@ -13,6 +13,18 @@
             <!-- Filter Form -->
             <form action="{{ route('test.tabulation-sheet.combine') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
+                    <!-- Campus -->
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                @php $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus; @endphp
+                                <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <!-- Class -->
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
@@ -71,7 +83,7 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_class', 'filter_section', 'filter_test_type', 'filter_from_date', 'filter_to_date']))
+            @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_test_type', 'filter_from_date', 'filter_to_date']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
@@ -244,17 +256,30 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Load sections when class changes
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
     
-    // Function to load sections dynamically
+    // When campus changes, clear class and section so user picks again for the new campus
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            if (classSelect) { classSelect.value = ''; }
+            if (sectionSelect) {
+                sectionSelect.disabled = true;
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            }
+        });
+    }
+    
+    // Function to load sections dynamically (optionally filtered by campus)
     function loadSections(selectedClass) {
         if (selectedClass) {
             sectionSelect.disabled = false;
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
-            
-            fetch(`{{ route('test.tabulation-sheet.combine.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+            const campusVal = campusSelect ? campusSelect.value : '';
+            let url = `{{ route('test.tabulation-sheet.combine.get-sections') }}?class=${encodeURIComponent(selectedClass)}`;
+            if (campusVal) url += `&campus=${encodeURIComponent(campusVal)}`;
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';

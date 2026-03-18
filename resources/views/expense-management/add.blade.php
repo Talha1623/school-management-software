@@ -12,10 +12,15 @@
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Add Management Expense</h4>
-                <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 expense-add-btn" data-bs-toggle="modal" data-bs-target="#expenseModal" onclick="resetForm()">
-                    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                    <span>Add New Expense</span>
-                </button>
+                @php
+                    $hasFilters = request('filter_campus') || request('filter_category') || request('filter_month');
+                @endphp
+                @if($hasFilters)
+                    <button type="button" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 expense-add-btn" data-bs-toggle="modal" data-bs-target="#expenseModal" onclick="resetForm()">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+                        <span>Add New Expense</span>
+                    </button>
+                @endif
             </div>
 
             @if(session('success'))
@@ -32,6 +37,74 @@
                 </div>
             @endif
 
+            <!-- Filter Form -->
+            <div class="card border-0 shadow-sm mb-3" style="border-radius: 8px; overflow: hidden;">
+                <div class="card-body p-3">
+                    <form action="{{ route('expense-management.add') }}" method="GET" id="filterForm">
+                        <!-- Preserve search parameter -->
+                        @if(request('search'))
+                            <input type="hidden" name="search" value="{{ request('search') }}">
+                        @endif
+                        @if(request('per_page'))
+                            <input type="hidden" name="per_page" value="{{ request('per_page') }}">
+                        @endif
+                        <div class="row g-3 align-items-end">
+                            <!-- Campus Filter -->
+                            <div class="col-md-3">
+                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                                <select class="form-select form-select-sm" name="filter_campus" id="filter_campus" style="height: 32px;">
+                                    <option value="">All Campuses</option>
+                                    @if(isset($campuses) && $campuses->count() > 0)
+                                        @foreach($campuses as $campus)
+                                            <option value="{{ $campus->campus_name ?? $campus }}" {{ request('filter_campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>{{ $campus->campus_name ?? $campus }}</option>
+                                        @endforeach
+                                    @endif
+                                </select>
+                            </div>
+
+                            <!-- Category Filter -->
+                            <div class="col-md-3">
+                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Category</label>
+                                <select class="form-select form-select-sm" name="filter_category" id="filter_category" style="height: 32px;">
+                                    <option value="">All Categories</option>
+                                    @if(isset($categories) && $categories->count() > 0)
+                                        @foreach($categories as $cat)
+                                            <option value="{{ $cat->category_name }}" {{ request('filter_category') == $cat->category_name ? 'selected' : '' }}>{{ $cat->category_name }}</option>
+                                        @endforeach
+                                    @endif
+                                </select>
+                            </div>
+
+                            <!-- Month Filter -->
+                            <div class="col-md-2">
+                                <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Month</label>
+                                <input type="month" class="form-select form-select-sm" name="filter_month" id="filter_month" value="{{ request('filter_month', date('Y-m')) }}" style="height: 32px;">
+                            </div>
+
+                            <!-- Filter Button -->
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-sm w-100 filter-btn" style="height: 32px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_list</span>
+                                    <span>Filter</span>
+                                </button>
+                            </div>
+
+                            <!-- Clear Filter Button -->
+                            <div class="col-md-2">
+                                <a href="{{ route('expense-management.add') }}" class="btn btn-sm w-100 btn-outline-secondary" style="height: 32px;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">clear</span>
+                                    <span>Clear</span>
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            @php
+                $hasFilters = request('filter_campus') || request('filter_category') || request('filter_month');
+            @endphp
+            @if($hasFilters)
             <!-- Table Toolbar -->
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                 <!-- Left Side -->
@@ -204,6 +277,14 @@
             @if(isset($expenses) && $expenses->hasPages())
                 <div class="mt-3">
                     {{ $expenses->links() }}
+                </div>
+            @endif
+            @else
+                <!-- No Filters Message -->
+                <div class="text-center py-5">
+                    <span class="material-symbols-outlined" style="font-size: 64px; color: #dee2e6; margin-bottom: 16px;">filter_list</span>
+                    <h5 class="text-muted mb-2">Apply Filters to View Expenses</h5>
+                    <p class="text-muted mb-0">Please select Campus, Category, or Month to view and manage expenses.</p>
                 </div>
             @endif
         </div>
@@ -658,6 +739,62 @@
     .default-table-area table tbody td strong {
         font-size: 13px;
         font-weight: 600;
+    }
+
+    /* Filter Form Styling */
+    .form-select-sm {
+        font-size: 13px;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        transition: all 0.3s ease;
+        height: 32px;
+    }
+
+    .form-select-sm:focus {
+        border-color: #003471;
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+        outline: none;
+    }
+
+    input[type="month"].form-select-sm {
+        font-size: 13px;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        transition: all 0.3s ease;
+        height: 32px;
+    }
+
+    input[type="month"].form-select-sm:focus {
+        border-color: #003471;
+        box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
+        outline: none;
+    }
+
+    .filter-btn {
+        background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 6px rgba(0, 52, 113, 0.2);
+        height: 32px;
+    }
+
+    .filter-btn:hover {
+        background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
+        color: white;
+    }
+
+    .filter-btn:active {
+        transform: translateY(0);
+    }
+
+    .filter-btn .material-symbols-outlined {
+        color: white !important;
     }
 </style>
 

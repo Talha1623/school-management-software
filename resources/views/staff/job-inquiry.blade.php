@@ -888,15 +888,36 @@ function editInquiry(id) {
             const modalLabel = document.getElementById('inquiryModalLabel');
             modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">work</span><span style="color: white;">Edit Inquiry</span>';
             
+            // Basic Information
             document.getElementById('name').value = data.name || '';
             document.getElementById('father_husband_name').value = data.father_husband_name || '';
             document.getElementById('campus').value = data.campus || '';
             document.getElementById('gender').value = data.gender || '';
             document.getElementById('phone').value = data.phone || '';
             document.getElementById('qualification').value = data.qualification || '';
-            document.getElementById('birthday').value = data.birthday || '';
+            
+            // Format birthday date properly
+            let birthdayValue = '';
+            if (data.birthday) {
+                if (typeof data.birthday === 'string') {
+                    if (data.birthday.match(/^\d{4}-\d{2}-\d{2}/)) {
+                        birthdayValue = data.birthday.split(' ')[0];
+                    } else {
+                        const date = new Date(data.birthday);
+                        if (!isNaN(date.getTime())) {
+                            birthdayValue = date.toISOString().split('T')[0];
+                        }
+                    }
+                } else if (data.birthday.date) {
+                    birthdayValue = data.birthday.date.split(' ')[0];
+                }
+            }
+            document.getElementById('birthday').value = birthdayValue;
+            
             document.getElementById('marital_status').value = data.marital_status || '';
             document.getElementById('applied_for_designation').value = data.applied_for_designation || '';
+            
+            // Salary Information
             document.getElementById('salary_type').value = data.salary_type || '';
             document.getElementById('salary_demand').value = data.salary_demand || '';
             document.getElementById('salary').value = data.salary || '';
@@ -904,6 +925,8 @@ function editInquiry(id) {
             document.getElementById('late_fees').value = data.late_fees || '';
             document.getElementById('early_exit_fees').value = data.early_exit_fees || '';
             document.getElementById('free_absent').value = data.free_absent || '0';
+            
+            // Contact Information
             document.getElementById('email').value = data.email || '';
             document.getElementById('home_address').value = data.home_address || '';
             document.getElementById('cv_resume').value = '';

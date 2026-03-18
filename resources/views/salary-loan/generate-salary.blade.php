@@ -205,8 +205,8 @@
                                         <th class="text-center">Present</th>
                                         <th class="text-center">Absent</th>
                                         <th class="text-center">Late</th>
+                                        <th class="text-center">Early Exit</th>
                                         <th class="text-end">Basic</th>
-                                        <th class="text-end">Discount</th>
                                         <th class="text-end">Salary Generated</th>
                                         <th class="text-end">Amount Paid</th>
                                         <th class="text-end">Loan Repayment</th>
@@ -243,6 +243,9 @@
                                         <td class="text-center">
                                             <span class="badge bg-warning text-dark" style="font-size: 11px;">{{ $salary->late ?? 0 }}</span>
                                         </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-danger text-white" style="font-size: 11px;">{{ $salary->early_exit ?? 0 }}</span>
+                                        </td>
                                         <td class="text-end">
                                             <strong class="text-primary">{{ number_format($salary->basic ?? 0, 2) }}</strong>
                                             <div>
@@ -250,9 +253,6 @@
                                                     {{ $salary->staff->salary_type ?? 'full time' }}
                                                 </span>
                                             </div>
-                                        </td>
-                                        <td class="text-end">
-                                            <strong class="text-danger">{{ number_format($salary->discount ?? 0, 2) }}</strong>
                                         </td>
                                         <td class="text-end">
                                             <strong class="text-success">{{ number_format($salary->salary_generated ?? 0, 2) }}</strong>
@@ -265,7 +265,14 @@
                                         </td>
                                         <td>
                                         @if($salary->status == 'Pending')
-                                            <span class="badge bg-warning text-dark" style="font-size: 11px;">Pending</span>
+                                            <form action="{{ route('salary-loan.generate-salary.update-status', $salary->id) }}" method="POST" class="d-inline">
+                                                @csrf
+                                                @method('PUT')
+                                                <input type="hidden" name="status" value="Paid">
+                                                <button type="submit" class="btn btn-sm px-2 py-0 btn-warning" title="Click to mark as Paid and print receipt">
+                                                    <span class="badge bg-warning text-dark" style="font-size: 11px; cursor: pointer;">Pending</span>
+                                                </button>
+                                            </form>
                                         @elseif($salary->status == 'Paid')
                                             <span class="badge bg-success text-white" style="font-size: 11px;">Paid</span>
                                         @else
@@ -296,7 +303,6 @@
                                     <tr style="background-color: #f8f9fa; font-weight: 600;">
                                         <td colspan="8" class="text-end"><strong>Total:</strong></td>
                                         <td class="text-end"><strong class="text-primary">{{ number_format($generatedSalaries->sum('basic'), 2) }}</strong></td>
-                                        <td class="text-end"><strong class="text-danger">{{ number_format($generatedSalaries->sum('discount'), 2) }}</strong></td>
                                         <td class="text-end"><strong class="text-success">{{ number_format($generatedSalaries->sum('salary_generated'), 2) }}</strong></td>
                                         <td class="text-end"><strong class="text-info">{{ number_format($generatedSalaries->sum('amount_paid'), 2) }}</strong></td>
                                         <td class="text-end"><strong class="text-warning">{{ number_format($generatedSalaries->sum('loan_repayment'), 2) }}</strong></td>
@@ -890,5 +896,16 @@ function resetForm() {
         staffListCard.style.display = 'none';
     }
 }
+
+// Auto-open thermal receipt print window if payment was made
+@if(session('print_receipt_id'))
+    window.onload = function() {
+        setTimeout(function() {
+            const receiptId = {{ session('print_receipt_id') }};
+            const printUrl = '{{ url("/salary-loan/generate-salary") }}/' + receiptId + '/print-receipt-thermal';
+            window.open(printUrl, '_blank');
+        }, 500);
+    };
+@endif
 </script>
 @endsection

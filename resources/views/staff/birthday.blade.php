@@ -27,8 +27,15 @@
         <div class="card bg-white border border-white rounded-10 p-3">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="mb-0 fs-16 fw-semibold">Staff Birthdays</h4>
-                <!-- Export Buttons -->
+                <!-- Action Buttons -->
                 <div class="d-flex gap-2">
+                    @if(isset($staff) && $staff->count() > 0)
+                        <button type="button" class="btn btn-sm px-3 py-1 wish-all-btn" onclick="wishToAllStaff()" style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); color: white; border: none; border-radius: 6px; font-weight: 500;">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">celebration</span>
+                            <span>Wish to All</span>
+                        </button>
+                    @endif
+                    <!-- Export Buttons -->
                     <a href="{{ route('staff.birthday.export', ['format' => 'excel']) }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
                         <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
                         <span>Excel</span>
@@ -205,6 +212,21 @@
         color: white;
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+    }
+    
+    .wish-all-btn {
+        transition: all 0.3s ease;
+    }
+    
+    .wish-all-btn:hover {
+        background: linear-gradient(135deg, #f57c00 0%, #ff9800 100%) !important;
+        color: white !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+    }
+    
+    .wish-all-btn:active {
+        transform: translateY(0);
     }
     
     .export-btn:active {
@@ -394,6 +416,45 @@ document.addEventListener('click', function(event) {
     }
     window.open(`https://wa.me/${phone}`, '_blank');
 });
+
+// Wish to All Staff Function
+function wishToAllStaff() {
+    const wishButtons = document.querySelectorAll('.action-btn-wish');
+    const phones = [];
+    
+    wishButtons.forEach(button => {
+        const phoneRaw = button.getAttribute('data-phone') || '';
+        const phone = normalizePhone(phoneRaw);
+        if (phone) {
+            phones.push(phone);
+        }
+    });
+    
+    if (phones.length === 0) {
+        alert('No staff members with phone numbers available.');
+        return;
+    }
+    
+    // Create a WhatsApp group message link with all phone numbers
+    // Note: WhatsApp Web doesn't support multiple recipients in one link
+    // So we'll open them one by one with a delay, or create a group link
+    // For now, let's open the first one and show a message
+    if (phones.length === 1) {
+        window.open(`https://wa.me/${phones[0]}`, '_blank');
+    } else {
+        // Open all WhatsApp chats in sequence
+        let delay = 0;
+        phones.forEach((phone, index) => {
+            setTimeout(() => {
+                window.open(`https://wa.me/${phone}`, '_blank');
+            }, delay);
+            delay += 500; // 500ms delay between each window
+        });
+        
+        // Show confirmation
+        alert(`Opening WhatsApp for ${phones.length} staff members. Please send your birthday wishes!`);
+    }
+}
 
 function printStaffTable() {
     const printWindow = window.open('', '_blank');

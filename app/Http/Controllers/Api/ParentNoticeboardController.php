@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Noticeboard;
 use App\Models\ParentAccount;
+use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -30,12 +31,40 @@ class ParentNoticeboardController extends Controller
                 ], 404);
             }
 
+            // Ensure user is a ParentAccount instance
+            if (!($parent instanceof ParentAccount)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid user type. Parent authentication required.',
+                    'token' => null,
+                ], 403);
+            }
+
             // Get parent's students' campuses
-            $parentCampuses = $parent->students()
+            // First get students via parent_account_id relationship
+            $students = $parent->students()
                 ->whereNotNull('campus')
                 ->distinct()
                 ->pluck('campus')
                 ->toArray();
+            
+            // Also get students via father_id_card if parent has id_card_number
+            if (!empty($parent->id_card_number)) {
+                $studentsByFatherIdCard = Student::where(function($query) use ($parent) {
+                    $parentIdCard = str_replace(['-', ' ', '_', '.'], '', strtolower(trim($parent->id_card_number)));
+                    $query->whereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", "")) = ?', [$parentIdCard])
+                          ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [trim($parent->id_card_number)]);
+                })
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->toArray();
+                
+                // Merge both arrays
+                $parentCampuses = array_unique(array_merge($students, $studentsByFatherIdCard));
+            } else {
+                $parentCampuses = $students;
+            }
 
             // Query notices - show notices where:
             // 1. show_on = 'Yes' (public notices)
@@ -174,12 +203,40 @@ class ParentNoticeboardController extends Controller
                 ], 404);
             }
 
+            // Ensure user is a ParentAccount instance
+            if (!($parent instanceof ParentAccount)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid user type. Parent authentication required.',
+                    'token' => null,
+                ], 403);
+            }
+
             // Get parent's students' campuses
-            $parentCampuses = $parent->students()
+            // First get students via parent_account_id relationship
+            $students = $parent->students()
                 ->whereNotNull('campus')
                 ->distinct()
                 ->pluck('campus')
                 ->toArray();
+            
+            // Also get students via father_id_card if parent has id_card_number
+            if (!empty($parent->id_card_number)) {
+                $studentsByFatherIdCard = Student::where(function($query) use ($parent) {
+                    $parentIdCard = str_replace(['-', ' ', '_', '.'], '', strtolower(trim($parent->id_card_number)));
+                    $query->whereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", "")) = ?', [$parentIdCard])
+                          ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [trim($parent->id_card_number)]);
+                })
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->toArray();
+                
+                // Merge both arrays
+                $parentCampuses = array_unique(array_merge($students, $studentsByFatherIdCard));
+            } else {
+                $parentCampuses = $students;
+            }
 
             // Find noticeboard that parent can access
             $query = Noticeboard::where(function($q) {
@@ -270,13 +327,40 @@ class ParentNoticeboardController extends Controller
                 ], 404);
             }
 
+            // Ensure user is a ParentAccount instance
+            if (!($parent instanceof ParentAccount)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid user type. Parent authentication required.',
+                    'token' => null,
+                ], 403);
+            }
+
             // Get campuses from parent's students
-            $campuses = $parent->students()
+            // First get students via parent_account_id relationship
+            $students = $parent->students()
                 ->whereNotNull('campus')
                 ->distinct()
                 ->pluck('campus')
-                ->sort()
-                ->values();
+                ->toArray();
+            
+            // Also get students via father_id_card if parent has id_card_number
+            if (!empty($parent->id_card_number)) {
+                $studentsByFatherIdCard = Student::where(function($query) use ($parent) {
+                    $parentIdCard = str_replace(['-', ' ', '_', '.'], '', strtolower(trim($parent->id_card_number)));
+                    $query->whereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", "")) = ?', [$parentIdCard])
+                          ->orWhereRaw('LOWER(TRIM(father_id_card)) = LOWER(TRIM(?))', [trim($parent->id_card_number)]);
+                })
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->toArray();
+                
+                // Merge both arrays
+                $campuses = collect(array_unique(array_merge($students, $studentsByFatherIdCard)))->sort()->values();
+            } else {
+                $campuses = collect($students)->sort()->values();
+            }
 
             // Also get campuses from all notices (for reference)
             $allNoticeCampuses = Noticeboard::whereNotNull('campus')

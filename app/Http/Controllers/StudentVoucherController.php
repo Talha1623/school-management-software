@@ -8,6 +8,7 @@ use App\Models\Section;
 use App\Models\StudentPayment;
 use App\Models\MonthlyFee;
 use App\Models\StudentDiscount;
+use App\Models\GeneralSetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Http\JsonResponse;
@@ -457,7 +458,10 @@ class StudentVoucherController extends Controller
             ];
         }
         
-        return view('accounting.fee-voucher.print', compact('vouchers', 'type', 'vouchersFor', 'currentYear', 'copyLabels'));
+        // Get General Settings for school information
+        $settings = GeneralSetting::getSettings();
+        
+        return view('accounting.fee-voucher.print', compact('vouchers', 'type', 'vouchersFor', 'currentYear', 'copyLabels', 'settings'));
     }
 }
 

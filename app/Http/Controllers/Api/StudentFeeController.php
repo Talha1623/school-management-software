@@ -218,6 +218,39 @@ class StudentFeeController extends Controller
 
             // Format payment history
             $paymentHistory = $payments->map(function ($payment) {
+                // Determine status based on method
+                // If method is "Generated", status is "generated"
+                // Otherwise, status is "paid" (payment has been made)
+                $status = strtolower(trim($payment->method)) === 'generated' ? 'generated' : 'paid';
+                
+                // Determine fee type from payment title
+                $feeType = null;
+                $paymentTitle = $payment->payment_title ?? '';
+                
+                if (stripos($paymentTitle, 'Monthly Fee') !== false) {
+                    $feeType = 'monthly_fee';
+                } elseif (stripos($paymentTitle, 'Transport Fee') !== false) {
+                    $feeType = 'transport_fee';
+                } elseif (stripos($paymentTitle, 'Admission Fee') !== false) {
+                    $feeType = 'admission_fee';
+                } elseif (stripos($paymentTitle, 'Custom Fee') !== false || stripos($paymentTitle, 'Library Fee') !== false || stripos($paymentTitle, 'Lab Fee') !== false) {
+                    $feeType = 'custom_fee';
+                } else {
+                    $feeType = 'other';
+                }
+                
+                // Calculate generated amount (for generated fees) or paid amount (for paid fees)
+                $generatedAmount = 0;
+                $paidAmount = 0;
+                
+                if ($status === 'generated') {
+                    // For generated fees, show the amount that was generated
+                    $generatedAmount = (float) $payment->payment_amount - (float) $payment->discount + (float) $payment->late_fee;
+                } else {
+                    // For paid fees, show the amount that was paid
+                    $paidAmount = (float) $payment->payment_amount;
+                }
+                
                 return [
                     'id' => $payment->id,
                     'payment_title' => $payment->payment_title,
@@ -226,6 +259,10 @@ class StudentFeeController extends Controller
                     'late_fee' => (float) $payment->late_fee,
                     'net_amount' => (float) $payment->payment_amount - (float) $payment->discount + (float) $payment->late_fee,
                     'method' => $payment->method,
+                    'status' => $status, // "generated" or "paid"
+                    'fee_type' => $feeType, // "monthly_fee", "transport_fee", "admission_fee", "custom_fee", or "other"
+                    'generated_amount' => $generatedAmount, // Amount generated (only for generated fees)
+                    'paid_amount' => $paidAmount, // Amount paid (only for paid fees)
                     'payment_date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
                     'payment_date_formatted' => $payment->payment_date ? $payment->payment_date->format('d M Y') : null,
                     'accountant' => $payment->accountant,

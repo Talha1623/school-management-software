@@ -378,19 +378,165 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Load sections when class changes
+    // Load classes when campus changes
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
-    const sectionSelect = document.getElementById('filter_section');
+    const modalCampusSelect = document.getElementById('modal_campus');
     const modalClassSelect = document.getElementById('modal_class');
+    const sectionSelect = document.getElementById('filter_section');
     const modalSectionSelect = document.getElementById('modal_section');
+    const testSelect = document.getElementById('filter_test');
+    const modalTestSelect = document.getElementById('modal_for_test');
+    
+    // Function to load classes based on campus
+    function loadClasses(campus, targetSelect) {
+        if (targetSelect) {
+            const currentValue = targetSelect.value;
+            targetSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            const params = new URLSearchParams();
+            if (campus) params.append('campus', campus);
+            
+            fetch(`{{ route('test.assign-grades.get-classes-by-campus') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (targetSelect.id === 'filter_class') {
+                        targetSelect.innerHTML = '<option value="">All Classes</option>';
+                    } else {
+                        targetSelect.innerHTML = '<option value="">Select Class</option>';
+                    }
+                    if (data.classes && data.classes.length > 0) {
+                        data.classes.forEach(function(className) {
+                            const option = document.createElement('option');
+                            option.value = className;
+                            option.textContent = className;
+                            if (className === currentValue) {
+                                option.selected = true;
+                            }
+                            targetSelect.appendChild(option);
+                        });
+                    }
+                    // Clear dependent dropdowns
+                    if (targetSelect.id === 'filter_class') {
+                        if (sectionSelect) sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                        const subjectSelectEl = document.getElementById('filter_subject');
+                        if (subjectSelectEl) subjectSelectEl.innerHTML = '<option value="">All Subjects</option>';
+                        if (testSelect) testSelect.innerHTML = '<option value="">All Tests</option>';
+                    } else if (targetSelect.id === 'modal_class') {
+                        if (modalSectionSelect) modalSectionSelect.innerHTML = '<option value="">Select Section</option>';
+                        const modalSubjectSelectEl = document.getElementById('modal_subject');
+                        if (modalSubjectSelectEl) modalSubjectSelectEl.innerHTML = '<option value="">Select Subject</option>';
+                        if (modalTestSelect) modalTestSelect.innerHTML = '<option value="">Select Test</option>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading classes:', error);
+                    if (targetSelect.id === 'filter_class') {
+                        targetSelect.innerHTML = '<option value="">All Classes</option>';
+                    } else {
+                        targetSelect.innerHTML = '<option value="">Select Class</option>';
+                    }
+                });
+        }
+    }
+    
+    // Load classes when campus changes
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses(this.value, classSelect);
+            // Also clear and reload other dependent dropdowns
+            if (sectionSelect) sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            if (subjectSelect) subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+            if (testSelect) loadTests();
+        });
+    }
+    
+    if (modalCampusSelect) {
+        modalCampusSelect.addEventListener('change', function() {
+            loadClasses(this.value, modalClassSelect);
+            if (modalSectionSelect) modalSectionSelect.innerHTML = '<option value="">Select Section</option>';
+            const modalSubjectSelectEl = document.getElementById('modal_subject');
+            if (modalSubjectSelectEl) modalSubjectSelectEl.innerHTML = '<option value="">Select Subject</option>';
+            if (modalTestSelect) modalTestSelect.innerHTML = '<option value="">Select Test</option>';
+        });
+    }
+    
+    // Function to load modal tests
+    function loadModalTests() {
+        const campus = modalCampusSelect ? modalCampusSelect.value : '';
+        const classValue = modalClassSelect ? modalClassSelect.value : '';
+        const section = modalSectionSelect ? modalSectionSelect.value : '';
+        const modalSubjectSelectEl = document.getElementById('modal_subject');
+        const subject = modalSubjectSelectEl ? modalSubjectSelectEl.value : '';
+        
+        if (!campus || !classValue) {
+            if (modalTestSelect) {
+                modalTestSelect.innerHTML = '<option value="">Select Test</option>';
+            }
+            return;
+        }
+        
+        const params = new URLSearchParams();
+        if (campus) params.append('campus', campus);
+        if (classValue) params.append('class', classValue);
+        if (section) params.append('section', section);
+        if (subject) params.append('subject', subject);
+        
+        if (modalTestSelect) {
+            const currentValue = modalTestSelect.value;
+            modalTestSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.assign-grades.get-tests-by-filters') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    modalTestSelect.innerHTML = '<option value="">Select Test</option>';
+                    if (data.tests && data.tests.length > 0) {
+                        data.tests.forEach(function(test) {
+                            const option = document.createElement('option');
+                            option.value = test;
+                            option.textContent = test;
+                            if (test === currentValue) {
+                                option.selected = true;
+                            }
+                            modalTestSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading modal tests:', error);
+                    modalTestSelect.innerHTML = '<option value="">Select Test</option>';
+                });
+        }
+    }
+    
+    // Load modal tests when modal filters change
+    if (modalCampusSelect) {
+        modalCampusSelect.addEventListener('change', loadModalTests);
+    }
+    if (modalClassSelect) {
+        modalClassSelect.addEventListener('change', function() {
+            setTimeout(loadModalTests, 500);
+        });
+    }
+    if (modalSectionSelect) {
+        modalSectionSelect.addEventListener('change', loadModalTests);
+    }
+    const modalSubjectSelectEl = document.getElementById('modal_subject');
+    if (modalSubjectSelectEl) {
+        modalSubjectSelectEl.addEventListener('change', loadModalTests);
+    }
 
     if (classSelect && sectionSelect) {
-        function loadSections(selectedClass, targetSelect) {
+        function loadSections(selectedClass, targetSelect, campus = null) {
             if (selectedClass) {
                 if (targetSelect) targetSelect.disabled = false;
                 if (targetSelect) targetSelect.innerHTML = '<option value="">Loading...</option>';
                 
-                fetch(`{{ route('test.assign-grades.get-sections-by-class') }}?class=${encodeURIComponent(selectedClass)}`)
+                const params = new URLSearchParams();
+                params.append('class', selectedClass);
+                if (campus) params.append('campus', campus);
+                
+                fetch(`{{ route('test.assign-grades.get-sections-by-class') }}?${params.toString()}`)
                     .then(response => response.json())
                     .then(data => {
                         if (targetSelect) {
@@ -427,26 +573,75 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (classSelect) {
             classSelect.addEventListener('change', function() {
-                loadSections(this.value, sectionSelect);
+                const campus = campusSelect ? campusSelect.value : null;
+                loadSections(this.value, sectionSelect, campus);
             });
         }
 
         if (modalClassSelect) {
             modalClassSelect.addEventListener('change', function() {
-                loadSections(this.value, modalSectionSelect);
+                const campus = modalCampusSelect ? modalCampusSelect.value : null;
+                loadSections(this.value, modalSectionSelect, campus);
             });
         }
 
         // Load sections on page load if class is already selected
         @if($filterClass)
-        loadSections('{{ $filterClass }}', sectionSelect);
+        const initialCampus = campusSelect ? campusSelect.value : null;
+        loadSections('{{ $filterClass }}', sectionSelect, initialCampus);
         @endif
     }
     
+    // Function to load tests dynamically
+    function loadTests() {
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
+        const subject = subjectSelect ? subjectSelect.value : '';
+        
+        if (!campus || !classValue) {
+            // If no campus or class selected, clear tests
+            if (testSelect) {
+                testSelect.innerHTML = '<option value="">All Tests</option>';
+            }
+            return;
+        }
+        
+        const params = new URLSearchParams();
+        if (campus) params.append('campus', campus);
+        if (classValue) params.append('class', classValue);
+        if (section) params.append('section', section);
+        if (subject) params.append('subject', subject);
+        
+        if (testSelect) {
+            const currentValue = testSelect.value;
+            testSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            fetch(`{{ route('test.assign-grades.get-tests-by-filters') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    testSelect.innerHTML = '<option value="">All Tests</option>';
+                    if (data.tests && data.tests.length > 0) {
+                        data.tests.forEach(function(test) {
+                            const option = document.createElement('option');
+                            option.value = test;
+                            option.textContent = test;
+                            if (test === currentValue) {
+                                option.selected = true;
+                            }
+                            testSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading tests:', error);
+                    testSelect.innerHTML = '<option value="">All Tests</option>';
+                });
+        }
+    }
+    
     // Function to load subjects dynamically
-    const campusSelect = document.getElementById('filter_campus');
     const subjectSelect = document.getElementById('filter_subject');
-    const modalCampusSelect = document.getElementById('modal_campus');
     const modalSubjectSelect = document.getElementById('modal_subject');
     
     function loadSubjects() {
@@ -512,16 +707,42 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Load subjects when campus changes
+    // Load tests when filters change
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
-            loadSubjects();
+            setTimeout(loadTests, 500);
         });
     }
     
-    // Load subjects on page load if filters are already selected
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            setTimeout(function() {
+                loadSubjects();
+                loadTests();
+            }, 500);
+        });
+    }
+    
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            loadSubjects();
+            loadTests();
+        });
+    }
+    
+    const subjectSelectEl = document.getElementById('filter_subject');
+    if (subjectSelectEl) {
+        subjectSelectEl.addEventListener('change', function() {
+            loadTests();
+        });
+    }
+    
+    // Load subjects and tests on page load if filters are already selected
     @if($filterClass)
-    setTimeout(loadSubjects, 1000);
+    setTimeout(function() {
+        loadSubjects();
+        loadTests();
+    }, 1000);
     @endif
 
 });

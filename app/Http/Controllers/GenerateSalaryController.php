@@ -79,16 +79,14 @@ class GenerateSalaryController extends Controller
                     // Calculate loan repayment from approved loans
                     $loanRepayment = $this->calculateLoanRepayment($salary->staff_id);
                     
-                    // Calculate fee discount from student payments
-                    $feeDiscount = $this->calculateFeeDiscount($salary->staff, (int) $salary->year, (int) $monthNumber);
-                    // Subtract discount and loan repayment from salary generated
-                    $finalSalaryGenerated = max(0, $salaryGenerated - $feeDiscount - $loanRepayment);
+                    // Subtract loan repayment from salary generated (no discount)
+                    $finalSalaryGenerated = max(0, $salaryGenerated - $loanRepayment);
 
                     if ($salary->basic != $basicRate) {
                         $salary->update(['basic' => $basicRate]);
                     }
-                    if ($salary->discount != $feeDiscount) {
-                        $salary->update(['discount' => $feeDiscount]);
+                    if ($salary->discount != 0) {
+                        $salary->update(['discount' => 0]);
                     }
                     if (abs($salary->loan_repayment - $loanRepayment) > 0.01) {
                         $salary->update(['loan_repayment' => $loanRepayment]);
@@ -211,10 +209,8 @@ class GenerateSalaryController extends Controller
                     $basicRate = (float) ($salary->staff->salary ?? 0);
                     $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
                     
-                    // Calculate fee discount from student payments
-                    $feeDiscount = $this->calculateFeeDiscount($salary->staff, $year, $month);
-                    // Subtract discount and loan repayment from salary generated
-                    $finalSalaryGenerated = max(0, $salaryGenerated - $feeDiscount - $loanRepayment);
+                    // Subtract loan repayment from salary generated (no discount)
+                    $finalSalaryGenerated = max(0, $salaryGenerated - $loanRepayment);
 
                     $updates = [];
                     if ($salary->loan_repayment != $loanRepayment) {
@@ -229,8 +225,8 @@ class GenerateSalaryController extends Controller
                     if ($salary->basic != $basicRate) {
                         $updates['basic'] = $basicRate;
                     }
-                    if ($salary->discount != $feeDiscount) {
-                        $updates['discount'] = $feeDiscount;
+                    if ($salary->discount != 0) {
+                        $updates['discount'] = 0;
                     }
                     // Update salary_generated if status is Pending and it differs (loan repayment is already deducted in finalSalaryGenerated)
                     // Also update if loan repayment changed, as it affects salary_generated
@@ -310,11 +306,8 @@ class GenerateSalaryController extends Controller
                 
                 $salaryGenerated = $this->calculateSalaryGenerated($staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
 
-                // Calculate fee discount from student payments
-                $feeDiscount = $this->calculateFeeDiscount($staff, $year, $month);
-                
-                // Subtract discount and loan repayment from salary generated
-                $finalSalaryGenerated = max(0, $salaryGenerated - $feeDiscount - $loanRepayment);
+                // Subtract loan repayment from salary generated (no discount)
+                $finalSalaryGenerated = max(0, $salaryGenerated - $loanRepayment);
 
                 // Create salary record
                 Salary::create([
@@ -329,7 +322,7 @@ class GenerateSalaryController extends Controller
                     'salary_generated' => $finalSalaryGenerated,
                     'amount_paid' => 0,
                     'loan_repayment' => $loanRepayment,
-                    'discount' => $feeDiscount,
+                    'discount' => 0,
                     'status' => 'Pending',
                 ]);
 
@@ -369,11 +362,8 @@ class GenerateSalaryController extends Controller
                 
                 $salaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
                 
-                // Calculate fee discount from student payments
-                $feeDiscount = $this->calculateFeeDiscount($salary->staff, $year, $month);
-                
-                // Subtract discount and loan repayment from salary generated
-                $finalSalaryGenerated = max(0, $salaryGenerated - $feeDiscount - $loanRepayment);
+                // Subtract loan repayment from salary generated (no discount)
+                $finalSalaryGenerated = max(0, $salaryGenerated - $loanRepayment);
                 
                 // Prepare updates array
                 $updates = [];
@@ -391,8 +381,8 @@ class GenerateSalaryController extends Controller
                 if ($salary->basic != $basicRate) {
                     $updates['basic'] = $basicRate;
                 }
-                if (abs($salary->discount - $feeDiscount) > 0.01) {
-                    $updates['discount'] = $feeDiscount;
+                if ($salary->discount != 0) {
+                    $updates['discount'] = 0;
                 }
                 // Always update salary_generated if status is Pending (loan repayment is already deducted in finalSalaryGenerated)
                 // This ensures old records are updated with correct loan deduction
@@ -450,29 +440,25 @@ class GenerateSalaryController extends Controller
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
         ]);
 
-        // Calculate loan repayment from approved loans (if not manually set)
-        $loanRepayment = $validated['loan_repayment'] ?? 0;
-        if ($loanRepayment == 0) {
-            $loanRepayment = $this->calculateLoanRepayment($salary->staff_id);
-        }
+        // Use existing loan repayment from salary (already deducted at generation time)
+        // Do NOT recalculate or deduct loan repayment again
+        $loanRepayment = $validated['loan_repayment'] ?? $salary->loan_repayment ?? 0;
 
-        // Calculate new salary generated (base + bonus - deduction - discount - loan repayment)
-        $bonusAmount = $validated['bonus_amount'] ?? 0;
-        $deductionAmount = $validated['deduction_amount'] ?? 0;
-        $monthNumber = $this->getMonthNumber($salary->salary_month);
-        $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, (int) $salary->year, $monthNumber);
-        $baseSalaryGenerated = $this->calculateSalaryGenerated($salary->staff, $attendanceSummary, 0, (int) $salary->year, (int) $monthNumber);
+        // Calculate new salary generated from existing salary_generated (which already has loan deducted)
+        // Only add bonus and subtract deduction - loan is already deducted
+        $bonusAmount = (float) ($validated['bonus_amount'] ?? 0);
+        $deductionAmount = (float) ($validated['deduction_amount'] ?? 0);
         
-        // Calculate fee discount from student payments
-        $feeDiscount = $this->calculateFeeDiscount($salary->staff, (int) $salary->year, (int) $monthNumber);
-        // Subtract discount and loan repayment from salary generated
-        $newSalaryGenerated = max(0, $baseSalaryGenerated + $bonusAmount - $deductionAmount - $feeDiscount - $loanRepayment);
+        // Use existing salary_generated (which already has loan repayment deducted at generation)
+        // Add bonus and subtract deduction only
+        $newSalaryGenerated = max(0, $salary->salary_generated + $bonusAmount - $deductionAmount);
 
+        // Get amount paid from user input (use exactly as entered, don't modify)
+        $amountPaid = (float) ($validated['amount_paid'] ?? 0);
+        
         // Determine status based on fully_paid or amount_paid
         $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
-        $amountPaid = $validated['amount_paid'] ?? 0;
         
-        // If form is submitted with payment data, update status
         $status = 'Pending';
         if ($fullyPaid || $amountPaid >= $newSalaryGenerated) {
             $status = 'Paid';
@@ -485,17 +471,14 @@ class GenerateSalaryController extends Controller
             $status = 'Issued';
         }
 
-        // Deduct loan repayment from amount_paid automatically
-        // amount_paid entered by user is the gross amount, we deduct loan from it
-        $enteredAmountPaid = (float) ($validated['amount_paid'] ?? 0);
-        $finalAmountPaid = max(0, $enteredAmountPaid - $loanRepayment);
-
-        // Update salary
+        // Update salary with all calculated values
+        // amount_paid is used as entered by user
+        // salary_generated includes bonus (added) and deduction/loan (subtracted)
         $salary->update([
-            'amount_paid' => $finalAmountPaid,
+            'amount_paid' => $amountPaid,
             'loan_repayment' => $loanRepayment,
             'salary_generated' => $newSalaryGenerated,
-            'discount' => $feeDiscount,
+            'discount' => 0,
             'status' => $status,
         ]);
 
@@ -515,6 +498,18 @@ class GenerateSalaryController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // If status is Paid, redirect back to generate-salary page with updated data and print receipt flag
+        if ($status === 'Paid') {
+            return redirect()
+                ->route('salary-loan.generate-salary')
+                ->with('success', 'Payment updated successfully. Status changed to Paid.')
+                ->with('generated_salaries', $generatedSalaries)
+                ->with('generated_campus', $salary->staff->campus ?? '')
+                ->with('generated_month', $this->getMonthNumber($salary->salary_month))
+                ->with('generated_year', $salary->year)
+                ->with('print_receipt_id', $salary->id);
+        }
+
         return redirect()
             ->route('salary-loan.generate-salary')
             ->with('success', 'Payment updated successfully. Status changed to ' . $status . '.')
@@ -527,22 +522,44 @@ class GenerateSalaryController extends Controller
     /**
      * Calculate loan repayment for a staff member based on approved loans
      * Only includes loans with status 'Approved' (excludes 'Completed', 'Rejected', 'Pending')
+     * Tracks how many installments have already been paid to avoid duplicate deductions
      */
-    private function calculateLoanRepayment($staffId): float
+    private function calculateLoanRepayment($staffId, ?int $excludeSalaryId = null): float
     {
         // Get all approved loans for this staff member (exclude Completed, Rejected, Pending)
         $approvedLoans = Loan::where('staff_id', $staffId)
             ->where('status', 'Approved')
             ->get();
         
+        if ($approvedLoans->isEmpty()) {
+            return 0;
+        }
+        
+        // Count how many salaries have been generated for this staff member with loan repayment
+        // This represents how many installments have already been paid
+        $paidSalariesQuery = Salary::where('staff_id', $staffId)
+            ->where('loan_repayment', '>', 0);
+        
+        // Exclude current salary if updating an existing one
+        if ($excludeSalaryId) {
+            $paidSalariesQuery->where('id', '!=', $excludeSalaryId);
+        }
+        
+        $paidInstallmentsCount = $paidSalariesQuery->count();
+        
         $totalLoanRepayment = 0;
         
         foreach ($approvedLoans as $loan) {
             // Only calculate if loan has approved amount and repayment instalments
             if ($loan->approved_amount && $loan->approved_amount > 0 && $loan->repayment_instalments > 0) {
-                // Calculate monthly installment: approved_amount / repayment_instalments
-                $monthlyInstallment = (float) $loan->approved_amount / (int) $loan->repayment_instalments;
-                $totalLoanRepayment += $monthlyInstallment;
+                // Check if there are remaining installments for this loan
+                // If paid installments count is less than total repayment instalments, add the installment
+                if ($paidInstallmentsCount < $loan->repayment_instalments) {
+                    // Calculate monthly installment: approved_amount / repayment_instalments
+                    $monthlyInstallment = (float) $loan->approved_amount / (int) $loan->repayment_instalments;
+                    $totalLoanRepayment += $monthlyInstallment;
+                }
+                // If all installments have been paid, don't add anything for this loan
             }
         }
         
@@ -572,6 +589,7 @@ class GenerateSalaryController extends Controller
         $staff = Staff::find($staffId);
         $isPerLecture = $staff && strtolower(trim($staff->salary_type ?? '')) === 'lecture';
         $isPerHour = $staff && strtolower(trim($staff->salary_type ?? '')) === 'per hour';
+        $isFullTime = $staff && (empty($staff->salary_type) || strtolower(trim($staff->salary_type)) === 'full time');
 
         // For per hour salary type, don't count leave
         if ($isPerHour) {
@@ -605,6 +623,9 @@ class GenerateSalaryController extends Controller
             }
         }
 
+        $holidayCount = 0;
+        $sundayCount = 0;
+        
         foreach ($records as $record) {
             if ($record->status === 'Present') {
                 $present++;
@@ -613,6 +634,10 @@ class GenerateSalaryController extends Controller
             } elseif ($record->status === 'Leave' && !$isPerHour) {
                 // Don't count leave for per hour salary type
                 $leave++;
+            } elseif ($record->status === 'Holiday') {
+                $holidayCount++;
+            } elseif ($record->status === 'Sunday') {
+                $sundayCount++;
             }
 
             // For per hour staff, don't count late/early exit (as per requirements)
@@ -671,98 +696,110 @@ class GenerateSalaryController extends Controller
             }
 
             // Calculate total minutes for per hour salary calculation
-            // For per hour staff, ALWAYS use timetable time, not attendance time
-            if ($isPerHour && $record->status === 'Present') {
-                $staffName = trim($staff->name ?? '');
-                if (!empty($staffName)) {
-                    // Get staff's assigned subjects from Subject table
-                    $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
-                        ->whereNotNull('subject_name')
-                        ->whereNotNull('class')
-                        ->whereNotNull('section')
-                        ->get();
-
-                    if ($assignedSubjects->isNotEmpty()) {
-                        $dayName = Carbon::parse($record->attendance_date)->format('l'); // Monday, Tuesday, etc.
-                        
-                        // Calculate expected hours from timetable for this day
-                        $dayMinutes = 0;
-                        foreach ($assignedSubjects as $subject) {
-                            $subjectName = trim($subject->subject_name ?? '');
-                            $subjectClass = trim($subject->class ?? '');
-                            $subjectSection = trim($subject->section ?? '');
-                            $subjectCampus = trim($subject->campus ?? '');
-                            
-                            if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
-                                continue;
-                            }
-                            
-                            // Use flexible matching for subject and class names
-                            $subjectNameLower = strtolower($subjectName);
-                            $timetableQuery = Timetable::where(function($query) use ($subjectNameLower) {
-                                $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                                // Flexible matching for common subject name variations
-                                $subjectNameMap = [
-                                    'maths' => ['maths', 'mathematics', 'math'],
-                                    'mathematics' => ['maths', 'mathematics', 'math'],
-                                    'english' => ['english', 'eng'],
-                                    'urdu' => ['urdu'],
-                                    'science' => ['science', 'sci'],
-                                    'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
-                                    'social studies' => ['social studies', 'social', 'sst'],
-                                ];
-                                if (isset($subjectNameMap[$subjectNameLower])) {
-                                    foreach ($subjectNameMap[$subjectNameLower] as $variant) {
-                                        $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
-                                    }
-                                }
-                            })
-                            ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
-                            ->where(function($query) use ($subjectClass) {
-                                // Match class name (handle variations like "Four" = "4" = "four")
-                                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
-                                // Also try numeric matching if class is numeric
-                                if (is_numeric($subjectClass)) {
-                                    $wordMap = [1 => 'one', 2 => 'two', 3 => 'three', 4 => 'four', 5 => 'five',
-                                                6 => 'six', 7 => 'seven', 8 => 'eight', 9 => 'nine', 10 => 'ten'];
-                                    if (isset($wordMap[(int)$subjectClass])) {
-                                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($wordMap[(int)$subjectClass])]);
-                                    }
-                                } else {
-                                    $wordToNumber = ['one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5,
-                                                     'six' => 6, 'seven' => 7, 'eight' => 8, 'nine' => 9, 'ten' => 10];
-                                    $classLower = strtolower(trim($subjectClass));
-                                    if (isset($wordToNumber[$classLower])) {
-                                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber[$classLower])]);
-                                    }
-                                }
-                            })
-                            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
-                            
-                            if (!empty($subjectCampus)) {
-                                $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)]);
-                            }
-                            
-                            $timetableEntries = $timetableQuery->get();
-                            
-                            // Calculate minutes from timetable entries
-                            foreach ($timetableEntries as $entry) {
-                                if (!empty($entry->starting_time) && !empty($entry->ending_time)) {
-                                    try {
-                                        $startTime = Carbon::parse($entry->starting_time);
-                                        $endTime = Carbon::parse($entry->ending_time);
-                                        if ($endTime->greaterThan($startTime)) {
-                                            $dayMinutes += $startTime->diffInMinutes($endTime);
-                                        }
-                                    } catch (\Exception $e) {
-                                        // Skip invalid times
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Add day minutes to total (from timetable, not attendance)
+            // For per hour staff, use ACTUAL hours taught from attendance (start_time and end_time)
+            if ($isPerHour && $record->status === 'Present' && !empty($record->start_time) && !empty($record->end_time)) {
+                // Use actual attendance times (actual hours taught)
+                try {
+                    $date = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                    $startTime = Carbon::parse($date . ' ' . $record->start_time);
+                    $endTime = Carbon::parse($date . ' ' . $record->end_time);
+                    if ($endTime->greaterThan($startTime)) {
+                        $dayMinutes = $startTime->diffInMinutes($endTime);
                         $totalMinutes += $dayMinutes;
+                    }
+                } catch (\Exception $e) {
+                    // If attendance times not available, fallback to timetable time
+                    $staffName = trim($staff->name ?? '');
+                    if (!empty($staffName)) {
+                        // Get staff's assigned subjects from Subject table
+                        $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
+                            ->whereNotNull('subject_name')
+                            ->whereNotNull('class')
+                            ->whereNotNull('section')
+                            ->get();
+
+                        if ($assignedSubjects->isNotEmpty()) {
+                            $dayName = Carbon::parse($record->attendance_date)->format('l'); // Monday, Tuesday, etc.
+                            
+                            // Calculate expected hours from timetable for this day
+                            $dayMinutes = 0;
+                            foreach ($assignedSubjects as $subject) {
+                                $subjectName = trim($subject->subject_name ?? '');
+                                $subjectClass = trim($subject->class ?? '');
+                                $subjectSection = trim($subject->section ?? '');
+                                $subjectCampus = trim($subject->campus ?? '');
+                                
+                                if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+                                    continue;
+                                }
+                                
+                                // Use flexible matching for subject and class names
+                                $subjectNameLower = strtolower($subjectName);
+                                $timetableQuery = Timetable::where(function($query) use ($subjectNameLower) {
+                                    $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                                    // Flexible matching for common subject name variations
+                                    $subjectNameMap = [
+                                        'maths' => ['maths', 'mathematics', 'math'],
+                                        'mathematics' => ['maths', 'mathematics', 'math'],
+                                        'english' => ['english', 'eng'],
+                                        'urdu' => ['urdu'],
+                                        'science' => ['science', 'sci'],
+                                        'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
+                                        'social studies' => ['social studies', 'social', 'sst'],
+                                    ];
+                                    if (isset($subjectNameMap[$subjectNameLower])) {
+                                        foreach ($subjectNameMap[$subjectNameLower] as $variant) {
+                                            $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+                                        }
+                                    }
+                                })
+                                ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+                                ->where(function($query) use ($subjectClass) {
+                                    // Match class name (handle variations like "Four" = "4" = "four")
+                                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
+                                    // Also try numeric matching if class is numeric
+                                    if (is_numeric($subjectClass)) {
+                                        $wordMap = [1 => 'one', 2 => 'two', 3 => 'three', 4 => 'four', 5 => 'five',
+                                                    6 => 'six', 7 => 'seven', 8 => 'eight', 9 => 'nine', 10 => 'ten'];
+                                        if (isset($wordMap[(int)$subjectClass])) {
+                                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($wordMap[(int)$subjectClass])]);
+                                        }
+                                    } else {
+                                        $wordToNumber = ['one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5,
+                                                         'six' => 6, 'seven' => 7, 'eight' => 8, 'nine' => 9, 'ten' => 10];
+                                        $classLower = strtolower(trim($subjectClass));
+                                        if (isset($wordToNumber[$classLower])) {
+                                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber[$classLower])]);
+                                        }
+                                    }
+                                })
+                                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
+                                
+                                if (!empty($subjectCampus)) {
+                                    $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)]);
+                                }
+                                
+                                $timetableEntries = $timetableQuery->get();
+                                
+                                // Calculate minutes from timetable entries
+                                foreach ($timetableEntries as $entry) {
+                                    if (!empty($entry->starting_time) && !empty($entry->ending_time)) {
+                                        try {
+                                            $startTime = Carbon::parse($entry->starting_time);
+                                            $endTime = Carbon::parse($entry->ending_time);
+                                            if ($endTime->greaterThan($startTime)) {
+                                                $dayMinutes += $startTime->diffInMinutes($endTime);
+                                            }
+                                        } catch (\Exception $e) {
+                                            // Skip invalid times
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Add day minutes to total (from timetable as fallback)
+                            $totalMinutes += $dayMinutes;
+                        }
                     }
                 }
             } elseif (!$isPerHour && !empty($record->start_time) && !empty($record->end_time)) {
@@ -778,6 +815,11 @@ class GenerateSalaryController extends Controller
                     // Skip invalid times
                 }
             }
+        }
+        
+        // For full-time staff, count Sunday and Holiday as present
+        if ($isFullTime) {
+            $present += $holidayCount + $sundayCount;
         }
 
         return [
@@ -797,14 +839,15 @@ class GenerateSalaryController extends Controller
         $salaryType = strtolower(trim($staff->salary_type ?? ''));
 
         if ($salaryType === 'per hour') {
-            $totalMinutes = $attendanceSummary['total_minutes'];
-            $presentDays = $attendanceSummary['present'];
+            $totalMinutes = $attendanceSummary['total_minutes'] ?? 0;
+            $totalHours = $totalMinutes / 60; // Convert minutes to hours
             
-            // For per hour staff, basic salary field represents daily rate
-            // Calculate: present_days * daily_rate
-            // This ensures 1 day attendance = 1 * basic_salary
-            if ($presentDays > 0) {
-                return round($presentDays * $rate, 2);
+            // For per hour staff, calculate: Basic Salary × Hours worked
+            // IMPORTANT: Use actual hours worked, NOT present days
+            // Example: 5000 × 4.50 = 22,500
+            if ($totalHours > 0) {
+                $calculatedSalary = $rate * $totalHours;
+                return round($calculatedSalary, 2);
             }
             
             return 0;
@@ -821,14 +864,24 @@ class GenerateSalaryController extends Controller
         $freeAbsents = $staffFreeAbsents !== null && $staffFreeAbsents >= 0 ? $staffFreeAbsents : (int) ($settings->free_absents ?? 0);
         
         $leaveDeduction = strtolower(trim($settings->leave_deduction ?? 'no')) === 'yes';
+        $presentCount = (int) ($attendanceSummary['present'] ?? 0);
         $absentCount = (int) ($attendanceSummary['absent'] ?? 0);
         $leaveCount = (int) ($attendanceSummary['leave'] ?? 0);
         $lateCount = (int) ($attendanceSummary['late'] ?? 0);
         $earlyExitCount = (int) ($attendanceSummary['early_exit'] ?? 0);
 
-        $deductibleAbsents = $absentCount + ($leaveDeduction ? $leaveCount : 0);
-        $deductibleAbsents = max(0, $deductibleAbsents - $freeAbsents);
+        // Calculate deductible absents (absents beyond free limit)
+        // Example: free_absent = 2, absent = 3
+        //   - deductibleAbsents = 3 - 2 = 1 (only 1 absent will be deducted, 2 are free)
+        $totalAbsents = $absentCount + ($leaveDeduction ? $leaveCount : 0);
+        $deductibleAbsents = max(0, $totalAbsents - $freeAbsents);
+        
+        // Calculate how many free absents are actually used (up to actual absent count)
+        // Example: free_absent = 2, absent = 3 -> freeAbsentsUsed = 2
+        // Example: free_absent = 2, absent = 1 -> freeAbsentsUsed = 1
+        $freeAbsentsUsed = min($freeAbsents, $absentCount);
 
+        // Calculate total days in month
         $daysInMonth = 30;
         if (!empty($year) && !empty($month)) {
             try {
@@ -837,7 +890,17 @@ class GenerateSalaryController extends Controller
                 $daysInMonth = 30;
             }
         }
+        
+        // Calculate per day salary: Basic Salary / Total Days in Month
         $dailyRate = $daysInMonth > 0 ? ($rate / $daysInMonth) : 0;
+        
+        // Calculate base salary: present days + free absent days + leave days (all treated as present)
+        // Example: present = 20, absent = 3, leave = 2, free_absent = 2
+        //   - freeAbsentsUsed = min(2, 3) = 2
+        //   - baseSalary = dailyRate * (20 + 2 + 2) = dailyRate * 24
+        //     (2 free absents + 2 leaves treated as present)
+        //   - deductibleAbsents = 3 - 2 = 1 (only 1 absent deducted)
+        $baseSalary = $dailyRate * ($presentCount + $freeAbsentsUsed + $leaveCount);
         
         // Late arrival deduction: Use staff's individual late_fees if set, otherwise default 500
         $staffLateFees = (float) ($staff->late_fees ?? null);
@@ -859,7 +922,9 @@ class GenerateSalaryController extends Controller
             $absentDeduction = $dailyRate * $deductibleAbsents;
         }
 
-        return round(max(0, $rate - $absentDeduction - $lateDeduction - $earlyExitDeduction), 2);
+        // Final salary: (Per Day Salary × Present Days) - Deductions
+        // Note: deductibleAbsents already accounts for free_absent (only deducts absents beyond free limit)
+        return round(max(0, $baseSalary - $absentDeduction - $lateDeduction - $earlyExitDeduction), 2);
     }
 
     /**
@@ -955,7 +1020,63 @@ class GenerateSalaryController extends Controller
     {
         $salary->load('staff');
         
-        return view('salary-loan.print-slip', compact('salary'));
+        // Calculate attendance summary for displaying hours/lectures
+        $monthNumber = $this->getMonthNumber($salary->salary_month);
+        $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, (int) $salary->year, $monthNumber);
+        
+        return view('salary-loan.print-slip', compact('salary', 'attendanceSummary'));
+    }
+
+    /**
+     * Print thermal receipt for salary payment.
+     */
+    public function printReceiptThermal(Salary $salary): View
+    {
+        $salary->load('staff');
+        
+        // Calculate attendance summary for displaying hours/lectures
+        $monthNumber = $this->getMonthNumber($salary->salary_month);
+        $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, (int) $salary->year, $monthNumber);
+        
+        return view('salary-loan.print-receipt-thermal', compact('salary', 'attendanceSummary'));
+    }
+
+    /**
+     * Update salary status.
+     */
+    public function updateStatus(Request $request, Salary $salary): RedirectResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', 'in:Pending,Paid,Issued'],
+        ]);
+
+        $salary->update($validated);
+
+        // If status is changed to Paid, redirect to thermal receipt print page
+        if ($validated['status'] === 'Paid') {
+            return redirect()
+                ->route('salary-loan.generate-salary.print-receipt-thermal', $salary->id)
+                ->with('success', 'Status updated to Paid. Receipt will be printed.');
+        }
+
+        // Get all generated salaries for the same campus, month, and year to show in table
+        $salary->load('staff');
+        $generatedSalaries = Salary::with('staff')
+            ->whereHas('staff', function($q) use ($salary) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($salary->staff->campus ?? ''))]);
+            })
+            ->where('salary_month', $salary->salary_month)
+            ->where('year', $salary->year)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return redirect()
+            ->route('salary-loan.generate-salary')
+            ->with('success', 'Salary status updated successfully.')
+            ->with('generated_salaries', $generatedSalaries)
+            ->with('generated_campus', $salary->staff->campus ?? '')
+            ->with('generated_month', $this->getMonthNumber($salary->salary_month))
+            ->with('generated_year', $salary->year);
     }
 
     /**

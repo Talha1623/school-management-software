@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\SaleRecord;
+use App\Models\GeneralSetting;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -77,6 +78,8 @@ class StockReportController extends Controller
                     ->with('error', 'Invalid report type.');
         }
 
+        $viewData['settings'] = GeneralSetting::getSettings();
+        
         return view('stock.sale-reports-print', $viewData);
     }
 }

@@ -146,7 +146,7 @@
                                         <td>{{ $quiz->start_date_time->format('d M Y H:i') }}</td>
                                         <td>
                                             @php
-                                                $duration = $quiz->duration_minutes ?? 60;
+                                                $duration = (int) ($quiz->duration_minutes ?? 60);
                                                 $endTime = $quiz->start_date_time->copy()->addMinutes($duration);
                                                 $isCompleted = now()->greaterThan($endTime);
                                             @endphp

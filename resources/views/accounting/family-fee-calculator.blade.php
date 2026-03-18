@@ -856,13 +856,15 @@ function printReceipt() {
             // Store data in sessionStorage for payment page
             sessionStorage.setItem('feeCalculatorPayment', JSON.stringify({
                 students: window.feeCalculatorData.students,
+                father: window.feeCalculatorData.father,
+                father_id_card: window.feeCalculatorData.father?.id_card_number || '',
                 totalAmount: totalAmount,
                 paymentAmount: amount,
                 paymentType: 'partial'
             }));
             
-            // Redirect to accounting fee payment page
-            window.location.href = `{{ route('accounting.direct-payment.student') }}`;
+            // Redirect to fee payment page
+            window.location.href = `{{ route('fee-payment') }}`;
         }
     }
 </script>

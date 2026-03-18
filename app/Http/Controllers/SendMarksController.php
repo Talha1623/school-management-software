@@ -6,6 +6,7 @@ use App\Models\Test;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
+use App\Models\GeneralSetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Http\JsonResponse;
@@ -147,7 +148,15 @@ class SendMarksController extends Controller
 
     private function getSessions()
     {
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Test::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        return $sessions->isEmpty() ? collect(['2024-2025', '2025-2026', '2026-2027']) : $sessions;
+        if ($sessions->isEmpty() && $runningSession) {
+            return collect([$runningSession]);
+        }
+        if ($runningSession && !$sessions->contains($runningSession)) {
+            return $sessions->prepend($runningSession)->values();
+        }
+        return $sessions;
     }
 }

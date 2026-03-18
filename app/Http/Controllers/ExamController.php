@@ -14,6 +14,7 @@ use App\Models\FinalExamGrade;
 use App\Models\ExamTimetable;
 use App\Models\ExamSetting;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -63,13 +64,15 @@ class ExamController extends Controller
             });
         }
 
-        // Get sessions
+        // Get sessions: from exams + Running Session from General Settings (no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
-        
         return view('exam.list', compact('exams', 'campuses', 'sessions', 'filterCampus'));
     }
 
@@ -123,6 +126,21 @@ class ExamController extends Controller
         return redirect()
             ->route('exam.list')
             ->with('success', 'Exam deleted successfully!');
+    }
+
+    /**
+     * Toggle result declared status for an exam.
+     */
+    public function toggleResultStatus(Request $request, Exam $exam): JsonResponse
+    {
+        $exam->result_status = !$exam->result_status;
+        $exam->save();
+
+        return response()->json([
+            'success' => true,
+            'result_status' => $exam->result_status,
+            'message' => $exam->result_status ? 'Result declared successfully!' : 'Result status reset successfully!',
+        ]);
     }
 
     /**
@@ -224,11 +242,14 @@ class ExamController extends Controller
             $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
         }
 
-        // Get sessions
+        // Get sessions (from exams + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         // Get exams (filtered by campus and session if provided)
@@ -259,15 +280,42 @@ class ExamController extends Controller
         $campus = $request->get('campus');
         $session = $request->get('session');
         
-        $examsQuery = Exam::query();
-        if ($campus) {
-            $examsQuery->where('campus', $campus);
-        }
-        if ($session) {
-            $examsQuery->where('session', $session);
+        // Get active campuses list for filtering
+        $activeCampuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        $examsQuery = Exam::query()->whereNotNull('exam_name');
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $examsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
         }
         
-        $exams = $examsQuery->whereNotNull('exam_name')->distinct()->pluck('exam_name')->sort()->values();
+        if ($campus && is_string($campus) && trim($campus) !== '') {
+            $campusLower = strtolower(trim($campus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                return response()->json([]);
+            }
+        }
+        if ($session && is_string($session) && trim($session) !== '') {
+            $examsQuery->whereRaw('LOWER(TRIM(session)) = ?', [strtolower(trim($session))]);
+        }
+        
+        $exams = $examsQuery->distinct()->pluck('exam_name')->sort()->values();
         
         return response()->json($exams);
     }
@@ -335,8 +383,9 @@ class ExamController extends Controller
             }
         }
 
-        // Get exams from Exam List (distinct exam names, filter by campus if selected)
-        $examsQuery = Exam::whereNotNull('exam_name');
+        // Get exams from Exam List - ONLY show exams where result_status = 1 (declared)
+        $examsQuery = Exam::where('result_status', 1)
+            ->whereNotNull('exam_name');
         if ($filterCampus) {
             $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
         }
@@ -681,7 +730,9 @@ class ExamController extends Controller
     public function getExamsForMarksEntry(Request $request): JsonResponse
     {
         $campus = $request->get('campus');
-        $examsQuery = Exam::whereNotNull('exam_name');
+        // ONLY show exams where result_status = 1 (declared)
+        $examsQuery = Exam::where('result_status', 1)
+            ->whereNotNull('exam_name');
         if ($campus) {
             $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
@@ -976,18 +1027,47 @@ class ExamController extends Controller
             
             // Load marks for each student for the selected exam
             if ($students->count() > 0) {
-                $marks = StudentMark::where('test_name', $filterExam)
+                // Get all marks for this exam (both subject-specific from marks entry and particular exam marks)
+                $allMarks = StudentMark::where('test_name', $filterExam)
                     ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
                     ->when($filterSection, function($query) use ($filterSection) {
                         return $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
                     })
-                    ->get()
-                    ->keyBy('student_id');
+                    ->get();
                 
-                // Attach marks to students
-                $students = $students->map(function($student) use ($marks) {
-                    $student->mark = $marks->get($student->id);
+                // Group marks by student_id and calculate totals from marks entry
+                $students = $students->map(function($student) use ($allMarks, $filterExam) {
+                    // Get all marks for this student for this exam
+                    $studentMarks = $allMarks->where('student_id', $student->id);
+                    
+                    // Calculate total and obtained from marks entry (subject-specific marks)
+                    $subjectMarks = $studentMarks->filter(function($mark) {
+                        return !empty($mark->subject) && trim($mark->subject) !== '';
+                    });
+                    
+                    $totalMarks = $subjectMarks->sum('total_marks') ?? 0;
+                    $obtainedMarks = $subjectMarks->sum('marks_obtained') ?? 0;
+                    
+                    // Get teacher remarks (from particular exam mark - subject = null)
+                    $particularMark = $studentMarks->filter(function($mark) {
+                        return empty($mark->subject) || $mark->subject === null || trim($mark->subject) === '';
+                    })->first();
+                    
+                    // Create a combined mark object with totals and remarks
+                    $combinedMark = null;
+                    if ($particularMark || $totalMarks > 0 || $obtainedMarks > 0) {
+                        $combinedMark = (object)[
+                            'id' => $particularMark->id ?? null,
+                            'student_id' => $student->id,
+                            'test_name' => $filterExam ?? '',
+                            'total_marks' => $totalMarks > 0 ? $totalMarks : ($particularMark->total_marks ?? null),
+                            'marks_obtained' => $obtainedMarks > 0 ? $obtainedMarks : ($particularMark->marks_obtained ?? null),
+                            'teacher_remarks' => $particularMark->teacher_remarks ?? null,
+                        ];
+                    }
+                    
+                    $student->mark = $combinedMark;
                     return $student;
                 });
             }
@@ -1180,8 +1260,11 @@ class ExamController extends Controller
         ]);
 
         // Save or update remarks for each student
+        // Save even if remark is empty to allow clearing remarks
         foreach ($validated['remarks'] as $studentId => $remark) {
-            if ($remark) {
+            // Get the student to ensure we have campus/class info
+            $student = Student::find($studentId);
+            if ($student) {
                 StudentMark::updateOrCreate(
                     [
                         'student_id' => $studentId,
@@ -1189,9 +1272,10 @@ class ExamController extends Controller
                         'campus' => $validated['campus'],
                         'class' => $validated['class'],
                         'section' => $validated['section'] ?? null,
+                        'subject' => null, // Particular exam remarks don't have subject
                     ],
                     [
-                        'teacher_remarks' => $remark,
+                        'teacher_remarks' => $remark ?? '', // Save even if empty to allow clearing
                     ]
                 );
             }
@@ -1315,11 +1399,14 @@ class ExamController extends Controller
             }
         }
 
-        // Get sessions
+        // Get sessions (from exams + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         // Get classes - filter by teacher's assigned classes if teacher, and only show existing (not deleted) classes
@@ -1551,16 +1638,70 @@ class ExamController extends Controller
     }
 
     /**
+     * Delete an exam timetable entry.
+     */
+    public function destroyTimetable(ExamTimetable $examTimetable): JsonResponse
+    {
+        try {
+            $examTimetable->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Exam timetable deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error deleting exam timetable: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get sections based on class (AJAX) for exam timetable.
      */
     public function getSectionsForTimetable(Request $request): JsonResponse
     {
         $class = $request->get('class');
         $campus = $request->get('campus');
-        $sections = Section::when($class, fn($q) => $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]))
-            ->when($campus, fn($q) => $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]))
-            ->whereNotNull('name')
-            ->distinct()
+        
+        // Get active campuses list for filtering
+        $activeCampuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        $sectionsQuery = Section::whereNotNull('name'); // Only active sections
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $sectionsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
+        }
+        
+        if ($class) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        }
+        
+        if ($campus) {
+            $campusLower = strtolower(trim($campus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                return response()->json([]);
+            }
+        }
+        
+        $sections = $sectionsQuery->distinct()
             ->pluck('name')
             ->sort()
             ->values();
@@ -1657,24 +1798,31 @@ class ExamController extends Controller
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
 
-        // Get campuses for dropdown - First from Campus model (primary source)
-        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
-
-        // Also get campuses from ClassModel and Section as fallback
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-
-        // Merge all campuses and get unique values
-        $campuses = $campusesFromModel
-            ->merge($campusesFromClasses)
-            ->merge($campusesFromSections)
-            ->unique()
-            ->sort()
+        // Get campuses from Campus model first (primary source - only active campuses)
+        $campuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
             ->values();
-
-        // Fallback to default campuses if none found
+        
+        // If no campuses found in Campus model, get from other sources
         if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->sort()
+                ->values();
+            
+            $campuses = $campusesFromClasses
+                ->merge($campusesFromSections)
+                ->unique()
+                ->sort()
+                ->values();
         }
 
         // Get exams (filtered by campus if provided)
@@ -1774,49 +1922,117 @@ class ExamController extends Controller
         $filterExam = $request->get('filter_exam');
         $filterType = $request->get('filter_type');
 
-        // Get campuses for dropdown - First from Campus model (primary source)
+        // Get active campuses from Campus model first (primary source)
         $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
-
-        // Also get campuses from ClassModel and Section as fallback
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-
-        // Merge all campuses and get unique values
+        
+        // Get active campuses list for filtering
+        $activeCampuses = $campusesFromModel
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // Also get campuses from ClassModel and Section, but only if they exist in Campus model
+        $campusesFromClasses = ClassModel::whereNotNull('campus')
+            ->whereNotNull('class_name') // Only active classes
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        $campusesFromSections = Section::whereNotNull('campus')
+            ->whereNotNull('name') // Only active sections
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        // Merge all campuses and get unique values (only active campuses)
         $campuses = $campusesFromModel
             ->merge($campusesFromClasses)
             ->merge($campusesFromSections)
             ->unique()
             ->sort()
             ->values();
+        
+        // Convert to collection of objects with campus_name property
+        $campuses = $campuses->map(function($campus) {
+            return (object)['campus_name' => $campus];
+        });
 
-        // Fallback to default campuses if none found
-        if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+        // Get classes (filtered by campus if provided, only active classes from active campuses)
+        $classesQuery = ClassModel::whereNotNull('class_name'); // Only active classes
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $classesQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
         }
-
-        // Get classes (filtered by campus if provided)
-        $classesQuery = ClassModel::whereNotNull('class_name');
+        
         if ($filterCampus) {
-            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $classes = collect();
+            }
         }
-        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+        if (!isset($classes)) {
+            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+        }
 
-        // Get sections (filtered by class if provided)
-        $sectionsQuery = Section::query();
+        // Get sections (filtered by class if provided, only active sections from active campuses)
+        $sectionsQuery = Section::whereNotNull('name'); // Only active sections
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $sectionsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
+        }
+        
         if ($filterClass) {
             $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
         }
         if ($filterCampus) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $sections = collect();
+            }
         }
-        $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
+        if (!isset($sections)) {
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+        }
 
-        // Get exams (filtered by campus if provided)
-        $examsQuery = Exam::query();
+        // Get exams (filtered by campus if provided, only active campuses)
+        $examsQuery = Exam::query()->whereNotNull('exam_name');
         if ($filterCampus) {
-            $examsQuery->where('campus', $filterCampus);
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $exams = collect();
+            }
         }
-        $exams = $examsQuery->whereNotNull('exam_name')->distinct()->pluck('exam_name')->sort()->values();
+        if (!isset($exams)) {
+            $exams = $examsQuery->distinct()->pluck('exam_name')->sort()->values();
+        }
 
         // Get exam types - only "editable" and "normal"
         $examTypes = collect(['editable', 'normal']);
@@ -1963,13 +2179,39 @@ class ExamController extends Controller
     {
         $campus = $request->get('campus');
         
-        $examsQuery = Exam::query();
-        if ($campus) {
-            $examsQuery->where('campus', $campus);
+        // Get active campuses list for filtering
+        $activeCampuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        $examsQuery = Exam::query()->whereNotNull('exam_name');
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $examsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
         }
         
-        $exams = $examsQuery->whereNotNull('exam_name')
-            ->distinct()
+        if ($campus) {
+            $campusLower = strtolower(trim($campus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                return response()->json([]);
+            }
+        }
+        
+        $exams = $examsQuery->distinct()
             ->pluck('exam_name')
             ->sort()
             ->values();
@@ -1983,9 +2225,37 @@ class ExamController extends Controller
     public function getClassesForTabulationSheet(Request $request): JsonResponse
     {
         $campus = trim((string) $request->get('campus'));
-        $classesQuery = ClassModel::whereNotNull('class_name');
+        
+        // Get active campuses list for filtering
+        $activeCampuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        $classesQuery = ClassModel::whereNotNull('class_name'); // Only active classes
+        
         if ($campus !== '') {
-            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            $campusLower = strtolower($campus);
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                return response()->json(['classes' => []]);
+            }
+        } else {
+            // If no campus specified, filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $classesQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
         }
 
         $classes = $classesQuery->distinct()
@@ -2094,49 +2364,115 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterSession = $request->get('filter_session');
 
-        // Get campuses for dropdown - First from Campus model (primary source)
+        // Get active campuses from Campus model first (primary source)
         $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
-
-        // Also get campuses from ClassModel and Section as fallback
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-
-        // Merge all campuses and get unique values
+        
+        // Get active campuses list for filtering
+        $activeCampuses = $campusesFromModel
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // Also get campuses from ClassModel and Section, but only if they exist in Campus model
+        $campusesFromClasses = ClassModel::whereNotNull('campus')
+            ->whereNotNull('class_name') // Only active classes
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        $campusesFromSections = Section::whereNotNull('campus')
+            ->whereNotNull('name') // Only active sections
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        // Merge all campuses and get unique values (only active campuses)
         $campuses = $campusesFromModel
             ->merge($campusesFromClasses)
             ->merge($campusesFromSections)
             ->unique()
             ->sort()
             ->values();
-
-        // Fallback to default campuses if none found
-        if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-        }
-
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
         
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        // Convert to collection of objects with campus_name property
+        $campuses = $campuses->map(function($campus) {
+            return (object)['campus_name' => $campus];
+        });
+
+        // Get classes (only active classes from active campuses)
+        // If campus is selected, show only classes from that campus
+        $classesQuery = ClassModel::whereNotNull('class_name'); // Only active classes
+        
+        if ($filterCampus) {
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $classes = collect();
+            }
+        } else {
+            // If no campus selected, filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $classesQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+        }
+        if (!isset($classes)) {
+            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         }
 
-        // Get sections (filtered by class if provided)
-        $sectionsQuery = Section::query();
+        // Get sections (filtered by class and campus if provided, only active sections from active campuses)
+        // If class is selected, show only sections from that class
+        // If campus is selected, show only sections from that campus
+        $sectionsQuery = Section::whereNotNull('name'); // Only active sections
+        
+        if ($filterCampus) {
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $sections = collect();
+            }
+        } else {
+            // If no campus selected, filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $sectionsQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
+        }
+        
         if ($filterClass) {
-            $sectionsQuery->where('class', $filterClass);
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
         }
-        $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
         
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D']);
+        if (!isset($sections)) {
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
         }
 
-        // Get academic sessions
+        // Get academic sessions (from exams + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         // Initialize variables for tabulation data
@@ -2289,49 +2625,117 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterExam = $request->get('filter_exam');
 
-        // Get campuses for dropdown - First from Campus model (primary source)
+        // Get active campuses from Campus model first (primary source)
         $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
-
-        // Also get campuses from ClassModel and Section as fallback
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-
-        // Merge all campuses and get unique values
+        
+        // Get active campuses list for filtering
+        $activeCampuses = $campusesFromModel
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // Also get campuses from ClassModel and Section, but only if they exist in Campus model
+        $campusesFromClasses = ClassModel::whereNotNull('campus')
+            ->whereNotNull('class_name') // Only active classes
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        $campusesFromSections = Section::whereNotNull('campus')
+            ->whereNotNull('name') // Only active sections
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        // Merge all campuses and get unique values (only active campuses)
         $campuses = $campusesFromModel
             ->merge($campusesFromClasses)
             ->merge($campusesFromSections)
             ->unique()
             ->sort()
             ->values();
+        
+        // Convert to collection of objects with campus_name property
+        $campuses = $campuses->map(function($campus) {
+            return (object)['campus_name' => $campus];
+        });
 
-        // Fallback to default campuses if none found
-        if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
+        // Get classes (filtered by campus if provided, only active classes)
+        $classesQuery = ClassModel::whereNotNull('class_name'); // Only active classes
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $classesQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
         }
-
-        // Get classes (filtered by campus if provided)
-        $classesQuery = ClassModel::whereNotNull('class_name');
+        
         if ($filterCampus) {
-            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $classes = collect();
+            }
         }
-        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+        if (!isset($classes)) {
+            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+        }
 
-        // Get sections (filtered by class if provided)
-        $sectionsQuery = Section::query();
+        // Get sections (filtered by class if provided, only active sections)
+        $sectionsQuery = Section::whereNotNull('name'); // Only active sections
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $sectionsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
+        }
+        
         if ($filterClass) {
             $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
         }
         if ($filterCampus) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $sections = collect();
+            }
         }
-        $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
+        if (!isset($sections)) {
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+        }
 
-        // Get exams (filtered by campus if provided)
-        $examsQuery = Exam::query();
+        // Get exams (filtered by campus if provided, only active campuses)
+        $examsQuery = Exam::query()->whereNotNull('exam_name');
         if ($filterCampus) {
-            $examsQuery->where('campus', $filterCampus);
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $exams = collect();
+            }
         }
-        $exams = $examsQuery->whereNotNull('exam_name')->distinct()->pluck('exam_name')->sort()->values();
+        if (!isset($exams)) {
+            $exams = $examsQuery->distinct()->pluck('exam_name')->sort()->values();
+        }
 
         $positionRows = collect();
         if ($filterCampus && $filterClass && $filterExam) {
@@ -2438,13 +2842,39 @@ class ExamController extends Controller
     {
         $campus = $request->get('campus');
         
-        $examsQuery = Exam::query();
-        if ($campus) {
-            $examsQuery->where('campus', $campus);
+        // Get active campuses list for filtering
+        $activeCampuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        $examsQuery = Exam::query()->whereNotNull('exam_name');
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $examsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
         }
         
-        $exams = $examsQuery->whereNotNull('exam_name')
-            ->distinct()
+        if ($campus) {
+            $campusLower = strtolower(trim($campus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                return response()->json([]);
+            }
+        }
+        
+        $exams = $examsQuery->distinct()
             ->pluck('exam_name')
             ->sort()
             ->values();
@@ -2458,9 +2888,37 @@ class ExamController extends Controller
     public function getClassesForPositionHolders(Request $request): JsonResponse
     {
         $campus = trim((string) $request->get('campus'));
-        $classesQuery = ClassModel::whereNotNull('class_name');
+        
+        // Get active campuses list for filtering
+        $activeCampuses = Campus::whereNotNull('campus_name')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        $classesQuery = ClassModel::whereNotNull('class_name'); // Only active classes
+        
         if ($campus !== '') {
-            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            $campusLower = strtolower($campus);
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                return response()->json(['classes' => []]);
+            }
+        } else {
+            // If no campus specified, filter by active campuses only
+            if (!empty($activeCampuses)) {
+                $classesQuery->where(function($q) use ($activeCampuses) {
+                    foreach ($activeCampuses as $activeCampus) {
+                        $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                    }
+                });
+            }
         }
 
         $classes = $classesQuery->distinct()
@@ -2485,49 +2943,110 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterSession = $request->get('filter_session');
 
-        // Get campuses for dropdown - First from Campus model (primary source)
+        // Get active campuses from Campus model first (primary source)
         $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
-
-        // Also get campuses from ClassModel and Section as fallback
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-
-        // Merge all campuses and get unique values
+        
+        // Get active campuses list for filtering
+        $activeCampuses = $campusesFromModel
+            ->map(fn($c) => strtolower(trim($c)))
+            ->filter(fn($c) => !empty($c))
+            ->unique()
+            ->values()
+            ->toArray();
+        
+        // Also get campuses from ClassModel and Section, but only if they exist in Campus model
+        $campusesFromClasses = ClassModel::whereNotNull('campus')
+            ->whereNotNull('class_name') // Only active classes
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        $campusesFromSections = Section::whereNotNull('campus')
+            ->whereNotNull('name') // Only active sections
+            ->distinct()
+            ->pluck('campus')
+            ->filter(function($campus) use ($activeCampuses) {
+                return !empty($activeCampuses) && in_array(strtolower(trim($campus)), $activeCampuses);
+            });
+        
+        // Merge all campuses and get unique values (only active campuses)
         $campuses = $campusesFromModel
             ->merge($campusesFromClasses)
             ->merge($campusesFromSections)
             ->unique()
             ->sort()
             ->values();
-
-        // Fallback to default campuses if none found
-        if ($campuses->isEmpty()) {
-            $campuses = collect(['Main Campus', 'Branch Campus 1', 'Branch Campus 2']);
-        }
-
-        // Get classes
-        $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
         
-        if ($classes->isEmpty()) {
-            $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
+        // Convert to collection of objects with campus_name property
+        $campuses = $campuses->map(function($campus) {
+            return (object)['campus_name' => $campus];
+        });
+
+        // Get classes (only active classes from active campuses)
+        $classesQuery = ClassModel::whereNotNull('class_name'); // Only active classes
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $classesQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
+        }
+        
+        if ($filterCampus) {
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $classes = collect();
+            }
+        }
+        if (!isset($classes)) {
+            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
         }
 
-        // Get sections (filtered by class if provided)
-        $sectionsQuery = Section::query();
+        // Get sections (filtered by class if provided, only active sections from active campuses)
+        $sectionsQuery = Section::whereNotNull('name'); // Only active sections
+        
+        // Filter by active campuses only
+        if (!empty($activeCampuses)) {
+            $sectionsQuery->where(function($q) use ($activeCampuses) {
+                foreach ($activeCampuses as $activeCampus) {
+                    $q->orWhereRaw('LOWER(TRIM(campus)) = ?', [$activeCampus]);
+                }
+            });
+        }
+        
         if ($filterClass) {
-            $sectionsQuery->where('class', $filterClass);
+            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
         }
-        $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
-        
-        if ($sections->isEmpty()) {
-            $sections = collect(['A', 'B', 'C', 'D']);
+        if ($filterCampus) {
+            $campusLower = strtolower(trim($filterCampus));
+            // Verify campus is active
+            if (in_array($campusLower, $activeCampuses)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+            } else {
+                // If campus is not active, return empty
+                $sections = collect();
+            }
+        }
+        if (!isset($sections)) {
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
         }
 
-        // Get academic sessions
+        // Get academic sessions (from exams + Running Session from General Settings, no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         // Initialize position rows
@@ -2618,20 +3137,34 @@ class ExamController extends Controller
         $filterType = $request->get('filter_type');
         $isPrint = $request->boolean('print');
 
-        // Get campuses for dropdown - First from Campus model (primary source)
-        $campusesFromModel = Campus::whereNotNull('campus_name')->orderBy('campus_name', 'asc')->pluck('campus_name');
+        // Get campuses for dropdown - Only from Campus model (primary source)
+        // This ensures only added/active campuses are shown, not deleted ones
+        $campusesFromModel = Campus::whereNotNull('campus_name')
+            ->where('campus_name', '!=', '')
+            ->orderBy('campus_name', 'asc')
+            ->pluck('campus_name');
         
-        // Also get campuses from ClassModel and Section as fallback
-        $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-        $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-        
-        // Merge all campuses and get unique values
-        $campuses = $campusesFromModel
-            ->merge($campusesFromClasses)
-            ->merge($campusesFromSections)
-            ->unique()
-            ->sort()
-            ->values();
+        // Only use fallback from ClassModel and Section if Campus model is completely empty
+        if ($campusesFromModel->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')
+                ->where('campus', '!=', '')
+                ->distinct()
+                ->pluck('campus');
+            $campusesFromSections = Section::whereNotNull('campus')
+                ->where('campus', '!=', '')
+                ->distinct()
+                ->pluck('campus');
+            
+            // Merge fallback campuses and get unique values
+            $campuses = $campusesFromClasses
+                ->merge($campusesFromSections)
+                ->unique()
+                ->sort()
+                ->values();
+        } else {
+            // Use only campuses from Campus model (active/added campuses)
+            $campuses = $campusesFromModel;
+        }
         
         // Fallback to default campuses if none found
         if ($campuses->isEmpty()) {
@@ -2945,10 +3478,14 @@ class ExamController extends Controller
         }
         $sections = $sectionsQuery->whereNotNull('name')->distinct()->pluck('name')->sort()->values();
 
-        // Sessions from Exam table
+        // Sessions from Exam table + Running Session from General Settings (no static list)
+        $settings = GeneralSetting::getSettings();
+        $runningSession = $settings->running_session ? trim($settings->running_session) : null;
         $sessions = Exam::whereNotNull('session')->distinct()->pluck('session')->sort()->values();
-        if ($sessions->isEmpty()) {
-            $sessions = collect(['2024-2025', '2025-2026', '2026-2027']);
+        if ($sessions->isEmpty() && $runningSession) {
+            $sessions = collect([$runningSession]);
+        } elseif ($runningSession && !$sessions->contains($runningSession)) {
+            $sessions = $sessions->prepend($runningSession)->values();
         }
 
         $marksByStudent = collect();

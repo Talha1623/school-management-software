@@ -442,39 +442,74 @@ class ParentTestResultController extends Controller
             // This ensures marks test names are still included
             $testNames = $testNamesFromMarks->merge($announcedTests->pluck('test_name'))->unique()->filter()->values();
 
-            // Build results: PRIORITIZE marks from StudentMark table
+            // Build results: Group by test_name, then show subject-wise marks
             // This ensures marks entered via Marks Entry are ALWAYS shown
             $results = collect();
             
-            // FIRST: Process ALL marks from StudentMark table (primary source)
-            // This is the most important - marks entered via Marks Entry must always show
-            foreach ($marks as $mark) {
-                $testNameKey = strtolower(trim($mark->test_name ?? ''));
-                $subjectKey = strtolower(trim($mark->subject ?? ''));
+            // Group marks by test_name to avoid duplicates and calculate totals
+            $marksByTestName = $marks->groupBy(function($mark) {
+                return strtolower(trim($mark->test_name ?? ''));
+            });
+            
+            // Process each test/exam
+            foreach ($marksByTestName as $testNameKey => $testMarks) {
+                if (empty($testNameKey)) {
+                    continue;
+                }
                 
-                if ($testNameKey) { // Only process if test_name exists
-                    $session = $testSessions[$testNameKey] ?? null;
-                    $testType = $testTypes[$testNameKey] ?? null;
-                    
-                    // Debug: Log each mark being added
-                    \Log::info('Adding mark to results', [
-                        'test_name' => $mark->test_name,
-                        'test_name_key' => $testNameKey,
-                        'subject' => $mark->subject,
-                        'test_type' => $testType,
-                        'marks_obtained' => $mark->marks_obtained,
-                    ]);
-                    
-                    $results->push([
-                        'subject_name' => $mark->test_name ?? null,
-                        'session' => $session,
+                $session = $testSessions[$testNameKey] ?? null;
+                $testType = $testTypes[$testNameKey] ?? null;
+                $testName = $testMarks->first()->test_name ?? null;
+                
+                // Separate subject-wise marks and particular exam mark (subject = null)
+                $subjectMarks = $testMarks->filter(function($mark) {
+                    return !empty($mark->subject) && trim($mark->subject) !== '';
+                });
+                
+                $particularMark = $testMarks->filter(function($mark) {
+                    return empty($mark->subject) || $mark->subject === null || trim($mark->subject) === '';
+                })->first();
+                
+                // Get teacher remarks from particular mark (subject = null)
+                $teacherRemarks = $particularMark ? ($particularMark->teacher_remarks ?? null) : null;
+                
+                // Calculate total obtained and total marks from all subject marks
+                $totalObtained = $subjectMarks->sum(function($mark) {
+                    return (float) ($mark->marks_obtained ?? 0);
+                });
+                
+                $totalMarks = $subjectMarks->sum(function($mark) {
+                    return (float) ($mark->total_marks ?? 0);
+                });
+                
+                // Build subject-wise marks array
+                $subjects = [];
+                foreach ($subjectMarks as $mark) {
+                    $subjects[] = [
                         'subject' => $mark->subject ?? null,
-                        'test_type' => $testType,
+                        'obtained' => $mark->marks_obtained ? (float) $mark->marks_obtained : null,
                         'total' => $mark->total_marks ? (float) $mark->total_marks : null,
                         'pass' => $mark->passing_marks ? (float) $mark->passing_marks : null,
-                        'obtained' => $mark->marks_obtained ? (float) $mark->marks_obtained : null,
-                    ]);
+                        'grade' => $mark->grade ?? null,
+                    ];
                 }
+                
+                // Add result with subject-wise marks, total obtained, and teacher remarks
+                $results->push([
+                    'exam_name' => $testName,
+                    'subject_name' => $testName, // Keep for backward compatibility
+                    'session' => $session,
+                    'test_type' => $testType,
+                    'subjects' => $subjects, // Subject-wise marks array
+                    'total_obtained' => round($totalObtained, 2), // Total obtained from all subjects
+                    'total_marks' => round($totalMarks, 2), // Total marks from all subjects
+                    'teacher_remarks' => $teacherRemarks, // Teacher remarks from particular mark
+                    // Legacy fields (for backward compatibility)
+                    'subject' => null, // Not a single subject, it's an exam with multiple subjects
+                    'total' => round($totalMarks, 2),
+                    'pass' => null, // Pass marks are per subject, not per exam
+                    'obtained' => round($totalObtained, 2),
+                ]);
             }
             
             // Debug: Log results count before filtering
@@ -483,57 +518,43 @@ class ParentTestResultController extends Controller
                 'is_exam' => $isExam,
             ]);
 
-            // SECOND: Add announced tests that don't have marks yet
-            // Group announced tests by test_name and subject
-            $testGroups = [];
-            foreach ($announcedTests as $test) {
-                $testNameKey = strtolower(trim($test->test_name ?? ''));
-                $subjectKey = strtolower(trim($test->subject ?? ''));
-                
-                if ($testNameKey) {
-                    if (!isset($testGroups[$testNameKey])) {
-                        $testGroups[$testNameKey] = [];
-                    }
-                    if ($subjectKey && !in_array($subjectKey, $testGroups[$testNameKey])) {
-                        $testGroups[$testNameKey][] = $subjectKey;
-                    } elseif (!$subjectKey) {
-                        $testGroups[$testNameKey][] = '';
-                    }
+            // SECOND: Add announced tests that don't have marks yet (only if no marks exist for that test)
+            // Group announced tests by test_name (unique test names only)
+            $announcedTestNames = $announcedTests->pluck('test_name')->unique()->filter();
+            
+            foreach ($announcedTestNames as $testName) {
+                $testNameKey = strtolower(trim($testName ?? ''));
+                if (empty($testNameKey)) {
+                    continue;
                 }
-            }
-
-            // Add announced tests that don't have marks
-            foreach ($testGroups as $testNameKey => $subjects) {
-                $testRecord = $announcedTests->first(function($t) use ($testNameKey) {
-                    return strtolower(trim($t->test_name ?? '')) === $testNameKey;
+                
+                // Check if this test already has marks (already in results)
+                $hasMarks = $results->contains(function($result) use ($testNameKey) {
+                    $resultTestNameKey = strtolower(trim($result['exam_name'] ?? $result['subject_name'] ?? ''));
+                    return $resultTestNameKey === $testNameKey;
                 });
-                $testName = $testRecord ? $testRecord->test_name : null;
-
-                foreach ($subjects as $subjectKey) {
-                    // Check if this test+subject already exists in results (has marks)
-                    $exists = $results->first(function($result) use ($testNameKey, $subjectKey) {
-                        $resultTestNameKey = strtolower(trim($result['subject_name'] ?? ''));
-                        $resultSubjectKey = strtolower(trim($result['subject'] ?? ''));
-                        $normalizedSubjectKey = $subjectKey ?: '';
-                        $normalizedResultSubjectKey = $resultSubjectKey ?: '';
-                        return $resultTestNameKey === $testNameKey && $normalizedResultSubjectKey === $normalizedSubjectKey;
+                
+                // Only add if no marks exist for this test
+                if (!$hasMarks) {
+                    $testRecord = $announcedTests->first(function($t) use ($testNameKey) {
+                        return strtolower(trim($t->test_name ?? '')) === $testNameKey;
                     });
                     
-                    // Only add if it doesn't exist (no marks for this test+subject)
-                    if (!$exists) {
-                        $testRecord = $announcedTests->first(function($t) use ($testNameKey, $subjectKey) {
-                            return strtolower(trim($t->test_name ?? '')) === $testNameKey 
-                                && strtolower(trim($t->subject ?? '')) === ($subjectKey ?: '');
-                        });
-                        $subject = $testRecord ? $testRecord->subject : null;
+                    if ($testRecord) {
                         $session = $testSessions[$testNameKey] ?? null;
                         $testType = $testTypes[$testNameKey] ?? null;
                         
                         $results->push([
-                            'subject_name' => $testName,
+                            'exam_name' => $testName,
+                            'subject_name' => $testName, // Keep for backward compatibility
                             'session' => $session,
-                            'subject' => $subject,
                             'test_type' => $testType,
+                            'subjects' => [], // No subjects yet (no marks)
+                            'total_obtained' => null,
+                            'total_marks' => null,
+                            'teacher_remarks' => null,
+                            // Legacy fields
+                            'subject' => null,
                             'total' => null,
                             'pass' => null,
                             'obtained' => null,
@@ -545,14 +566,14 @@ class ParentTestResultController extends Controller
             // Filter results by test type (if needed - already filtered announced tests, but also filter marks-only results)
             if ($isExam) {
                 $results = $results->filter(function ($result) use ($testTypes) {
-                    $testNameKey = strtolower(trim($result['subject_name'] ?? ''));
+                    $testNameKey = strtolower(trim($result['exam_name'] ?? $result['subject_name'] ?? ''));
                     $testType = $testTypes[$testNameKey] ?? null;
                     $include = $testType !== null && strtolower(trim($testType)) === 'exam';
                     
                     // Debug
                     if (!$include) {
                         \Log::info('Filtering out from exam results', [
-                            'test_name' => $result['subject_name'],
+                            'test_name' => $result['exam_name'] ?? $result['subject_name'],
                             'test_type' => $testType,
                         ]);
                     }
@@ -563,22 +584,21 @@ class ParentTestResultController extends Controller
                 // IMPORTANT: For test results, marks from StudentMark should ALWAYS be shown
                 // regardless of Exam table. Only filter announced tests, not actual marks.
                 $results = $results->filter(function ($result) use ($testTypes) {
-                    $testNameKey = strtolower(trim($result['subject_name'] ?? ''));
+                    $testNameKey = strtolower(trim($result['exam_name'] ?? $result['subject_name'] ?? ''));
                     $testType = $testTypes[$testNameKey] ?? null;
                     
                     // Check if this result has actual marks data (from StudentMark table)
-                    // If it has obtained, total, or pass marks, it's from Marks Entry and should ALWAYS be shown
-                    $hasActualMarks = !is_null($result['obtained']) || !is_null($result['total']) || !is_null($result['pass']);
+                    // If it has subjects array with data, it has marks
+                    $hasActualMarks = !empty($result['subjects']) && is_array($result['subjects']) && count($result['subjects']) > 0;
                     
                     // If this result has actual marks from StudentMark, ALWAYS include it
                     // (marks entered via Marks Entry should never be filtered out, even if test is in Exam table)
                     if ($hasActualMarks) {
                         \Log::info('Including mark from StudentMark (always show marks)', [
-                            'test_name' => $result['subject_name'],
-                            'subject' => $result['subject'],
+                            'test_name' => $result['exam_name'] ?? $result['subject_name'],
                             'test_type' => $testType,
-                            'obtained' => $result['obtained'],
-                            'total' => $result['total'],
+                            'total_obtained' => $result['total_obtained'],
+                            'total_marks' => $result['total_marks'],
                         ]);
                         return true;
                     }
@@ -595,7 +615,7 @@ class ParentTestResultController extends Controller
                     // Debug
                     if (!$include) {
                         \Log::info('Filtering out announced test from test results', [
-                            'test_name' => $result['subject_name'],
+                            'test_name' => $result['exam_name'] ?? $result['subject_name'],
                             'test_type' => $testType,
                             'reason' => 'is exam',
                         ]);
@@ -611,9 +631,14 @@ class ParentTestResultController extends Controller
                 'is_exam' => $isExam,
             ]);
 
-            // Sort results
+            // Remove duplicates: Keep only unique exam/test names
+            $results = $results->unique(function($result) {
+                return strtolower(trim($result['exam_name'] ?? $result['subject_name'] ?? ''));
+            })->values();
+            
+            // Sort results by exam name
             $results = $results->sortBy(function($result) {
-                return ($result['subject_name'] ?? '') . '|' . ($result['subject'] ?? '');
+                return ($result['exam_name'] ?? $result['subject_name'] ?? '');
             })->values();
 
             return response()->json([

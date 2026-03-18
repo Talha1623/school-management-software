@@ -638,8 +638,25 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Debounce: Wait 800ms after user stops typing
             searchTimeout = setTimeout(function() {
-                // Fetch parent details by ID Card
-                fetch(`{{ route('admission.get-parent-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}`)
+                // Get campus value - only search if campus is selected
+                const campusSelect = document.getElementById('campus');
+                const campusValue = campusSelect ? campusSelect.value.trim() : '';
+                
+                // If campus is not selected, show message and don't search
+                if (!campusValue || campusValue === '') {
+                    parentFoundMessage.innerHTML = '<small class="text-warning"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">warning</span> Please select a campus first to search for parent account.</small>';
+                    parentFoundMessage.className = 'mt-1';
+                    
+                    // Enable "Create Parent Account" dropdown
+                    const createParentAccountSelect = document.getElementById('create_parent_account');
+                    if (createParentAccountSelect) {
+                        createParentAccountSelect.disabled = false;
+                    }
+                    return;
+                }
+                
+                // Fetch parent details by ID Card (with campus parameter)
+                fetch(`{{ route('admission.get-parent-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}&campus=${encodeURIComponent(campusValue)}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.success && data.found) {
@@ -859,10 +876,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
-            loadClassesForCampus(this.value);
-            loadTransportRoutesByCampus(this.value);
+            const campusValue = this.value.trim();
+            loadClassesForCampus(campusValue);
+            loadTransportRoutesByCampus(campusValue);
             loadTransportFare('');
-            loadFeeTypesByCampus(this.value);
+            loadFeeTypesByCampus(campusValue);
+            
+            // Handle parent search based on campus selection
+            const fatherIdCardInput = document.getElementById('father_id_card');
+            const parentFoundMessage = document.getElementById('parent-found-message');
+            
+            if (!campusValue || campusValue === '') {
+                // If campus is cleared, clear parent found message and enable create parent account
+                if (parentFoundMessage) {
+                    parentFoundMessage.style.display = 'none';
+                    parentFoundMessage.innerHTML = '';
+                }
+                const createParentAccountSelect = document.getElementById('create_parent_account');
+                if (createParentAccountSelect) {
+                    createParentAccountSelect.disabled = false;
+                }
+            } else if (fatherIdCardInput && fatherIdCardInput.value.trim()) {
+                // If campus is selected and father ID card is already filled, re-trigger parent search
+                fatherIdCardInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
         });
     }
 

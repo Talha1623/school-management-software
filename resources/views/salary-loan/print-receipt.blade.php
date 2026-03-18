@@ -204,24 +204,98 @@
         </div>
         
         <div class="amount-section">
+            @php
+                $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
+                $isPerHour = $salaryType === 'per hour';
+                $isPerLecture = $salaryType === 'lecture';
+                $isFullTime = !$isPerHour && !$isPerLecture;
+            @endphp
+            
+            {{-- Show attendance details based on salary type --}}
+            @if($isPerHour && isset($attendanceSummary['total_minutes']))
+                @php
+                    $totalHours = round($attendanceSummary['total_minutes'] / 60, 2);
+                    $totalClasses = $attendanceSummary['present'] ?? 0;
+                @endphp
+                <div class="amount-row">
+                    <span class="amount-label">Salary Type:</span>
+                    <span class="info-value">Per Hour</span>
+                </div>
+                <div class="amount-row">
+                    <span class="amount-label">Total Hours:</span>
+                    <span class="info-value">{{ number_format($totalHours, 2) }} hours</span>
+                </div>
+                <div class="amount-row">
+                    <span class="amount-label">Total Classes:</span>
+                    <span class="info-value">{{ $totalClasses }}</span>
+                </div>
+            @elseif($isPerLecture && isset($attendanceSummary['total_lectures']))
+                <div class="amount-row">
+                    <span class="amount-label">Salary Type:</span>
+                    <span class="info-value">Per Lecture</span>
+                </div>
+                <div class="amount-row">
+                    <span class="amount-label">Total Lectures:</span>
+                    <span class="info-value">{{ $attendanceSummary['total_lectures'] }}</span>
+                </div>
+            @else
+                <div class="amount-row">
+                    <span class="amount-label">Salary Type:</span>
+                    <span class="info-value">Full Time</span>
+                </div>
+                <div class="amount-row">
+                    <span class="amount-label">Present Days:</span>
+                    <span class="info-value">{{ $salary->present ?? 0 }}</span>
+                </div>
+                <div class="amount-row">
+                    <span class="amount-label">Absent Days:</span>
+                    <span class="info-value">{{ $salary->absent ?? 0 }}</span>
+                </div>
+            @endif
+            
+            <div style="border-top: 1px solid #ddd; margin: 15px 0; padding-top: 15px;"></div>
+            
+            {{-- Salary breakdown --}}
             <div class="amount-row">
-                <span class="amount-label">Salary Generated:</span>
-                <span class="info-value">₹{{ number_format($salary->salary_generated ?? 0, 2) }}</span>
+                <span class="amount-label">Basic Salary:</span>
+                <span class="info-value">₹{{ number_format($salary->basic ?? 0, 2) }}</span>
             </div>
-            @if($salary->loan_repayment > 0)
+            
+            @if(($salary->bonus_amount ?? 0) > 0)
             <div class="amount-row">
-                <span class="amount-label">Loan Repayment (Deducted):</span>
-                <span class="info-value" style="color: #dc3545;">- ₹{{ number_format($salary->loan_repayment ?? 0, 2) }}</span>
-            </div>
-            <div class="amount-row">
-                <span class="amount-label">Net Amount After Loan Deduction:</span>
-                <span class="info-value" style="font-weight: bold;">₹{{ number_format(($salary->salary_generated ?? 0) - ($salary->loan_repayment ?? 0), 2) }}</span>
+                <span class="amount-label">Bonus:</span>
+                <span class="info-value" style="color: #28a745;">+ ₹{{ number_format($salary->bonus_amount ?? 0, 2) }}</span>
             </div>
             @endif
+            
+            @if(($salary->deduction_amount ?? 0) > 0)
+            <div class="amount-row">
+                <span class="amount-label">Deduction:</span>
+                <span class="info-value" style="color: #dc3545;">- ₹{{ number_format($salary->deduction_amount ?? 0, 2) }}</span>
+            </div>
+            @endif
+            
+            @php
+                $baseSalary = ($salary->basic ?? 0) + ($salary->bonus_amount ?? 0) - ($salary->deduction_amount ?? 0);
+            @endphp
+            
+            @if($salary->loan_repayment > 0)
+            <div class="amount-row">
+                <span class="amount-label">Loan Repayment:</span>
+                <span class="info-value" style="color: #dc3545;">- ₹{{ number_format($salary->loan_repayment ?? 0, 2) }}</span>
+            </div>
+            @endif
+            
+            <div class="amount-row" style="border-top: 1px solid #003471; margin-top: 10px; padding-top: 10px;">
+                <span class="amount-label">Salary Generated:</span>
+                <span class="info-value" style="font-weight: bold; font-size: 18px;">₹{{ number_format($salary->salary_generated ?? 0, 2) }}</span>
+            </div>
+            
             <div class="amount-row" style="border-top: 2px solid #003471; margin-top: 15px; padding-top: 15px;">
                 <span class="amount-label">Amount Paid:</span>
                 <span class="amount-value">₹{{ number_format($salary->amount_paid ?? 0, 2) }}</span>
             </div>
+            
             @if($salary->loan_repayment > 0)
             <div class="amount-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
                 <span class="amount-label">Note:</span>

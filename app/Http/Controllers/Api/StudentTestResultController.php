@@ -227,8 +227,8 @@ class StudentTestResultController extends Controller
      * Returns all subjects for the student's exams
      * 
      * GET /api/student/exam-results?student_id=9
-     * Optional: student_id, test_name, session
-     * If student_id is not provided, uses authenticated student's ID
+     * Optional: test_name, session
+     * NOTE: student_id is ignored; students can only access their own results (based on token)
      * 
      * @param Request $request
      * @return JsonResponse
@@ -246,17 +246,8 @@ class StudentTestResultController extends Controller
                 ], 404);
             }
 
-            // Determine which student ID to use
-            $studentId = $request->filled('student_id') ? (int) $request->student_id : $authenticatedStudent->id;
-            
-            // If student_id is provided, verify it matches authenticated student (security check)
-            if ($request->filled('student_id') && $studentId != $authenticatedStudent->id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You can only access your own exam results',
-                    'token' => null,
-                ], 403);
-            }
+            // Students can only access their own results - ignore any provided student_id
+            $studentId = (int) $authenticatedStudent->id;
 
             // Get student record
             $student = \App\Models\Student::find($studentId);

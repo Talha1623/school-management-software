@@ -44,6 +44,7 @@ class GeneralSettingsController extends Controller
             'school_email' => ['nullable', 'email', 'max:255'],
             'currency' => ['nullable', 'string', 'max:10'],
             'timezone' => ['nullable', 'string', 'max:255'],
+            'running_session' => ['nullable', 'string', 'max:50'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,svg', 'max:2048'],
             'system_name' => ['nullable', 'string', 'max:100'],
         ]);

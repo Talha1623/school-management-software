@@ -267,33 +267,44 @@ class StaffAttendanceController extends Controller
                 'social studies' => ['social studies', 'social', 'sst'],
             ];
 
-            foreach ($subjects as $subject) {
-                $teacherKey = strtolower(trim((string) $subject->teacher));
-                if (!isset($staffNameToId[$teacherKey])) {
-                    continue;
-                }
-                
-                // If day filter is enabled (for Subject Attendance type), check timetable
-                if ($type === 'Subject Attendance' && $dayName) {
-                    $subjectName = trim($subject->subject_name ?? '');
-                    $subjectClass = trim($subject->class ?? '');
-                    $subjectSection = trim($subject->section ?? '');
-                    $subjectCampus = trim($subject->campus ?? '');
-                    
-                    if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+            // For Subject Attendance, count timetable entries (classes) instead of subjects
+            if ($type === 'Subject Attendance' && $dayName) {
+                // Get all timetable entries for each staff on this day
+                foreach ($staffNameToId as $teacherName => $staffId) {
+                    $staff = Staff::find($staffId);
+                    if (!$staff) {
                         continue;
                     }
                     
-                    // Check if this subject is scheduled on this day in timetable
-                    $subjectNameLower = strtolower($subjectName);
+                    // Get staff's assigned subjects to find matching timetable entries
+                    $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($teacherName)])
+                        ->whereNotNull('subject_name')
+                        ->whereNotNull('class')
+                        ->whereNotNull('section')
+                        ->get();
                     
-                    // Build base query for subject, day, class, section matching
-                    $buildTimetableQuery = function($includeCampus = false) use ($subjectNameLower, $subjectNameMap, $dayName, $subjectClass, $subjectSection, $subjectCampus) {
-                        $query = Timetable::where(function($q) use ($subjectNameLower, $subjectNameMap) {
-                            // Exact match
+                    if ($assignedSubjects->isEmpty()) {
+                        continue;
+                    }
+                    
+                    // Collect all timetable entries for this staff on this day
+                    $timetableEntries = collect();
+                    
+                    foreach ($assignedSubjects as $subject) {
+                        $subjectName = trim($subject->subject_name ?? '');
+                        $subjectClass = trim($subject->class ?? '');
+                        $subjectSection = trim($subject->section ?? '');
+                        $subjectCampus = trim($subject->campus ?? '');
+                        
+                        if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+                            continue;
+                        }
+                        
+                        $subjectNameLower = strtolower($subjectName);
+                        
+                        // Build query to find timetable entries matching this subject
+                        $timetableQuery = Timetable::where(function($q) use ($subjectNameLower, $subjectNameMap) {
                             $q->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                            
-                            // Flexible matching for common subject name variations
                             if (isset($subjectNameMap[$subjectNameLower])) {
                                 foreach ($subjectNameMap[$subjectNameLower] as $variant) {
                                     $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
@@ -302,9 +313,7 @@ class StaffAttendanceController extends Controller
                         })
                         ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
                         ->where(function($q) use ($subjectClass) {
-                            // Match class name (handle variations like "Four" = "4" = "four")
                             $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
-                            // Also try numeric matching if class is numeric
                             if (is_numeric($subjectClass)) {
                                 $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
                             } else {
@@ -316,56 +325,53 @@ class StaffAttendanceController extends Controller
                         })
                         ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
                         
-                        // Add campus filter only if requested
-                        if ($includeCampus && !empty($subjectCampus)) {
-                            $query->where(function($q) use ($subjectCampus) {
-                                // Match campus (case-insensitive) or allow null/empty
+                        // Add campus filter if available
+                        if (!empty($subjectCampus)) {
+                            $timetableQuery->where(function($q) use ($subjectCampus) {
                                 $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)])
                                   ->orWhereNull('campus')
                                   ->orWhere('campus', '');
                             });
                         }
                         
-                        return $query;
-                    };
-                    
-                    // First try without campus filter (most flexible)
-                    $timetableExists = $buildTimetableQuery(false)->exists();
-                    
-                    // If no results and subject has campus, try with campus filter
-                    if (!$timetableExists && !empty($subjectCampus)) {
-                        $timetableExists = $buildTimetableQuery(true)->exists();
+                        // Get all matching timetable entries (each entry is a class)
+                        $entries = $timetableQuery->get();
+                        $timetableEntries = $timetableEntries->merge($entries);
                     }
                     
-                    // If still no match, try more flexible matching: just subject name + day (ignore class/section)
-                    if (!$timetableExists) {
-                        $flexibleQuery = Timetable::where(function($q) use ($subjectNameLower, $subjectNameMap) {
-                            $q->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                            if (isset($subjectNameMap[$subjectNameLower])) {
-                                foreach ($subjectNameMap[$subjectNameLower] as $variant) {
-                                    $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
-                                }
-                            }
-                        })
-                        ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)]);
-                        
-                        $timetableExists = $flexibleQuery->exists();
-                    }
+                    // Remove duplicates based on timetable entry ID
+                    $timetableEntries = $timetableEntries->unique('id');
                     
-                    // Only include subject if it has a timetable entry for this day
-                    if (!$timetableExists) {
-                        continue;
+                    // Build labels for each timetable entry (class)
+                    foreach ($timetableEntries as $entry) {
+                        $labelParts = array_filter([
+                            $entry->class ?? null,
+                            $entry->section ?? null
+                        ]);
+                        $label = implode(' ', $labelParts);
+                        $subjectLabel = trim(($label ? $label . ': ' : '') . ($entry->subject ?? ''));
+                        if ($subjectLabel !== '') {
+                            $assignedSubjectsByStaff[$staffId][] = $subjectLabel;
+                        }
                     }
                 }
-                
-                $staffId = $staffNameToId[$teacherKey];
-                $labelParts = array_filter([
-                    $subject->class ?? null,
-                    $subject->section ?? null
-                ]);
-                $label = implode(' ', $labelParts);
-                $subjectLabel = trim(($label ? $label . ': ' : '') . ($subject->subject_name ?? ''));
-                $assignedSubjectsByStaff[$staffId][] = $subjectLabel !== '' ? $subjectLabel : 'N/A';
+            } else {
+                // For non-Subject Attendance, use original logic
+                foreach ($subjects as $subject) {
+                    $teacherKey = strtolower(trim((string) $subject->teacher));
+                    if (!isset($staffNameToId[$teacherKey])) {
+                        continue;
+                    }
+                    
+                    $staffId = $staffNameToId[$teacherKey];
+                    $labelParts = array_filter([
+                        $subject->class ?? null,
+                        $subject->section ?? null
+                    ]);
+                    $label = implode(' ', $labelParts);
+                    $subjectLabel = trim(($label ? $label . ': ' : '') . ($subject->subject_name ?? ''));
+                    $assignedSubjectsByStaff[$staffId][] = $subjectLabel !== '' ? $subjectLabel : 'N/A';
+                }
             }
         }
 
@@ -1117,14 +1123,26 @@ class StaffAttendanceController extends Controller
                     }
                 }
                 
+                // Check if staff is full-time (full-time teachers should count Sunday and Holiday as present)
+                $isFullTime = empty($staff->salary_type) || strtolower(trim($staff->salary_type)) === 'full time';
+                
+                $presentCount = $monthAttendances->where('status', 'Present')->count();
+                $holidayCount = $monthAttendances->where('status', 'Holiday')->count();
+                $sundayCount = $monthAttendances->where('status', 'Sunday')->count();
+                
+                // For full-time staff, count Sunday and Holiday as present
+                if ($isFullTime) {
+                    $presentCount += $holidayCount + $sundayCount;
+                }
+                
                 $monthlySummary[] = [
                     'month' => $monthNum,
                     'month_name' => $monthName,
-                    'present' => $monthAttendances->where('status', 'Present')->count(),
+                    'present' => $presentCount,
                     'absent' => $monthAttendances->where('status', 'Absent')->count(),
                     'leave' => $monthAttendances->where('status', 'Leave')->count(),
-                    'holiday' => $monthAttendances->where('status', 'Holiday')->count(),
-                    'sunday' => $monthAttendances->where('status', 'Sunday')->count(),
+                    'holiday' => $holidayCount,
+                    'sunday' => $sundayCount,
                 ];
             }
             

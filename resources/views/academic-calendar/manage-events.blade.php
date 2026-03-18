@@ -147,9 +147,6 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-success px-2 py-0" title="Add Students" onclick="addStudents({{ $event->id }})">
-                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">person_add</span>
-                                                </button>
                                                 <button type="button" class="btn btn-sm btn-primary px-2 py-0" title="Edit" onclick="editEvent({{ $event->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
@@ -269,38 +266,6 @@
     </div>
 </div>
 
-<!-- Add Students Modal -->
-<div class="modal fade" id="addStudentsModal" tabindex="-1" aria-labelledby="addStudentsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <div class="modal-header text-white p-3" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none;">
-                <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2" id="addStudentsModalLabel">
-                    <span class="material-symbols-outlined" style="font-size: 20px;">person_add</span>
-                    <span>Add Students to Event</span>
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
-            </div>
-            <div class="modal-body p-3">
-                <p class="text-muted">Event: <strong id="eventTitleForStudents"></strong></p>
-                <p class="text-muted mb-3">Select students to add to this event.</p>
-                <div class="alert alert-info">
-                    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">info</span>
-                    <span>Student selection functionality can be implemented here based on your requirements.</span>
-                </div>
-            </div>
-            <div class="modal-footer p-3" style="background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
-                <button type="button" class="btn btn-sm py-2 px-4 rounded-8" data-bs-dismiss="modal" style="background-color: #6c757d; color: white; border: none;">
-                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
-                    Close
-                </button>
-                <button type="button" class="btn btn-sm py-2 px-4 rounded-8 event-submit-btn" onclick="saveStudents()">
-                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
-                    Add Students
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <style>
     /* Event Form Styling */
@@ -784,25 +749,6 @@ function editEvent(id) {
         });
 }
 
-// Add students function
-function addStudents(eventId) {
-    fetch(`{{ url('/events') }}/${eventId}`)
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('eventTitleForStudents').textContent = data.event_title || 'Event';
-            new bootstrap.Modal(document.getElementById('addStudentsModal')).show();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error loading event data');
-        });
-}
-
-// Save students function (placeholder)
-function saveStudents() {
-    alert('Student addition functionality can be implemented based on your requirements.');
-    // You can implement AJAX call here to save students to the event
-}
 
 // Search functionality
 function performSearch() {
