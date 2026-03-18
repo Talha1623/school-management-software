@@ -28,7 +28,7 @@
 
     @stack('styles')
 </head>
-<body class="bg-body-bg">
+<body class="bg-body-bg" sidebar-data-theme="sidebar-show">
     
     @include('partials.preloader')
 
@@ -107,6 +107,108 @@
     (function() {
         'use strict';
         
+        // Function to update active menu items based on current URL
+        function updateActiveMenuItems(currentUrl) {
+            // Parse current URL to get pathname
+            let currentPath = currentUrl;
+            try {
+                const urlObj = new URL(currentUrl, window.location.origin);
+                currentPath = urlObj.pathname;
+            } catch(e) {
+                // If URL parsing fails, use as is
+                if (currentUrl.startsWith('/')) {
+                    currentPath = currentUrl.split('?')[0]; // Remove query string
+                } else if (currentUrl.startsWith('http')) {
+                    try {
+                        const url = new URL(currentUrl);
+                        currentPath = url.pathname;
+                    } catch(e2) {
+                        currentPath = currentUrl;
+                    }
+                }
+            }
+            
+            // Normalize path (remove trailing slash except for root)
+            if (currentPath !== '/' && currentPath.endsWith('/')) {
+                currentPath = currentPath.slice(0, -1);
+            }
+            
+            // Remove all active classes from menu items
+            const allMenuItems = document.querySelectorAll('.menu-item');
+            const allMenuLinks = document.querySelectorAll('.menu-link');
+            
+            allMenuItems.forEach(function(item) {
+                item.classList.remove('active', 'open');
+            });
+            
+            allMenuLinks.forEach(function(link) {
+                link.classList.remove('active');
+            });
+            
+            // Find and activate menu items that match current URL
+            const menuLinks = document.querySelectorAll('.menu-link[href]');
+            let bestMatch = null;
+            let bestMatchLength = 0;
+            
+            menuLinks.forEach(function(link) {
+                const linkHref = link.getAttribute('href');
+                if (!linkHref || linkHref === '#' || linkHref.startsWith('javascript:') || linkHref.startsWith('mailto:') || linkHref.startsWith('tel:')) {
+                    return;
+                }
+                
+                // Parse link href
+                let linkPath = linkHref;
+                try {
+                    const linkUrl = new URL(linkHref, window.location.origin);
+                    linkPath = linkUrl.pathname;
+                } catch(e) {
+                    if (linkHref.startsWith('/')) {
+                        linkPath = linkHref.split('?')[0]; // Remove query string
+                    }
+                }
+                
+                // Normalize link path
+                if (linkPath !== '/' && linkPath.endsWith('/')) {
+                    linkPath = linkPath.slice(0, -1);
+                }
+                
+                // Check for exact match
+                if (currentPath === linkPath) {
+                    bestMatch = link;
+                    bestMatchLength = linkPath.length;
+                } else if (currentPath.startsWith(linkPath + '/') && linkPath !== '/' && linkPath.length > bestMatchLength) {
+                    // Check for path prefix match (for nested routes)
+                    bestMatch = link;
+                    bestMatchLength = linkPath.length;
+                }
+            });
+            
+            // Activate the best matching menu item
+            if (bestMatch) {
+                bestMatch.classList.add('active');
+                
+                // Add active class to parent menu item
+                const menuItem = bestMatch.closest('.menu-item');
+                if (menuItem) {
+                    menuItem.classList.add('active');
+                    
+                    // If it's a nested menu, also open parent menus
+                    let parent = menuItem.parentElement;
+                    while (parent && parent.classList.contains('menu-sub')) {
+                        const parentMenuItem = parent.closest('.menu-item');
+                        if (parentMenuItem) {
+                            parentMenuItem.classList.add('open', 'active');
+                            const parentToggle = parentMenuItem.querySelector('.menu-toggle');
+                            if (parentToggle) {
+                                parentToggle.classList.add('active');
+                            }
+                        }
+                        parent = parent.parentElement?.closest('.menu-sub');
+                    }
+                }
+            }
+        }
+        
         // Function to handle AJAX navigation
         function handleAjaxNavigation(href, e) {
             // Skip if no href or external link
@@ -176,6 +278,16 @@
                     // Update URL without reload
                     window.history.pushState({path: href}, '', href);
                     
+                    // Update active menu items based on current URL
+                    updateActiveMenuItems(href);
+
+                    // Always scroll to top on navigation (so user lands at top of new page)
+                    try {
+                        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+                    } catch (e) {
+                        window.scrollTo(0, 0);
+                    }
+                    
                     // Re-initialize any scripts that need to run on page load
                     // Trigger custom event for page change
                     window.dispatchEvent(new Event('pagechange'));
@@ -242,7 +354,113 @@
         window.addEventListener('popstate', function(e) {
             if (e.state && e.state.path) {
                 handleAjaxNavigation(e.state.path, null);
+                try {
+                    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+                } catch (e2) {
+                    window.scrollTo(0, 0);
+                }
+            } else {
+                // Update active menu items on browser back/forward
+                updateActiveMenuItems(window.location.pathname);
             }
+        });
+        
+        // Update active menu items on initial page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateActiveMenuItems(window.location.pathname);
+            
+            // Ensure sidebar is open after login (on dashboard or any page)
+            const body = document.body;
+            const sidebarArea = document.getElementById('sidebar-area');
+            
+            // Check if sidebar is hidden, if so, open it
+            if (body.getAttribute('sidebar-data-theme') === 'sidebar-hide') {
+                body.setAttribute('sidebar-data-theme', 'sidebar-show');
+            }
+            
+            // Also ensure sidebar area has correct classes
+            if (sidebarArea) {
+                sidebarArea.classList.remove('sidebar-hide');
+                sidebarArea.classList.add('sidebar-show');
+            }
+        });
+        
+        // Also ensure sidebar is open on window load (after preloader)
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                const body = document.body;
+                const sidebarArea = document.getElementById('sidebar-area');
+                
+                // Ensure sidebar is open
+                if (body.getAttribute('sidebar-data-theme') === 'sidebar-hide') {
+                    body.setAttribute('sidebar-data-theme', 'sidebar-show');
+                }
+                
+                if (sidebarArea) {
+                    sidebarArea.classList.remove('sidebar-hide');
+                    sidebarArea.classList.add('sidebar-show');
+                }
+            }, 100);
+        });
+        
+        // Prevent sidebar from closing - disable hamburger menu toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            // Disable hamburger menu button functionality
+            const hamburgerMenu = document.getElementById('sidebar-burger-menu');
+            const hamburgerMenuClose = document.getElementById('sidebar-burger-menu-close');
+            
+            if (hamburgerMenu) {
+                hamburgerMenu.style.display = 'none';
+                hamburgerMenu.removeEventListener('click', function() {});
+                hamburgerMenu.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Force sidebar to stay open
+                    const body = document.body;
+                    body.setAttribute('sidebar-data-theme', 'sidebar-show');
+                    const sidebarArea = document.getElementById('sidebar-area');
+                    if (sidebarArea) {
+                        sidebarArea.classList.remove('sidebar-hide');
+                        sidebarArea.classList.add('sidebar-show');
+                    }
+                    return false;
+                });
+            }
+            
+            if (hamburgerMenuClose) {
+                hamburgerMenuClose.style.display = 'none';
+                hamburgerMenuClose.removeEventListener('click', function() {});
+                hamburgerMenuClose.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Force sidebar to stay open
+                    const body = document.body;
+                    body.setAttribute('sidebar-data-theme', 'sidebar-show');
+                    const sidebarArea = document.getElementById('sidebar-area');
+                    if (sidebarArea) {
+                        sidebarArea.classList.remove('sidebar-hide');
+                        sidebarArea.classList.add('sidebar-show');
+                    }
+                    return false;
+                });
+            }
+            
+            // Continuously ensure sidebar stays open
+            setInterval(function() {
+                const body = document.body;
+                const sidebarArea = document.getElementById('sidebar-area');
+                
+                if (body.getAttribute('sidebar-data-theme') === 'sidebar-hide') {
+                    body.setAttribute('sidebar-data-theme', 'sidebar-show');
+                }
+                
+                if (sidebarArea) {
+                    if (sidebarArea.classList.contains('sidebar-hide')) {
+                        sidebarArea.classList.remove('sidebar-hide');
+                        sidebarArea.classList.add('sidebar-show');
+                    }
+                }
+            }, 500); // Check every 500ms
         });
         
         // Ensure preloader is hidden after initial page load
