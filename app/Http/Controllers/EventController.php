@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -41,6 +42,35 @@ class EventController extends Controller
         }
         
         return view($viewName, compact('events'));
+    }
+
+    /**
+     * Print events list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = Event::query();
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(event_title) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(event_details) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(event_type) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $events = $query->orderBy('event_date', 'desc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('events.manage-print', [
+            'events' => $events,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**
@@ -250,6 +280,34 @@ class EventController extends Controller
         }
         
         return view('academic-calendar.view', compact('eventsByMonth', 'year'));
+    }
+
+    /**
+     * Print calendar view for selected year.
+     */
+    public function calendarPrint(Request $request): View
+    {
+        $year = (int) $request->get('year', date('Y'));
+        if ($year <= 0) {
+            $year = (int) date('Y');
+        }
+
+        $events = Event::whereYear('event_date', $year)
+            ->orderBy('event_date')
+            ->get();
+
+        $eventsByMonth = [];
+        foreach ($events as $event) {
+            $month = $event->event_date->format('n');
+            if (!isset($eventsByMonth[$month])) {
+                $eventsByMonth[$month] = [];
+            }
+            $eventsByMonth[$month][] = $event;
+        }
+
+        $settings = GeneralSetting::getSettings();
+
+        return view('academic-calendar.view-print', compact('eventsByMonth', 'year', 'settings'));
     }
 }
 

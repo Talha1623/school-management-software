@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
 use App\Models\Subject;
+use App\Models\GeneralSetting;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -189,6 +190,62 @@ class OnlineClassesController extends Controller
         }
         
         return view('online-classes', compact('onlineClasses', 'campuses', 'classes', 'sections'));
+    }
+
+    /**
+     * Print online classes (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = OnlineClass::query();
+
+        // Keep teacher restriction same as index
+        $staff = Auth::guard('staff')->user();
+        if ($staff && $staff->isTeacher()) {
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])->get();
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])->get();
+
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(fn ($class) => trim((string) $class))
+                ->filter(fn ($class) => !empty($class))
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($assignedClasses->isNotEmpty()) {
+                $query->where(function ($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $class) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                    }
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        // Search filter same as index
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(class) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(section) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(class_topic) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $onlineClasses = $query->orderBy('start_date', 'desc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('online-classes-print', [
+            'onlineClasses' => $onlineClasses,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

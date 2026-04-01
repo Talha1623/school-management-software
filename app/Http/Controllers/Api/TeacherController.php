@@ -582,6 +582,7 @@ class TeacherController extends Controller
             $sectionName = $request->input('section') ?? $request->query('section');
             $examName = $request->input('exam_name') ?? $request->query('exam_name'); // Exam name from Exam List
             $subjectName = $request->input('subject') ?? $request->query('subject');
+            $unmarkedOnly = filter_var($request->query('unmarked_only', 'false'), FILTER_VALIDATE_BOOLEAN);
 
             // Validate required parameters
             if (!$className) {
@@ -701,13 +702,31 @@ class TeacherController extends Controller
 
                 // Add existing exam marks if available (when exam_name and subject are provided)
                 if (isset($marksData[$student->id])) {
-                    $studentData['marks_obtained'] = $marksData[$student->id]['marks_obtained'] ?? null;
-                    $studentData['total_marks'] = $marksData[$student->id]['total_marks'] ?? null;
-                    $studentData['passing_marks'] = $marksData[$student->id]['passing_marks'] ?? null;
+                    $marksObtained = $marksData[$student->id]['marks_obtained'] ?? null;
+                    $totalMarks = $marksData[$student->id]['total_marks'] ?? null;
+                    $passingMarks = $marksData[$student->id]['passing_marks'] ?? null;
+
+                    $studentData['marks_obtained'] = $marksObtained;
+                    $studentData['total_marks'] = $totalMarks;
+                    $studentData['passing_marks'] = $passingMarks;
                     $studentData['remarks'] = $marksData[$student->id]['remarks'] ?? null;
+
+                    // Boolean pass based on obtained >= passing
+                    if ($marksObtained !== null && $passingMarks !== null && $passingMarks !== '') {
+                        $studentData['is_passed'] = (float)$marksObtained >= (float)$passingMarks;
+                    } else {
+                        $studentData['is_passed'] = null;
+                    }
                 }
 
                 return $studentData;
+            })->filter(function ($studentData) use ($marksData, $unmarkedOnly) {
+                if (!$unmarkedOnly) {
+                    return true;
+                }
+                // If marks exist for this student -> hide it
+                $id = $studentData['id'] ?? null;
+                return $id ? !isset($marksData[$id]) : true;
             })->values();
 
             $message = 'Students list retrieved successfully for class: ' . $className;
@@ -745,6 +764,617 @@ class TeacherController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving students: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all students for exam marks entry by class/section/exam/subject.
+     *
+     * Required query params:
+     * - class
+     * - section
+     * - exam_name
+     * - subject
+     *
+     * Example:
+     * GET /api/teacher/exam/students/by-subject?class=One&section=A&exam_name=Mid%20Term&subject=English
+     */
+    public function examStudentsBySubject(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'class' => ['required', 'string', 'max:255'],
+                'section' => ['required', 'string', 'max:255'],
+                'exam_name' => ['required', 'string', 'max:255'],
+                'subject' => ['required', 'string', 'max:255'],
+            ]);
+
+            $className = trim((string) $validated['class']);
+            $sectionName = trim((string) $validated['section']);
+            $examName = trim((string) $validated['exam_name']);
+            $subjectName = trim((string) $validated['subject']);
+
+            // Verify class access for this teacher
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])->get();
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])->get();
+
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(fn($class) => trim((string) $class))
+                ->filter(fn($class) => !empty($class))
+                ->unique()
+                ->values();
+
+            $isClassAssigned = $assignedClasses->contains(function ($class) use ($className) {
+                return strtolower(trim($class)) === strtolower($className);
+            });
+
+            if (!$isClassAssigned && $assignedClasses->isNotEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this class.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $studentsQuery = Student::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+
+            if (!empty($teacher->campus)) {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
+            }
+
+            $students = $studentsQuery
+                ->orderBy('student_code', 'asc')
+                ->orderBy('student_name', 'asc')
+                ->get();
+
+            $marks = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower($examName)])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)])
+                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower($subjectName)])
+                ->get()
+                ->keyBy('student_id');
+
+            $studentsData = $students->map(function ($student) use ($marks) {
+                $mark = $marks->get($student->id);
+                $marksObtained = $mark->marks_obtained ?? null;
+                $passingMarks = $mark->passing_marks ?? null;
+
+                return [
+                    'id' => $student->id,
+                    'student_code' => $student->student_code,
+                    'student_name' => $student->student_name,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                    'marks_obtained' => $marksObtained,
+                    'total_marks' => $mark->total_marks ?? null,
+                    'passing_marks' => $passingMarks,
+                    'remarks' => $mark->teacher_remarks ?? null,
+                    'is_passed' => ($marksObtained !== null && $passingMarks !== null && $passingMarks !== '')
+                        ? ((float) $marksObtained >= (float) $passingMarks)
+                        : null,
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Students list retrieved successfully.',
+                'data' => [
+                    'filters' => [
+                        'class' => $className,
+                        'section' => $sectionName,
+                        'exam_name' => $examName,
+                        'subject' => $subjectName,
+                    ],
+                    'total_students' => $studentsData->count(),
+                    'students' => $studentsData,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Exam Students By Subject API Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'teacher_id' => $request->user()->id ?? null,
+                'request_data' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving students: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * List already uploaded exam marks (from StudentMark).
+     *
+     * This is separate from examStudents (which lists all students).
+     * Here we return only marks rows that exist.
+     *
+     * Query parameters:
+     * - exam_name (required): exam name from Exam List (stored in StudentMark.test_name)
+     * - class (required)
+     * - section (optional)
+     * - subject (optional)
+     * - campus (optional)
+     */
+    public function examMarksList(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'exam_name' => ['required', 'string', 'max:255'],
+                'class' => ['required', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
+                'subject' => ['nullable', 'string', 'max:255'],
+                'campus' => ['nullable', 'string', 'max:255'],
+            ]);
+
+            $examName = trim((string) $validated['exam_name']);
+            $className = trim((string) $validated['class']);
+            $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : null;
+            $subjectName = isset($validated['subject']) ? trim((string) $validated['subject']) : null;
+            $campusName = isset($validated['campus']) ? trim((string) $validated['campus']) : null;
+
+            $teacherName = strtolower(trim($teacher->name ?? ''));
+
+            // Get teacher assigned subjects for requested class/section (optionally campus)
+            $assignedSubjectsQuery = \App\Models\Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+
+            if (!empty($sectionName)) {
+                $assignedSubjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($sectionName))]);
+            }
+            if (!empty($campusName)) {
+                $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
+            }
+
+            if (!empty($subjectName)) {
+                $assignedSubjectsQuery->whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($subjectName))]);
+            }
+
+            $assignedSubjects = $assignedSubjectsQuery->get();
+
+            if (empty($assignedSubjects) && !empty($subjectName)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this subject/class/section.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $allowedSubjectNames = $assignedSubjects->pluck('subject_name')
+                ->filter()
+                ->map(fn($s) => trim((string)$s))
+                ->unique()
+                ->values()
+                ->toArray();
+
+            // If subject not provided, but teacher has no assignments for class/section -> no marks
+            if (empty($allowedSubjectNames)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No uploaded marks found (teacher has no assigned subjects for this class/section).',
+                    'data' => [
+                        'exam_name' => $examName,
+                        'class' => $className,
+                        'section' => $sectionName,
+                        'campus' => $campusName,
+                        'subject' => $subjectName,
+                        'marks' => [],
+                        'total_marks_rows' => 0,
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
+            }
+
+            // Query StudentMark rows
+            $marksQuery = \App\Models\StudentMark::query()
+                ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($examName))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+
+            if (!empty($sectionName)) {
+                $marksQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($sectionName))]);
+            }
+
+            if (!empty($campusName)) {
+                $marksQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
+            }
+
+            // Case-insensitive allowed subjects match
+            $marksQuery->where(function ($q) use ($allowedSubjectNames) {
+                foreach ($allowedSubjectNames as $subj) {
+                    $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subj))]);
+                }
+            });
+
+            $marks = $marksQuery->with('student')
+                ->get();
+
+            $marksList = $marks->map(function ($mark) {
+                $marksObtained = $mark->marks_obtained;
+                $passingMarks = $mark->passing_marks;
+
+                $isPassed = null;
+                if ($marksObtained !== null && $passingMarks !== null && $passingMarks !== '') {
+                    $isPassed = (float)$marksObtained >= (float)$passingMarks;
+                }
+
+                return [
+                    'student_id' => $mark->student_id,
+                    'student_code' => $mark->student->student_code ?? null,
+                    'student_name' => $mark->student->student_name ?? null,
+                    'class' => $mark->class,
+                    'section' => $mark->section,
+                    'campus' => $mark->campus,
+                    'subject' => $mark->subject,
+                    'test_name' => $mark->test_name,
+                    'marks_obtained' => $mark->marks_obtained,
+                    'total_marks' => $mark->total_marks,
+                    'passing_marks' => $mark->passing_marks,
+                    'grade' => $mark->grade,
+                    'teacher_remarks' => $mark->teacher_remarks,
+                    'is_passed' => $isPassed,
+                    'marked_at' => $mark->created_at?->format('Y-m-d H:i:s'),
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Exam marks list retrieved successfully.',
+                'data' => [
+                    'exam_name' => $examName,
+                    'class' => $className,
+                    'section' => $sectionName,
+                    'campus' => $campusName,
+                    'subject' => $subjectName,
+                    'marks' => $marksList,
+                    'total_marks_rows' => $marksList->count(),
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Exam Marks List API Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'teacher_id' => $request->user()->id ?? null,
+                'request_data' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving exam marks: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Save / update exam remarks only (no marks change).
+     *
+     * Request JSON (bulk):
+     * {
+     *   "exam_name": "Mid Term Exam",
+     *   "class": "one",
+     *   "section": "a",
+     *   "subject": "English",
+     *   "remarks": {
+     *      "8": "Very good",
+     *      "9": "Needs improvement"
+     *   }
+     * }
+     *
+     * Request JSON (single student):
+     * {
+     *   "exam_name": "Mid Term Exam",
+     *   "class": "one",
+     *   "section": "a",
+     *   "subject": "English",
+     *   "student_id": 8,
+     *   "remark": "Very good"
+     * }
+     */
+    public function saveExamRemarks(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'exam_name' => ['required', 'string', 'max:255'],
+                'class' => ['required', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
+                'subject' => ['required', 'string', 'max:255'],
+                'student_id' => ['nullable', 'integer', 'exists:students,id'],
+                'remark' => ['nullable', 'string', 'max:1000'],
+                'remarks' => ['nullable', 'array', 'min:1'],
+                'remarks.*' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $examName = trim((string) $validated['exam_name']);
+            $className = trim((string) $validated['class']);
+            $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : null;
+            $subjectName = trim((string) $validated['subject']);
+
+            // Verify class assignment similar to saveExamMarks
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(function ($class) {
+                    return trim($class);
+                })
+                ->filter(function ($class) {
+                    return !empty($class);
+                })
+                ->unique()
+                ->values();
+
+            $isClassAssigned = $assignedClasses->contains(function ($class) use ($className) {
+                return strtolower(trim($class)) === strtolower($className);
+            });
+
+            if (!$isClassAssigned && $assignedClasses->isNotEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this class.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Accept either single student payload OR old bulk map payload.
+            if (!empty($validated['student_id'])) {
+                if (!array_key_exists('remark', $validated)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'remark is required when student_id is provided.',
+                        'token' => null,
+                    ], 422);
+                }
+                $remarksPayload = [
+                    (string) $validated['student_id'] => $validated['remark'],
+                ];
+            } else {
+                $remarksPayload = $validated['remarks'] ?? [];
+                if (empty($remarksPayload)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please provide either student_id + remark or remarks object.',
+                        'token' => null,
+                    ], 422);
+                }
+            }
+
+            $updated = 0;
+            $created = 0;
+            $errors = [];
+
+            foreach ($remarksPayload as $studentId => $remarkText) {
+                if (!$studentId) {
+                    continue;
+                }
+
+                $student = Student::find($studentId);
+                if (!$student) {
+                    $errors[] = "Student with ID {$studentId} not found.";
+                    continue;
+                }
+
+                if (strtolower(trim($student->class ?? '')) !== strtolower($className)) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to class {$className}.";
+                    continue;
+                }
+
+                if (!empty($sectionName) && strtolower(trim($student->section ?? '')) !== strtolower($sectionName)) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to section {$sectionName}.";
+                    continue;
+                }
+
+                $campus = $student->campus ?? ($teacher->campus ?? null);
+
+                // Look for existing mark row for this exam/subject
+                $mark = StudentMark::where('student_id', $studentId)
+                    ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower($examName)])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                    ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower($subjectName)])
+                    ->when(!empty($sectionName), function ($q) use ($sectionName) {
+                        return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                    })
+                    ->first();
+
+                if ($mark) {
+                    $mark->update([
+                        'teacher_remarks' => $remarkText,
+                    ]);
+                    $updated++;
+                } else {
+                    StudentMark::create([
+                        'student_id' => $studentId,
+                        'test_name' => $examName,
+                        'campus' => $campus,
+                        'class' => $className,
+                        'section' => $sectionName,
+                        'subject' => $subjectName,
+                        'marks_obtained' => null,
+                        'total_marks' => null,
+                        'passing_marks' => null,
+                        'teacher_remarks' => $remarkText,
+                    ]);
+                    $created++;
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Exam remarks saved (updated: {$updated}, created: {$created}).",
+                'data' => [
+                    'exam_name' => $examName,
+                    'class' => $className,
+                    'section' => $sectionName,
+                    'subject' => $subjectName,
+                    'updated_count' => $updated,
+                    'created_count' => $created,
+                    'errors' => !empty($errors) ? $errors : null,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Save Exam Remarks API Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'teacher_id' => $request->user()->id ?? null,
+                'request_data' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while saving exam remarks: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get subjects for a given exam + class (+ section) that this teacher can use.
+     *
+     * Mostly used to build subject dropdown after selecting class/section/exam.
+     * It returns subjects from Subject assignments for the logged-in teacher.
+     *
+     * Query params:
+     * - exam_name (required)  -> currently only echoed back (for context)
+     * - class (required)
+     * - section (optional)
+     * - campus (optional)
+     */
+    public function examSubjects(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'exam_name' => ['required', 'string', 'max:255'],
+                'class' => ['required', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
+                'campus' => ['nullable', 'string', 'max:255'],
+            ]);
+
+            $examName = trim((string) $validated['exam_name']);
+            $className = trim((string) $validated['class']);
+            $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : null;
+            $campusName = isset($validated['campus']) ? trim((string) $validated['campus']) : null;
+
+            $teacherName = strtolower(trim($teacher->name ?? ''));
+
+            // Subjects assigned to this teacher for this class/section/campus
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)]);
+
+            if (!empty($sectionName)) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+            }
+            if (!empty($campusName)) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+            }
+
+            $subjects = $subjectsQuery->pluck('subject_name')
+                ->filter()
+                ->map(fn($s) => trim((string) $s))
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Exam subjects retrieved successfully.',
+                'data' => [
+                    'exam_name' => $examName,
+                    'class' => $className,
+                    'section' => $sectionName,
+                    'campus' => $campusName,
+                    'subjects' => $subjects,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Exam Subjects API Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'teacher_id' => $request->user()->id ?? null,
+                'request_data' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving exam subjects: ' . $e->getMessage(),
                 'token' => null,
             ], 500);
         }
@@ -798,6 +1428,9 @@ class TeacherController extends Controller
                 'class' => ['required', 'string', 'max:255'],
                 'section' => ['nullable', 'string', 'max:255'],
                 'subject' => ['required', 'string', 'max:255'],
+                // If true, do not overwrite existing marks for same exam/class/section/subject.
+                // Default: true (prevents re-upload).
+                'prevent_duplicate' => ['nullable', 'boolean'],
                 'marks' => ['required', 'array', 'min:1'],
                 'marks.*.obtained' => ['nullable', 'numeric', 'min:0'],
                 'marks.*.total' => ['nullable', 'numeric', 'min:0'],
@@ -865,7 +1498,9 @@ class TeacherController extends Controller
 
             $savedCount = 0;
             $updatedCount = 0;
+            $skippedCount = 0;
             $errors = [];
+            $preventDuplicate = filter_var($request->input('prevent_duplicate', true), FILTER_VALIDATE_BOOLEAN);
 
             // Save or update marks for each student
             foreach ($validated['marks'] as $studentId => $markData) {
@@ -913,6 +1548,12 @@ class TeacherController extends Controller
                     // Save exam marks in StudentMark table
                     // IMPORTANT: exam_name is stored in test_name field
                     // Exam marks and test marks are differentiated by the value in test_name field
+                    if ($isUpdate && $preventDuplicate) {
+                        // Skip overwriting existing marks
+                        $skippedCount++;
+                        continue;
+                    }
+
                     StudentMark::updateOrCreate(
                         [
                             'student_id' => $studentId,
@@ -948,7 +1589,9 @@ class TeacherController extends Controller
             if ($totalProcessed > 0) {
                 return response()->json([
                     'success' => true,
-                    'message' => "Exam marks saved successfully for {$totalProcessed} student(s)!",
+                    'message' => $preventDuplicate
+                        ? "Exam marks saved (new: {$savedCount}, updated: {$updatedCount}, skipped(existing): {$skippedCount})!"
+                        : "Exam marks saved successfully for {$totalProcessed} student(s)!",
                     'data' => [
                         'exam_name' => $validated['exam_name'],
                         'class' => $className,
@@ -956,12 +1599,27 @@ class TeacherController extends Controller
                         'subject' => $validated['subject'],
                         'saved_count' => $savedCount,
                         'updated_count' => $updatedCount,
+                        'skipped_count' => $skippedCount,
                         'total_processed' => $totalProcessed,
                         'errors' => !empty($errors) ? $errors : null,
                     ],
                     'token' => $request->user()->currentAccessToken()->token ?? null,
                 ], 200);
             } else {
+                // If prevent_duplicate=true and everything is already uploaded, let client know.
+                if ($preventDuplicate && $skippedCount > 0) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Marks already uploaded for the selected students/exam/subject. Re-upload prevented.',
+                        'data' => [
+                            'saved_count' => $savedCount,
+                            'updated_count' => $updatedCount,
+                            'skipped_count' => $skippedCount,
+                            'errors' => !empty($errors) ? $errors : null,
+                        ],
+                        'token' => null,
+                    ], 409);
+                }
                 return response()->json([
                     'success' => false,
                     'message' => 'No marks were saved. Please enter at least one mark value.',

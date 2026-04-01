@@ -91,35 +91,62 @@ class StaffAttendanceController extends Controller
                 ->orderBy('attendance_date', 'asc')
                 ->get();
 
-            // Check if staff is full-time (full-time teachers should count Sunday and Holiday as present)
-            $isFullTime = empty($targetStaff->salary_type) || strtolower(trim($targetStaff->salary_type)) === 'full time';
-            
-            // Calculate monthly totals (based on StaffAttendance status values)
-            $totalPresent = $monthlyAttendances->where('status', 'Present')->count();
-            $totalAbsent = $monthlyAttendances->where('status', 'Absent')->count();
-            $totalLeave = $monthlyAttendances->where('status', 'Leave')->count();
-            $totalHoliday = $monthlyAttendances->where('status', 'Holiday')->count();
-            $totalSunday = $monthlyAttendances->where('status', 'Sunday')->count();
-            
+            // Salary type aware counting (same direction as web salary flow)
+            $salaryTypeRaw = strtolower(trim((string) ($targetStaff->salary_type ?? '')));
+            $isPerLecture = $salaryTypeRaw === 'lecture';
+            $isPerHour = $salaryTypeRaw === 'per hour';
+            $isFullTime = empty($salaryTypeRaw) || $salaryTypeRaw === 'full time';
+            $normalizedSalaryType = $isPerLecture ? 'lecture' : ($isPerHour ? 'per hour' : 'full time');
+
+            $totalPresent = 0;
+            $totalAbsent = 0;
+            $totalLeave = 0;
+            $totalHoliday = 0;
+            $totalSunday = 0;
+            $totalMinutes = 0;
+            $lectureCount = 0;
+
+            foreach ($monthlyAttendances as $attendance) {
+                $statusNormalized = strtolower(trim((string) ($attendance->status ?? '')));
+                $isPresentLike = in_array($statusNormalized, ['present', 'half day'], true);
+
+                if ($isPresentLike) {
+                    $totalPresent++;
+
+                    if ($isPerLecture) {
+                        $conducted = (int) ($attendance->conducted_lectures ?? 0);
+                        $lectureCount += $conducted > 0 ? $conducted : 1;
+                    }
+
+                    if ($isPerHour && $attendance->start_time && $attendance->end_time) {
+                        try {
+                            $dateStr = Carbon::parse($attendance->attendance_date)->format('Y-m-d');
+                            $start = Carbon::parse($dateStr . ' ' . $attendance->start_time);
+                            $end = Carbon::parse($dateStr . ' ' . $attendance->end_time);
+                            if ($end->greaterThan($start)) {
+                                $totalMinutes += $start->diffInMinutes($end);
+                            }
+                        } catch (\Exception $e) {
+                            // Ignore invalid time records
+                        }
+                    }
+                } elseif ($statusNormalized === 'absent') {
+                    $totalAbsent++;
+                } elseif ($statusNormalized === 'leave') {
+                    $totalLeave++;
+                } elseif ($statusNormalized === 'holiday') {
+                    $totalHoliday++;
+                } elseif ($statusNormalized === 'sunday') {
+                    $totalSunday++;
+                }
+            }
+
             // For full-time staff, count Sunday and Holiday as present
             if ($isFullTime) {
                 $totalPresent += $totalHoliday + $totalSunday;
             }
-            
-            // Calculate total hours (for present days with start_time and end_time)
-            $totalHours = 0;
-            foreach ($monthlyAttendances->where('status', 'Present') as $attendance) {
-                if ($attendance->start_time && $attendance->end_time) {
-                    try {
-                        $start = Carbon::parse($attendance->start_time);
-                        $end = Carbon::parse($attendance->end_time);
-                        $hours = $end->diffInHours($start);
-                        $totalHours += $hours;
-                    } catch (\Exception $e) {
-                        // If time parsing fails, skip
-                    }
-                }
-            }
+
+            $totalHours = round($totalMinutes / 60, 2);
 
             // Get attendance for today (if within the month) or first day of month
             $today = Carbon::today();
@@ -130,10 +157,26 @@ class StaffAttendanceController extends Controller
 
                 // Format date-wise attendance
                 $attendanceByDate = $monthlyAttendances->map(function($att) {
+                    $statusRaw = (string) ($att->status ?? 'N/A');
+                    $statusNormalized = strtolower(trim($statusRaw));
+                    $shortStatus = '--';
+                    if (in_array($statusNormalized, ['present', 'half day'], true)) {
+                        $shortStatus = 'P';
+                    } elseif ($statusNormalized === 'absent') {
+                        $shortStatus = 'A';
+                    } elseif ($statusNormalized === 'leave') {
+                        $shortStatus = 'L';
+                    } elseif ($statusNormalized === 'holiday') {
+                        $shortStatus = 'H';
+                    } elseif ($statusNormalized === 'sunday') {
+                        $shortStatus = 'S';
+                    }
+
                     return [
                         'date' => Carbon::parse($att->attendance_date)->format('Y-m-d'),
                         'date_formatted' => Carbon::parse($att->attendance_date)->format('d M Y'),
-                        'status' => $att->status,
+                        'status' => $statusRaw,
+                        'short_status' => $shortStatus,
                         'start_time' => $att->start_time,
                         'end_time' => $att->end_time,
                         'remarks' => $att->remarks,
@@ -149,10 +192,26 @@ class StaffAttendanceController extends Controller
                         return Carbon::parse($att->attendance_date)->format('Y-m-d') === $dateStr;
                     });
                     
+                    $statusRaw = $existingAttendance ? (string) ($existingAttendance->status ?? 'N/A') : 'N/A';
+                    $statusNormalized = strtolower(trim($statusRaw));
+                    $shortStatus = '--';
+                    if (in_array($statusNormalized, ['present', 'half day'], true)) {
+                        $shortStatus = 'P';
+                    } elseif ($statusNormalized === 'absent') {
+                        $shortStatus = 'A';
+                    } elseif ($statusNormalized === 'leave') {
+                        $shortStatus = 'L';
+                    } elseif ($statusNormalized === 'holiday') {
+                        $shortStatus = 'H';
+                    } elseif ($statusNormalized === 'sunday') {
+                        $shortStatus = 'S';
+                    }
+
                     $allDatesInMonth[] = [
                         'date' => $dateStr,
                         'date_formatted' => $currentDate->format('d M Y'),
-                        'status' => $existingAttendance ? $existingAttendance->status : 'N/A',
+                        'status' => $statusRaw,
+                        'short_status' => $shortStatus,
                         'start_time' => $existingAttendance ? $existingAttendance->start_time : null,
                         'end_time' => $existingAttendance ? $existingAttendance->end_time : null,
                         'remarks' => $existingAttendance ? $existingAttendance->remarks : null,
@@ -184,11 +243,14 @@ class StaffAttendanceController extends Controller
                     'campus' => $targetStaff->campus,
                     'designation' => $targetStaff->designation,
                     'monthly_summary' => [
+                        'salary_type' => $normalizedSalaryType,
                         'total_present' => $totalPresent,
                         'total_absent' => $totalAbsent,
                         'total_leave' => $totalLeave,
                         'total_holiday' => $totalHoliday,
                         'total_sunday' => $totalSunday,
+                        'total_lectures' => $isPerLecture ? $lectureCount : 0,
+                        'total_minutes' => $isPerHour ? $totalMinutes : 0,
                         'total_hours' => $totalHours,
                     ],
                     'staff' => $staffData,

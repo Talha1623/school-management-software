@@ -82,17 +82,23 @@
                 </div>
             </div>
 
-            <!-- Table Header -->
-            <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
-                <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
-                    <span>Categories List</span>
-                </h5>
-            </div>
+            <div class="print-area">
+                <!-- Print Header (visible only on print) -->
+                <div class="d-none d-print-block text-center mb-2 print-header">
+                    <h3 class="mb-1">Stock Categories List</h3>
+                </div>
+
+                <!-- Table Header -->
+                <div class="mb-2 p-2 rounded-8 d-print-none" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                    <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
+                        <span>Categories List</span>
+                    </h5>
+                </div>
 
             <!-- Search Results Info -->
             @if(request('search'))
-                <div class="search-results-info">
+                <div class="search-results-info d-print-none">
                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: #003471;">search</span>
                     <strong>Search Results:</strong> Showing results for "<strong>{{ request('search') }}</strong>"
                     @if(isset($categories))
@@ -114,7 +120,7 @@
                                 <th>Category Name</th>
                                 <th>Description</th>
                                 <th>Campus</th>
-                                <th class="text-end">Actions</th>
+                                <th class="text-end no-print">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -166,9 +172,10 @@
                     </table>
                 </div>
             </div>
+            </div>
 
             @if(isset($categories) && $categories->hasPages())
-                <div class="mt-3">
+                <div class="mt-3 d-print-none">
                     {{ $categories->links() }}
                 </div>
             @endif
@@ -594,19 +601,58 @@ function updateEntriesPerPage(value) {
 
 // Print table
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
-    
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Stock Categories List</h3>
-            ${printContents}
-        </div>
-    `;
-    
     window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
 }
 </script>
+<style>
+@media print {
+    .category-add-btn,
+    .export-btn,
+    .search-input-group,
+    .search-results-info,
+    .alert,
+    .pagination,
+    .modal,
+    .btn,
+    nav,
+    header,
+    footer {
+        display: none !important;
+    }
+    body * {
+        visibility: hidden;
+    }
+    .print-area, .print-area * {
+        visibility: visible;
+    }
+    .print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0 10mm;
+    }
+    .default-table-area table {
+        width: 100% !important;
+        font-size: 12px;
+    }
+    .default-table-area thead th,
+    .default-table-area tbody td {
+        padding: 6px 8px !important;
+        border-color: #000 !important;
+    }
+    .default-table-area th.no-print,
+    .default-table-area td:nth-child(5) {
+        display: none !important;
+    }
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        color: #000 !important;
+    }
+    .default-table-area table tbody tr:hover {
+        background: transparent !important;
+    }
+}
+</style>
 @endsection

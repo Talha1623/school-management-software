@@ -82,6 +82,45 @@ class TaskManagementController extends Controller
     }
 
     /**
+     * Print tasks list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = Task::query();
+
+        // Check if staff is logged in and is a teacher
+        $loggedInStaff = Auth::guard('staff')->user();
+        $isTeacher = $loggedInStaff && $loggedInStaff->isTeacher();
+        $teacherName = $isTeacher ? trim($loggedInStaff->name ?? '') : null;
+
+        // If teacher, filter tasks by assign_to field matching teacher's name (match index behavior)
+        if ($isTeacher && $teacherName) {
+            $query->whereRaw('LOWER(TRIM(assign_to)) = ?', [strtolower($teacherName)]);
+        }
+
+        // Search functionality (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(task_title) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(type) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(assign_to) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $tasks = $query->latest()->get();
+
+        return view('task-management-print', [
+            'tasks' => $tasks,
+            'printedAt' => now()->format('d-m-Y H:i'),
+        ]);
+    }
+
+    /**
      * Store a newly created task.
      */
     public function store(Request $request): RedirectResponse

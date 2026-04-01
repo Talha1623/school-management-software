@@ -838,7 +838,14 @@ function toggleResultStatus(examId) {
 }
 
 function printTable() {
-    window.print();
+    const params = new URLSearchParams(window.location.search);
+    params.set('auto_print', '1');
+
+    const url = `{{ route('exam.list.print') }}?` + params.toString();
+    const w = window.open(url, '_blank');
+    if (!w) {
+        window.location.href = url;
+    }
 }
 
 // Auto-dismiss toast notifications

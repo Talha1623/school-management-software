@@ -190,6 +190,87 @@ class ParentFeeVoucherController extends Controller
     }
 
     /**
+     * Render printable fee voucher (web-like layout) for mobile app/WebView.
+     *
+     * GET /api/parent/fee-vouchers/{student_id}/pdf?vouchers_for=March
+     */
+    public function pdf(Request $request, $student_id)
+    {
+        try {
+            $parent = $request->user();
+
+            if (!$parent || !($parent instanceof ParentAccount)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid user type. Parent authentication required.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $student = $parent->students()->where('id', $student_id)->first();
+            if (!$student) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student not found or not associated with this parent account.',
+                    'token' => null,
+                ], 404);
+            }
+
+            $currentYear = date('Y');
+            $vouchersFor = $request->get('vouchers_for', date('F'));
+            $voucher = $this->generateVoucherForStudent($student, $vouchersFor, (int) $currentYear);
+
+            if (!$voucher) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No pending fees found for this student.',
+                    'data' => null,
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
+            }
+
+            $settings = GeneralSetting::getSettings();
+            $type = 'three_copies';
+            $copyLabels = ['PARENT COPY', 'SCHOOL COPY', 'STUDENT COPY'];
+
+            $voucherForPrint = [
+                'student' => $student,
+                'pending_fees' => collect($voucher['pending_fees'] ?? []),
+                'current_fees_subtotal' => (float) ($voucher['current_fees_subtotal'] ?? 0),
+                'arrears_amount' => (float) ($voucher['arrears_amount'] ?? 0),
+                'subtotal' => (float) ($voucher['subtotal'] ?? 0),
+                'late_fee' => (float) ($voucher['late_fee'] ?? 0),
+                'total' => (float) ($voucher['total'] ?? 0),
+                'after_due_date' => (float) ($voucher['total'] ?? 0),
+                'due_date' => Carbon::parse($voucher['due_date']),
+                'voucher_validity' => Carbon::parse($voucher['voucher_validity']),
+                'voucher_number' => $voucher['voucher_number'] ?? null,
+                'fee_history' => collect($voucher['fee_history'] ?? []),
+                'month' => $voucher['month'] ?? $vouchersFor,
+                'year' => $voucher['year'] ?? (int) $currentYear,
+            ];
+
+            $html = view('accounting.fee-voucher.print', [
+                'vouchers' => [$voucherForPrint],
+                'type' => $type,
+                'vouchersFor' => $vouchersFor,
+                'currentYear' => (int) $currentYear,
+                'copyLabels' => $copyLabels,
+                'settings' => $settings,
+            ])->render();
+
+            // WebView-friendly printable document (same as web print layout)
+            return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while generating fee voucher print: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
      * Generate voucher data for a student
      * 
      * @param Student $student
@@ -374,6 +455,33 @@ class ParentFeeVoucherController extends Controller
             }
         }
 
+        // Include overdue monthly/transport as explicit arrears rows so app/web can display line items
+        foreach ($arrearsPayments as $payment) {
+            $amount = (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
+            $title = (string) ($payment->payment_title ?? '');
+
+            if (preg_match('/Monthly Fee - (\w+) (\d+)/', $title, $matches)) {
+                $month = $matches[1];
+                $year = $matches[2];
+                $monthlyFees->push([
+                    'description' => "Arrears - Monthly Fee Of {$month} ({$year})",
+                    'amount' => $amount,
+                    'sort_order' => 0,
+                ]);
+            } elseif (preg_match('/Transport Fee - (\w+) (\d+)/', $title, $matches)) {
+                $month = $matches[1];
+                $year = $matches[2];
+                $routeLabel = !empty($student->transport_route)
+                    ? "Transport Route ({$student->transport_route})"
+                    : 'Transport Route';
+                $monthlyFees->push([
+                    'description' => "Arrears - {$routeLabel} - {$month} ({$year})",
+                    'amount' => $amount,
+                    'sort_order' => 0,
+                ]);
+            }
+        }
+
         // Always include custom/admission fees
         $customFeePayments = $pendingPayments->filter(function ($payment) use ($isMonthlyOrTransport) {
             return !$isMonthlyOrTransport($payment->payment_title ?? '');
@@ -395,7 +503,7 @@ class ParentFeeVoucherController extends Controller
             }
         }
         
-        // Combine and sort: monthly fees first, then custom fees
+        // Combine and sort: arrears first, then current monthly/transport, then custom fees
         $pendingFeesList = $monthlyFees->merge($customFees)->sortBy('sort_order')->map(function($fee) {
             return [
                 'description' => $fee['description'],

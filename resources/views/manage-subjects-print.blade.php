@@ -29,7 +29,7 @@ body{
 /* Header */
 .header{
     text-align:center;
-    border-bottom:2px solid #000;
+    border-bottom:2px solid #003471;
     padding-bottom:10px;
 }
 
@@ -48,6 +48,7 @@ body{
     font-size:16px;
     font-weight:bold;
     text-transform:uppercase;
+    color:#003471;
 }
 
 /* Top Bar */
@@ -60,8 +61,8 @@ body{
 
 .print-btn{
     padding:5px 10px;
-    border:1px solid #000;
-    background:#000;
+    border:1px solid #003471;
+    background:#003471;
     color:#fff;
     cursor:pointer;
 }
@@ -71,15 +72,15 @@ table{
     width:100%;
     border-collapse:collapse;
     font-size:12px;
-    border:2px solid #000; /* only outer border */
+    border:2px solid #003471; /* only outer border */
 }
 
 th{
-    background:#000;
+    background:#003471;
     color:#fff;
     padding:8px;
     text-align:left;
-    border-bottom:2px solid #000;
+    border-bottom:2px solid #003471;
 }
 
 td{
@@ -108,7 +109,7 @@ tbody tr:nth-child(even){
 /* Badge (simple) */
 .badge{
     padding:2px 6px;
-    border:1px solid #000;
+    border:1px solid #003471;
     font-size:11px;
     font-weight:bold;
 }
@@ -116,7 +117,7 @@ tbody tr:nth-child(even){
 /* Footer */
 .footer{
     margin-top:15px;
-    border-top:2px solid #000;
+    border-top:2px solid #003471;
     padding-top:8px;
     display:flex;
     justify-content:space-between;
@@ -134,7 +135,7 @@ tbody tr:nth-child(even){
 .signature div{
     width:200px;
     text-align:center;
-    border-top:1px solid #000;
+    border-top:1px solid #003471;
     padding-top:5px;
 }
 

@@ -635,7 +635,16 @@ function clearSearch() {
 }
 
 function printTable() {
-    window.print();
+    const searchValue = document.getElementById('searchInput')?.value?.trim() || '';
+    let url = '{{ route("manage.campuses.print") }}?auto_print=1';
+    if (searchValue) {
+        url += '&search=' + encodeURIComponent(searchValue);
+    }
+
+    const w = window.open(url, '_blank');
+    if (!w || w.closed || typeof w.closed === 'undefined') {
+        window.location.href = url;
+    }
 }
 
 // Auto-dismiss toast notifications

@@ -6,6 +6,7 @@ use App\Models\Noticeboard;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -222,7 +223,41 @@ class NoticeboardController extends Controller
      */
     public function print(Noticeboard $noticeboard): View
     {
-        return view('school.noticeboard-print', compact('noticeboard'));
+        $settings = GeneralSetting::getSettings();
+        return view('school.noticeboard-print', [
+            'noticeboard' => $noticeboard,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
+    }
+
+    /**
+     * Print noticeboard list (dedicated print-only page).
+     */
+    public function printAll(Request $request): View
+    {
+        $query = Noticeboard::query();
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(title) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(notice) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $noticeboards = $query->orderBy('date', 'desc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('school.noticeboard-list-print', [
+            'noticeboards' => $noticeboards,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AdmissionInquiry;
 use App\Models\Campus;
 use App\Models\ClassModel;
+use App\Models\GeneralSetting;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\ParentAccount;
@@ -158,6 +159,34 @@ class AdmissionInquiryController extends Controller
                 return redirect()->route('admission.inquiry.manage')
                     ->with('error', 'Invalid export format!');
         }
+    }
+
+    /**
+     * Print inquiry list (same pattern as Stock / Admission Requests print pages)
+     */
+    public function print(Request $request): View
+    {
+        $query = AdmissionInquiry::query();
+
+        // Search functionality - case insensitive and trim whitespace (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(parent) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(full_address) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(gender) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $inquiries = $query->latest()->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('admission.inquiry.print', compact('inquiries', 'settings'));
     }
 
     /**

@@ -501,19 +501,19 @@ function updateEntriesPerPage(value) {
 
 // Print table
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
-    
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Account Requests List</h3>
-            ${printContents}
-        </div>
-    `;
-    
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
+    const searchParam = document.getElementById('searchInput')?.value?.trim();
+    let url = '{{ route("parent.account-request.print") }}';
+    if (searchParam) {
+        url += '?search=' + encodeURIComponent(searchParam) + '&auto_print=1';
+    } else {
+        url += '?auto_print=1';
+    }
+
+    const w = window.open(url, '_blank');
+    // If popup is blocked, fall back to same-tab navigation
+    if (!w) {
+        window.location.href = url;
+    }
 }
 </script>
 @endsection

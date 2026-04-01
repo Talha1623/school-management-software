@@ -164,7 +164,7 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <a href="{{ route('school.noticeboard.print', $noticeboard->id) }}" target="_blank" class="btn btn-sm btn-warning px-2 py-1" title="Print">
+                                                <a href="javascript:void(0)" onclick="openNoticeboardPrint({{ $noticeboard->id }})" class="btn btn-sm btn-warning px-2 py-1" title="Print">
                                                     <span class="material-symbols-outlined">print</span>
                                                 </a>
                                                 @if($isSuperAdmin)
@@ -755,7 +755,26 @@ function clearSearch() {
 }
 
 function printTable() {
-    window.print();
+    const searchValue = document.getElementById('searchInput')?.value?.trim() || '';
+    let url = '{{ route("school.noticeboard.print.all") }}?auto_print=1';
+    if (searchValue) {
+        url += '&search=' + encodeURIComponent(searchValue);
+    }
+
+    const w = window.open(url, '_blank');
+    if (!w || w.closed || typeof w.closed === 'undefined') {
+        // Fallback if popup is blocked
+        window.location.href = url;
+    }
+}
+
+function openNoticeboardPrint(id) {
+    const urlTemplate = '{{ route("school.noticeboard.print", "__ID__") }}';
+    const url = urlTemplate.replace('__ID__', id) + '?auto_print=1';
+    const w = window.open(url, '_blank');
+    if (!w || w.closed || typeof w.closed === 'undefined') {
+        window.location.href = url;
+    }
 }
 
 // Auto-dismiss toast notifications

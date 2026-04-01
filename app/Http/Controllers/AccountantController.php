@@ -7,6 +7,8 @@ use App\Models\Campus;
 use App\Models\StudentPayment;
 use App\Models\Student;
 use App\Models\ManagementExpense;
+use App\Models\GeneralSetting;
+use App\Models\FeeType;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
@@ -83,6 +85,37 @@ class AccountantController extends Controller
         }
 
         return view('accountant', compact('accountants', 'totalAccountants', 'activeAccountants', 'restrictedAccountants', 'campuses', 'filterCampus'));
+    }
+
+    /**
+     * Print accountants list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = Accountant::query();
+
+        // Campus filter
+        $filterCampus = $request->get('campus');
+        if ($filterCampus) {
+            $query->where('campus', $filterCampus);
+        }
+
+        // Search functionality (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('campus', 'like', "%{$search}%");
+                });
+            }
+        }
+
+        $accountants = $query->latest()->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('accountant-print', compact('accountants', 'settings'));
     }
 
     /**
@@ -1322,7 +1355,7 @@ class AccountantController extends Controller
      */
     public function feeType(Request $request): View
     {
-        $query = \App\Models\FeeType::query();
+        $query = FeeType::query();
         
         // Search functionality
         if ($request->filled('search')) {
@@ -1380,6 +1413,43 @@ class AccountantController extends Controller
         }
         
         return view('accountant.fee-type', compact('feeTypes', 'campuses'));
+    }
+
+    /**
+     * Print Fee Type / Fee Head (Accountant) - dedicated print page
+     */
+    public function feeTypePrint(Request $request): View
+    {
+        $query = FeeType::query();
+
+        // Search functionality (same as listing)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(fee_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        // Restrict to logged-in accountant's campus (match listing intent)
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && $accountant->campus) {
+                $query->where('campus', $accountant->campus);
+            }
+        }
+
+        $feeTypes = $query->orderBy('fee_name')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('accountant.fee-type-print', [
+            'feeTypes' => $feeTypes,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

@@ -226,7 +226,11 @@ function printReport(type) {
         window.location.href = '{{ route("student.info-report.gender-wise.filter") }}';
     } else {
         const url = `/student/info-report/print?type=${encodeURIComponent(type)}`;
-        window.open(url, '_blank');
+        const w = window.open(url, '_blank');
+        // If popup is blocked, fall back to same-tab navigation
+        if (!w) {
+            window.location.href = url;
+        }
     }
 }
 </script>

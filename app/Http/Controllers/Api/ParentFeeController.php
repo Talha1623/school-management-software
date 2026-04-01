@@ -25,104 +25,119 @@ class ParentFeeController extends Controller
      */
     public function studentFees(Request $request): JsonResponse
     {
-        $parent = $request->user();
+        try {
+            $parent = $request->user();
 
-        if (!$parent) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User not found',
-            ], 404);
-        }
+            if (!$parent) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'token' => null,
+                ], 404);
+            }
 
-        $feeYear = (int) $request->get('fee_year', date('Y'));
+            $feeYear = (int) $request->get('fee_year', date('Y'));
+            if ($feeYear < 2000 || $feeYear > 2100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid fee_year. Year must be between 2000 and 2100.',
+                    'token' => null,
+                ], 422);
+            }
 
-        $students = $parent->students()
-            ->orderBy('class', 'asc')
-            ->orderBy('section', 'asc')
-            ->orderBy('student_name', 'asc')
-            ->get();
+            $students = $parent->students()
+                ->orderBy('class', 'asc')
+                ->orderBy('section', 'asc')
+                ->orderBy('student_name', 'asc')
+                ->get();
 
-        // Aggregate payments per student_code for the selected year
-        $studentCodes = $students->pluck('student_code')->filter()->values();
+            $studentCodes = $students->pluck('student_code')->filter()->values();
 
-        // Get paid payments (exclude "Generated" method payments)
-        $paymentsByCode = collect();
-        if ($studentCodes->isNotEmpty()) {
-            $paymentsByCode = StudentPayment::whereIn('student_code', $studentCodes)
-                ->where('method', '!=', 'Generated') // Only actual paid payments, exclude generated fees
-                ->whereYear('payment_date', $feeYear)
-                ->get()
-                ->groupBy('student_code');
-        }
+            $allPaymentsByCode = collect();
+            if ($studentCodes->isNotEmpty()) {
+                $allPaymentsByCode = StudentPayment::whereIn('student_code', $studentCodes)
+                    ->whereYear('payment_date', $feeYear)
+                    ->orderBy('payment_date', 'desc')
+                    ->get()
+                    ->groupBy('student_code');
+            }
 
-        // Get generated fees (method = 'Generated')
-        $generatedFeesByCode = collect();
-        if ($studentCodes->isNotEmpty()) {
-            $generatedFeesByCode = StudentPayment::whereIn('student_code', $studentCodes)
-                ->where('method', '=', 'Generated') // Only generated fees
-                ->whereYear('payment_date', $feeYear)
-                ->get()
-                ->groupBy('student_code');
-        }
+            $data = $students->map(function ($student) use ($allPaymentsByCode, $feeYear) {
+                $code = $student->student_code;
 
-        $data = $students->map(function ($student) use ($paymentsByCode, $generatedFeesByCode, $feeYear) {
-            $code = $student->student_code;
-            
-            // Get paid payments
-            $payments = $code && $paymentsByCode->has($code)
-                ? $paymentsByCode->get($code)
-                : collect();
+                $payments = $code && $allPaymentsByCode->has($code)
+                    ? $allPaymentsByCode->get($code)
+                    : collect();
 
-            // Get generated fees
-            $generatedFees = $code && $generatedFeesByCode->has($code)
-                ? $generatedFeesByCode->get($code)
-                : collect();
+                $generatedPayments = $payments->filter(function ($p) {
+                    return strtolower(trim((string) ($p->method ?? ''))) === 'generated';
+                });
+                $paidPayments = $payments->reject(function ($p) {
+                    return strtolower(trim((string) ($p->method ?? ''))) === 'generated';
+                });
 
-            // Calculate paid amount from actual paid payments (method != 'Generated')
-            $paid = (float) $payments->sum('payment_amount');
-            $discount = (float) $payments->sum('discount');
-            $lateFee = (float) $payments->sum('late_fee');
+                // Generated fees (what system generated as payable)
+                $generatedAmount = (float) $generatedPayments->sum(function ($fee) {
+                    $amount = (float) ($fee->payment_amount ?? 0);
+                    $discount = (float) ($fee->discount ?? 0);
+                    $lateFee = (float) ($fee->late_fee ?? 0);
+                    return max(0, $amount - $discount) + $lateFee;
+                });
 
-            // Calculate generated fees amount
-            // Generated amount = payment_amount - discount + late_fee (for generated records)
-            $generatedAmount = (float) $generatedFees->sum(function($fee) {
-                $amount = (float) ($fee->payment_amount ?? 0);
-                $discount = (float) ($fee->discount ?? 0);
-                $lateFee = (float) ($fee->late_fee ?? 0);
-                return max(0, $amount - $discount) + $lateFee;
+                // Actual paid history
+                $paidAmount = (float) $paidPayments->sum('payment_amount');
+                $paidDiscount = (float) $paidPayments->sum('discount');
+                $paidLateFee = (float) $paidPayments->sum('late_fee');
+                $paidNetAmount = max(0, $paidAmount - $paidDiscount + $paidLateFee);
+
+                $monthlyFee = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
+                $annualFee = $monthlyFee * 12;
+
+                // Prefer generated fee as due base (web-like), fallback to annual fee
+                $expectedFee = $generatedAmount > 0 ? $generatedAmount : $annualFee;
+                $dueAmount = max($expectedFee - $paidNetAmount, 0.0);
+
+                return [
+                    'id' => $student->id,
+                    'student_name' => $student->student_name,
+                    'student_code' => $student->student_code,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                    'fee_year' => $feeYear,
+                    'monthly_fee' => round($monthlyFee, 2),
+                    'annual_fee' => round($annualFee, 2),
+                    'generated_amount' => round($generatedAmount, 2),
+                    'paid' => round($paidAmount, 2),
+                    'discount' => round($paidDiscount, 2),
+                    'late_fee' => round($paidLateFee, 2),
+                    'paid_net_amount' => round($paidNetAmount, 2),
+                    'due_amount' => round($dueAmount, 2),
+                    'total_payments' => $payments->count(),
+                    'paid_payments_count' => $paidPayments->count(),
+                    'generated_payments_count' => $generatedPayments->count(),
+                ];
             });
 
-            $initialAmount = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
-            $dueAmount = max($initialAmount - $paid - $discount + $lateFee, 0.0);
-
-            return [
-                'id' => $student->id,
-                'student_name' => $student->student_name,
-                'student_code' => $student->student_code,
-                'class' => $student->class,
-                'section' => $student->section,
-                'campus' => $student->campus,
-                'fee_year' => $feeYear,
-                // base fee from admit student (monthly_fee)
-                'initial_amount' => $initialAmount,
-                'generated_amount' => round($generatedAmount, 2), // Total generated fees amount
-                'paid' => $paid,
-                'discount' => $discount,
-                'late_fee' => $lateFee,
-                'due_amount' => $dueAmount,
-            ];
-        });
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Student fees list retrieved successfully',
-            'data' => [
-                'parent_id' => $parent->id,
-                'parent_name' => $parent->name,
-                'total_students' => $students->count(),
-                'students' => $data,
-            ],
-        ], 200);
+            return response()->json([
+                'success' => true,
+                'message' => 'Student fees list retrieved successfully',
+                'data' => [
+                    'parent_id' => $parent->id,
+                    'parent_name' => $parent->name,
+                    'fee_year' => $feeYear,
+                    'total_students' => $students->count(),
+                    'students' => $data,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving student fees: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
     }
 }
 

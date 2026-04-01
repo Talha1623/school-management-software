@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AdvanceFee;
 use App\Models\Student;
 use App\Models\ParentAccount;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -143,6 +144,100 @@ class AdvanceFeeController extends Controller
         }
         
         return view('accounting.manage-advance-fee', compact('advanceFees'));
+    }
+
+    /**
+     * Print advance fee records (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        // Query only non-deleted records (exclude soft-deleted if column exists)
+        $query = AdvanceFee::query();
+        if (Schema::hasColumn('advance_fees', 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+
+        // Get all existing parent IDs for filtering
+        $existingParentIds = ParentAccount::pluck('id')->map(function ($id) {
+            return (string) $id;
+        })->toArray();
+
+        // Get unique parent_ids (to avoid duplicates) - for each parent_id, get only the latest record
+        $uniqueParentIdsQuery = AdvanceFee::whereNotNull('parent_id')
+            ->where('parent_id', '!=', '')
+            ->whereIn('parent_id', $existingParentIds);
+
+        if (Schema::hasColumn('advance_fees', 'deleted_at')) {
+            $uniqueParentIdsQuery->whereNull('deleted_at');
+        }
+
+        $uniqueParentIds = $uniqueParentIdsQuery
+            ->select('parent_id', \DB::raw('MAX(id) as max_id'))
+            ->groupBy('parent_id')
+            ->pluck('max_id')
+            ->toArray();
+
+        // Same visibility rules as index()
+        $query->where(function ($q) use ($uniqueParentIds, $existingParentIds) {
+            $q->whereIn('id', $uniqueParentIds)
+                ->orWhere(function ($subQ) {
+                    $subQ->where(function ($cardQ) {
+                        $cardQ->whereNull('parent_id')
+                            ->orWhere('parent_id', '=', '');
+                    })
+                        ->whereExists(function ($studentQuery) {
+                            $studentQuery->select(\DB::raw(1))
+                                ->from('students')
+                                ->whereColumn('students.father_id_card', 'advance_fees.id_card_number')
+                                ->whereNotNull('advance_fees.id_card_number')
+                                ->where('advance_fees.id_card_number', '!=', '');
+                        });
+                });
+        });
+
+        // Search (same as index)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(parent_id) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(id_card_number) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $advanceFees = $query->orderBy('name')->get();
+
+        // Calculate children count dynamically for print
+        foreach ($advanceFees as $advanceFee) {
+            $childrenCount = 0;
+
+            if (!empty($advanceFee->parent_id) && in_array($advanceFee->parent_id, $existingParentIds)) {
+                $childrenCount += Student::where('parent_account_id', $advanceFee->parent_id)->count();
+            }
+
+            if (!empty($advanceFee->id_card_number)) {
+                $childrenByCard = Student::where('father_id_card', $advanceFee->id_card_number);
+                if (!empty($advanceFee->parent_id) && in_array($advanceFee->parent_id, $existingParentIds)) {
+                    $childrenByCard->where('parent_account_id', '!=', $advanceFee->parent_id);
+                }
+                $childrenCount += $childrenByCard->count();
+            }
+
+            $advanceFee->childs = $childrenCount;
+        }
+
+        $settings = GeneralSetting::getSettings();
+
+        return view('accounting.manage-advance-fee-print', [
+            'advanceFees' => $advanceFees,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

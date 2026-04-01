@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ParentAccountRequest;
 use Illuminate\Http\Request;
+use App\Models\GeneralSetting;
 use Illuminate\View\View;
 
 class ParentAccountRequestController extends Controller
@@ -72,6 +73,35 @@ class ParentAccountRequestController extends Controller
                 return redirect()->route('parent.account-request')
                     ->with('error', 'Invalid export format!');
         }
+    }
+
+    /**
+     * Print parent account requests list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = ParentAccountRequest::query();
+
+        // Search functionality (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(request_by) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('id_card', 'like', "%{$search}%")
+                        ->orWhere('parent_id', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(request_status) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $requests = $query->latest()->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('parent.account-request-print', compact('requests', 'settings'));
     }
 
     /**

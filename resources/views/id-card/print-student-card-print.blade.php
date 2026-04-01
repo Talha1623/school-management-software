@@ -19,17 +19,19 @@
 
         /* GRID */
         .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 18px;
             max-width: 100%;
         }
 
         /* CARD */
         .student-card {
-            background: {{ $designSettings['gradient_color1'] ?? '#FFFFFF' }};
-            border-radius: {{ ($designSettings['border_style'] ?? 'rounded') == 'rounded' ? '12px' : (($designSettings['border_style'] ?? 'rounded') == 'square' ? '0px' : '12px') }};
-            border: {{ ($designSettings['border_style'] ?? 'rounded') == 'none' ? 'none' : '2px solid ' . ($designSettings['accent_color'] ?? '#003471') }};
+            background: #ffffff;
+            border-radius: 10px;
+            border: 2px solid {{ $designSettings['accent_color'] ?? '#003471' }};
+            width: 370px;
             height: 240px;
             padding: 12px;
             position: relative;
@@ -45,12 +47,7 @@
 
         /* HEADER */
         .card-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border-bottom: 2px solid {{ $designSettings['accent_color'] ?? '#003471' }};
-            padding-bottom: 8px;
-            margin-bottom: 10px;
+            display: none; /* Screenshot style */
         }
 
         .school-logo {
@@ -98,19 +95,21 @@
         .card-body {
             display: flex;
             gap: 10px;
-            margin-top: 8px;
-            height: calc(100% - 80px);
+            margin-top: 0;
+            height: calc(100% - 26px); /* keep footer space */
         }
 
         /* PHOTO */
         .photo-box {
             text-align: center;
             flex-shrink: 0;
+            width: 110px;
+            margin-left: -8px; /* allow circle to overlap like sample */
         }
 
         .photo-box img {
-            width: 75px;
-            height: 75px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             border: 3px solid {{ $designSettings['accent_color'] ?? '#003471' }};
             object-fit: cover;
@@ -118,10 +117,10 @@
         }
 
         .photo-placeholder {
-            width: 75px;
-            height: 75px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
-            background: linear-gradient(135deg, {{ $designSettings['accent_color'] ?? '#003471' }} 0%, {{ $designSettings['secondary_color'] ?? '#004a9e' }} 100%);
+            background: {{ $designSettings['accent_color'] ?? '#003471' }};
             border: 3px solid {{ $designSettings['accent_color'] ?? '#003471' }};
             display: flex;
             align-items: center;
@@ -131,8 +130,8 @@
         }
 
         .photo-placeholder span {
-            font-size: 38px;
-            color: rgba(255, 255, 255, 0.9);
+            font-size: 44px;
+            color: #fff;
         }
 
         .student-name {
@@ -145,6 +144,54 @@
             max-width: 75px;
         }
 
+        /* Left bottom education label (screenshot style) */
+        .edu-box {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            align-items: center;
+        }
+
+        .edu-logo {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: 2px solid {{ $designSettings['accent_color'] ?? '#003471' }};
+            background: {{ $designSettings['accent_color'] ?? '#003471' }};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .edu-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* when we show initials inside the circle */
+        .edu-logo-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            color: #fff;
+            font-size: 13px;
+            background: {{ $designSettings['accent_color'] ?? '#003471' }};
+        }
+
+        .edu-text {
+            text-align: center;
+            font-size: 9px;
+            font-weight: 900;
+            line-height: 1.1;
+            color: #003471;
+        }
+
         /* DETAILS */
         .details {
             flex: 1;
@@ -152,6 +199,7 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            padding-top: 6px;
         }
 
         .detail {
@@ -167,20 +215,58 @@
             min-width: 50px;
         }
 
-        /* QR */
-        .qr {
-            text-align: center;
-            margin-top: auto;
-            padding-top: 5px;
+        .student-role {
+            font-size: 10px;
+            font-weight: 900;
+            color: #003471;
+            letter-spacing: 0.4px;
+            margin-bottom: 2px;
         }
 
-        .qr img {
-            width: 60px;
-            height: 60px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background: #fff;
-            padding: 3px;
+        .student-fullname {
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: 0.3px;
+            color: #1f2a44;
+            line-height: 1.1;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .detail-row {
+            margin: 2px 0;
+            color: {{ $designSettings['details_text_color'] ?? '#333333' }};
+            line-height: 1.2;
+            font-size: 11px;
+        }
+
+        .detail-row span {
+            font-weight: 900;
+            color: {{ $designSettings['accent_color'] ?? '#003471' }};
+            display: inline-block;
+            min-width: 60px;
+        }
+
+        /* Barcode */
+        .barcode {
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 0;
+        }
+
+        .barcode img {
+            width: 185px;
+            height: 44px;
+            object-fit: contain;
+        }
+
+        .id-block {
+            margin-top: 2px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 900;
+            color: #1f2937;
+            line-height: 1.1;
         }
 
         /* FOOTER */
@@ -189,13 +275,29 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: linear-gradient(135deg, {{ $designSettings['accent_color'] ?? '#003471' }} 0%, {{ $designSettings['secondary_color'] ?? '#004a9e' }} 100%);
+            background: {{ $designSettings['accent_color'] ?? '#003471' }};
             color: {{ $designSettings['footer_text_color'] ?? '#FFFFFF' }};
-            font-size: 8px;
+            font-size: 9px;
             text-align: center;
-            padding: 5px;
+            padding: 6px 5px;
             font-weight: 600;
             letter-spacing: 0.3px;
+        }
+
+        /* Top diagonal blue stripe (screenshot style) */
+        .student-card::before {
+            display: none !important;
+        }
+
+        .student-card > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Print-only: only show cards, hide design panel */
+        .design-panel { display: none !important; }
+        @media print {
+            .student-card { break-after: page; }
         }
 
         /* DESIGN PANEL */
@@ -478,7 +580,7 @@
     <div class="card-header">
         <div class="school-logo">
             @if($settings->logo)
-                <img src="{{ Storage::url($settings->logo) }}" alt="School Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <img src="{{ asset('storage/' . $settings->logo) }}" alt="School Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                 <div style="display: none; width: 100%; height: 100%; background: {{ $designSettings['accent_color'] ?? '#003471' }}; border-radius: 50%; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px;">
                     {{ strtoupper(substr($settings->school_name ?? 'SCH', 0, 3)) }}
                 </div>
@@ -509,20 +611,51 @@
                     <span>{{ strtoupper(substr($student->student_name ?? 'S', 0, 1)) }}</span>
                 </div>
             @endif
-            <div class="student-name">{{ $student->student_name }}</div>
+            <!-- Left bottom education mark (screenshot style) -->
+            <div class="edu-box">
+                <div class="edu-logo">
+                    @if($settings->logo)
+                        <img src="{{ asset('storage/' . $settings->logo) }}" alt="Education Logo"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="edu-logo-placeholder" style="display: none;">
+                            {{ strtoupper(substr($settings->school_name ?? 'SCH', 0, 3)) }}
+                        </div>
+                    @else
+                        <div class="edu-logo-placeholder">
+                            {{ strtoupper(substr($settings->school_name ?? 'SCH', 0, 3)) }}
+                        </div>
+                    @endif
+                </div>
+                <div class="edu-text">
+                    EDUCATION<br>
+                    MANAGEMENT SYSTEM
+                </div>
+            </div>
         </div>
 
         <!-- DETAILS -->
         <div class="details">
             <div>
-                <div class="detail"><span>ID:</span> {{ $student->student_code ?? 'N/A' }}</div>
-                <div class="detail"><span>Class:</span> {{ $student->class ?? 'N/A' }}</div>
-                <div class="detail"><span>Section:</span> {{ $student->section ?? 'N/A' }}</div>
-                <div class="detail"><span>Campus:</span> {{ $student->campus ?? 'N/A' }}</div>
+                <div class="student-role">STUDENT</div>
+                <div class="student-fullname">{{ strtoupper($student->student_name ?? 'N/A') }}</div>
+                <div class="detail-row"><span>CLASS:</span> {{ $student->class ?? 'N/A' }}</div>
+                <div class="detail-row"><span>SECTION:</span> {{ $student->section ?? 'N/A' }}</div>
+                <div class="detail-row"><span>CAMPUS:</span> {{ $student->campus ?? 'N/A' }}</div>
             </div>
 
-            <div class="qr">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=60x60&data={{ $student->student_code ?? $student->id }}" alt="QR Code">
+            <div class="barcode">
+                @php
+                    $codeValue = (string)($student->student_code ?? $student->id ?? '');
+                    $encoded = urlencode($codeValue);
+                @endphp
+                <img
+                    src="https://barcode.tec-it.com/barcode.ashx?data={{ $encoded }}&code=Code128&dpi=96&single=true"
+                    alt="Student Barcode"
+                >
+                <div class="id-block">
+                    ID<br>
+                    {{ $codeValue ?: 'N/A' }}
+                </div>
             </div>
         </div>
 

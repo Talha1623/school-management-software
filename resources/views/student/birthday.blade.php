@@ -125,7 +125,7 @@
                                         </a>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
-                                        <button type="button" class="action-pill action-pill-wish action-btn-wish" data-phone="{{ $student['parent_phone'] ?? '' }}">
+                                        <button type="button" class="action-pill action-pill-wish action-btn-wish" data-student-id="{{ $student['id'] }}">
                                             <span class="material-symbols-outlined">send</span>
                                             <span>Click To Wish</span>
                                         </button>
@@ -400,83 +400,112 @@
 </style>
 
 <script>
-function normalizePhone(raw) {
-    return (raw || '').replace(/[^\d]/g, '');
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+async function postJson(url, payload) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload || {}),
+        credentials: 'same-origin',
+    });
+
+    const text = await res.text();
+    try {
+        return { ok: res.ok, status: res.status, body: JSON.parse(text) };
+    } catch (e) {
+        return { ok: res.ok, status: res.status, body: { success: false, message: text || 'Unknown error' } };
+    }
 }
 
 document.addEventListener('click', function(event) {
     const button = event.target.closest('.action-btn-wish');
     if (!button) return;
-    const phoneRaw = button.getAttribute('data-phone') || '';
-    const phone = normalizePhone(phoneRaw);
-    if (!phone) {
-        alert('Parent phone not available for this student.');
-        return;
-    }
-    window.open(`https://wa.me/${phone}`, '_blank');
+
+    const studentId = button.getAttribute('data-student-id');
+    if (!studentId) return;
+
+    // UI loading state
+    if (button.dataset.loading === '1') return;
+    button.dataset.loading = '1';
+    const oldHtml = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="material-symbols-outlined">hourglass_top</span><span>Sending...</span>';
+
+    postJson(`/student/birthday/${studentId}/wish`, {})
+        .then(resp => {
+            if (resp.body && resp.body.success) {
+                button.innerHTML = '<span class="material-symbols-outlined">check_circle</span><span>Sent</span>';
+                button.classList.add('opacity-75');
+            } else {
+                alert(resp.body?.message || 'Failed to send wish.');
+                button.innerHTML = oldHtml;
+                button.disabled = false;
+                button.dataset.loading = '0';
+            }
+        })
+        .catch(() => {
+            alert('Failed to send wish.');
+            button.innerHTML = oldHtml;
+            button.disabled = false;
+            button.dataset.loading = '0';
+        });
 });
 
 function printStudentTable() {
-    const printWindow = window.open('', '_blank');
-    const table = document.getElementById('studentBirthdayTable');
-    const tableHTML = table.outerHTML;
-    
-    printWindow.document.write(`
-        <html>
-            <head>
-                <title>Student Birthdays - Print</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th { background-color: #003471; color: white; padding: 12px; text-align: left; }
-                    td { padding: 10px; border-bottom: 1px solid #ddd; }
-                    tr:nth-child(even) { background-color: #f8f9fa; }
-                    @media print { body { margin: 0; } }
-                </style>
-            </head>
-            <body>
-                <h2>Student Birthdays</h2>
-                ${tableHTML}
-            </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+    let url = '{{ route("student.birthday.print") }}';
+    // Support auto-print in print page (optional)
+    url += '?auto_print=1';
+
+    const w = window.open(url, '_blank');
+    // If popup is blocked, fall back to same-tab navigation
+    if (!w) {
+        window.location.href = url;
+    }
 }
 
 function wishToAllStudents() {
-    // Collect all parent phone numbers from the table
     const wishButtons = document.querySelectorAll('.action-btn-wish');
-    const phoneNumbers = [];
-    
-    wishButtons.forEach(button => {
-        const phoneRaw = button.getAttribute('data-phone') || '';
-        const phone = normalizePhone(phoneRaw);
-        if (phone && phone.length >= 10) {
-            phoneNumbers.push(phone);
-        }
+    const studentIds = [];
+
+    wishButtons.forEach(btn => {
+        const id = btn.getAttribute('data-student-id');
+        if (id) studentIds.push(parseInt(id, 10));
     });
-    
-    if (phoneNumbers.length === 0) {
-        alert('No valid parent phone numbers found to send wishes.');
+
+    if (studentIds.length === 0) {
+        alert('No students found to send wishes.');
         return;
     }
-    
-    // Confirm action
-    const confirmMessage = `Are you sure you want to send birthday wishes to ${phoneNumbers.length} parent(s)? This will open ${phoneNumbers.length} WhatsApp chat(s).`;
-    if (!confirm(confirmMessage)) {
-        return;
-    }
-    
-    // Open WhatsApp chats for each parent with a delay to avoid blocking
-    phoneNumbers.forEach((phone, index) => {
-        setTimeout(() => {
-            window.open(`https://wa.me/${phone}`, '_blank');
-        }, index * 500); // 500ms delay between each window
-    });
-    
-    // Show confirmation
-    alert(`Opening WhatsApp chats for ${phoneNumbers.length} parent(s). Please wait...`);
+
+    const confirmMessage = `Are you sure you want to send birthday wishes to ${studentIds.length} student(s)?`;
+    if (!confirm(confirmMessage)) return;
+
+    postJson(`/student/birthday/wish-all`, { student_ids: studentIds })
+        .then(resp => {
+            if (resp.body && resp.body.success) {
+                const count = resp.body?.data?.count ?? studentIds.length;
+                alert(`Wishes sent successfully to ${count} student(s).`);
+
+                // Update UI (disable buttons)
+                wishButtons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="material-symbols-outlined">check_circle</span><span>Sent</span>';
+                    btn.classList.add('opacity-75');
+                });
+            } else {
+                alert(resp.body?.message || 'Failed to send wishes.');
+            }
+        })
+        .catch(() => alert('Failed to send wishes.'));
 }
 
 </script>

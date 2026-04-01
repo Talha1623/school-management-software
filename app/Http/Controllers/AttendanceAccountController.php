@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AttendanceAccount;
 use App\Models\ClassModel;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -63,6 +64,35 @@ class AttendanceAccountController extends Controller
         }
         
         return view('attendance.account', compact('accounts', 'campuses'));
+    }
+
+    /**
+     * Print attendance accounts (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = AttendanceAccount::query();
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(user_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(user_id_card) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $accounts = $query->orderBy('created_at', 'desc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('attendance.account-print', [
+            'accounts' => $accounts,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Quiz;
 use App\Models\QuizQuestion;
+use App\Models\QuizSubmission;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class StudentQuizController extends Controller
 {
@@ -428,6 +430,255 @@ class StudentQuizController extends Controller
                 'success' => false,
                 'message' => 'An error occurred while retrieving quiz marks: ' . $e->getMessage(),
                 'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Submit quiz answers (student attempt).
+     *
+     * POST /api/student/quizzes/{id}/submit
+     * Body:
+     * {
+     *   "answers": [
+     *     {"question_number": 1, "selected_option": 2},
+     *     {"question_number": 2, "selected_option": 1}
+     *   ]
+     * }
+     */
+    public function submit(Request $request, int $id): JsonResponse
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user || !($user instanceof Student)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid user type. Student authentication required.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $student = $user;
+
+            $quiz = Quiz::find($id);
+            if (!$quiz) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Quiz not found.',
+                    'token' => null,
+                ], 404);
+            }
+
+            $classMatch = strtolower(trim($quiz->for_class)) === strtolower(trim($student->class ?? ''));
+            $sectionMatch = strtolower(trim($quiz->section)) === strtolower(trim($student->section ?? ''));
+            $campusOk = empty($student->campus) || empty($quiz->campus) || strtolower(trim($quiz->campus)) === strtolower(trim($student->campus));
+
+            if (!$classMatch || !$sectionMatch || !$campusOk) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this quiz.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $timing = $this->quizTiming($quiz);
+            
+            // If quiz has no start time, allow submission (edge case)
+            if (!$timing['start']) {
+                // No start time restriction - allow submission
+            } else {
+                $now = Carbon::now();
+                $start = $timing['start'];
+                
+                // Check if quiz has started
+                if ($now->lt($start)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Quiz has not started yet.',
+                        'data' => [
+                            'start_date_time' => $start->format('Y-m-d H:i:s'),
+                            'start_date_time_formatted' => $start->format('d M Y h:i A'),
+                            'current_time' => $now->format('Y-m-d H:i:s'),
+                        ],
+                        'token' => $request->user()->currentAccessToken()->token ?? null,
+                    ], 200);
+                }
+                
+                // Check if quiz has expired (only if end time exists)
+                if ($timing['end'] && $now->gte($timing['end'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Quiz time is over (expired). Submission not allowed.',
+                        'data' => [
+                            'end_date_time' => $timing['end']->format('Y-m-d H:i:s'),
+                            'end_date_time_formatted' => $timing['end']->format('d M Y h:i A'),
+                            'current_time' => $now->format('Y-m-d H:i:s'),
+                        ],
+                        'token' => $request->user()->currentAccessToken()->token ?? null,
+                    ], 200);
+                }
+                
+                // If quiz has started and (no end time OR within time window), allow submission
+                // No additional check needed - if we reach here, quiz is valid for submission
+            }
+
+            // Prevent multiple submissions
+            $existing = QuizSubmission::where('quiz_id', $quiz->id)
+                ->where('student_id', $student->id)
+                ->first();
+            if ($existing) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have already submitted this quiz.',
+                    'data' => [
+                        'submission_id' => $existing->id,
+                        'obtained_marks' => (int) $existing->obtained_marks,
+                        'total_marks' => (int) $existing->total_marks,
+                        'submitted_at' => $existing->submitted_at ? $existing->submitted_at->format('Y-m-d H:i:s') : null,
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
+            }
+
+            $validated = $request->validate([
+                'answers' => ['required', 'array', 'min:1'],
+                'answers.*.question_number' => ['required', 'integer', 'min:1'],
+                'answers.*.selected_option' => ['required', 'integer', 'min:1', 'max:3'],
+            ]);
+
+            // Load questions and compute marks
+            $questions = $quiz->questions()->get()->keyBy('question_number');
+
+            $obtained = 0;
+            $total = 0;
+
+            // Total marks = sum of max marks per question (common pattern: only one option has marks)
+            foreach ($questions as $q) {
+                $total += max((int) ($q->marks1 ?? 0), (int) ($q->marks2 ?? 0), (int) ($q->marks3 ?? 0));
+            }
+
+            $storedAnswers = [];
+            foreach ($validated['answers'] as $a) {
+                $qn = (int) $a['question_number'];
+                $opt = (int) $a['selected_option'];
+                $q = $questions->get($qn);
+                if (!$q) {
+                    // skip invalid question numbers
+                    continue;
+                }
+
+                $selectedAnswer = null;
+                $marksAwarded = 0;
+                if ($opt === 1) {
+                    $selectedAnswer = $q->answer1;
+                    $marksAwarded = (int) ($q->marks1 ?? 0);
+                } elseif ($opt === 2) {
+                    $selectedAnswer = $q->answer2;
+                    $marksAwarded = (int) ($q->marks2 ?? 0);
+                } elseif ($opt === 3) {
+                    $selectedAnswer = $q->answer3;
+                    $marksAwarded = (int) ($q->marks3 ?? 0);
+                }
+
+                $obtained += $marksAwarded;
+
+                $storedAnswers[] = [
+                    'question_id' => $q->id,
+                    'question_number' => $qn,
+                    'selected_option' => $opt,
+                    'selected_answer' => $selectedAnswer,
+                    'marks_awarded' => $marksAwarded,
+                ];
+            }
+
+            $submission = QuizSubmission::create([
+                'quiz_id' => $quiz->id,
+                'student_id' => $student->id,
+                'answers' => $storedAnswers,
+                'obtained_marks' => $obtained,
+                'total_marks' => $total,
+                'submitted_at' => now(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Quiz submitted successfully.',
+                'data' => [
+                    'submission_id' => $submission->id,
+                    'quiz_id' => $quiz->id,
+                    'obtained_marks' => $obtained,
+                    'total_marks' => $total,
+                    'submitted_at' => $submission->submitted_at ? $submission->submitted_at->format('Y-m-d H:i:s') : null,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+                'token' => $request->user()?->currentAccessToken()?->token ?? null,
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while submitting quiz: ' . $e->getMessage(),
+                'token' => $request->user()?->currentAccessToken()?->token ?? null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get submitted result for a quiz (if submitted).
+     *
+     * GET /api/student/quizzes/{id}/result
+     */
+    public function result(Request $request, int $id): JsonResponse
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user || !($user instanceof Student)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid user type. Student authentication required.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $student = $user;
+
+            $submission = QuizSubmission::where('quiz_id', $id)
+                ->where('student_id', $student->id)
+                ->first();
+
+            if (!$submission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No submission found for this quiz.',
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Quiz result retrieved successfully.',
+                'data' => [
+                    'submission_id' => $submission->id,
+                    'quiz_id' => (int) $submission->quiz_id,
+                    'obtained_marks' => (int) $submission->obtained_marks,
+                    'total_marks' => (int) $submission->total_marks,
+                    'answers' => $submission->answers ?? [],
+                    'submitted_at' => $submission->submitted_at ? $submission->submitted_at->format('Y-m-d H:i:s') : null,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving quiz result: ' . $e->getMessage(),
+                'token' => $request->user()?->currentAccessToken()?->token ?? null,
             ], 500);
         }
     }

@@ -80,9 +80,41 @@ class StaffManagementController extends Controller
      */
     public function print(Request $request): View
     {
-        $staff = Staff::query()
-            ->orderBy('name')
-            ->get();
+        $query = Staff::query();
+
+        // Search functionality (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('whatsapp', 'like', "%{$search}%")
+                        ->orWhere('emp_id', 'like', "%{$search}%")
+                        ->orWhere('cnic', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(designation) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        // Status filter (match index behavior)
+        if ($request->filled('status_filter')) {
+            $statusFilter = $request->get('status_filter');
+            if ($statusFilter === 'active') {
+                $query->where(function ($q) {
+                    $q->where('status', 'Active')
+                        ->orWhereNull('status')
+                        ->orWhere('status', '');
+                });
+            } elseif ($statusFilter === 'inactive') {
+                $query->where('status', 'Inactive');
+            }
+        }
+
+        $staff = $query->orderBy('name')->get();
 
         return view('staff.management-print', [
             'staff' => $staff,

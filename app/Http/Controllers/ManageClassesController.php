@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ClassModel;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\Subject;
@@ -82,6 +83,53 @@ class ManageClassesController extends Controller
         }
         
         return view('classes.manage-classes', compact('classes', 'campuses'));
+    }
+
+    /**
+     * Print classes list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = ClassModel::query();
+
+        // Search functionality (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(class_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('numeric_no', 'like', "%{$search}%");
+                });
+            }
+        }
+
+        $classes = $query->orderBy('numeric_no')->get();
+
+        // Load sections for each class (same matching logic as index)
+        foreach ($classes as $class) {
+            $sectionsQuery = Section::whereRaw('LOWER(TRIM(COALESCE(class, ""))) = ?', [strtolower(trim($class->class_name))])
+                ->whereNotNull('name')
+                ->where('name', '!=', '');
+
+            if (!empty($class->campus)) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower(trim($class->campus))]);
+            }
+
+            $class->sections = $sectionsQuery
+                ->orderBy('name', 'asc')
+                ->pluck('name')
+                ->toArray();
+        }
+
+        $settings = GeneralSetting::getSettings();
+
+        return view('classes.manage-classes-print', [
+            'classes' => $classes,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

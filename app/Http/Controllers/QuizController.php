@@ -8,6 +8,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -152,6 +153,36 @@ class QuizController extends Controller
                 return redirect()->route('quiz.manage')
                     ->with('error', 'Invalid export format!');
         }
+    }
+
+    /**
+     * Print quizzes (dedicated print-only page).
+     */
+    public function print(Request $request): View
+    {
+        $query = Quiz::query();
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(quiz_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(for_class) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(section) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $quizzes = $query->orderBy('start_date_time', 'desc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('quiz.manage-print', [
+            'quizzes' => $quizzes,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

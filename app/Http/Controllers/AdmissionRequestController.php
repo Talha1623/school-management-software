@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AdmissionInquiry;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -127,6 +128,34 @@ class AdmissionRequestController extends Controller
                 return redirect()->route('admission.request')
                     ->with('error', 'Invalid export format!');
         }
+    }
+
+    /**
+     * Print admission requests list (same style as Stock print pages)
+     */
+    public function print(Request $request): View
+    {
+        $query = AdmissionInquiry::query();
+
+        // Search functionality - case insensitive and trim whitespace (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(parent) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(full_address) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(gender) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $requests = $query->latest()->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('admission.request-print', compact('requests', 'settings'));
     }
 
     /**

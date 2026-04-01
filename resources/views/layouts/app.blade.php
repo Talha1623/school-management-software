@@ -55,6 +55,28 @@
     @include('partials.scripts')
 
     @stack('scripts')
+
+    <style>
+        /* Fix: Laravel default (Tailwind) pagination SVG arrows become huge when Tailwind CSS isn't loaded */
+        .pagination .page-link,
+        nav[aria-label="Pagination Navigation"] a,
+        nav[aria-label="Pagination Navigation"] span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            line-height: 1;
+        }
+        .pagination .page-link svg,
+        nav[aria-label="Pagination Navigation"] svg {
+            width: 16px !important;
+            height: 16px !important;
+            max-width: 16px !important;
+            max-height: 16px !important;
+            display: inline-block !important;
+            flex: 0 0 auto;
+        }
+    </style>
     
     <!-- Dynamic Logo and System Name Script -->
     <script>
@@ -106,6 +128,59 @@
     <script>
     (function() {
         'use strict';
+
+        // Top navigation progress bar (for AJAX navigation)
+        const TOP_BAR_ID = 'ajaxTopProgressBar';
+        function ensureTopProgressBar() {
+            let bar = document.getElementById(TOP_BAR_ID);
+            if (bar) return bar;
+
+            bar = document.createElement('div');
+            bar.id = TOP_BAR_ID;
+            bar.style.position = 'fixed';
+            bar.style.top = '0';
+            bar.style.left = '0';
+            bar.style.height = '3px';
+            bar.style.width = '0%';
+            bar.style.opacity = '0';
+            bar.style.zIndex = '999999';
+            bar.style.background = '#277507';
+            bar.style.boxShadow = '0 0 12px rgba(39, 117, 7, .35)';
+            bar.style.transition = 'width 350ms ease, opacity 250ms ease';
+            document.body.appendChild(bar);
+            return bar;
+        }
+
+        let topBarTimer = null;
+        function startTopProgress() {
+            const bar = ensureTopProgressBar();
+            if (topBarTimer) clearInterval(topBarTimer);
+            bar.style.opacity = '1';
+            bar.style.width = '10%';
+
+            // Simulate progress while request is in-flight (never reaches 100% until done)
+            let current = 10;
+            topBarTimer = setInterval(function() {
+                current = Math.min(current + Math.random() * 12, 85);
+                bar.style.width = current.toFixed(0) + '%';
+            }, 250);
+        }
+
+        function finishTopProgress() {
+            const bar = ensureTopProgressBar();
+            if (topBarTimer) {
+                clearInterval(topBarTimer);
+                topBarTimer = null;
+            }
+            bar.style.width = '100%';
+            // Hide after it completes
+            setTimeout(function() {
+                bar.style.opacity = '0';
+                setTimeout(function() {
+                    bar.style.width = '0%';
+                }, 250);
+            }, 250);
+        }
         
         // Function to update active menu items based on current URL
         function updateActiveMenuItems(currentUrl) {
@@ -231,6 +306,9 @@
             if (e) {
                 e.preventDefault();
             }
+
+            // Show top progress line so user feels navigation happened
+            startTopProgress();
             
             // Don't show preloader for AJAX navigation (only show on initial page load/login)
             // Ensure preloader is hidden
@@ -287,6 +365,9 @@
                     } catch (e) {
                         window.scrollTo(0, 0);
                     }
+
+                    // Complete the top progress line
+                    finishTopProgress();
                     
                     // Re-initialize any scripts that need to run on page load
                     // Trigger custom event for page change
@@ -304,12 +385,14 @@
                         oldScript.parentNode.removeChild(oldScript);
                     });
                 } else {
+                    finishTopProgress();
                     // Fallback to normal navigation if content not found
                     window.location.href = href;
                 }
             })
             .catch(error => {
                 console.error('Navigation error:', error);
+                finishTopProgress();
                 // Fallback to normal navigation on error
                 window.location.href = href;
             });
@@ -353,6 +436,7 @@
         // Handle browser back/forward buttons
         window.addEventListener('popstate', function(e) {
             if (e.state && e.state.path) {
+                startTopProgress();
                 handleAjaxNavigation(e.state.path, null);
                 try {
                     window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });

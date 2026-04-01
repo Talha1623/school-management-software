@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Staff;
 use App\Models\Salary;
+use App\Models\StaffAttendance;
+use App\Models\SalarySetting;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
@@ -202,6 +204,81 @@ class StaffSalaryController extends Controller
                 $monthlyData[] = $monthData;
             }
 
+            // Build yearly flow summary by salary type using attendance records (web-like flow detail)
+            $salaryTypeRaw = strtolower(trim((string) ($targetStaff->salary_type ?? '')));
+            $isPerLecture = $salaryTypeRaw === 'lecture';
+            $isPerHour = $salaryTypeRaw === 'per hour';
+            $normalizedSalaryType = $isPerLecture ? 'lecture' : ($isPerHour ? 'per hour' : 'full time');
+            $rate = (float) ($targetStaff->salary ?? 0);
+
+            $yearAttendance = StaffAttendance::where('staff_id', $targetStaffId)
+                ->whereYear('attendance_date', $year)
+                ->get();
+
+            $attendancePresent = 0;
+            $attendanceAbsent = 0;
+            $attendanceLeave = 0;
+            $totalLectures = 0;
+            $totalMinutes = 0;
+
+            foreach ($yearAttendance as $record) {
+                $statusNormalized = strtolower(trim((string) ($record->status ?? '')));
+                $isPresentLike = in_array($statusNormalized, ['present', 'half day'], true);
+
+                if ($isPresentLike) {
+                    $attendancePresent++;
+
+                    if ($isPerLecture) {
+                        $conducted = (int) ($record->conducted_lectures ?? 0);
+                        $totalLectures += $conducted > 0 ? $conducted : 1;
+                    }
+
+                    if ($isPerHour && !empty($record->start_time) && !empty($record->end_time)) {
+                        try {
+                            $dateStr = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                            $startTime = Carbon::parse($dateStr . ' ' . $record->start_time);
+                            $endTime = Carbon::parse($dateStr . ' ' . $record->end_time);
+                            if ($endTime->greaterThan($startTime)) {
+                                $totalMinutes += $startTime->diffInMinutes($endTime);
+                            }
+                        } catch (\Exception $e) {
+                            // Ignore invalid times
+                        }
+                    }
+                } elseif ($statusNormalized === 'absent') {
+                    $attendanceAbsent++;
+                } elseif ($statusNormalized === 'leave') {
+                    $attendanceLeave++;
+                }
+            }
+
+            $typeSummary = [
+                'salary_type' => $normalizedSalaryType,
+                'rate' => $rate,
+                'full_time' => [
+                    'active' => $normalizedSalaryType === 'full time',
+                    'present_count' => $attendancePresent,
+                    'absent_count' => $attendanceAbsent,
+                    'leave_count' => $attendanceLeave,
+                    'salary_generated' => round((float) $yearlyTotals['salary_generated'], 2),
+                ],
+                'per_hour' => [
+                    'active' => $normalizedSalaryType === 'per hour',
+                    'total_minutes' => $totalMinutes,
+                    'total_hours' => round($totalMinutes / 60, 2),
+                    'salary_generated' => $normalizedSalaryType === 'per hour'
+                        ? round($rate * ($totalMinutes / 60), 2)
+                        : 0,
+                ],
+                'per_lecture' => [
+                    'active' => $normalizedSalaryType === 'lecture',
+                    'lecture_count' => $totalLectures,
+                    'salary_generated' => $normalizedSalaryType === 'lecture'
+                        ? round($rate * $totalLectures, 2)
+                        : 0,
+                ],
+            ];
+
             // Staff information
             $staffData = [
                 'id' => $targetStaff->id,
@@ -219,6 +296,7 @@ class StaffSalaryController extends Controller
                 'data' => [
                     'year' => $year,
                     'staff' => $staffData,
+                    'salary_type_summary' => $typeSummary,
                     'monthly_data' => $monthlyData,
                     'yearly_totals' => [
                         'total_present' => $yearlyTotals['present'],
@@ -240,6 +318,330 @@ class StaffSalaryController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving salary report: ' . $e->getMessage(),
+                'data' => null,
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Staff salary calculation flow (per hour / per lecture / full time)
+     * Uses StaffAttendance for the given month/year (does not rely on Salary table).
+     *
+     * Query params:
+     * - year (e.g., 2026)
+     * - month (1-12)
+     */
+    public function salaryCalculation(Request $request): JsonResponse
+    {
+        try {
+            $staff = $request->user();
+
+            if (!$staff) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'data' => null,
+                    'token' => null,
+                ], 404);
+            }
+
+            if (!$request->filled('year')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Year is required (e.g., 2026)',
+                    'data' => null,
+                    'token' => null,
+                ], 400);
+            }
+
+            if (!$request->filled('month')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Month is required (1-12)',
+                    'data' => null,
+                    'token' => null,
+                ], 400);
+            }
+
+            $year = (int) $request->year;
+            $month = (int) $request->month;
+
+            if ($year < 2000 || $year > 2100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid year. Year must be between 2000 and 2100',
+                    'data' => null,
+                    'token' => null,
+                ], 400);
+            }
+
+            if ($month < 1 || $month > 12) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid month. Month must be between 1 and 12',
+                    'data' => null,
+                    'token' => null,
+                ], 400);
+            }
+
+            $settings = SalarySetting::getSettings();
+            $lateArrivalTime = $settings->late_arrival_time ?? '09:00:00';
+            $earlyExitTime = $settings->early_exit_time ?? null;
+            $freeAbsentsSetting = (int) ($settings->free_absents ?? 0);
+            $leaveDeduction = strtolower(trim($settings->leave_deduction ?? 'no')) === 'yes';
+
+            $records = StaffAttendance::where('staff_id', $staff->id)
+                ->whereYear('attendance_date', $year)
+                ->whereMonth('attendance_date', $month)
+                ->get();
+
+            $salaryType = strtolower(trim((string) ($staff->salary_type ?? '')));
+            $isPerLecture = $salaryType === 'lecture';
+            $isPerHour = $salaryType === 'per hour';
+            $isFullTime = empty($salaryType) || $salaryType === 'full time';
+
+            $present = 0;
+            $absent = 0;
+            $leave = 0;
+            $late = 0;
+            $earlyExit = 0;
+            $holidayCount = 0;
+            $sundayCount = 0;
+            $totalLectures = 0;
+            $totalMinutes = 0;
+
+            $lecturesFromAttendance = 0;
+            $presentDaysForLectures = 0;
+
+            // For per-hour staff: leave should be ignored, and late/early rules are skipped
+            if ($isPerHour) {
+                $leave = 0;
+            }
+
+            foreach ($records as $record) {
+                $status = (string) ($record->status ?? '');
+                $statusNormalized = strtolower(trim($status));
+
+                // Treat Half Day as Present for salary logic
+                $isPresentLike = in_array($statusNormalized, ['present', 'half day'], true);
+
+                if ($isPresentLike) {
+                    $present++;
+
+                    if ($isPerLecture) {
+                        $conducted = (int) ($record->conducted_lectures ?? 0);
+                        if ($conducted > 0) {
+                            $lecturesFromAttendance += $conducted;
+                        }
+                        $presentDaysForLectures++;
+                    }
+
+                    if ($isPerHour) {
+                        if (!empty($record->start_time) && !empty($record->end_time)) {
+                            try {
+                                $dateStr = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                                $startTime = Carbon::parse($dateStr . ' ' . $record->start_time);
+                                $endTime = Carbon::parse($dateStr . ' ' . $record->end_time);
+                                if ($endTime->greaterThan($startTime)) {
+                                    $totalMinutes += $startTime->diffInMinutes($endTime);
+                                }
+                            } catch (\Exception $e) {
+                                // ignore invalid times
+                            }
+                        }
+                    }
+                } elseif ($statusNormalized === 'absent') {
+                    $absent++;
+                } elseif ($statusNormalized === 'leave') {
+                    if (!$isPerHour) {
+                        $leave++;
+                    }
+                } elseif ($statusNormalized === 'holiday') {
+                    $holidayCount++;
+                } elseif ($statusNormalized === 'sunday') {
+                    $sundayCount++;
+                }
+
+                if (!$isPerHour) {
+                    // Late arrival
+                    $lateFlag = false;
+                    if (!empty($record->start_time)) {
+                        try {
+                            $dateStr = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                            $startTime = Carbon::parse($dateStr . ' ' . $record->start_time);
+                            $standardTime = Carbon::parse($dateStr . ' ' . $lateArrivalTime);
+                            if ($startTime->greaterThan($standardTime)) {
+                                $lateFlag = true;
+                            }
+                        } catch (\Exception $e) {
+                            // ignore invalid times
+                        }
+                    }
+                    if (!$lateFlag && !empty($record->remarks) && stripos((string) $record->remarks, 'Late Arrival') !== false) {
+                        $lateFlag = true;
+                    }
+                    if ($lateFlag) {
+                        $late++;
+                    }
+
+                    // Early exit
+                    $earlyExitFlag = false;
+                    if (!empty($record->end_time) && !empty($earlyExitTime)) {
+                        try {
+                            $dateStr = $record->attendance_date ? $record->attendance_date->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+                            $endTime = Carbon::parse($dateStr . ' ' . $record->end_time);
+                            $standardExitTime = Carbon::parse($dateStr . ' ' . $earlyExitTime);
+                            if ($endTime->lessThan($standardExitTime)) {
+                                $earlyExitFlag = true;
+                            }
+                        } catch (\Exception $e) {
+                            // ignore invalid times
+                        }
+                    }
+                    if (!$earlyExitFlag && !empty($record->remarks) && stripos((string) $record->remarks, 'Early Exit') !== false) {
+                        $earlyExitFlag = true;
+                    }
+                    if ($earlyExitFlag) {
+                        $earlyExit++;
+                    }
+                }
+            }
+
+            // Full-time: count Holiday + Sunday as present
+            if ($isFullTime) {
+                $present += $holidayCount + $sundayCount;
+            }
+
+            // Per lecture: if conducted_lectures isn't available, use present days as lectures
+            if ($isPerLecture) {
+                if ($lecturesFromAttendance > 0) {
+                    $totalLectures = $lecturesFromAttendance;
+                } else {
+                    $totalLectures = $presentDaysForLectures;
+                }
+            }
+
+            $rate = (float) ($staff->salary ?? 0);
+            $salaryGenerated = 0.0;
+            $salaryBreakdown = [];
+
+            if ($isPerHour) {
+                $totalHours = $totalMinutes / 60;
+                $salaryGenerated = $rate * $totalHours;
+                $salaryBreakdown = [
+                    'salary_type' => 'per hour',
+                    'rate' => $rate,
+                    'total_minutes' => $totalMinutes,
+                    'total_hours' => round($totalHours, 2),
+                ];
+            } elseif ($isPerLecture) {
+                $salaryGenerated = $totalLectures * $rate;
+                $salaryBreakdown = [
+                    'salary_type' => 'lecture',
+                    'rate' => $rate,
+                    'total_lectures' => $totalLectures,
+                ];
+            } else {
+                $staffFreeAbsents = $staff->free_absent ?? null;
+                $freeAbsents = $staffFreeAbsents !== null && (int) $staffFreeAbsents >= 0 ? (int) $staffFreeAbsents : $freeAbsentsSetting;
+
+                $totalAbsents = $absent + ($leaveDeduction ? $leave : 0);
+                $deductibleAbsents = max(0, $totalAbsents - $freeAbsents);
+                $freeAbsentsUsed = min($freeAbsents, $absent);
+
+                $daysInMonth = 30;
+                try {
+                    $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
+                } catch (\Exception $e) {
+                    $daysInMonth = 30;
+                }
+
+                $dailyRate = $daysInMonth > 0 ? ($rate / $daysInMonth) : 0;
+                $baseSalary = $dailyRate * ($present + $freeAbsentsUsed + $leave);
+
+                $staffLateFees = (float) ($staff->late_fees ?? null);
+                $lateFeePerLate = $staffLateFees !== null && $staffLateFees >= 0 ? $staffLateFees : 500;
+                $lateDeduction = $lateFeePerLate * $late;
+
+                $staffEarlyExitFees = (float) ($staff->early_exit_fees ?? null);
+                $earlyExitFeePerExit = $staffEarlyExitFees !== null && $staffEarlyExitFees >= 0 ? $staffEarlyExitFees : 1000;
+                $earlyExitDeduction = $earlyExitFeePerExit * $earlyExit;
+
+                $staffAbsentFees = (float) ($staff->absent_fees ?? null);
+                if ($staffAbsentFees !== null && $staffAbsentFees >= 0) {
+                    $absentDeduction = $staffAbsentFees * $deductibleAbsents;
+                } else {
+                    $absentDeduction = $dailyRate * $deductibleAbsents;
+                }
+
+                $salaryGenerated = round(max(0, $baseSalary - $absentDeduction - $lateDeduction - $earlyExitDeduction), 2);
+
+                $salaryBreakdown = [
+                    'salary_type' => 'full time',
+                    'rate' => $rate,
+                    'days_in_month' => $daysInMonth,
+                    'daily_rate' => round($dailyRate, 2),
+                    'present' => $present,
+                    'absent' => $absent,
+                    'leave' => $leave,
+                    'free_absents' => $freeAbsents,
+                    'free_absents_used' => $freeAbsentsUsed,
+                    'leave_deduction_enabled' => $leaveDeduction,
+                    'deductible_absents' => $deductibleAbsents,
+                    'late_count' => $late,
+                    'early_exit_count' => $earlyExit,
+                    'late_fee_per_late' => $lateFeePerLate,
+                    'early_exit_fee_per_exit' => $earlyExitFeePerExit,
+                    'absent_fees' => $staffAbsentFees,
+                    'base_salary' => round($baseSalary, 2),
+                    'late_deduction' => round($lateDeduction, 2),
+                    'early_exit_deduction' => round($earlyExitDeduction, 2),
+                    'absent_deduction' => round($absentDeduction, 2),
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Staff salary calculation retrieved successfully',
+                'data' => [
+                    'year' => $year,
+                    'month' => $month,
+                    'staff' => [
+                        'id' => $staff->id,
+                        'name' => $staff->name,
+                        'salary_type' => $staff->salary_type,
+                        'salary_rate' => $staff->salary,
+                        'campus' => $staff->campus,
+                        'designation' => $staff->designation,
+                    ],
+                    'attendance_summary' => [
+                        'present' => $present,
+                        'absent' => $absent,
+                        'leave' => $leave,
+                        'late' => $late,
+                        'early_exit' => $earlyExit,
+                        'total_lectures' => $totalLectures,
+                        'total_minutes' => $totalMinutes,
+                        'total_hours' => $isPerHour ? round($totalMinutes / 60, 2) : null,
+                    ],
+                    'salary_calculation' => [
+                        'salary_generated' => round((float) $salaryGenerated, 2),
+                        'breakdown' => $salaryBreakdown,
+                    ],
+                    'settings' => [
+                        'late_arrival_time' => $lateArrivalTime,
+                        'early_exit_time' => $earlyExitTime,
+                        'free_absents_default' => $freeAbsentsSetting,
+                        'leave_deduction' => $leaveDeduction ? 'yes' : 'no',
+                    ],
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while calculating salary: ' . $e->getMessage(),
                 'data' => null,
                 'token' => null,
             ], 500);

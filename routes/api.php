@@ -142,6 +142,7 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         // Fee Voucher Routes
         Route::get('/fee-vouchers', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'index'])->name('fee-vouchers.index');
         Route::get('/fee-vouchers/{student_id}', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'show'])->name('fee-vouchers.show');
+        Route::get('/fee-vouchers/{student_id}/pdf', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'pdf'])->name('fee-vouchers.pdf');
     });
 });
 
@@ -194,9 +195,11 @@ Route::prefix('student')->name('api.student.')->group(function () {
 
         // Quiz Routes (Student side)
         Route::match(['GET', 'POST'], '/quizzes', [App\Http\Controllers\Api\StudentQuizController::class, 'index'])->name('quizzes.index');
-        Route::get('/quizzes/{id}', [App\Http\Controllers\Api\StudentQuizController::class, 'show'])->name('quizzes.show');
-        Route::get('/quizzes/{id}/questions', [App\Http\Controllers\Api\StudentQuizController::class, 'questions'])->name('quizzes.questions');
-        Route::get('/quizzes/{id}/marks', [App\Http\Controllers\Api\StudentQuizController::class, 'marks'])->name('quizzes.marks');
+        Route::get('/quizzes/{id}', [App\Http\Controllers\Api\StudentQuizController::class, 'show'])->whereNumber('id')->name('quizzes.show');
+        Route::get('/quizzes/{id}/questions', [App\Http\Controllers\Api\StudentQuizController::class, 'questions'])->whereNumber('id')->name('quizzes.questions');
+        Route::get('/quizzes/{id}/marks', [App\Http\Controllers\Api\StudentQuizController::class, 'marks'])->whereNumber('id')->name('quizzes.marks');
+        Route::post('/quizzes/{id}/submit', [App\Http\Controllers\Api\StudentQuizController::class, 'submit'])->whereNumber('id')->name('quizzes.submit');
+        Route::get('/quizzes/{id}/result', [App\Http\Controllers\Api\StudentQuizController::class, 'result'])->whereNumber('id')->name('quizzes.result');
         
         // Timetable Routes
         Route::get('/timetable/{student_id}/{date}', [App\Http\Controllers\Api\StudentTimetableController::class, 'getTimetable'])->name('timetable');
@@ -221,6 +224,10 @@ Route::prefix('student')->name('api.student.')->group(function () {
         
         // Test List Routes
         Route::get('/tests', [App\Http\Controllers\Api\StudentTestListController::class, 'getTests'])->name('tests');
+
+        // In-app notifications (student-specific)
+        Route::get('/notifications', [App\Http\Controllers\Api\StudentNotificationController::class, 'index'])->name('notifications.index');
+        Route::post('/notifications/{id}/read', [App\Http\Controllers\Api\StudentNotificationController::class, 'markRead'])->name('notifications.read');
     });
 });
 
@@ -241,7 +248,11 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         // Exam List Routes
         Route::match(['GET', 'POST'], '/exam/list', [App\Http\Controllers\Api\TeacherController::class, 'examList'])->name('exam.list');
         Route::match(['GET', 'POST'], '/exam/students', [App\Http\Controllers\Api\TeacherController::class, 'examStudents'])->name('exam.students');
+        Route::get('/exam/students/by-subject', [App\Http\Controllers\Api\TeacherController::class, 'examStudentsBySubject'])->name('exam.students.by.subject');
+        Route::get('/exam/subjects', [App\Http\Controllers\Api\TeacherController::class, 'examSubjects'])->name('exam.subjects');
+        Route::get('/exam/marks/list', [App\Http\Controllers\Api\TeacherController::class, 'examMarksList'])->name('exam.marks.list');
         Route::post('/exam/marks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveExamMarks'])->name('exam.marks.save');
+        Route::post('/exam/remarks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveExamRemarks'])->name('exam.remarks.save');
         
         // Student List Routes
         Route::match(['GET', 'POST'], '/students', [App\Http\Controllers\Api\TeacherStudentController::class, 'index'])->name('students.index');
@@ -261,6 +272,10 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         // Chat with Super Admin/Admin (Teacher side)
         Route::get('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'index'])->name('chat.messages');
         Route::post('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'store'])->name('chat.messages.store');
+
+        // In-app notifications (teacher/staff)
+        Route::get('/notifications', [App\Http\Controllers\Api\TeacherNotificationController::class, 'index'])->name('notifications.index');
+        Route::post('/notifications/{id}/read', [App\Http\Controllers\Api\TeacherNotificationController::class, 'markRead'])->name('notifications.read');
         
         // Attendance Routes
         Route::post('/attendance/mark', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'mark'])->name('attendance.mark');
@@ -291,6 +306,9 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         
         // Staff Salary Report (for staff/teachers to view their own salary)
         Route::get('/staff-salary/report', [App\Http\Controllers\Api\StaffSalaryController::class, 'salaryReport'])->name('staff-salary.report');
+
+        // Staff Salary Calculation Flow (per hour / lecture / full time)
+        Route::get('/staff-salary/calculate', [App\Http\Controllers\Api\StaffSalaryController::class, 'salaryCalculation'])->name('staff-salary.calculate');
         
         // Academic Calendar Events Routes
         Route::post('/events/create', [App\Http\Controllers\Api\TeacherEventController::class, 'create'])->name('events.create');
@@ -301,6 +319,9 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::put('/events/{id}', [App\Http\Controllers\Api\TeacherEventController::class, 'update'])->name('events.update');
         Route::delete('/events/{id}', [App\Http\Controllers\Api\TeacherEventController::class, 'delete'])->name('events.delete');
         
+        // School timings (Teacher)
+        Route::get('/school/timings', [App\Http\Controllers\Api\TeacherSchoolController::class, 'timings'])->name('school.timings');
+
         // Homework Diary Routes
         Route::get('/homework-diary/filter-options', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getFilterOptions'])->name('homework-diary.filter-options');
         Route::get('/homework-diary/sections', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getSections'])->name('homework-diary.sections');
@@ -324,6 +345,14 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/noticeboard/filter-options', [App\Http\Controllers\Api\TeacherNoticeboardController::class, 'getFilterOptions'])->name('noticeboard.filter-options');
         
         // Test Management - Marks Entry Routes
+        // Quick API: class + section (and optional campus) => all test subjects
+        Route::get('/test/subjects', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntrySubjects'])->name('test.subjects');
+        // Quick API: class + section + subject (and optional campus) => all tests
+        Route::get('/test/tests', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntryTests'])->name('test.tests');
+        // Quick API: class + section + subject + test => all students
+        Route::get('/test/students', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntryStudents'])->name('test.students');
+        // Quick API: save test remarks (single student_id+remark or bulk remarks map)
+        Route::post('/test/remarks/save', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'saveRemarksEntry'])->name('test.remarks.save');
         Route::get('/test-management/marks-entry/filter-options', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntryFilterOptions'])->name('test-management.marks-entry.filter-options');
         Route::get('/test-management/marks-entry/sections', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntrySections'])->name('test-management.marks-entry.sections');
         Route::get('/test-management/marks-entry/tests', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntryTests'])->name('test-management.marks-entry.tests');
@@ -356,6 +385,10 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/timetable/list/{day}/{month}/{year}', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getTimetable'])->name('timetable.list-by-date');
         Route::match(['GET', 'POST'], '/timetable/list', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getTimetable'])->name('timetable.list');
         Route::match(['GET', 'POST'], '/timetable/by-class', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getTimetableByClass'])->name('timetable.by-class');
+
+        // Quiz Upload (Teacher)
+        Route::get('/quizzes/upload/template', [App\Http\Controllers\Api\TeacherQuizUploadController::class, 'template'])->name('quizzes.upload.template');
+        Route::post('/quizzes/upload', [App\Http\Controllers\Api\TeacherQuizUploadController::class, 'upload'])->name('quizzes.upload');
     });
 });
 

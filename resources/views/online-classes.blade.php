@@ -827,7 +827,14 @@
     }
 
     function printTable() {
-        window.print();
+        const searchParam = document.getElementById('searchInput')?.value?.trim();
+        let url = '{{ route("online-classes.print") }}?auto_print=1';
+        if (searchParam) url += '&search=' + encodeURIComponent(searchParam);
+
+        const w = window.open(url, '_blank');
+        if (!w) {
+            window.location.href = url;
+        }
     }
 </script>
 @endsection

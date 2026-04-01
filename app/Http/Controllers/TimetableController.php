@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
 use App\Models\Subject;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -582,6 +583,79 @@ class TimetableController extends Controller
                 return redirect()->route('timetable.manage')
                     ->with('error', 'Invalid export format!');
         }
+    }
+
+    /**
+     * Print timetables (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = Timetable::query();
+
+        if ($request->filled('filter_campus')) {
+            $query->where('campus', $request->filter_campus);
+        }
+
+        if ($request->filled('filter_class')) {
+            $query->where('class', $request->filter_class);
+        }
+
+        if ($request->filled('filter_section')) {
+            $query->where('section', $request->filter_section);
+        }
+
+        if ($request->filled('filter_day')) {
+            $query->where('day', $request->filter_day);
+        }
+
+        $timetables = $query
+            ->orderByRaw("
+                CASE day
+                    WHEN 'Monday' THEN 1
+                    WHEN 'Tuesday' THEN 2
+                    WHEN 'Wednesday' THEN 3
+                    WHEN 'Thursday' THEN 4
+                    WHEN 'Friday' THEN 5
+                    WHEN 'Saturday' THEN 6
+                    WHEN 'Sunday' THEN 7
+                    ELSE 8
+                END
+            ")
+            ->orderBy('starting_time')
+            ->get();
+
+        // Load assigned teacher (same behavior as manage list)
+        $timetables->transform(function ($timetable) {
+            if (strpos((string) $timetable->subject, '[') === 0) {
+                $timetable->assigned_teacher = null;
+                return $timetable;
+            }
+
+            $subjectRecord = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim((string) $timetable->subject))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $timetable->class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $timetable->section))])
+                ->whereNotNull('teacher')
+                ->first();
+
+            if ($subjectRecord && $subjectRecord->teacher) {
+                $timetable->assigned_teacher = $subjectRecord->teacher;
+            } else {
+                $anyTeacher = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim((string) $timetable->subject))])
+                    ->whereNotNull('teacher')
+                    ->first();
+                $timetable->assigned_teacher = $anyTeacher ? $anyTeacher->teacher : null;
+            }
+
+            return $timetable;
+        });
+
+        $settings = GeneralSetting::getSettings();
+
+        return view('timetable.manage-print', [
+            'timetables' => $timetables,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

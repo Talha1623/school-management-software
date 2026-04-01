@@ -755,7 +755,16 @@ function clearSearch() {
 }
 
 function printTable() {
-    window.print();
+    const searchValue = document.getElementById('searchInput')?.value?.trim() || '';
+    let url = '{{ route("quiz.manage.print") }}?auto_print=1';
+    if (searchValue) {
+        url += '&search=' + encodeURIComponent(searchValue);
+    }
+
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
+        window.location.href = url;
+    }
 }
 
 // Dynamic section loading based on class

@@ -321,6 +321,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::get('/generate-transport-fee/get-sections-by-class', [App\Http\Controllers\AccountantController::class, 'getTransportFeeSectionsByClass'])->name('transport-fee.get-sections-by-class');
         Route::get('/generate-transport-fee/get-students-with-fee-status', [App\Http\Controllers\TransportFeeController::class, 'getStudentsWithFeeStatus'])->name('transport-fee.get-students-with-fee-status');
         Route::get('/fee-type', [App\Http\Controllers\AccountantController::class, 'feeType'])->name('fee-type');
+        Route::get('/fee-type/print', [App\Http\Controllers\AccountantController::class, 'feeTypePrint'])->name('fee-type.print');
         Route::post('/fee-type', [App\Http\Controllers\FeeTypeController::class, 'store'])->name('fee-type.store');
         Route::get('/fee-type/export/{format}', [App\Http\Controllers\FeeTypeController::class, 'export'])->name('fee-type.export');
         Route::get('/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'show'])->name('fee-type.show');
@@ -365,6 +366,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::put('/expense-categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'update'])->name('expense-categories.update');
         Route::delete('/expense-categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'destroy'])->name('expense-categories.destroy');
         Route::get('/expense-categories/export/{format}', [App\Http\Controllers\ExpenseCategoryController::class, 'export'])->name('expense-categories.export');
+        Route::get('/expense-categories/print', [App\Http\Controllers\ExpenseCategoryController::class, 'print'])->name('expense-categories.print');
         
         Route::get('/expense-management', [App\Http\Controllers\AccountantController::class, 'expenseManagement'])->name('expense-management');
         
@@ -451,6 +453,7 @@ Route::get('/admission/request', [App\Http\Controllers\AdmissionRequestControlle
 Route::post('/admission/request', [App\Http\Controllers\AdmissionRequestController::class, 'store'])->name('admission.request.store');
 Route::put('/admission/request/{admission_request}', [App\Http\Controllers\AdmissionRequestController::class, 'update'])->name('admission.request.update');
 Route::delete('/admission/request/{admission_request}', [App\Http\Controllers\AdmissionRequestController::class, 'destroy'])->name('admission.request.destroy');
+Route::get('/admission/request/print', [App\Http\Controllers\AdmissionRequestController::class, 'print'])->name('admission.request.print');
 Route::get('/admission/request/export/{format}', [App\Http\Controllers\AdmissionRequestController::class, 'export'])->name('admission.request.export');
 
 Route::get('/admission/report', [App\Http\Controllers\AdmissionController::class, 'report'])->name('admission.report');
@@ -466,6 +469,7 @@ Route::post('/admission/inquiry', [App\Http\Controllers\AdmissionInquiryControll
 Route::put('/admission/inquiry/{inquiry}', [App\Http\Controllers\AdmissionInquiryController::class, 'update'])->name('admission.inquiry.update');
 Route::delete('/admission/inquiry/{inquiry}', [App\Http\Controllers\AdmissionInquiryController::class, 'destroy'])->name('admission.inquiry.destroy');
 Route::get('/admission/inquiry/export/{format}', [App\Http\Controllers\AdmissionInquiryController::class, 'export'])->name('admission.inquiry.export');
+Route::get('/admission/inquiry/print', [App\Http\Controllers\AdmissionInquiryController::class, 'print'])->name('admission.inquiry.print');
 Route::get('/admission/inquiry/{inquiry}/data', [App\Http\Controllers\AdmissionInquiryController::class, 'getData'])->name('admission.inquiry.data');
 Route::post('/admission/inquiry/admit', [App\Http\Controllers\AdmissionInquiryController::class, 'admit'])->name('admission.inquiry.admit');
 
@@ -488,7 +492,10 @@ Route::get('/student/promotion/get-classes-by-campus', [App\Http\Controllers\Stu
 // Student Birthday Routes (must be before /student/{student} route)
 Route::get('/student/birthday', [App\Http\Controllers\StudentBirthdayController::class, 'index'])->name('student.birthday');
 Route::get('/student/birthday/export/{format}', [App\Http\Controllers\StudentBirthdayController::class, 'export'])->name('student.birthday.export');
+Route::get('/student/birthday/print', [App\Http\Controllers\StudentBirthdayController::class, 'print'])->name('student.birthday.print');
 Route::get('/student/birthday/{student}/card', [App\Http\Controllers\StudentBirthdayController::class, 'printBirthdayCard'])->name('student.birthday.card.print');
+Route::post('/student/birthday/{student}/wish', [App\Http\Controllers\StudentBirthdayController::class, 'wish'])->name('student.birthday.wish');
+Route::post('/student/birthday/wish-all', [App\Http\Controllers\StudentBirthdayController::class, 'wishAll'])->name('student.birthday.wish-all');
 
 // Student Transfer Routes (must be before /student/{student} route)
 Route::get('/student/transfer', [App\Http\Controllers\StudentTransferController::class, 'index'])->name('student.transfer');
@@ -547,6 +554,7 @@ Route::get('/parent/manage-access/export/{format}', [App\Http\Controllers\Parent
 
 Route::get('/parent/account-request', [App\Http\Controllers\ParentAccountRequestController::class, 'index'])->name('parent.account-request');
 Route::get('/parent/account-request/export/{format}', [App\Http\Controllers\ParentAccountRequestController::class, 'export'])->name('parent.account-request.export');
+Route::get('/parent/account-request/print', [App\Http\Controllers\ParentAccountRequestController::class, 'print'])->name('parent.account-request.print');
 
 Route::get('/parent/print-gate-passes', [App\Http\Controllers\PrintGatePassesController::class, 'index'])->name('parent.print-gate-passes');
 Route::post('/parent/print-gate-passes', [App\Http\Controllers\PrintGatePassesController::class, 'index'])->name('parent.print-gate-passes.filter');
@@ -577,10 +585,14 @@ Route::get('/staff/management/export/{format}', [App\Http\Controllers\StaffManag
 
 Route::get('/staff/birthday', [App\Http\Controllers\StaffBirthdayController::class, 'index'])->name('staff.birthday');
 Route::get('/staff/birthday/export/{format}', [App\Http\Controllers\StaffBirthdayController::class, 'export'])->name('staff.birthday.export');
+Route::get('/staff/birthday/print', [App\Http\Controllers\StaffBirthdayController::class, 'print'])->name('staff.birthday.print');
 Route::get('/staff/birthday/{staff}/card', [App\Http\Controllers\StaffBirthdayController::class, 'printBirthdayCard'])->name('staff.birthday.card.print');
+Route::post('/staff/birthday/{staff}/wish', [App\Http\Controllers\StaffBirthdayController::class, 'wish'])->name('staff.birthday.wish');
+Route::post('/staff/birthday/wish-all', [App\Http\Controllers\StaffBirthdayController::class, 'wishAll'])->name('staff.birthday.wish-all');
 
 Route::get('/staff/job-inquiry', [App\Http\Controllers\JobInquiryController::class, 'index'])->name('staff.job-inquiry');
 Route::post('/staff/job-inquiry', [App\Http\Controllers\JobInquiryController::class, 'store'])->name('staff.job-inquiry.store');
+Route::get('/staff/job-inquiry/print', [App\Http\Controllers\JobInquiryController::class, 'print'])->name('staff.job-inquiry.print');
 Route::delete('/staff/job-inquiry/delete-all', [App\Http\Controllers\JobInquiryController::class, 'deleteAll'])->name('staff.job-inquiry.delete-all');
 Route::get('/staff/job-inquiry/{job_inquiry}', [App\Http\Controllers\JobInquiryController::class, 'show'])->name('staff.job-inquiry.show');
 Route::put('/staff/job-inquiry/{job_inquiry}', [App\Http\Controllers\JobInquiryController::class, 'update'])->name('staff.job-inquiry.update');
@@ -592,6 +604,7 @@ Route::get('/dashboard/lms', [DashboardController::class, 'lms'])->name('dashboa
 
 // Task Management Routes
 Route::get('/task-management', [App\Http\Controllers\TaskManagementController::class, 'index'])->name('task-management');
+Route::get('/task-management/print', [App\Http\Controllers\TaskManagementController::class, 'print'])->name('task-management.print');
 Route::post('/task-management', [App\Http\Controllers\TaskManagementController::class, 'store'])->name('task-management.store');
 Route::delete('/task-management/delete-all', [App\Http\Controllers\TaskManagementController::class, 'deleteAll'])->name('task-management.delete-all');
 Route::get('/task-management/{task}', [App\Http\Controllers\TaskManagementController::class, 'show'])->name('task-management.show');
@@ -611,6 +624,7 @@ Route::get('/id-card/print-staff/print', [App\Http\Controllers\PrintStaffCardCon
 
 // Accountant Routes
 Route::get('/accountants', [App\Http\Controllers\AccountantController::class, 'index'])->name('accountants');
+Route::get('/accountants/print', [App\Http\Controllers\AccountantController::class, 'print'])->name('accountants.print');
 Route::post('/accountants', [App\Http\Controllers\AccountantController::class, 'store'])->name('accountants.store');
 Route::get('/accountants/{accountant}', [App\Http\Controllers\AccountantController::class, 'show'])->name('accountants.show');
 Route::put('/accountants/{accountant}', [App\Http\Controllers\AccountantController::class, 'update'])->name('accountants.update');
@@ -645,6 +659,7 @@ Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function 
 
 // Fee Type Routes
 Route::get('/accounting/fee-type', [App\Http\Controllers\FeeTypeController::class, 'index'])->name('accounting.fee-type');
+Route::get('/accounting/fee-type/print', [App\Http\Controllers\FeeTypeController::class, 'print'])->name('accounting.fee-type.print');
 Route::post('/accounting/fee-type', [App\Http\Controllers\FeeTypeController::class, 'store'])->name('accounting.fee-type.store');
 Route::get('/accounting/fee-type/export/{format}', [App\Http\Controllers\FeeTypeController::class, 'export'])->name('accounting.fee-type.export');
 Route::get('/accounting/fee-type/{feeType}', [App\Http\Controllers\FeeTypeController::class, 'show'])->name('accounting.fee-type.show');
@@ -926,6 +941,7 @@ Route::get('/accounting/family-fee-calculator/search-by-id-card', function (\Ill
 
 // Manage Advance Fee Routes
 Route::get('/accounting/manage-advance-fee', [App\Http\Controllers\AdvanceFeeController::class, 'index'])->name('accounting.manage-advance-fee.index');
+Route::get('/accounting/manage-advance-fee/print', [App\Http\Controllers\AdvanceFeeController::class, 'print'])->name('accounting.manage-advance-fee.print');
 Route::post('/accounting/manage-advance-fee', [App\Http\Controllers\AdvanceFeeController::class, 'store'])->name('accounting.manage-advance-fee.store');
 Route::get('/accounting/manage-advance-fee/export/{format}', [App\Http\Controllers\AdvanceFeeController::class, 'export'])->name('accounting.manage-advance-fee.export');
 Route::get('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controllers\AdvanceFeeController::class, 'show'])->name('accounting.manage-advance-fee.show');
@@ -937,6 +953,40 @@ Route::delete('/accounting/manage-advance-fee/{advanceFee}', [App\Http\Controlle
 Route::get('/accounting/parent-wallet/installments', function () {
     return view('accounting.parent-wallet.installments');
 })->name('accounting.parent-wallet.installments');
+
+Route::get('/accounting/parent-wallet/installments/print', function (\Illuminate\Http\Request $request) {
+    // Same dataset as installments.data, but rendered in a dedicated print-only page
+    $payments = \App\Models\StudentPayment::with('student')
+        ->where(function($query) {
+            $query->whereRaw("payment_title REGEXP '/[0-9]+$'")
+                  ->orWhereRaw('LOWER(payment_title) LIKE ?', ['%installment%']);
+        })
+        ->orderBy('payment_date', 'desc')
+        ->limit(500)
+        ->get();
+
+    $items = $payments->map(function ($payment) {
+        $student = $payment->student;
+        $paymentDate = $payment->payment_date ? \Carbon\Carbon::parse($payment->payment_date) : null;
+        $feeMonth = $paymentDate ? $paymentDate->format('F Y') : null;
+        $amountPaid = (float) $payment->payment_amount - (float) ($payment->discount ?? 0);
+
+        return [
+            'name' => $student->student_name ?? 'N/A',
+            'parent' => $student->father_name ?? 'N/A',
+            'class_section' => trim(($student->class ?? '') . '/' . ($student->section ?? ''), '/'),
+            'installment_title' => $payment->payment_title ?? 'N/A',
+            'fee_month' => $feeMonth ?? 'N/A',
+            'installment_fee' => (float) $payment->payment_amount,
+            'amount_paid' => max($amountPaid, 0),
+        ];
+    })->values();
+
+    $settings = \App\Models\GeneralSetting::getSettings();
+    $printedAt = now()->format('d M Y, h:i A');
+
+    return view('accounting.parent-wallet.installments-print', compact('items', 'settings', 'printedAt'));
+})->name('accounting.parent-wallet.installments.print');
 
 Route::get('/accounting/parent-wallet/installments/data', function () {
     // Find installments by pattern: payment_title ending with /number (e.g., "Monthly Fee - January 2026/1")
@@ -995,6 +1045,7 @@ Route::put('/accounting/parent-wallet/discount-student/{studentDiscount}', [App\
 Route::delete('/accounting/parent-wallet/discount-student/{studentDiscount}', [App\Http\Controllers\StudentDiscountController::class, 'destroy'])->name('accounting.parent-wallet.discount-student.delete');
 
 Route::get('/accounting/parent-wallet/accounts-settlement', [App\Http\Controllers\AccountsSettlementController::class, 'index'])->name('accounting.parent-wallet.accounts-settlement');
+Route::get('/accounting/parent-wallet/accounts-settlement/print', [App\Http\Controllers\AccountsSettlementController::class, 'print'])->name('accounting.parent-wallet.accounts-settlement.print');
 Route::delete('/accounting/parent-wallet/accounts-settlement/{type}/{id}', [App\Http\Controllers\AccountsSettlementController::class, 'destroy'])->name('accounting.parent-wallet.accounts-settlement.delete');
 
 Route::get('/accounting/parent-wallet/online-rejected-payments', [App\Http\Controllers\OnlineRejectedPaymentController::class, 'index'])->name('accounting.parent-wallet.online-rejected-payments');
@@ -1601,6 +1652,7 @@ Route::get('/accounting/fee-voucher/family/print', [App\Http\Controllers\FamilyV
 // Parent Complain Route
 Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function () {
 Route::get('/parent-complain', [App\Http\Controllers\ParentComplaintController::class, 'index'])->name('parent-complain');
+Route::get('/parent-complain/print', [App\Http\Controllers\ParentComplaintController::class, 'print'])->name('parent-complain.print');
 Route::post('/parent-complain/{id}/reply', [App\Http\Controllers\ParentComplaintController::class, 'reply'])->name('parent-complain.reply');
 Route::get('/parent-complain/export/{format}', function () {
     // TODO: Add export functionality for parent complaints if needed
@@ -1618,6 +1670,7 @@ Route::post('/classes/manage-classes/{class_model}/passout', [App\Http\Controlle
 Route::post('/classes/manage-classes/{class_model}/transfer', [App\Http\Controllers\ManageClassesController::class, 'transfer'])->name('classes.manage-classes.transfer');
 Route::get('/classes/manage-classes/get-classes-by-campus', [App\Http\Controllers\ManageClassesController::class, 'getClassesByCampus'])->name('classes.manage-classes.get-classes-by-campus');
 Route::get('/classes/manage-classes/get-sections-by-class', [App\Http\Controllers\ManageClassesController::class, 'getSectionsByClass'])->name('classes.manage-classes.get-sections-by-class');
+Route::get('/classes/manage-classes/print', [App\Http\Controllers\ManageClassesController::class, 'print'])->name('classes.manage-classes.print');
 Route::get('/classes/manage-classes/export/{format}', [App\Http\Controllers\ManageClassesController::class, 'export'])->name('classes.manage-classes.export');
 
 Route::get('/classes/manage-section', [App\Http\Controllers\ManageSectionController::class, 'index'])->name('classes.manage-section');
@@ -1627,6 +1680,7 @@ Route::put('/classes/manage-section/{section}', [App\Http\Controllers\ManageSect
 Route::delete('/classes/manage-section/{section}', [App\Http\Controllers\ManageSectionController::class, 'destroy'])->name('classes.manage-section.destroy');
 Route::post('/classes/manage-section/{section}/verify-passout', [App\Http\Controllers\ManageSectionController::class, 'verifyPassout'])->name('classes.manage-section.verify-passout');
 Route::post('/classes/manage-section/{section}/passout', [App\Http\Controllers\ManageSectionController::class, 'passout'])->name('classes.manage-section.passout');
+Route::get('/classes/manage-section/print', [App\Http\Controllers\ManageSectionController::class, 'print'])->name('classes.manage-section.print');
 Route::get('/classes/manage-section/export/{format}', [App\Http\Controllers\ManageSectionController::class, 'export'])->name('classes.manage-section.export');
 
 // Manage Subjects Routes
@@ -1670,6 +1724,7 @@ Route::get('/attendance/facial-record', function () {
 })->name('attendance.facial-record');
 
 Route::get('/attendance/account', [App\Http\Controllers\AttendanceAccountController::class, 'index'])->name('attendance.account');
+Route::get('/attendance/account/print', [App\Http\Controllers\AttendanceAccountController::class, 'print'])->name('attendance.account.print');
 Route::post('/attendance/account', [App\Http\Controllers\AttendanceAccountController::class, 'store'])->name('attendance.account.store');
 Route::put('/attendance/account/{attendance_account}', [App\Http\Controllers\AttendanceAccountController::class, 'update'])->name('attendance.account.update');
 Route::delete('/attendance/account/{attendance_account}', [App\Http\Controllers\AttendanceAccountController::class, 'destroy'])->name('attendance.account.destroy');
@@ -1694,6 +1749,7 @@ Route::post('/online-classes', [App\Http\Controllers\OnlineClassesController::cl
 Route::put('/online-classes/{online_class}', [App\Http\Controllers\OnlineClassesController::class, 'update'])->name('online-classes.update');
 Route::delete('/online-classes/{online_class}', [App\Http\Controllers\OnlineClassesController::class, 'destroy'])->name('online-classes.destroy');
 Route::get('/online-classes/export/{format}', [App\Http\Controllers\OnlineClassesController::class, 'export'])->name('online-classes.export');
+Route::get('/online-classes/print', [App\Http\Controllers\OnlineClassesController::class, 'print'])->name('online-classes.print');
 Route::get('/online-classes/get-sections', [App\Http\Controllers\OnlineClassesController::class, 'getSections'])->name('online-classes.get-sections');
 
 // Timetable Management Routes
@@ -1708,11 +1764,13 @@ Route::get('/timetable/{timetable}/edit', [App\Http\Controllers\TimetableControl
 Route::put('/timetable/{timetable}', [App\Http\Controllers\TimetableController::class, 'update'])->name('timetable.update');
 Route::delete('/timetable/{timetable}', [App\Http\Controllers\TimetableController::class, 'destroy'])->name('timetable.destroy');
 Route::get('/timetable/{timetable}/terminal-print', [App\Http\Controllers\TimetableController::class, 'terminalPrint'])->name('timetable.terminal-print');
+Route::get('/timetable/manage/print', [App\Http\Controllers\TimetableController::class, 'print'])->name('timetable.manage.print');
 Route::get('/timetable/export/{format}', [App\Http\Controllers\TimetableController::class, 'export'])->name('timetable.export');
 
 // Events Management Routes
 Route::prefix('events')->name('events.')->group(function () {
     Route::get('/manage', [App\Http\Controllers\EventController::class, 'index'])->name('manage');
+    Route::get('/print', [App\Http\Controllers\EventController::class, 'print'])->name('print');
     Route::post('/', [App\Http\Controllers\EventController::class, 'store'])->name('store');
     Route::get('/{event}', [App\Http\Controllers\EventController::class, 'show'])->name('show');
     Route::put('/{event}', [App\Http\Controllers\EventController::class, 'update'])->name('update');
@@ -1723,7 +1781,9 @@ Route::prefix('events')->name('events.')->group(function () {
 // Academic Holiday Calendar Routes
 Route::prefix('academic-calendar')->name('academic-calendar.')->group(function () {
     Route::get('/manage-events', [App\Http\Controllers\EventController::class, 'index'])->name('manage-events');
+    Route::get('/manage-events/print', [App\Http\Controllers\EventController::class, 'print'])->name('manage-events.print');
     Route::get('/view', [App\Http\Controllers\EventController::class, 'calendarView'])->name('view');
+    Route::get('/view/print', [App\Http\Controllers\EventController::class, 'calendarPrint'])->name('view.print');
 });
 
 // Fee Management Route
@@ -2352,6 +2412,7 @@ Route::get('/expense-management/add/{managementExpense}', [App\Http\Controllers\
 Route::get('/expense-management/add/{managementExpense}/print', [App\Http\Controllers\ManagementExpenseController::class, 'print'])->name('expense-management.add.print');
 
 Route::get('/expense-management/categories', [App\Http\Controllers\ExpenseCategoryController::class, 'index'])->name('expense-management.categories');
+Route::get('/expense-management/categories/print', [App\Http\Controllers\ExpenseCategoryController::class, 'print'])->name('expense-management.categories.print');
 Route::post('/expense-management/categories', [App\Http\Controllers\ExpenseCategoryController::class, 'store'])->name('expense-management.categories.store');
 Route::put('/expense-management/categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'update'])->name('expense-management.categories.update');
 Route::delete('/expense-management/categories/{expenseCategory}', [App\Http\Controllers\ExpenseCategoryController::class, 'destroy'])->name('expense-management.categories.destroy');
@@ -2634,6 +2695,7 @@ Route::get('/test/reports/print/blank-marksheet', [App\Http\Controllers\TestRepo
 
 // Exam Management Routes
 Route::get('/exam/list', [App\Http\Controllers\ExamController::class, 'index'])->name('exam.list');
+Route::get('/exam/list/print', [App\Http\Controllers\ExamController::class, 'printList'])->name('exam.list.print');
 Route::post('/exam/list', [App\Http\Controllers\ExamController::class, 'store'])->name('exam.list.store');
 Route::put('/exam/list/{exam}', [App\Http\Controllers\ExamController::class, 'update'])->name('exam.list.update');
 Route::delete('/exam/list/{exam}', [App\Http\Controllers\ExamController::class, 'destroy'])->name('exam.list.destroy');
@@ -2736,6 +2798,7 @@ Route::post('/quiz/manage', [App\Http\Controllers\QuizController::class, 'store'
 Route::put('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'update'])->name('quiz.manage.update');
 Route::delete('/quiz/manage/{quiz}', [App\Http\Controllers\QuizController::class, 'destroy'])->name('quiz.manage.destroy');
 Route::get('/quiz/manage/export/{format}', [App\Http\Controllers\QuizController::class, 'export'])->name('quiz.manage.export');
+Route::get('/quiz/manage/print', [App\Http\Controllers\QuizController::class, 'print'])->name('quiz.manage.print');
 Route::get('/quiz/manage/get-classes-by-campus', [App\Http\Controllers\QuizController::class, 'getClassesByCampus'])->name('quiz.manage.get-classes-by-campus');
 Route::get('/quiz/manage/get-sections-by-class', [App\Http\Controllers\QuizController::class, 'getSectionsByClass'])->name('quiz.manage.get-sections-by-class');
 Route::get('/quiz/questions/{quiz}', [App\Http\Controllers\QuizController::class, 'getQuestions'])->name('quiz.questions.get');
@@ -2827,6 +2890,7 @@ Route::post('/school/noticeboard', [App\Http\Controllers\NoticeboardController::
 Route::put('/school/noticeboard/{noticeboard}', [App\Http\Controllers\NoticeboardController::class, 'update'])->name('school.noticeboard.update');
 Route::delete('/school/noticeboard/{noticeboard}', [App\Http\Controllers\NoticeboardController::class, 'destroy'])->name('school.noticeboard.destroy');
 Route::get('/school/noticeboard/{noticeboard}/print', [App\Http\Controllers\NoticeboardController::class, 'print'])->name('school.noticeboard.print');
+Route::get('/school/noticeboard/print', [App\Http\Controllers\NoticeboardController::class, 'printAll'])->name('school.noticeboard.print.all');
 Route::get('/school/noticeboard/export/{format}', [App\Http\Controllers\NoticeboardController::class, 'export'])->name('school.noticeboard.export');
 
 // Manage Campuses Routes
@@ -2835,6 +2899,7 @@ Route::post('/manage/campuses', [App\Http\Controllers\CampusController::class, '
 Route::put('/manage/campuses/{campus}', [App\Http\Controllers\CampusController::class, 'update'])->name('manage.campuses.update');
 Route::delete('/manage/campuses/{campus}', [App\Http\Controllers\CampusController::class, 'destroy'])->name('manage.campuses.destroy');
 Route::get('/manage/campuses/export/{format}', [App\Http\Controllers\CampusController::class, 'export'])->name('manage.campuses.export');
+Route::get('/manage/campuses/print', [App\Http\Controllers\CampusController::class, 'print'])->name('manage.campuses.print');
 
 // Admin Roles Management Routes (Super Admin Only)
 Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(function () {
@@ -2843,11 +2908,13 @@ Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(func
     Route::put('/admin/roles-management/{adminRole}', [App\Http\Controllers\AdminRoleController::class, 'update'])->name('admin.roles-management.update');
     Route::delete('/admin/roles-management/{adminRole}', [App\Http\Controllers\AdminRoleController::class, 'destroy'])->name('admin.roles-management.destroy');
     Route::get('/admin/roles-management/export/{format}', [App\Http\Controllers\AdminRoleController::class, 'export'])->name('admin.roles-management.export');
+    Route::get('/admin/roles-management/print', [App\Http\Controllers\AdminRoleController::class, 'print'])->name('admin.roles-management.print');
 });
 
 // Transport Routes (Super Admin Only)
 Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(function () {
     Route::get('/transport/manage', [App\Http\Controllers\TransportController::class, 'index'])->name('transport.manage');
+    Route::get('/transport/manage/print', [App\Http\Controllers\TransportController::class, 'print'])->name('transport.manage.print');
     Route::post('/transport/manage', [App\Http\Controllers\TransportController::class, 'store'])->name('transport.manage.store');
     Route::put('/transport/manage/{transport}', [App\Http\Controllers\TransportController::class, 'update'])->name('transport.manage.update');
     Route::delete('/transport/manage/{transport}', [App\Http\Controllers\TransportController::class, 'destroy'])->name('transport.manage.destroy');

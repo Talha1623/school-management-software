@@ -227,7 +227,16 @@ function escapeHtml(value) {
 }
 
 function exportInstallments(type) {
-    if (type === 'print' || type === 'pdf') {
+    if (type === 'print') {
+        const url = '{{ route("accounting.parent-wallet.installments.print") }}?auto_print=1';
+        const w = window.open(url, '_blank');
+        if (!w) {
+            window.location.href = url;
+        }
+        return;
+    }
+
+    if (type === 'pdf') {
         window.print();
         return;
     }

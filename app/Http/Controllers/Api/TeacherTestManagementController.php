@@ -157,7 +157,8 @@ class TeacherTestManagementController extends Controller
                 ], 403);
             }
 
-            $campus = $request->get('campus');
+            // Campus is taken from authenticated teacher token (not from request)
+            $campus = $teacher->campus ?? null;
             $class = $request->get('class');
             $section = $request->get('section');
             $subject = $request->get('subject');
@@ -165,7 +166,7 @@ class TeacherTestManagementController extends Controller
             // Only show tests where result_status = 1 (declared)
             $testsQuery = Test::where('result_status', 1);
             
-            if ($campus) {
+            if (!empty($campus)) {
                 $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
             if ($class) {
@@ -218,7 +219,8 @@ class TeacherTestManagementController extends Controller
                 ], 403);
             }
 
-            $campus = $request->get('campus');
+            // Campus is taken from authenticated teacher token (not from request)
+            $campus = $teacher->campus ?? null;
             $class = $request->get('class');
             $section = $request->get('section');
             
@@ -238,8 +240,8 @@ class TeacherTestManagementController extends Controller
             // Always filter by class
             $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
             
-            // If campus is provided, filter by campus
-            if ($campus) {
+            // Always prefer teacher campus from token
+            if (!empty($campus)) {
                 $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
             }
             
@@ -289,56 +291,58 @@ class TeacherTestManagementController extends Controller
             }
 
             $request->validate([
-                'campus' => ['required', 'string'],
                 'class' => ['required', 'string'],
-                'test_name' => ['required', 'string'],
+                'section' => ['required', 'string'],
+                'subject' => ['required', 'string'],
+                'test' => ['nullable', 'string'],
+                'test_name' => ['nullable', 'string'],
+                'exam_name' => ['nullable', 'string'],
             ]);
 
-            $campus = $request->get('campus');
+            // Campus is intentionally not enforced here; class/section/subject/test are authoritative filters
+            $campus = $teacher->campus ?? null;
             $class = $request->get('class');
             $section = $request->get('section');
-            $testName = $request->get('test_name');
             $subject = $request->get('subject');
+            $testName = $request->get('test_name') ?: $request->get('test');
+            if (empty($testName)) {
+                $testName = $request->get('exam_name');
+            }
+
+            if (empty($testName)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'test or test_name is required.',
+                ], 422);
+            }
 
             // Get test details
-            $test = Test::where('test_name', $testName)
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            $test = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
                 ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($class))])
-                ->where('result_status', 1)
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))])
                 ->first();
 
             if (!$test) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Test not found or result not declared.',
+                    'message' => 'Test not found for the given class/section/subject.',
                 ], 404);
             }
 
             // Query students based on filters
             $studentsQuery = Student::query();
             
-            if ($campus) {
-                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-            }
-            if ($class) {
-                $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-            }
-            if ($section) {
-                $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-            }
+            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
             
             $students = $studentsQuery->orderBy('student_name')->get();
 
             // Get existing marks for these students
-            $existingMarks = StudentMark::where('test_name', $testName)
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            $existingMarks = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->when($section, function($q) use ($section) {
-                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-                })
-                ->when($subject, function($q) use ($subject) {
-                    $q->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))]);
-                })
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))])
                 ->get()
                 ->keyBy('student_id');
 
@@ -900,37 +904,117 @@ class TeacherTestManagementController extends Controller
             }
 
             $validated = $request->validate([
-                'test_name' => ['required', 'string'],
-                'campus' => ['required', 'string'],
-                'class' => ['required', 'string'],
+                'test_name' => ['nullable', 'string'],
+                'test' => ['nullable', 'string'],
+                'class' => ['nullable', 'string'],
                 'section' => ['nullable', 'string'],
-                'subject' => ['nullable', 'string'],
-                'remarks' => ['required', 'array'],
+                'subject' => ['required', 'string'],
+                // Accept DB id OR student_code OR gr_number
+                'student_id' => ['nullable'],
+                'remark' => ['nullable', 'string'],
+                'remarks' => ['nullable', 'array'],
                 'remarks.*' => ['nullable', 'string'],
             ]);
 
-            // Save or update remarks for each student
-            $savedCount = 0;
-            foreach ($validated['remarks'] as $studentId => $remark) {
-                if ($studentId && $remark) {
-                    $student = Student::find($studentId);
-                    $campus = $student ? $student->campus : $validated['campus'];
-                    
-                    StudentMark::updateOrCreate(
-                        [
-                            'student_id' => $studentId,
-                            'test_name' => $validated['test_name'],
-                            'campus' => $campus,
-                            'class' => $validated['class'],
-                            'section' => $validated['section'] ?? null,
-                            'subject' => $validated['subject'] ?? null,
-                        ],
-                        [
-                            'teacher_remarks' => $remark,
-                        ]
-                    );
-                    $savedCount++;
+            $testName = $validated['test_name'] ?? ($validated['test'] ?? null);
+            if (empty($testName)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'test or test_name is required.',
+                ], 422);
+            }
+
+            // Resolve class/section from request or test record (fallback)
+            $testRecord = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
+                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($validated['subject']))])
+                ->first();
+
+            $className = $validated['class'] ?? ($testRecord->for_class ?? null);
+            $sectionName = $validated['section'] ?? ($testRecord->section ?? null);
+
+            if (empty($className)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'class is required (or must exist on matching test record).',
+                ], 422);
+            }
+
+            // Support both single and bulk payloads
+            if (!empty($validated['student_id'])) {
+                if (!array_key_exists('remark', $validated)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'remark is required when student_id is provided.',
+                    ], 422);
                 }
+                $remarksPayload = [(string) $validated['student_id'] => $validated['remark']];
+            } else {
+                $remarksPayload = $validated['remarks'] ?? [];
+                if (empty($remarksPayload)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please provide either student_id + remark OR remarks object.',
+                    ], 422);
+                }
+            }
+
+            $resolveStudent = function ($studentIdentifier) {
+                $value = trim((string) $studentIdentifier);
+                if ($value === '') {
+                    return null;
+                }
+
+                if (ctype_digit($value)) {
+                    $byId = Student::find((int) $value);
+                    if ($byId) {
+                        return $byId;
+                    }
+                }
+
+                return Student::where('student_code', $value)
+                    ->orWhere('gr_number', $value)
+                    ->first();
+            };
+
+            $savedCount = 0;
+            $errors = [];
+            foreach ($remarksPayload as $studentId => $remark) {
+                if (empty($studentId)) {
+                    continue;
+                }
+
+                $student = $resolveStudent($studentId);
+                if (!$student) {
+                    $errors[] = "Student with ID {$studentId} not found.";
+                    continue;
+                }
+
+                if (strtolower(trim((string) ($student->class ?? ''))) !== strtolower(trim((string) $className))) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to class {$className}.";
+                    continue;
+                }
+
+                if (!empty($sectionName) && strtolower(trim((string) ($student->section ?? ''))) !== strtolower(trim((string) $sectionName))) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to section {$sectionName}.";
+                    continue;
+                }
+
+                $campus = $student->campus ?? ($teacher->campus ?? null);
+
+                StudentMark::updateOrCreate(
+                    [
+                        'student_id' => $student->id,
+                        'test_name' => $testName,
+                        'campus' => $campus,
+                        'class' => $className,
+                        'section' => $sectionName,
+                        'subject' => $validated['subject'],
+                    ],
+                    [
+                        'teacher_remarks' => $remark,
+                    ]
+                );
+                $savedCount++;
             }
 
             return response()->json([
@@ -938,6 +1022,11 @@ class TeacherTestManagementController extends Controller
                 'message' => 'Remarks saved successfully',
                 'data' => [
                     'saved_count' => $savedCount,
+                    'test_name' => $testName,
+                    'class' => $className,
+                    'section' => $sectionName,
+                    'subject' => $validated['subject'],
+                    'errors' => !empty($errors) ? $errors : null,
                 ],
             ], 200);
 

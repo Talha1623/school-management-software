@@ -6,6 +6,7 @@ use App\Models\FeeType;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -63,6 +64,35 @@ class FeeTypeController extends Controller
         }
         
         return view('accounting.fee-type', compact('feeTypes', 'campuses'));
+    }
+
+    /**
+     * Print Fee Type / Fee Head (Admin/Accounting) - dedicated print page
+     */
+    public function print(Request $request): View
+    {
+        $query = FeeType::query();
+
+        // Search functionality (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(fee_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $feeTypes = $query->orderBy('fee_name')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('accounting.fee-type-print', [
+            'feeTypes' => $feeTypes,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

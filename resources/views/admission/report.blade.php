@@ -221,7 +221,11 @@ function printReport(type) {
     
     // Open in new window for printing
     if (url) {
-        window.open(url, '_blank');
+        const w = window.open(url, '_blank');
+        // If popup is blocked, fall back to same-tab navigation
+        if (!w) {
+            window.location.href = url;
+        }
     }
 }
 </script>

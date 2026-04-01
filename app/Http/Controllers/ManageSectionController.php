@@ -6,6 +6,7 @@ use App\Models\Section;
 use App\Models\ClassModel;
 use App\Models\Staff;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use App\Models\Subject;
 use App\Models\Student;
 use Illuminate\Support\Facades\DB;
@@ -152,6 +153,74 @@ class ManageSectionController extends Controller
             ->get(['name', 'campus', 'salary_type']);
         
         return view('classes.manage-section', compact('sections', 'campuses', 'classes', 'allSessions', 'teachers'));
+    }
+
+    /**
+     * Print sections list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = Section::query();
+
+        // Filter out sections with deleted classes or null/empty class names
+        $query->whereNotNull('class')
+            ->where('class', '!=', '');
+
+        // Keep class existence guard same as index
+        $existingClassNames = ClassModel::whereNotNull('class_name')
+            ->where('class_name', '!=', '')
+            ->pluck('class_name')
+            ->map(function ($name) {
+                return strtolower(trim($name));
+            })
+            ->unique()
+            ->values()
+            ->toArray();
+
+        if (!empty($existingClassNames)) {
+            $query->where(function ($q) use ($existingClassNames) {
+                foreach ($existingClassNames as $className) {
+                    $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                }
+            });
+        } else {
+            $query->whereRaw('1 = 0');
+        }
+
+        // Apply filters
+        if ($request->filled('filter_campus')) {
+            $query->where('campus', $request->filter_campus);
+        }
+        if ($request->filled('filter_class')) {
+            $query->where('class', $request->filter_class);
+        }
+        if ($request->filled('filter_session')) {
+            $query->where('session', $request->filter_session);
+        }
+
+        // Search
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(nick_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(class) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(teacher) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $sections = $query->latest()->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('classes.manage-section-print', [
+            'sections' => $sections,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

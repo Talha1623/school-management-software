@@ -7,6 +7,7 @@
     <title>Admissions Today Report</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        :root { --theme-blue: #003471; }
         @media print {
             @page {
                 margin: 1cm;
@@ -95,7 +96,7 @@
         }
         table th,
         table td {
-            border: 1px solid #000;
+            border: 1px solid var(--theme-blue);
             padding: 8px;
             text-align: left;
         }

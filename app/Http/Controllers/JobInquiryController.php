@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\JobInquiry;
 use App\Models\Campus;
 use App\Models\Staff;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -50,6 +51,35 @@ class JobInquiryController extends Controller
         $partTimeInquiries = (clone $query)->whereRaw('LOWER(salary_type) LIKE ?', ['%part time%'])->count();
         
         return view('staff.job-inquiry', compact('inquiries', 'campuses', 'totalInquiries', 'fullTimeInquiries', 'partTimeInquiries'));
+    }
+
+    /**
+     * Print job inquiries list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $query = JobInquiry::query();
+
+        // Search functionality (match index behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(qualification) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(applied_for_designation) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $inquiries = $query->latest()->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('staff.job-inquiry-print', compact('inquiries', 'settings'));
     }
 
     /**

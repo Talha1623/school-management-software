@@ -19,7 +19,7 @@
                         <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">add</span>
                         Manage Events
                     </a>
-                    <button type="button" class="btn btn-sm px-3 py-2" onclick="window.print()" style="background-color: white; color: #003471; border: 1px solid #003471; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
+                    <button type="button" class="btn btn-sm px-3 py-2" onclick="printCalendar()" style="background-color: white; color: #003471; border: 1px solid #003471; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
                         <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">print</span>
                         Print Calendar
                     </button>
@@ -298,4 +298,18 @@
         box-shadow: 0 0 0 0.2rem rgba(0, 52, 113, 0.25) !important;
     }
 </style>
+<script>
+function printCalendar() {
+    const year = document.getElementById('year')?.value || '{{ $year ?? date("Y") }}';
+    let url = '{{ route("academic-calendar.view.print") }}?auto_print=1';
+    if (year) {
+        url += '&year=' + encodeURIComponent(year);
+    }
+
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
+        window.location.href = url;
+    }
+}
+</script>
 @endsection

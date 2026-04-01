@@ -3,10 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Staff;
+use App\Models\StaffNotification;
+use App\Models\GeneralSetting;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class StaffBirthdayController extends Controller
 {
@@ -41,6 +46,17 @@ class StaffBirthdayController extends Controller
     }
 
     /**
+     * Print staff birthdays list (dedicated print page)
+     */
+    public function print(Request $request): View
+    {
+        $staff = $this->getStaffData();
+        $settings = GeneralSetting::getSettings();
+
+        return view('staff.birthday-print', compact('staff', 'settings'));
+    }
+
+    /**
      * Print birthday card for a staff member.
      */
     public function printBirthdayCard(Staff $staff): View
@@ -49,6 +65,125 @@ class StaffBirthdayController extends Controller
             'staff' => $staff,
             'printedAt' => now()->format('d-m-Y H:i'),
             'autoPrint' => request()->get('auto_print'),
+        ]);
+    }
+
+    /**
+     * Send birthday wish notification to a single staff member (in-app notification for teacher app).
+     * POST /staff/birthday/{staff}/wish
+     */
+    public function wish(Request $request, Staff $staff): JsonResponse
+    {
+        // Allow admin/staff session only
+        if (!Auth::guard('admin')->check() && !Auth::guard('staff')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        $title = $request->input('title') ?: 'Happy Birthday!';
+        $message = $request->input('message') ?: ('Happy Birthday ' . ($staff->name ?? 'Staff') . '! 🎉');
+
+        $creatorType = Auth::guard('admin')->check() ? 'admin' : 'staff';
+        $creatorId = Auth::guard('admin')->check()
+            ? (Auth::guard('admin')->user()->id ?? null)
+            : (Auth::guard('staff')->user()->id ?? null);
+
+        StaffNotification::create([
+            'staff_id' => $staff->id,
+            'title' => $title,
+            'message' => $message,
+            'data' => [
+                'type' => 'birthday_wish',
+                'staff_id' => $staff->id,
+            ],
+            'created_by_type' => $creatorType,
+            'created_by_id' => $creatorId,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Wish sent successfully',
+        ]);
+    }
+
+    /**
+     * Send birthday wishes to multiple staff members (in-app notifications).
+     * POST /staff/birthday/wish-all
+     * Body: { staff_ids?: [1,2,3], title?: string, message?: string }
+     */
+    public function wishAll(Request $request): JsonResponse
+    {
+        if (!Auth::guard('admin')->check() && !Auth::guard('staff')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'staff_ids' => ['nullable', 'array'],
+            'staff_ids.*' => ['integer'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'message' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $title = $validated['title'] ?? 'Happy Birthday!';
+        $messageTemplate = $validated['message'] ?? 'Happy Birthday {name}! 🎉';
+
+        $creatorType = Auth::guard('admin')->check() ? 'admin' : 'staff';
+        $creatorId = Auth::guard('admin')->check()
+            ? (Auth::guard('admin')->user()->id ?? null)
+            : (Auth::guard('staff')->user()->id ?? null);
+
+        $query = Staff::query()->whereNotNull('birthday');
+
+        // If IDs provided, target only those. Otherwise, target "today birthdays".
+        if (!empty($validated['staff_ids'])) {
+            $query->whereIn('id', $validated['staff_ids']);
+        } else {
+            $today = Carbon::today();
+            $query->whereRaw("DATE_FORMAT(birthday, '%m-%d') = ?", [$today->format('m-d')]);
+        }
+
+        $members = $query->get(['id', 'name']);
+
+        if ($members->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No staff found to send wishes.',
+            ], 200);
+        }
+
+        $rows = $members->map(function (Staff $s) use ($title, $messageTemplate, $creatorType, $creatorId) {
+            $name = $s->name ?: 'Staff';
+            $message = str_replace('{name}', $name, $messageTemplate);
+
+            return [
+                'staff_id' => $s->id,
+                'title' => $title,
+                'message' => $message,
+                'data' => json_encode([
+                    'type' => 'birthday_wish',
+                    'staff_id' => $s->id,
+                ]),
+                'read_at' => null,
+                'created_by_type' => $creatorType,
+                'created_by_id' => $creatorId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        })->values()->all();
+
+        DB::table('staff_notifications')->insert($rows);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Wishes sent successfully',
+            'data' => [
+                'count' => count($rows),
+            ],
         ]);
     }
 

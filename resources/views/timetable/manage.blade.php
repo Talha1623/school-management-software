@@ -561,21 +561,23 @@
     }
 
     function printTable() {
-        // Show print header
-        const printHeader = document.querySelector('.print-header');
-        if (printHeader) {
-            printHeader.style.display = 'block';
+        const params = new URLSearchParams();
+        const campus = document.getElementById('filter_campus')?.value?.trim();
+        const cls = document.getElementById('filter_class')?.value?.trim();
+        const section = document.getElementById('filter_section')?.value?.trim();
+        const day = document.getElementById('filter_day')?.value?.trim();
+
+        params.set('auto_print', '1');
+        if (campus) params.set('filter_campus', campus);
+        if (cls) params.set('filter_class', cls);
+        if (section) params.set('filter_section', section);
+        if (day) params.set('filter_day', day);
+
+        const url = '{{ route("timetable.manage.print") }}?' + params.toString();
+        const w = window.open(url, '_blank');
+        if (!w) {
+            window.location.href = url;
         }
-        
-        // Trigger print
-        window.print();
-        
-        // Hide print header after print dialog closes
-        setTimeout(() => {
-            if (printHeader) {
-                printHeader.style.display = 'none';
-            }
-        }, 1000);
     }
 
     function getCsrfToken() {

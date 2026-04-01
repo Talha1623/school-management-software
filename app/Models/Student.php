@@ -130,5 +130,13 @@ class Student extends Authenticatable
     {
         return $this->hasMany(BehaviorRecord::class);
     }
+
+    /**
+     * Student-specific in-app notifications (used by mobile app).
+     */
+    public function notifications()
+    {
+        return $this->hasMany(StudentNotification::class);
+    }
 }
 

@@ -344,7 +344,19 @@ function clearSearch() {
 }
 
 function exportAccounts(type) {
-    if (type === 'print' || type === 'pdf') {
+    if (type === 'print') {
+        const searchParam = document.getElementById('searchInput')?.value?.trim();
+        let url = '{{ route("accounting.parent-wallet.accounts-settlement.print") }}?auto_print=1';
+        if (searchParam) url += '&search=' + encodeURIComponent(searchParam);
+
+        const w = window.open(url, '_blank');
+        if (!w) {
+            window.location.href = url;
+        }
+        return;
+    }
+
+    if (type === 'pdf') {
         window.print();
         return;
     }

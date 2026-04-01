@@ -124,5 +124,13 @@ class Staff extends Authenticatable
     {
         return $this->hasMany(Loan::class);
     }
+
+    /**
+     * Teacher/staff in-app notifications (used by mobile teacher app).
+     */
+    public function notifications()
+    {
+        return $this->hasMany(StaffNotification::class, 'staff_id');
+    }
 }
 

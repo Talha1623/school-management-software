@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ParentComplaint;
+use App\Models\GeneralSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -36,6 +37,34 @@ class ParentComplaintController extends Controller
         $complains = $query->latest()->paginate($perPage)->withQueryString();
 
         return view('parent-complain', compact('complains'));
+    }
+
+    public function print(Request $request): View
+    {
+        $query = ParentComplaint::query();
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(parent_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(subject) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(complain) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $complains = $query->latest()->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('parent-complain-print', [
+            'complains' => $complains,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CustomPayment;
+use App\Models\GeneralSetting;
 use App\Models\ManagementExpense;
 use App\Models\StudentPayment;
 use Illuminate\Http\RedirectResponse;
@@ -108,6 +109,91 @@ class AccountsSettlementController extends Controller
 
         return view('accounting.parent-wallet.accounts-settlement', [
             'items' => $paginatedItems,
+        ]);
+    }
+
+    public function print(Request $request): View
+    {
+        $items = collect();
+
+        $studentPayments = StudentPayment::with('student')->get();
+        foreach ($studentPayments as $payment) {
+            $studentName = $payment->student->student_name ?? 'N/A';
+            $userLabel = $payment->student_code
+                ? "{$studentName} ({$payment->student_code})"
+                : $studentName;
+            $amount = (float) $payment->payment_amount;
+            $items->push([
+                'user' => $userLabel,
+                'type' => 'Income',
+                'date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
+                'income' => $amount,
+                'expense' => 0,
+                'total' => $amount,
+                'method' => $payment->method ?? 'N/A',
+                'trx' => $payment->id,
+                'remarks' => $payment->payment_title ?? 'N/A',
+            ]);
+        }
+
+        $customPayments = CustomPayment::all();
+        foreach ($customPayments as $payment) {
+            $amount = (float) $payment->payment_amount;
+            $items->push([
+                'user' => $payment->accountant ?? 'N/A',
+                'type' => 'Income',
+                'date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
+                'income' => $amount,
+                'expense' => 0,
+                'total' => $amount,
+                'method' => $payment->method ?? 'N/A',
+                'trx' => $payment->id,
+                'remarks' => $payment->payment_title ?? 'N/A',
+            ]);
+        }
+
+        $expenses = ManagementExpense::all();
+        foreach ($expenses as $expense) {
+            $amount = (float) $expense->amount;
+            $items->push([
+                'user' => $expense->title ?? $expense->category ?? 'N/A',
+                'type' => 'Expense',
+                'date' => $expense->date ? $expense->date->format('Y-m-d') : null,
+                'income' => 0,
+                'expense' => $amount,
+                'total' => 0 - $amount,
+                'method' => $expense->method ?? 'N/A',
+                'trx' => $expense->id,
+                'remarks' => $expense->description ?? 'N/A',
+            ]);
+        }
+
+        $items = $items->sortBy('date')->values();
+
+        $balance = 0;
+        $items = $items->map(function ($item) use (&$balance) {
+            $balance += (float) $item['income'] - (float) $item['expense'];
+            $item['balance'] = $balance;
+            return $item;
+        });
+
+        if ($request->filled('search')) {
+            $search = strtolower(trim((string) $request->get('search')));
+            $items = $items->filter(function ($item) use ($search) {
+                return str_contains(strtolower((string) $item['user']), $search)
+                    || str_contains(strtolower((string) $item['type']), $search)
+                    || str_contains(strtolower((string) $item['remarks']), $search)
+                    || str_contains(strtolower((string) $item['method']), $search)
+                    || str_contains(strtolower((string) $item['trx']), $search);
+            })->values();
+        }
+
+        $settings = GeneralSetting::getSettings();
+
+        return view('accounting.parent-wallet.accounts-settlement-print', [
+            'items' => $items,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
         ]);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -165,5 +166,34 @@ class CampusController extends Controller
         // Simple PDF generation (you can use DomPDF or similar package)
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Print campuses (dedicated print-only page).
+     */
+    public function print(Request $request): View
+    {
+        $query = Campus::query();
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(campus_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus_address) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $campuses = $query->orderBy('campus_name', 'asc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('campus.manage-print', [
+            'campuses' => $campuses,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 }

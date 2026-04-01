@@ -620,19 +620,17 @@ function updateEntriesPerPage(value) {
 
 // Print table
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
-    
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Expense Categories List</h3>
-            ${printContents}
-        </div>
-    `;
-    
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
+    const searchValue = document.getElementById('searchInput')?.value?.trim() || '';
+    let url = '{{ route("expense-management.categories.print") }}?auto_print=1';
+    if (searchValue) {
+        url += '&search=' + encodeURIComponent(searchValue);
+    }
+
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
+        // Fallback if popup is blocked
+        window.location.href = url;
+    }
 }
 </script>
 @endsection

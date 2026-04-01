@@ -125,7 +125,7 @@
                                         </a>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
-                                        <button type="button" class="action-pill action-pill-wish action-btn-wish" data-phone="{{ $member['phone'] ?? '' }}">
+                                        <button type="button" class="action-pill action-pill-wish action-btn-wish" data-staff-id="{{ $member['id'] }}">
                                             <span class="material-symbols-outlined">send</span>
                                             <span>Click To Wish</span>
                                         </button>
@@ -401,87 +401,109 @@
 </style>
 
 <script>
-function normalizePhone(raw) {
-    return (raw || '').replace(/[^\d]/g, '');
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+async function postJson(url, payload) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload || {}),
+        credentials: 'same-origin',
+    });
+
+    const text = await res.text();
+    try {
+        return { ok: res.ok, status: res.status, body: JSON.parse(text) };
+    } catch (e) {
+        return { ok: res.ok, status: res.status, body: { success: false, message: text || 'Unknown error' } };
+    }
 }
 
 document.addEventListener('click', function(event) {
     const button = event.target.closest('.action-btn-wish');
     if (!button) return;
-    const phoneRaw = button.getAttribute('data-phone') || '';
-    const phone = normalizePhone(phoneRaw);
-    if (!phone) {
-        alert('Staff phone not available for this member.');
-        return;
-    }
-    window.open(`https://wa.me/${phone}`, '_blank');
+
+    const staffId = button.getAttribute('data-staff-id');
+    if (!staffId) return;
+
+    if (button.dataset.loading === '1') return;
+    button.dataset.loading = '1';
+    const oldHtml = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="material-symbols-outlined">hourglass_top</span><span>Sending...</span>';
+
+    postJson(`/staff/birthday/${staffId}/wish`, {})
+        .then(resp => {
+            if (resp.body && resp.body.success) {
+                button.innerHTML = '<span class="material-symbols-outlined">check_circle</span><span>Sent</span>';
+                button.classList.add('opacity-75');
+            } else {
+                alert(resp.body?.message || 'Failed to send wish.');
+                button.innerHTML = oldHtml;
+                button.disabled = false;
+                button.dataset.loading = '0';
+            }
+        })
+        .catch(() => {
+            alert('Failed to send wish.');
+            button.innerHTML = oldHtml;
+            button.disabled = false;
+            button.dataset.loading = '0';
+        });
 });
 
 // Wish to All Staff Function
 function wishToAllStaff() {
     const wishButtons = document.querySelectorAll('.action-btn-wish');
-    const phones = [];
-    
-    wishButtons.forEach(button => {
-        const phoneRaw = button.getAttribute('data-phone') || '';
-        const phone = normalizePhone(phoneRaw);
-        if (phone) {
-            phones.push(phone);
-        }
+    const staffIds = [];
+
+    wishButtons.forEach(btn => {
+        const id = btn.getAttribute('data-staff-id');
+        if (id) staffIds.push(parseInt(id, 10));
     });
-    
-    if (phones.length === 0) {
-        alert('No staff members with phone numbers available.');
+
+    if (staffIds.length === 0) {
+        alert('No staff found to send wishes.');
         return;
     }
-    
-    // Create a WhatsApp group message link with all phone numbers
-    // Note: WhatsApp Web doesn't support multiple recipients in one link
-    // So we'll open them one by one with a delay, or create a group link
-    // For now, let's open the first one and show a message
-    if (phones.length === 1) {
-        window.open(`https://wa.me/${phones[0]}`, '_blank');
-    } else {
-        // Open all WhatsApp chats in sequence
-        let delay = 0;
-        phones.forEach((phone, index) => {
-            setTimeout(() => {
-                window.open(`https://wa.me/${phone}`, '_blank');
-            }, delay);
-            delay += 500; // 500ms delay between each window
-        });
-        
-        // Show confirmation
-        alert(`Opening WhatsApp for ${phones.length} staff members. Please send your birthday wishes!`);
-    }
+
+    const confirmMessage = `Are you sure you want to send birthday wishes to ${staffIds.length} staff member(s)?`;
+    if (!confirm(confirmMessage)) return;
+
+    postJson(`/staff/birthday/wish-all`, { staff_ids: staffIds })
+        .then(resp => {
+            if (resp.body && resp.body.success) {
+                const count = resp.body?.data?.count ?? staffIds.length;
+                alert(`Wishes sent successfully to ${count} staff member(s).`);
+
+                wishButtons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="material-symbols-outlined">check_circle</span><span>Sent</span>';
+                    btn.classList.add('opacity-75');
+                });
+            } else {
+                alert(resp.body?.message || 'Failed to send wishes.');
+            }
+        })
+        .catch(() => alert('Failed to send wishes.'));
 }
 
 function printStaffTable() {
-    const printWindow = window.open('', '_blank');
-    const table = document.getElementById('staffBirthdayTable');
-    const tableHTML = table.outerHTML;
-    
-    printWindow.document.write(`
-        <html>
-            <head>
-                <title>Staff Birthdays - Print</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th { background-color: #003471; color: white; padding: 12px; text-align: left; }
-                    td { padding: 10px; border-bottom: 1px solid #ddd; }
-                    tr:nth-child(even) { background-color: #f8f9fa; }
-                    @media print { body { margin: 0; } }
-                </style>
-            </head>
-            <body>
-                <h2>Staff Birthdays</h2>
-                ${tableHTML}
-            </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+    let url = '{{ route("staff.birthday.print") }}?auto_print=1';
+
+    const w = window.open(url, '_blank');
+    // Popup-blocker fallback (keep same tab if new tab blocked)
+    if (!w || w.closed || typeof w.closed === 'undefined') {
+        window.location.href = url;
+    }
 }
 
 </script>

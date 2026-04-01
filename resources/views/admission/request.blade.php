@@ -492,21 +492,15 @@ function updateEntriesPerPage(value) {
     window.location.href = url.toString();
 }
 
-// Print table
+// Print table (open dedicated print page like Stock module)
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
-    
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Admission Requests List</h3>
-            ${printContents}
-        </div>
-    `;
-    
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
+    const searchParam = document.getElementById('searchInput')?.value?.trim();
+    let printUrl = '{{ route("admission.request.print") }}';
+    if (searchParam) {
+        printUrl += '?search=' + encodeURIComponent(searchParam);
+    }
+
+    window.open(printUrl, '_blank');
 }
 </script>
 @endsection

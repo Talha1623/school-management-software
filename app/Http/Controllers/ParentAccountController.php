@@ -55,9 +55,26 @@ class ParentAccountController extends Controller
      */
     public function print(Request $request): View
     {
-        $parents = ParentAccount::query()
-            ->orderBy('name')
-            ->get();
+        $query = ParentAccount::query();
+
+        // Apply search filter if present (match Manage Access listing behavior)
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('whatsapp', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(id_card_number) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(address) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(profession) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $parents = $query->orderBy('name')->get();
 
         $settings = GeneralSetting::getSettings();
 

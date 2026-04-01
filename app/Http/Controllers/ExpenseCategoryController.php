@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ExpenseCategory;
 use App\Models\Campus;
 use App\Models\ClassModel;
+use App\Models\GeneralSetting;
 use App\Models\Section;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -240,6 +241,43 @@ class ExpenseCategoryController extends Controller
         
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Print expense categories (dedicated print page).
+     */
+    public function print(Request $request): View
+    {
+        $query = ExpenseCategory::query();
+
+        // If accountant is logged in, restrict to their campus (to match listing behavior)
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && !empty($accountant->campus)) {
+                $query->where('campus', $accountant->campus);
+            }
+        }
+
+        // Apply search filter if present
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(category_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $categories = $query->orderBy('category_name')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('expense-management.categories-print', [
+            'categories' => $categories,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 }
 

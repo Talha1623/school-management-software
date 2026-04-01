@@ -372,13 +372,86 @@ use Illuminate\Support\Facades\Auth;
             </div>
 
             @if($staff->hasPages())
-                <div class="mt-3">
-                    {{ $staff->links() }}
+                <div class="mt-3 staff-pagination-wrap">
+                    <div class="staff-pagination-row">
+                        <div class="staff-pagination-info">
+                            Showing
+                            <strong>{{ $staff->firstItem() ?? 0 }}</strong>
+                            to
+                            <strong>{{ $staff->lastItem() ?? 0 }}</strong>
+                            of
+                            <strong>{{ $staff->total() }}</strong>
+                            results
+                        </div>
+                        <div class="staff-pagination-links">
+                            {{ $staff->onEachSide(1)->links('pagination::bootstrap-5') }}
+                        </div>
+                    </div>
                 </div>
             @endif
         </div>
     </div>
 </div>
+
+<style>
+    /* Staff Management pagination - keep everything in one clean row */
+    .staff-pagination-wrap {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 10px 12px;
+    }
+    .staff-pagination-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap; /* responsive small screens */
+    }
+    .staff-pagination-info {
+        color: #6b7280;
+        font-size: 13px;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .staff-pagination-links .pagination {
+        margin: 0;
+        flex-wrap: nowrap;
+    }
+    .staff-pagination-links .page-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 38px;
+        height: 34px;
+        padding: 0 10px;
+        font-size: 13px;
+        border-radius: 8px;
+    }
+    .staff-pagination-links .page-item + .page-item {
+        margin-left: 6px;
+    }
+    .staff-pagination-links .page-item.active .page-link {
+        background-color: #003471;
+        border-color: #003471;
+    }
+    .staff-pagination-links .page-link:focus {
+        box-shadow: 0 0 0 0.2rem rgba(0, 52, 113, 0.2);
+    }
+    @media (max-width: 576px) {
+        .staff-pagination-row {
+            justify-content: center;
+        }
+        .staff-pagination-info {
+            order: 2;
+            white-space: normal;
+            text-align: center;
+        }
+        .staff-pagination-links {
+            order: 1;
+        }
+    }
+</style>
 
 <!-- Staff Modal -->
 <div class="modal fade" id="staffModal" tabindex="-1" aria-labelledby="staffModalLabel" aria-hidden="true">
@@ -1348,19 +1421,22 @@ function updateStatusFilter(value) {
 }
 
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
-    
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Staff Members List</h3>
-            ${printContents}
-        </div>
-    `;
-    
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
+    const searchParam = document.getElementById('searchInput')?.value?.trim();
+    const statusFilter = document.getElementById('statusFilter')?.value || '';
+
+    let url = '{{ route("staff.management.print") }}' + '?auto_print=1';
+    if (searchParam) {
+        url += '&search=' + encodeURIComponent(searchParam);
+    }
+    if (statusFilter) {
+        url += '&status_filter=' + encodeURIComponent(statusFilter);
+    }
+
+    const w = window.open(url, '_blank');
+    // If popup is blocked, fall back to same-tab navigation
+    if (!w) {
+        window.location.href = url;
+    }
 }
 
 function attachStatusSwitch(switchElement) {

@@ -1358,110 +1358,17 @@ function showToast(message, type = 'success') {
 }
 
 function printTable() {
-    const printContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Accountants List - Print</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    margin: 20px;
-                    color: #333;
-                }
-                h1 {
-                    color: #003471;
-                    text-align: center;
-                    border-bottom: 3px solid #003471;
-                    padding-bottom: 10px;
-                    margin-bottom: 20px;
-                }
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 20px;
-                }
-                th {
-                    background-color: #003471;
-                    color: white;
-                    padding: 12px;
-                    text-align: left;
-                    font-weight: bold;
-                    border: 1px solid #ddd;
-                }
-                td {
-                    padding: 10px;
-                    border: 1px solid #ddd;
-                }
-                tr:nth-child(even) {
-                    background-color: #f8f9fa;
-                }
-                .footer {
-                    margin-top: 30px;
-                    text-align: center;
-                    color: #666;
-                    font-size: 12px;
-                }
-                @media print {
-                    body {
-                        margin: 0;
-                    }
-                    @page {
-                        margin: 1cm;
-                    }
-                }
-            </style>
-        </head>
-        <body>
-            <h1>Accountants List</h1>
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Acc. ID</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Campus</th>
-                        <th>App Login</th>
-                        <th>Web Login</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${Array.from(document.querySelectorAll('.accountant-table tbody tr')).map((row, index) => {
-                        const cells = row.querySelectorAll('td');
-                        const accId = cells[1]?.textContent.trim() || '';
-                        const name = cells[3]?.textContent.trim() || '';
-                        const email = cells[4]?.textContent.trim() || '';
-                        const campus = cells[5]?.textContent.trim() || '';
-                        const appLoginSwitch = cells[6]?.querySelector('.toggle-switch-input.app-login-switch');
-                        const webLoginSwitch = cells[7]?.querySelector('.toggle-switch-input.web-login-switch');
-                        return `
-                            <tr>
-                                <td>${index + 1}</td>
-                                <td>${accId}</td>
-                                <td>${name}</td>
-                                <td>${email}</td>
-                                <td>${campus}</td>
-                                <td>${appLoginSwitch?.checked ? 'Enabled' : 'Disabled'}</td>
-                                <td>${webLoginSwitch?.checked ? 'Enabled' : 'Disabled'}</td>
-                            </tr>
-                        `;
-                    }).join('')}
-                </tbody>
-            </table>
-            <div class="footer">
-                <p>Generated on: ${new Date().toLocaleString()}</p>
-            </div>
-        </body>
-        </html>
-    `;
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.onload = function() {
-        printWindow.print();
-    };
+    const searchParam = document.getElementById('searchInput')?.value?.trim();
+    const campusParam = document.getElementById('filterCampus')?.value?.trim();
+    let url = '{{ route("accountants.print") }}?auto_print=1';
+    if (searchParam) url += '&search=' + encodeURIComponent(searchParam);
+    if (campusParam) url += '&campus=' + encodeURIComponent(campusParam);
+
+    const w = window.open(url, '_blank');
+    // If popup is blocked, fall back to same-tab navigation
+    if (!w) {
+        window.location.href = url;
+    }
 }
 
 // Force dropdown menu to always open upward (top mein)

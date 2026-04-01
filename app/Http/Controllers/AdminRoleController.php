@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AdminRole;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -191,5 +192,35 @@ class AdminRoleController extends Controller
         // Simple PDF generation (you can use DomPDF or similar package)
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Print admin roles list in a dedicated print-only page.
+     */
+    public function print(Request $request): View
+    {
+        $query = AdminRole::query();
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(admin_of) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $adminRoles = $query->orderBy('name', 'asc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('admin.roles-management-print', [
+            'adminRoles' => $adminRoles,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 }

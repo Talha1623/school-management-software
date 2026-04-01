@@ -16,7 +16,7 @@
             
             <!-- Content Area -->
             <div class="card-body p-3">
-                <form id="filterForm" method="GET" action="{{ route('student.info-report.print') }}" target="_blank">
+                <form id="filterForm" method="GET" action="{{ route('student.info-report.print') }}" onsubmit="return openPrintFromForm(event)">
                     <input type="hidden" name="type" value="all-inactive">
                     
                     <!-- Compact Single Row Layout -->
@@ -94,6 +94,20 @@
 </style>
 
 <script>
+function openPrintFromForm(event) {
+    event.preventDefault();
+    const form = document.getElementById('filterForm');
+    if (!form) return true;
+
+    const params = new URLSearchParams(new FormData(form));
+    const url = `${form.action}?${params.toString()}`;
+    const w = window.open(url, '_blank');
+    if (!w) {
+        window.location.href = url;
+    }
+    return false;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');

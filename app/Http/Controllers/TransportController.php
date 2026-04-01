@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Transport;
 use App\Models\Campus;
 use App\Models\Student;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -188,5 +189,35 @@ class TransportController extends Controller
         // Simple PDF generation (you can use DomPDF or similar package)
         return response($html)
             ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Print transport routes list (dedicated print page).
+     */
+    public function print(Request $request): View
+    {
+        $query = Transport::query();
+
+        // Apply search filter if present
+        if ($request->filled('search')) {
+            $search = trim((string) $request->get('search'));
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(route_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        $transports = $query->orderBy('route_name', 'asc')->get();
+        $settings = GeneralSetting::getSettings();
+
+        return view('transport.manage-print', [
+            'transports' => $transports,
+            'settings' => $settings,
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 }

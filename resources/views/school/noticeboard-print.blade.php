@@ -7,12 +7,12 @@
     <style>
         @media print {
             @page {
-                margin: 0;
-                size: 80mm auto;
+                margin: 10mm;
+                size: A4;
             }
             body {
                 margin: 0;
-                padding: 10mm;
+                padding: 0;
             }
             .no-print {
                 display: none !important;
@@ -26,11 +26,11 @@
         }
         
         body {
-            font-family: 'Courier New', monospace;
+            font-family: Arial, sans-serif;
             font-size: 12px;
-            width: 80mm;
+            width: 210mm;
             margin: 0 auto;
-            padding: 10mm;
+            padding: 0;
             background: white;
         }
         
@@ -40,17 +40,18 @@
         
         .header {
             text-align: center;
-            border-bottom: 1px dashed #000;
+            border-bottom: 2px solid #003471;
             padding-bottom: 10px;
             margin-bottom: 10px;
         }
         
         .school-name {
-            font-size: 16px;
-            font-weight: bold;
+            font-size: 18px;
+            font-weight: 800;
             margin-bottom: 5px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
+            color: #003471;
         }
         
         .notice-title {
@@ -62,7 +63,7 @@
         }
         
         .divider {
-            border-top: 1px dashed #000;
+            border-top: 2px solid #003471;
             margin: 8px 0;
         }
         
@@ -89,31 +90,34 @@
         .title-row {
             margin: 10px 0;
             padding: 8px;
-            background: #f5f5f5;
-            border-left: 3px solid #000;
+            background: #eef5ff;
+            border-left: 3px solid #003471;
             font-size: 12px;
             font-weight: bold;
             text-transform: uppercase;
             text-align: center;
+            border-radius: 6px;
         }
         
         .notice-content {
             margin: 15px 0;
             padding: 12px;
-            border: 1px dashed #000;
+            border: 2px solid #003471;
+            background: #f8fbff;
             font-size: 11px;
             line-height: 1.6;
             min-height: 80px;
             word-wrap: break-word;
             white-space: pre-wrap;
             text-align: justify;
+            border-radius: 8px;
         }
         
         .date-section {
             text-align: center;
             margin-top: 15px;
             padding-top: 10px;
-            border-top: 1px dashed #000;
+            border-top: 1px dashed #003471;
             font-size: 11px;
         }
         
@@ -130,7 +134,7 @@
             text-align: center;
             margin-top: 15px;
             padding-top: 10px;
-            border-top: 1px dashed #000;
+            border-top: 1px solid #003471;
             font-size: 9px;
         }
         
@@ -138,6 +142,20 @@
             margin-top: 8px;
             font-weight: bold;
             text-transform: uppercase;
+        }
+
+        .notice-image {
+            margin: 12px 0 0 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .notice-image img {
+            max-width: 100%;
+            max-height: 150px;
+            object-fit: cover;
+            border: 2px solid #003471;
+            border-radius: 8px;
         }
         
         .print-btn {
@@ -162,11 +180,11 @@
         
         @media print {
             .notice-content {
-                border: 1px solid #000;
+                border: 2px solid #003471;
             }
             .title-row {
-                background: transparent;
-                border-left: 2px solid #000;
+                background: #eef5ff;
+                border-left: 3px solid #003471;
             }
         }
     </style>
@@ -174,7 +192,7 @@
 <body>
     <div class="notice">
         <div class="header">
-            <div class="school-name">School Management System</div>
+            <div class="school-name">{{ $settings->school_name ?? 'School Name' }}</div>
             <div class="notice-title">Official Notice</div>
         </div>
         
@@ -196,15 +214,19 @@
         </div>
         @endif
         
-        @if($noticeboard->show_on === 'Yes')
         <div class="info-row">
             <span class="info-label">Status:</span>
-            <span class="info-value">Active</span>
+            <span class="info-value">{{ $noticeboard->show_on === 'Yes' ? 'Active' : 'Inactive' }}</span>
         </div>
-        @endif
         
         <div class="divider"></div>
         
+        @if($noticeboard->image)
+            <div class="notice-image">
+                <img src="{{ asset('storage/' . $noticeboard->image) }}" alt="Notice Image">
+            </div>
+        @endif
+
         @if($noticeboard->notice)
         <div class="notice-content">
 {{ $noticeboard->notice }}
@@ -215,32 +237,26 @@
         </div>
         @endif
         
-        <div class="divider"></div>
-        
-        <div class="date-section">
-            <div class="date-label">Notice Date</div>
-            <div class="date-value">{{ $noticeboard->date->format('d-m-Y') }}</div>
-        </div>
-        
         <div class="footer">
             <div class="footer-text">Thank You</div>
             <div style="margin-top: 8px; font-size: 9px;">
-                Generated: {{ date('d-m-Y H:i:s') }}
+                Generated: {{ $printedAt ?? now()->format('d M Y, h:i A') }}
             </div>
         </div>
         
         <div class="print-btn no-print">
             <button class="btn-print" onclick="window.print()">
-                🖨️ Print Notice
+                Print Notice
             </button>
         </div>
     </div>
     
+    @if(request()->get('auto_print'))
     <script>
-        // Auto print when page loads
-        window.onload = function() {
-            window.print();
-        };
+        window.addEventListener('load', function () {
+            setTimeout(function () { window.print(); }, 300);
+        });
     </script>
+    @endif
 </body>
 </html>

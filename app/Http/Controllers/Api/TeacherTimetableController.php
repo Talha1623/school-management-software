@@ -598,61 +598,93 @@ class TeacherTimetableController extends Controller
                 $query->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
             }
             
-            // Filter by campus if provided - case insensitive (MANDATORY if provided)
-            // If campus is provided, match exact campus OR null campus (for backward compatibility)
+            // Campus handling:
+            // 1) If provided, filter by it (case-insensitive), also include null-campus for backward compatibility.
+            // 2) If NOT provided, try to auto-detect a single campus from Timetable or Subject for this class/section.
+            $campusName = null;
             if (!empty($validated['campus'])) {
                 $campusName = strtolower(trim($validated['campus']));
                 $query->where(function($q) use ($campusName) {
                     $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusName])
-                      ->orWhereNull('campus'); // Also include entries with null campus for backward compatibility
+                      ->orWhereNull('campus');
                 });
+            } else {
+                // Auto-detect campus
+                $autoCampus = null;
+                // First try Timetable
+                $campusProbe = Timetable::query()
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
+                if (!empty($validated['section'])) {
+                    $campusProbe->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
+                }
+                $ttCampuses = $campusProbe->whereNotNull('campus')->pluck('campus')->filter()->map(function($c){ return trim((string)$c); })->unique()->values();
+                if ($ttCampuses->count() === 1) {
+                    $autoCampus = strtolower($ttCampuses->first());
+                } else {
+                    // Fallback to Subject table
+                    $subProbe = Subject::query()
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
+                    if (!empty($validated['section'])) {
+                        $subProbe->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
+                    }
+                    $subCampuses = $subProbe->whereNotNull('campus')->pluck('campus')->filter()->map(function($c){ return trim((string)$c); })->unique()->values();
+                    if ($subCampuses->count() === 1) {
+                        $autoCampus = strtolower($subCampuses->first());
+                    }
+                }
+                if (!empty($autoCampus)) {
+                    $campusName = $autoCampus;
+                    $query->where(function($q) use ($campusName) {
+                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusName])
+                          ->orWhereNull('campus');
+                    });
+                }
             }
             
-            // Get static subjects list
+            // Include static subjects list
             $staticSubjects = $this->getStaticSubjects();
-            
-            // Filter by teacher's assigned subjects AND static subjects
-            // Show timetables for assigned subjects OR static subjects (not all subjects for this class/section)
-            // Static subjects should be included regardless of teacher assignment (they are class-wide activities)
-            if (!empty($teacherSubjectNames) || !empty($staticSubjects)) {
-                $query->where(function($q) use ($teacherSubjectNames, $staticSubjects) {
-                    // Include assigned subjects
-                    if (!empty($teacherSubjectNames)) {
-                        foreach ($teacherSubjectNames as $subjectName) {
-                            $subjectNameLower = strtolower(trim($subjectName));
-                            // Exact match
-                            $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                            
-                            // Handle common subject name variations
-                            $subjectVariations = [
-                                'computer science' => ['computer science', 'computer', 'cs', 'comp science'],
-                                'english' => ['english', 'eng'],
-                                'mathematics' => ['mathematics', 'maths', 'math'],
-                                'urdu' => ['urdu'],
-                                'science' => ['science', 'sci'],
-                                'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
-                                'social studies' => ['social studies', 'social', 'sst'],
-                            ];
-                            
-                            if (isset($subjectVariations[$subjectNameLower])) {
-                                foreach ($subjectVariations[$subjectNameLower] as $variant) {
-                                    $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
+
+            // CLASS API default: show timetable for the whole class (all subjects).
+            // Only restrict to teacher subjects if explicitly requested.
+            $teacherOnly = filter_var($request->query('teacher_only', 'false'), FILTER_VALIDATE_BOOLEAN);
+            $showAllSubjects = !$teacherOnly;
+
+            if ($teacherOnly) {
+                // Restrict by teacher's assigned subjects plus static subjects
+                if (!empty($teacherSubjectNames) || !empty($staticSubjects)) {
+                    $query->where(function($q) use ($teacherSubjectNames, $staticSubjects) {
+                        if (!empty($teacherSubjectNames)) {
+                            foreach ($teacherSubjectNames as $subjectName) {
+                                $subjectNameLower = strtolower(trim($subjectName));
+                                $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+
+                                $subjectVariations = [
+                                    'computer science' => ['computer science', 'computer', 'cs', 'comp science'],
+                                    'english' => ['english', 'eng'],
+                                    'mathematics' => ['mathematics', 'maths', 'math'],
+                                    'urdu' => ['urdu'],
+                                    'science' => ['science', 'sci'],
+                                    'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
+                                    'social studies' => ['social studies', 'social', 'sst'],
+                                ];
+
+                                if (isset($subjectVariations[$subjectNameLower])) {
+                                    foreach ($subjectVariations[$subjectNameLower] as $variant) {
+                                        $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($variant))]);
+                                    }
                                 }
                             }
                         }
-                    }
-                    
-                    // Include static subjects (Assembly, Lunch Break, etc.)
-                    // These are class-wide activities and should always be shown
-                    if (!empty($staticSubjects)) {
-                        foreach ($staticSubjects as $staticSubject) {
-                            $q->orWhereRaw('TRIM(subject) = ?', [trim($staticSubject)]);
+
+                        if (!empty($staticSubjects)) {
+                            foreach ($staticSubjects as $staticSubject) {
+                                $q->orWhereRaw('TRIM(subject) = ?', [trim($staticSubject)]);
+                            }
                         }
-                    }
-                });
-            } else {
-                // If teacher has no assigned subjects and no static subjects, return empty
-                $query->whereRaw('1 = 0');
+                    });
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
             }
 
             // Debug: Check if any data exists for this class (without section filter)
@@ -797,13 +829,127 @@ class TeacherTimetableController extends Controller
                 $actualCampus = $timetables->first()->campus;
             }
 
+            // Build subject lists for visibility (even if no timetable rows exist for some subjects)
+            $subjectsInClass = $allClassTimetables->pluck('subject')
+                ->filter()
+                ->map(function($s) { return trim((string)$s); })
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $assignedSubjectsForClass = $teacherSubjects->pluck('subject_name')
+                ->filter()
+                ->map(function($s) { return trim((string)$s); })
+                ->unique()
+                ->values()
+                ->toArray();
+
+            // Subjects that are assigned but don't have any timetable periods yet
+            $missingAssignedSubjects = array_values(array_diff(
+                array_map('strtolower', $assignedSubjectsForClass),
+                array_map('strtolower', $subjectsInClass)
+            ));
+            // Restore original casing by matching against assigned list
+            $missingAssignedSubjects = array_values(array_filter($assignedSubjectsForClass, function($s) use ($missingAssignedSubjects) {
+                return in_array(strtolower($s), $missingAssignedSubjects, true);
+            }));
+
+            // Class-wide subjects from Subject table (irrespective of teacher)
+            $classSubjectsQuery = Subject::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
+            if (!empty($validated['section'])) {
+                $classSubjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))]);
+            }
+            if (!empty($validated['campus'])) {
+                $classSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))]);
+            }
+            $classSubjectsAll = $classSubjectsQuery->get();
+            $classSubjects = $classSubjectsAll->pluck('subject_name')
+                ->filter()
+                ->map(function($s) { return trim((string)$s); })
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray();
+            $classSubjectsDetail = $classSubjectsAll->map(function($row) {
+                return [
+                    'subject_name' => trim((string)($row->subject_name ?? '')),
+                    'teacher' => $row->teacher ?? null,
+                    'campus' => $row->campus ?? null,
+                    'section' => $row->section ?? null,
+                ];
+            })->unique(function($i){ return strtolower($i['subject_name']).'|'.strtolower((string)$i['section']).'|'.strtolower((string)$i['campus']); })
+              ->values()
+              ->toArray();
+
+            // Build timetable grouped by subject (include subjects with no periods)
+            $periodsBySubject = [];
+            // Normalize helper
+            $normalize = function($s) { return strtolower(trim((string)$s)); };
+
+            // Seed with empty arrays for every subject attached to the class
+            foreach ($classSubjects as $subj) {
+                $periodsBySubject[$subj] = [];
+            }
+            // Also ensure any subjects found in timetable are present
+            foreach ($subjectsInClass as $subj) {
+                if (!array_key_exists($subj, $periodsBySubject)) {
+                    $periodsBySubject[$subj] = [];
+                }
+            }
+            // Fill with actual periods
+            foreach ($timetableData as $row) {
+                $subj = trim((string)$row['subject']);
+                if ($subj === '') {
+                    continue;
+                }
+                if (!array_key_exists($subj, $periodsBySubject)) {
+                    $periodsBySubject[$subj] = [];
+                }
+                $periodsBySubject[$subj][] = $row;
+            }
+
+            // Optional compact subject summaries (first/last time and counts)
+            $subjectsSummary = [];
+            foreach ($periodsBySubject as $subj => $periods) {
+                if (empty($periods)) {
+                    $subjectsSummary[] = [
+                        'subject' => $subj,
+                        'periods' => 0,
+                        'first_time' => null,
+                        'last_time' => null,
+                    ];
+                    continue;
+                }
+                // Sort by starting_time for summary
+                usort($periods, function($a, $b) {
+                    return strcmp($a['starting_time'], $b['starting_time']);
+                });
+                $subjectsSummary[] = [
+                    'subject' => $subj,
+                    'periods' => count($periods),
+                    'first_time' => $periods[0]['starting_time_formatted'] ?? $periods[0]['starting_time'],
+                    'last_time' => $periods[count($periods)-1]['ending_time_formatted'] ?? $periods[count($periods)-1]['ending_time'],
+                ];
+            }
+
             $responseData = [
                 'class' => $validated['class'],
                 'section' => $validated['section'] ?? null,
-                'campus' => $validated['campus'] ?? null,
+                'campus' => $validated['campus'] ?? ($campusName ? ucwords($campusName) : null),
                 'timetable' => $timetableData->values()->toArray(),
                 'timetable_by_day' => $timetableByDay,
+                'timetable_by_subject' => $periodsBySubject,
+                'subjects_summary' => $subjectsSummary,
                 'total_periods' => $timetables->count(),
+                'all_subjects' => $showAllSubjects,
+                // New: surface subjects even if they have no timetable rows yet
+                'subjects_in_class' => $subjectsInClass,
+                'assigned_subjects' => $assignedSubjectsForClass,
+                'assigned_subjects_without_periods' => $missingAssignedSubjects,
+                // New: subjects attached to class from Subject table (full list)
+                'class_subjects' => $classSubjects,
+                'class_subjects_detail' => $classSubjectsDetail,
             ];
 
             // Add day, month and year info if provided

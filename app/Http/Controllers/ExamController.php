@@ -77,6 +77,39 @@ class ExamController extends Controller
     }
 
     /**
+     * Print exam list with applied filters (clean A4 print-only view).
+     */
+    public function printList(Request $request): View
+    {
+        $query = Exam::query();
+        $filterCampus = $request->get('filter_campus');
+
+        // Search functionality (same as index)
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(exam_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(campus) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(session) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        if ($filterCampus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        }
+
+        $exams = $query->orderBy('exam_date', 'desc')->get();
+        $settings = GeneralSetting::getSettings();
+        $printedAt = now();
+        $autoPrint = (int) $request->get('auto_print', 0) === 1;
+
+        return view('exam.list-print', compact('exams', 'settings', 'printedAt', 'filterCampus', 'autoPrint'));
+    }
+
+    /**
      * Store a newly created exam.
      */
     public function store(Request $request): RedirectResponse

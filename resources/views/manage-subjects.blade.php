@@ -1123,6 +1123,7 @@ function printTable() {
     if (urlParams.get('filter_class')) filterParams.filter_class = urlParams.get('filter_class');
     if (urlParams.get('filter_section')) filterParams.filter_section = urlParams.get('filter_section');
     if (urlParams.get('search')) filterParams.search = urlParams.get('search');
+    filterParams.auto_print = 1;
     
     // Build print URL
     let printUrl = '{{ route("manage-subjects.print") }}';
@@ -1132,7 +1133,10 @@ function printTable() {
     }
     
     // Open print page in new window
-    window.open(printUrl, '_blank');
+    const w = window.open(printUrl, '_blank');
+    if (!w) {
+        window.location.href = printUrl;
+    }
 }
 </script>
 @endsection

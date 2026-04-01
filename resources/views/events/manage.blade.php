@@ -693,19 +693,14 @@ function updateEntriesPerPage(value) {
 
 // Print table
 function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
-    
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Events List</h3>
-            ${printContents}
-        </div>
-    `;
-    
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
+    const searchParam = document.getElementById('searchInput')?.value?.trim();
+    let url = '{{ route("events.print") }}?auto_print=1';
+    if (searchParam) url += '&search=' + encodeURIComponent(searchParam);
+
+    const w = window.open(url, '_blank');
+    if (!w) {
+        window.location.href = url;
+    }
 }
 </script>
 @endsection
