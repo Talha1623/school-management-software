@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
@@ -36,6 +38,32 @@ class GeneralSettingsController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
+        $settings = GeneralSetting::getSettings();
+        $missingColumns = [];
+        $voucherColumns = [
+            'fee_voucher_notice' => 'text',
+            'accounts_settlement_print_note' => 'text',
+            'fee_voucher_bank_name' => 'string',
+            'fee_voucher_account_title' => 'string',
+            'fee_voucher_account_number' => 'string',
+            'fee_voucher_iban' => 'string',
+        ];
+        foreach ($voucherColumns as $column => $type) {
+            if (!Schema::hasColumn('general_settings', $column)) {
+                $missingColumns[$column] = $type;
+            }
+        }
+        if (!empty($missingColumns)) {
+            Schema::table('general_settings', function (Blueprint $table) use ($missingColumns) {
+                foreach ($missingColumns as $column => $type) {
+                    if ($type === 'text') {
+                        $table->text($column)->nullable();
+                    } else {
+                        $table->string($column)->nullable();
+                    }
+                }
+            });
+        }
         $validated = $request->validate([
             'school_name' => ['nullable', 'string', 'max:255'],
             'sms_signature' => ['nullable', 'string', 'max:255'],
@@ -45,11 +73,15 @@ class GeneralSettingsController extends Controller
             'currency' => ['nullable', 'string', 'max:10'],
             'timezone' => ['nullable', 'string', 'max:255'],
             'running_session' => ['nullable', 'string', 'max:50'],
+            'fee_voucher_notice' => ['nullable', 'string', 'max:1000'],
+            'accounts_settlement_print_note' => ['nullable', 'string', 'max:1000'],
+            'fee_voucher_bank_name' => ['nullable', 'string', 'max:255'],
+            'fee_voucher_account_title' => ['nullable', 'string', 'max:255'],
+            'fee_voucher_account_number' => ['nullable', 'string', 'max:255'],
+            'fee_voucher_iban' => ['nullable', 'string', 'max:255'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,svg', 'max:2048'],
             'system_name' => ['nullable', 'string', 'max:100'],
         ]);
-
-        $settings = GeneralSetting::getSettings();
 
         // Handle logo upload
         if ($request->hasFile('logo')) {

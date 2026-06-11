@@ -15,9 +15,71 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Carbon\Carbon;
 use App\Models\AdvanceFee;
+use App\Services\FeePaymentWebTables;
 
 class ParentAccountController extends Controller
 {
+    /**
+     * Fix legacy placeholder emails/passwords using linked students' father_email.
+     */
+    public function repairPlaceholderFromStudents(Request $request): RedirectResponse
+    {
+        $fixed = 0;
+        $passwordFixed = 0;
+
+        ParentAccount::query()->orderBy('id')->chunkById(100, function ($parents) use (&$fixed, &$passwordFixed) {
+            foreach ($parents as $parent) {
+                $student = Student::query()
+                    ->where(function ($query) use ($parent) {
+                        $query->where('parent_account_id', $parent->id);
+                        if (!empty($parent->id_card_number)) {
+                            $query->orWhere('father_id_card', $parent->id_card_number);
+                        }
+                    })
+                    ->whereNotNull('father_email')
+                    ->where('father_email', '!=', '')
+                    ->orderByDesc('id')
+                    ->first();
+
+                $updateData = [];
+
+                if ($student && filter_var($student->father_email, FILTER_VALIDATE_EMAIL)) {
+                    $email = strtolower(trim((string) $student->father_email));
+                    if ($parent->hasPlaceholderEmail() || strtolower(trim((string) $parent->email)) !== $email) {
+                        $emailTaken = ParentAccount::whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                            ->where('id', '!=', $parent->id)
+                            ->exists();
+                        if (!$emailTaken) {
+                            $updateData['email'] = $email;
+                            $fixed++;
+                        }
+                    }
+                }
+
+                if (empty($parent->plain_password)) {
+                    $updateData['password'] = 'parent';
+                    $updateData['plain_password'] = 'parent';
+                    $passwordFixed++;
+                }
+
+                if (!empty($updateData)) {
+                    $parent->update($updateData);
+                    $parent->refresh();
+                    AdvanceFee::where('parent_id', (string) $parent->id)->update([
+                        'email' => $parent->email,
+                        'name' => $parent->name,
+                        'phone' => $parent->phone,
+                        'id_card_number' => $parent->id_card_number,
+                    ]);
+                }
+            }
+        });
+
+        return redirect()
+            ->route('parent.manage-access')
+            ->with('success', "Repair complete: {$fixed} email(s) updated, {$passwordFixed} password(s) set to \"parent\".");
+    }
+
     /**
      * Display a listing of parent accounts.
      */
@@ -90,36 +152,22 @@ class ParentAccountController extends Controller
      */
     public function printDuesReport(Request $request, ParentAccount $parent_account): View
     {
-        $students = Student::where('parent_account_id', $parent_account->id)->get();
-        $studentCodes = $students->pluck('student_code')->filter()->values();
-        $payments = collect();
-
-        if ($studentCodes->isNotEmpty()) {
-            $payments = StudentPayment::whereIn('student_code', $studentCodes)
-                ->where('method', 'Generated')
-                ->orderBy('student_code')
-                ->orderBy('payment_date')
-                ->get();
-        }
+        $students = FeePaymentWebTables::studentsForParentAccount($parent_account);
+        $report = FeePaymentWebTables::parentDuesReportPayload($students);
 
         $studentsByCode = $students->keyBy(function ($student) {
             return $student->student_code;
         });
 
-        $totalDue = $payments->sum(function ($payment) {
-            $amount = (float) ($payment->payment_amount ?? 0);
-            $discount = (float) ($payment->discount ?? 0);
-            $lateFee = (float) ($payment->late_fee ?? 0);
-            return $amount - $discount + $lateFee;
-        });
-
         return view('parent.dues-report-print', [
             'parent' => $parent_account,
             'studentsByCode' => $studentsByCode,
-            'payments' => $payments,
-            'totalDue' => $totalDue,
+            'dueRows' => $report['rows'],
+            'tableTotals' => $report['totals'],
+            'totalDue' => $report['total_due'],
+            'settings' => GeneralSetting::getSettings(),
             'printedAt' => Carbon::now()->format('d-m-Y H:i'),
-            'autoPrint' => $request->get('auto_print'),
+            'autoPrint' => $request->boolean('auto_print'),
         ]);
     }
 
@@ -139,7 +187,7 @@ class ParentAccountController extends Controller
             'profession' => ['nullable', 'string', 'max:255'],
         ]);
 
-        // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
+        $validated['plain_password'] = $validated['password'];
         $parent = ParentAccount::create($validated);
 
         AdvanceFee::firstOrCreate(
@@ -157,9 +205,12 @@ class ParentAccountController extends Controller
         );
 
         if ($request->ajax() || $request->wantsJson()) {
+            $parentData = $parent->fresh()->toArray();
+            $parentData['plain_password'] = $validated['password'];
+
             return response()->json([
                 'success' => true,
-                'parent' => $parent,
+                'parent' => $parentData,
             ]);
         }
 
@@ -188,6 +239,8 @@ class ParentAccountController extends Controller
         // If password is empty, remove it from update data
         if (empty($validated['password'])) {
             unset($validated['password']);
+        } else {
+            $validated['plain_password'] = $validated['password'];
         }
 
         $parent_account->update($validated);
@@ -256,8 +309,8 @@ class ParentAccountController extends Controller
             'password' => ['required', 'string', 'min:6', 'confirmed'],
         ]);
 
-        // Password will be automatically hashed by ParentAccount model's setPasswordAttribute
         $parent_account->password = $validated['password'];
+        $parent_account->plain_password = $validated['password'];
         $parent_account->save();
 
         return redirect()
@@ -477,13 +530,14 @@ class ParentAccountController extends Controller
             
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             
-            fputcsv($file, ['ID', 'Name', 'Email', 'Phone', 'WhatsApp', 'ID Card Number', 'Address', 'Profession', 'Created At']);
+            fputcsv($file, ['ID', 'Name', 'Email', 'Password', 'Phone', 'WhatsApp', 'ID Card Number', 'Address', 'Profession', 'Created At']);
             
             foreach ($parents as $parent) {
                 fputcsv($file, [
                     $parent->id,
                     $parent->name,
                     $parent->email,
+                    $parent->displayPassword(),
                     $parent->phone ?? 'N/A',
                     $parent->whatsapp ?? 'N/A',
                     $parent->id_card_number ?? 'N/A',
@@ -514,13 +568,14 @@ class ParentAccountController extends Controller
         $callback = function() use ($parents) {
             $file = fopen('php://output', 'w');
             
-            fputcsv($file, ['ID', 'Name', 'Email', 'Phone', 'WhatsApp', 'ID Card Number', 'Address', 'Profession', 'Created At']);
+            fputcsv($file, ['ID', 'Name', 'Email', 'Password', 'Phone', 'WhatsApp', 'ID Card Number', 'Address', 'Profession', 'Created At']);
             
             foreach ($parents as $parent) {
                 fputcsv($file, [
                     $parent->id,
                     $parent->name,
                     $parent->email,
+                    $parent->displayPassword(),
                     $parent->phone ?? 'N/A',
                     $parent->whatsapp ?? 'N/A',
                     $parent->id_card_number ?? 'N/A',

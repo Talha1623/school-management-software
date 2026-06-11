@@ -21,6 +21,20 @@
    
     <aside id="layout-menu" class="layout-menu menu-vertical menu active" data-simplebar>
         <ul class="menu-inner">
+            @php
+                $accountantUnreadChatCount = 0;
+                if (Auth::guard('accountant')->check()) {
+                    $accountantUser = Auth::guard('accountant')->user();
+                    if ($accountantUser) {
+                        $accountantUnreadChatCount = \App\Models\Message::where('from_type', 'accountant')
+                            ->where('to_type', 'accountant')
+                            ->where('to_id', $accountantUser->id)
+                            ->whereNull('read_at')
+                            ->count();
+                    }
+                }
+            @endphp
+
             <li class="menu-title small text-uppercase">
                 <span class="menu-title-text">MENU</span>
             </li>
@@ -49,7 +63,7 @@
                 </a>
             </li>
             
-            {{-- Family Fee Calculator --}}
+            {{-- Family Fee Calculator (accountant portal) --}}
             <li class="menu-item {{ request()->routeIs('accountant.family-fee-calculator*') ? 'active' : '' }}">
                 <a href="{{ route('accountant.family-fee-calculator') }}" class="menu-link {{ request()->routeIs('accountant.family-fee-calculator*') ? 'active' : '' }}">
                     <span class="material-symbols-outlined menu-icon">calculate</span>
@@ -177,8 +191,13 @@
                 </a>
                 <ul class="menu-sub">
                     <li class="menu-item">
+                        <a href="{{ route('accountant.expense-management') }}" class="menu-link {{ request()->routeIs('accountant.expense-management') ? 'active' : '' }}">
+                            Overview
+                        </a>
+                    </li>
+                    <li class="menu-item">
                         <a href="{{ route('accountant.add-manage-expense') }}" class="menu-link {{ request()->routeIs('accountant.add-manage-expense*') ? 'active' : '' }}">
-                            Add / Manage Expense
+                            Add Management Expense
                         </a>
                     </li>
                     <li class="menu-item">
@@ -256,8 +275,40 @@
                     </li>
                 </ul>
             </li>
+
+            <li class="menu-title small text-uppercase">
+                <span class="menu-title-text">IMPORTANT LINKS</span>
+            </li>
+
+            <li class="menu-item {{ request()->routeIs('accountant.chat*') ? 'active' : '' }}">
+                <a href="{{ route('accountant.chat') }}" class="menu-link {{ request()->routeIs('accountant.chat*') ? 'active' : '' }}">
+                    <span class="material-symbols-outlined menu-icon">chat</span>
+                    <span class="title">Chat</span>
+                    @if($accountantUnreadChatCount > 0)
+                        <span class="badge bg-danger ms-auto" style="font-size: 11px; min-width: 20px;">{{ $accountantUnreadChatCount > 99 ? '99+' : $accountantUnreadChatCount }}</span>
+                    @endif
+                </a>
+            </li>
+
+            <li class="menu-item {{ request()->routeIs('accountant.change-password*') ? 'active' : '' }}">
+                <a href="{{ route('accountant.change-password') }}" class="menu-link {{ request()->routeIs('accountant.change-password*') ? 'active' : '' }}">
+                    <span class="material-symbols-outlined menu-icon">lock</span>
+                    <span class="title">Change Password</span>
+                </a>
+            </li>
+
+            <li class="menu-item">
+                <a href="#" onclick="event.preventDefault(); document.getElementById('accountant-sidebar-logout-form').submit();" class="menu-link">
+                    <span class="material-symbols-outlined menu-icon">logout</span>
+                    <span class="title">Logout</span>
+                </a>
+            </li>
         </ul>
     </aside>
 </div>
 <!-- End Sidebar Area -->
+
+<form id="accountant-sidebar-logout-form" action="{{ route('accountant.logout') }}" method="POST" style="display: none;">
+    @csrf
+</form>
 

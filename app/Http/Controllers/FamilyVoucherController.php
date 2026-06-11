@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GeneralSetting;
 use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -9,6 +10,26 @@ use Illuminate\Support\Facades\DB;
 
 class FamilyVoucherController extends Controller
 {
+    private function walletKeyForStudent(Student $student): string
+    {
+        return (string) ($student->parent_account_id ?: $student->father_id_card ?: $student->father_name ?: $student->student_code);
+    }
+
+    private function availableWalletCreditForStudent(Student $student): float
+    {
+        $advanceFee = null;
+
+        if (!empty($student->parent_account_id)) {
+            $advanceFee = \App\Models\AdvanceFee::where('parent_id', (string) $student->parent_account_id)->first();
+        }
+
+        if (!$advanceFee && !empty($student->father_id_card)) {
+            $advanceFee = \App\Models\AdvanceFee::where('id_card_number', $student->father_id_card)->first();
+        }
+
+        return $advanceFee ? max(0, round((float) ($advanceFee->available_credit ?? 0), 2)) : 0.0;
+    }
+
     /**
      * Show the family vouchers page with filters.
      */
@@ -57,9 +78,9 @@ class FamilyVoucherController extends Controller
         $currentYear = date('Y');
 
         $copyMap = [
-            'three_copies' => ['PARENT COPY', 'SCHOOL COPY', 'STUDENT COPY'],
-            'two_copies' => ['PARENT COPY', 'SCHOOL COPY'],
-            'one_copy' => ['PARENT COPY'],
+            'three_copies' => ['Bank Copy', 'Parent Copy', 'School Copy'],
+            'two_copies' => ['Bank Copy', 'Parent Copy'],
+            'one_copy' => ['Bank Copy'],
         ];
         $copyLabels = $copyMap[$type] ?? $copyMap['three_copies'];
 
@@ -74,6 +95,7 @@ class FamilyVoucherController extends Controller
         $students = $studentsQuery->orderBy('student_name')->get();
 
         $vouchers = [];
+        $walletRemainingByParent = [];
         foreach ($students as $student) {
             $pendingPayments = \App\Models\StudentPayment::where('student_code', $student->student_code)
                 ->where('method', 'Generated')
@@ -166,8 +188,7 @@ class FamilyVoucherController extends Controller
                 return (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
             });
 
-            $total = $currentFeesSubtotal + $arrearsAmount + $lateFee;
-            $afterDueDate = $total;
+            $totalBeforeWallet = $currentFeesSubtotal + $arrearsAmount + $lateFee;
 
             $pendingFeesList = $pendingPayments->map(function ($payment) {
                 return [
@@ -177,6 +198,24 @@ class FamilyVoucherController extends Controller
                 ];
             });
 
+            $walletKey = $this->walletKeyForStudent($student);
+            if (!array_key_exists($walletKey, $walletRemainingByParent)) {
+                $walletRemainingByParent[$walletKey] = $this->availableWalletCreditForStudent($student);
+            }
+            $walletCredit = $walletRemainingByParent[$walletKey];
+            $walletApplied = min($walletCredit, $totalBeforeWallet);
+            if ($walletApplied > 0) {
+                $pendingFeesList->push([
+                    'description' => 'Advance Fee / Wallet Credit',
+                    'amount' => -$walletApplied,
+                    'sort_order' => 99,
+                ]);
+                $walletRemainingByParent[$walletKey] = max(0, round($walletCredit - $walletApplied, 2));
+            }
+
+            $total = max(0, round($totalBeforeWallet - $walletApplied, 2));
+            $afterDueDate = $total;
+
             $vouchers[] = [
                 'student' => $student,
                 'pending_fees' => $pendingFeesList,
@@ -184,6 +223,8 @@ class FamilyVoucherController extends Controller
                 'arrears_amount' => $arrearsAmount,
                 'subtotal' => $currentFeesSubtotal + $arrearsAmount,
                 'late_fee' => $lateFee,
+                'wallet_credit' => $walletCredit,
+                'wallet_applied' => $walletApplied,
                 'total' => $total,
                 'after_due_date' => $afterDueDate,
                 'voucher_validity' => $latestDueDate->copy()->addDays(10),
@@ -195,7 +236,9 @@ class FamilyVoucherController extends Controller
             ];
         }
 
-        return view('accounting.fee-voucher.print', compact('vouchers', 'copyLabels'));
+        $settings = GeneralSetting::getSettings();
+
+        return view('accounting.fee-voucher.print', compact('vouchers', 'copyLabels', 'settings'));
     }
 }
 

@@ -203,8 +203,8 @@ class PrintStudentCardController extends Controller
         $this->applySoftDeleteFilter($query);
         
         // Only include active students with valid class and admission_date
-        // This ensures only active students are shown
-        $query->whereNotNull('class')
+        $query->active()
+              ->whereNotNull('class')
               ->where('class', '!=', '')
               ->whereNotNull('admission_date');
         
@@ -308,10 +308,6 @@ class PrintStudentCardController extends Controller
             'student_label_color' => $request->get('student_label_color', '#003471'),
             'details_text_color' => $request->get('details_text_color', '#333333'),
             'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
-            'orientation' => $request->get('orientation', 'portrait'),
-            'show_monogram' => $request->get('show_monogram', 'yes'),
-            'card_style' => $request->get('card_style', 'modern'),
-            'border_style' => $request->get('border_style', 'rounded'),
         ];
         
         return view('id-card.print-student-card-print', compact('students', 'designSettings', 'settings'));

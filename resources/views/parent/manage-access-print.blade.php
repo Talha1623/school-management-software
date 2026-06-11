@@ -1,3 +1,7 @@
+@php
+    $parents = $parents ?? collect();
+    $settings = $settings ?? \App\Models\GeneralSetting::getSettings();
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -299,6 +303,7 @@
                         <th>Phone</th>
                         <th>WhatsApp</th>
                         <th>Email</th>
+                        <th>Password</th>
                         <th>ID Card</th>
                         <th>Profession</th>
                         <th>Address</th>
@@ -312,13 +317,14 @@
                             <td>{{ $parent->phone ?? 'N/A' }}</td>
                             <td>{{ $parent->whatsapp ?? 'N/A' }}</td>
                             <td>{{ $parent->email ?? 'N/A' }}</td>
+                            <td>{{ $parent->displayPassword() }}</td>
                             <td>{{ $parent->id_card_number ?? 'N/A' }}</td>
                             <td>{{ $parent->profession ?? 'N/A' }}</td>
                             <td>{{ $parent->address ?? 'N/A' }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="empty-state">
+                            <td colspan="9" class="empty-state">
                                 No parent accounts found.
                             </td>
                         </tr>

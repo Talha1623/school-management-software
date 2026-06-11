@@ -17,8 +17,8 @@
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">groups</span>
                         </div>
-                        <a href="{{ route('parent.info-request.all-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
-                            View Report
+                        <a href="{{ route('parent.info-request.all-parents.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            Print
                         </a>
                     </div>
                 </div>
@@ -34,8 +34,8 @@
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">payments</span>
                         </div>
-                        <a href="{{ route('parent.info-request.parent-credit.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
-                            View Report
+                        <a href="{{ route('parent.info-request.parent-credit.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            Print
                         </a>
                     </div>
                 </div>
@@ -51,8 +51,8 @@
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">report</span>
                         </div>
-                        <a href="{{ route('parent.info-request.defaulter-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
-                            View Report
+                        <a href="{{ route('parent.info-request.defaulter-parents.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            Print
                         </a>
                     </div>
                 </div>
@@ -68,8 +68,8 @@
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">account_tree</span>
                         </div>
-                        <a href="{{ route('parent.info-request.family-tree.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
-                            View Report
+                        <a href="{{ route('parent.info-request.family-tree.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
+                            Print
                         </a>
                     </div>
                 </div>
@@ -97,7 +97,7 @@
                                     <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">All Parents</h6>
                                     <p class="mb-0 text-muted" style="font-size: 12px;">Complete list of parents with linked students.</p>
                                 </div>
-                                <a href="{{ route('parent.info-request.all-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
+                                <a href="{{ route('parent.info-request.all-parents.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
                                     Print
                                 </a>
@@ -109,7 +109,7 @@
                                     <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Parent Credit Report</h6>
                                     <p class="mb-0 text-muted" style="font-size: 12px;">Total paid amounts grouped by parent.</p>
                                 </div>
-                                <a href="{{ route('parent.info-request.parent-credit.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
+                                <a href="{{ route('parent.info-request.parent-credit.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
                                     Print
                                 </a>
@@ -121,7 +121,7 @@
                                     <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Family Tree Report</h6>
                                     <p class="mb-0 text-muted" style="font-size: 12px;">Parent with linked students list.</p>
                                 </div>
-                                <a href="{{ route('parent.info-request.family-tree.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
+                                <a href="{{ route('parent.info-request.family-tree.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
                                     Print
                                 </a>
@@ -133,7 +133,7 @@
                                     <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Defaulter Parents Report</h6>
                                     <p class="mb-0 text-muted" style="font-size: 12px;">Parents with outstanding dues.</p>
                                 </div>
-                                <a href="{{ route('parent.info-request.defaulter-parents.print', ['auto_print' => 1]) }}" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
+                                <a href="{{ route('parent.info-request.defaulter-parents.print') }}?auto_print=1" target="_blank" class="btn btn-sm btn-light text-dark ms-3" style="font-size: 12px; padding: 4px 12px;">
                                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
                                     Print
                                 </a>

@@ -151,8 +151,8 @@ class ParentTimetableController extends Controller
                 $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($studentSection)]);
             }
 
-            // Don't filter by campus - show all timetables for class/section regardless of campus
-            // This ensures timetables added by super admin show up even if campus doesn't match
+            // Strict campus isolation: only student's own campus timetable should be visible.
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $student->campus))]);
 
             // Filter by day name for the specific date
             $query->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)]);
@@ -237,7 +237,8 @@ class ParentTimetableController extends Controller
                 $allTimetablesQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($studentSection)]);
             }
             
-            // Don't filter by campus - show all timetables for class/section regardless of campus
+            // Strict campus isolation for weekly grouping as well.
+            $allTimetablesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $student->campus))]);
             
             $allTimetables = $allTimetablesQuery->orderByRaw("
                 CASE day

@@ -15,6 +15,7 @@ use App\Models\Subject;
 use App\Models\Student;
 use App\Models\ParentAccount;
 use App\Models\StudentPayment;
+use App\Services\MobilePushNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,11 @@ use Illuminate\View\View;
 
 class GenerateSalaryController extends Controller
 {
+    public function __construct(
+        private readonly MobilePushNotificationService $pushNotifications,
+    ) {
+    }
+
     /**
      * Display the generate salary form.
      */
@@ -310,7 +316,7 @@ class GenerateSalaryController extends Controller
                 $finalSalaryGenerated = max(0, $salaryGenerated - $loanRepayment);
 
                 // Create salary record
-                Salary::create([
+                $salary = Salary::create([
                     'staff_id' => $staff->id,
                     'salary_month' => $monthName,
                     'year' => (string)$year,
@@ -325,6 +331,8 @@ class GenerateSalaryController extends Controller
                     'discount' => 0,
                     'status' => 'Pending',
                 ]);
+
+                $this->pushNotifications->notifyStaffSalaryGenerated($staff, $salary);
 
                 $generatedCount++;
             }
@@ -434,7 +442,7 @@ class GenerateSalaryController extends Controller
             'bonus_amount' => ['nullable', 'numeric', 'min:0'],
             'deduction_title' => ['nullable', 'string', 'max:255'],
                 'deduction_amount' => ['nullable', 'numeric', 'min:0'],
-                'payment_method' => ['required', 'string', 'in:Bank,Wallet,Transfer,Card,Check,Deposit,Cash'],
+                'payment_method' => ['required', 'string', 'in:Bank,Wallet,Transfer,Card,Check,Cheque,Deposit,Cash'],
             'fully_paid' => ['nullable', 'string', 'in:0,1'],
             'payment_date' => ['required', 'date'],
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
@@ -474,15 +482,29 @@ class GenerateSalaryController extends Controller
         // Update salary with all calculated values
         // amount_paid is used as entered by user
         // salary_generated includes bonus (added) and deduction/loan (subtracted)
-        $salary->update([
+        $updates = [
             'amount_paid' => $amountPaid,
             'loan_repayment' => $loanRepayment,
             'salary_generated' => $newSalaryGenerated,
             'discount' => 0,
+            'bonus_amount' => $bonusAmount,
+            'deduction_amount' => $deductionAmount,
+            'payment_method' => Salary::normalizePaymentMethod($validated['payment_method']),
+            'payment_date' => $validated['payment_date'],
             'status' => $status,
-        ]);
+        ];
 
-        // TODO: Store bonus, deduction, payment method, payment date, and notify_employee details if needed (may require additional table)
+        if ($amountPaid > 0 || $status === 'Paid') {
+            $updates = array_merge($updates, Salary::metadataForPaidAction($salary));
+            $updates['payment_method'] = Salary::normalizePaymentMethod($validated['payment_method']);
+            $updates['payment_date'] = $validated['payment_date'] ?? ($updates['payment_date'] ?? null);
+        }
+
+        $salary->update($updates);
+
+        if (($validated['notify_employee'] ?? '0') === '1' && $salary->staff) {
+            $this->pushNotifications->notifyStaffSalaryPaid($salary->staff, $salary);
+        }
 
         // Get the updated salary with staff relationship
         $salary->refresh();
@@ -1050,7 +1072,19 @@ class GenerateSalaryController extends Controller
             'status' => ['required', 'in:Pending,Paid,Issued'],
         ]);
 
-        $salary->update($validated);
+        $updates = ['status' => $validated['status']];
+        if ($validated['status'] === 'Paid') {
+            if ((float) ($salary->amount_paid ?? 0) <= 0) {
+                $updates['amount_paid'] = max(0, (float) ($salary->salary_generated ?? 0));
+            }
+
+            $finalAmount = (float) ($updates['amount_paid'] ?? $salary->amount_paid ?? 0);
+            if ($finalAmount > 0) {
+                $updates = array_merge($updates, Salary::metadataForPaidAction($salary));
+            }
+        }
+
+        $salary->update($updates);
 
         // If status is changed to Paid, redirect to thermal receipt print page
         if ($validated['status'] === 'Paid') {

@@ -254,11 +254,21 @@
                                     <td style="padding: 8px 12px; font-size: 13px; text-align: center;">
                                         <div class="d-flex gap-1 justify-content-center">
                                             @php
-                                                $isPassout = $student->class && in_array(strtolower(trim($student->class)), ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni']);
+                                                $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
+                                                $isPassout = $student->class && in_array(strtolower(trim($student->class)), $passoutClasses);
+                                                $isActiveStudent = !$isPassout && $student->isActiveStudent();
                                             @endphp
                                             @if($isPassout)
                                                 <button type="button" class="btn btn-sm btn-success px-2 py-1" onclick="reactivateStudent({{ $student->id }}, '{{ addslashes($student->student_name) }}', '{{ addslashes($student->previous_class ?? '') }}', '{{ addslashes($student->previous_section ?? '') }}')" title="Reactivate Student">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">check_circle</span>
+                                                </button>
+                                            @elseif($isActiveStudent)
+                                                <button type="button" class="btn btn-sm btn-warning px-2 py-1" onclick="deactivateStudent({{ $student->id }}, '{{ addslashes($student->student_name) }}')" title="Deactivate Student">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">person_off</span>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-sm btn-success px-2 py-1" onclick="activateStudent({{ $student->id }}, '{{ addslashes($student->student_name) }}')" title="Activate Student">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">how_to_reg</span>
                                                 </button>
                                             @endif
                                             <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="viewStudent({{ $student->id }})" title="View Details">
@@ -785,6 +795,80 @@ document.addEventListener('DOMContentLoaded', function() {
 // View student details
 function viewStudent(studentId) {
     window.location.href = '{{ route("student.view", ":id") }}'.replace(':id', studentId);
+}
+
+function activateStudent(studentId, studentName) {
+    if (!confirm(`Activate student "${studentName}"?`)) {
+        return;
+    }
+
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
+    fetch(`{{ url('student') }}/${studentId}/activate`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Student activated successfully!');
+            window.location.reload();
+        } else {
+            alert(data.message || 'Error: Failed to activate student.');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while activating the student.');
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+}
+
+function deactivateStudent(studentId, studentName) {
+    if (!confirm(`Deactivate student "${studentName}"?`)) {
+        return;
+    }
+
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
+    fetch(`{{ url('student') }}/${studentId}/deactivate`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Student deactivated successfully!');
+            window.location.reload();
+        } else {
+            alert(data.message || 'Error: Failed to deactivate student.');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while deactivating the student.');
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
 }
 
 // Delete student

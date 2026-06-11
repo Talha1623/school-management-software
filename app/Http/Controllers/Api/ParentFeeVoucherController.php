@@ -9,6 +9,8 @@ use App\Models\StudentPayment;
 use App\Models\MonthlyFee;
 use App\Models\StudentDiscount;
 use App\Models\GeneralSetting;
+use App\Services\FeePaymentWebTables;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,13 +62,14 @@ class ParentFeeVoucherController extends Controller
                 ], 200);
             }
 
-            $currentYear = date('Y');
+            $currentYear = (int) $request->get('year', date('Y'));
             $vouchersFor = $request->get('vouchers_for', date('F')); // Month name
 
             // Get fee vouchers for each student
             $vouchers = [];
             foreach ($students as $student) {
-                $voucher = $this->generateVoucherForStudent($student, $vouchersFor, $currentYear);
+                $strictMonth = filter_var($request->get('strict_month', false), FILTER_VALIDATE_BOOLEAN);
+                $voucher = $this->generateVoucherForStudent($student, $vouchersFor, $currentYear, $strictMonth);
                 if ($voucher) {
                     $vouchers[] = $voucher;
                 }
@@ -142,10 +145,11 @@ class ParentFeeVoucherController extends Controller
                 ], 404);
             }
 
-            $currentYear = date('Y');
+            $currentYear = (int) $request->get('year', date('Y'));
             $vouchersFor = $request->get('vouchers_for', date('F'));
 
-            $voucher = $this->generateVoucherForStudent($student, $vouchersFor, $currentYear);
+            $strictMonth = filter_var($request->get('strict_month', false), FILTER_VALIDATE_BOOLEAN);
+            $voucher = $this->generateVoucherForStudent($student, $vouchersFor, $currentYear, $strictMonth);
 
             if (!$voucher) {
                 return response()->json([
@@ -216,9 +220,10 @@ class ParentFeeVoucherController extends Controller
                 ], 404);
             }
 
-            $currentYear = date('Y');
+            $currentYear = (int) $request->get('year', date('Y'));
             $vouchersFor = $request->get('vouchers_for', date('F'));
-            $voucher = $this->generateVoucherForStudent($student, $vouchersFor, (int) $currentYear);
+            $strictMonth = filter_var($request->get('strict_month', false), FILTER_VALIDATE_BOOLEAN);
+            $voucher = $this->generateVoucherForStudent($student, $vouchersFor, (int) $currentYear, $strictMonth);
 
             if (!$voucher) {
                 return response()->json([
@@ -231,7 +236,7 @@ class ParentFeeVoucherController extends Controller
 
             $settings = GeneralSetting::getSettings();
             $type = 'three_copies';
-            $copyLabels = ['PARENT COPY', 'SCHOOL COPY', 'STUDENT COPY'];
+            $copyLabels = ['Bank Copy', 'Parent Copy', 'School Copy'];
 
             $voucherForPrint = [
                 'student' => $student,
@@ -250,17 +255,27 @@ class ParentFeeVoucherController extends Controller
                 'year' => $voucher['year'] ?? (int) $currentYear,
             ];
 
-            $html = view('accounting.fee-voucher.print', [
+            $viewData = [
                 'vouchers' => [$voucherForPrint],
                 'type' => $type,
                 'vouchersFor' => $vouchersFor,
                 'currentYear' => (int) $currentYear,
                 'copyLabels' => $copyLabels,
                 'settings' => $settings,
-            ])->render();
+            ];
 
-            // WebView-friendly printable document (same as web print layout)
-            return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+            // Optional: HTML preview (for WebView/debug)
+            if (strtolower((string) $request->query('format', 'pdf')) === 'html') {
+                $html = view('accounting.fee-voucher.print', $viewData)->render();
+                return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+            }
+
+            // Generate real PDF from the same web voucher template.
+            $pdf = Pdf::loadView('accounting.fee-voucher.print', $viewData)
+                ->setPaper('a4', 'portrait');
+
+            $fileName = 'fee-voucher-' . ($voucher['voucher_number'] ?? $student->id) . '.pdf';
+            return $pdf->stream($fileName);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -276,55 +291,129 @@ class ParentFeeVoucherController extends Controller
      * @param Student $student
      * @param string $vouchersFor
      * @param int $currentYear
+     * @param bool $strictMonth When true, only selected vouchers_for month is included.
      * @return array|null
      */
-    private function generateVoucherForStudent(Student $student, string $vouchersFor, int $currentYear): ?array
+    private function generateVoucherForStudent(Student $student, string $vouchersFor, int $currentYear, bool $strictMonth = false): ?array
     {
-        // Get all pending fees (unpaid fees) for this student
-        $pendingPayments = StudentPayment::where('student_code', $student->student_code)
-            ->where('method', 'Generated')
+        // Start from generated/installment rows for this student
+        $normalizedStudentCode = strtolower(trim((string) ($student->student_code ?? '')));
+        $generatedPayments = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$normalizedStudentCode])
+            ->whereIn('method', ['Generated', 'Installment'])
             ->orderBy('payment_date', 'asc')
             ->get();
 
-        if ($pendingPayments->isEmpty()) {
+        if ($generatedPayments->isEmpty()) {
             return null; // No pending fees
         }
 
-        // Filter by vouchers_for month if provided
-        if ($vouchersFor) {
+        // Web-aligned unpaid rows (paid rows are already excluded here)
+        $searchResults = FeePaymentWebTables::searchResultsForStudent($student);
+        $unpaidRows = collect($searchResults['rows'] ?? []);
+
+        // Optional strict month filter.
+        // Default false to match Fee Payment > Search Results (all pending generated rows).
+        if ($strictMonth && $vouchersFor) {
             $monthlyTitle = "Monthly Fee - {$vouchersFor} {$currentYear}";
             $transportTitle = "Transport Fee - {$vouchersFor} {$currentYear}";
-            $pendingPayments = $pendingPayments->filter(function($payment) use ($monthlyTitle, $transportTitle) {
-                return $payment->payment_title === $monthlyTitle
-                    || $payment->payment_title === $transportTitle
-                    || (!str_contains($payment->payment_title ?? '', 'Monthly Fee -')
-                        && !str_contains($payment->payment_title ?? '', 'Transport Fee -'));
-            });
+            $unpaidRows = $unpaidRows->filter(function($row) use ($monthlyTitle, $transportTitle) {
+                $title = (string) ($row['fee_type'] ?? '');
+                return stripos($title, $monthlyTitle) !== false
+                    || stripos($title, $transportTitle) !== false;
+            })->values();
         }
 
-        if ($pendingPayments->isEmpty()) {
+        if ($unpaidRows->isEmpty()) {
+            return null; // No unpaid rows
+        }
+
+        // Keep generated rows only for unpaid titles for subsequent date/arrears logic.
+        $unpaidTitles = $unpaidRows->pluck('fee_type')
+            ->map(fn($t) => strtolower(trim((string) $t)))
+            ->filter(fn($t) => $t !== '')
+            ->unique()
+            ->values();
+        $pendingPayments = $generatedPayments->filter(function($payment) use ($unpaidTitles) {
+            $title = strtolower(trim((string) ($payment->payment_title ?? '')));
+            return $unpaidTitles->contains($title);
+        })->values();
+
+        $transportFallbackTitle = "Transport Fee - {$vouchersFor} {$currentYear}";
+        $hasTransportConfigured = !empty($student->transport_route) && (float) ($student->transport_fare ?? 0) > 0;
+        $hasTransportPending = $pendingPayments->contains(function ($payment) {
+            return str_contains(strtolower(trim((string) ($payment->payment_title ?? ''))), 'transport');
+        });
+
+        // If transport is configured at admission but no generated transport row exists yet,
+        // expose it as pending in voucher API so parent app still shows transport dues.
+        if ($hasTransportConfigured && !$hasTransportPending) {
+            $pendingPayments->push((object) [
+                'payment_title' => $transportFallbackTitle,
+                'payment_amount' => (float) ($student->transport_fare ?? 0),
+                'discount' => 0,
+                'late_fee' => 0,
+                'payment_date' => Carbon::now()->toDateString(),
+            ]);
+        }
+
+        // Build fee-payment rows exactly from web pending rows.
+        $feeRows = $unpaidRows->map(function ($row) {
+            return [
+                'title' => (string) ($row['fee_type'] ?? 'Generated Fee'),
+                'total' => round((float) ($row['total'] ?? 0), 2),
+                'discount' => round((float) ($row['discount'] ?? 0), 2),
+                'late_fee' => round((float) ($row['late_fee'] ?? 0), 2),
+                'generated_fee' => round((float) ($row['generated_fee'] ?? 0), 2),
+                'paid' => round((float) ($row['paid'] ?? 0), 2),
+                'due' => round((float) ($row['due'] ?? 0), 2),
+            ];
+        })->values();
+
+        // Keep only rows with actual due > 0.
+        $feeRows = $feeRows->filter(fn($r) => (float) ($r['due'] ?? 0) > 0)->values();
+
+        if ($hasTransportConfigured) {
+            $hasTransportFeeRow = $feeRows->contains(function ($row) {
+                return str_contains(strtolower(trim((string) ($row['title'] ?? ''))), 'transport');
+            });
+            if (!$hasTransportFeeRow) {
+                $transportAmount = round((float) ($student->transport_fare ?? 0), 2);
+                $feeRows->push([
+                    'title' => $transportFallbackTitle,
+                    'total' => $transportAmount,
+                    'discount' => 0.0,
+                    'late_fee' => 0.0,
+                    'generated_fee' => $transportAmount,
+                    'paid' => 0.0,
+                    'due' => $transportAmount,
+                ]);
+            }
+        }
+
+        if ($feeRows->isEmpty()) {
             return null;
         }
 
-        // Get fee history for current year
-        $feeHistory = [];
-        $months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                  'July', 'August', 'September', 'October', 'November', 'December'];
-        
-        foreach ($months as $month) {
-            $paymentTitle = "Monthly Fee - {$month} {$currentYear}";
-            $payment = StudentPayment::where('student_code', $student->student_code)
-                ->where('payment_title', $paymentTitle)
-                ->first();
-            
-            $feeHistory[] = [
-                'month' => $month,
-                'total' => $payment ? (float) $payment->payment_amount : 0,
-                'paid' => $payment && $payment->method !== 'Generated' ? (float) $payment->payment_amount : 0,
-                'pending' => $payment && $payment->method === 'Generated' ? (float) $payment->payment_amount : 0,
-            ];
-        }
-        
+        // Use web-calculated due per title so partial payments are reflected correctly.
+        $dueByTitle = $feeRows->mapWithKeys(function ($row) {
+            $key = strtolower(trim((string) ($row['title'] ?? '')));
+            return [$key => round((float) ($row['due'] ?? 0), 2)];
+        });
+
+        /*
+        Previous strict-month filter was applied directly on generated payments:
+            $pendingPayments = $pendingPayments->filter(function($payment) use ($monthlyTitle, $transportTitle) {
+                $title = (string) ($payment->payment_title ?? '');
+                // Strict month scope to match Fee Payment search-results behavior.
+                // Also supports installment titles like "Monthly Fee - July 2026/1".
+                return stripos($title, $monthlyTitle) !== false
+                    || stripos($title, $transportTitle) !== false;
+            });
+        */
+
+        // Yearly fee history: aggregate all Monthly + Transport rows per month (installments, multiple rows).
+        $feeHistory = $this->buildYearlyFeeHistory($normalizedStudentCode, $currentYear);
+
         // Calculate late fee from pending payments
         $lateFee = $pendingPayments->sum(function($payment) {
             return (float) ($payment->late_fee ?? 0);
@@ -423,15 +512,30 @@ class ParentFeeVoucherController extends Controller
             $dueDate = Carbon::parse($payment->payment_date);
             return $dueDate->gte($today);
         });
+
+        // For explicit month voucher flow, don't relabel selected-month items as "arrears".
+        if ($strictMonth && !empty($vouchersFor)) {
+            $arrearsPayments = collect();
+            $currentFeesPayments = $pendingPayments;
+        }
         
         // Format pending fees for display
         $monthlyFees = collect();
         $customFees = collect();
+        $addedFeeTitleKeys = [];
         
         foreach ($currentFeesPayments as $payment) {
-            $amount = (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
+            $titleKey = strtolower(trim((string) ($payment->payment_title ?? '')));
+            if ($titleKey === '') {
+                continue;
+            }
+            $amount = $dueByTitle->get($titleKey, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0));
 
             if (preg_match('/Monthly Fee - (\w+) (\d+)/', $payment->payment_title, $matches)) {
+                if (isset($addedFeeTitleKeys[$titleKey])) {
+                    continue;
+                }
+                $addedFeeTitleKeys[$titleKey] = true;
                 $month = $matches[1];
                 $year = $matches[2];
                 $description = "Monthly Fee Of {$month} ({$year})";
@@ -441,6 +545,10 @@ class ParentFeeVoucherController extends Controller
                     'sort_order' => 1,
                 ]);
             } elseif (preg_match('/Transport Fee - (\w+) (\d+)/', $payment->payment_title, $matches)) {
+                if (isset($addedFeeTitleKeys[$titleKey])) {
+                    continue;
+                }
+                $addedFeeTitleKeys[$titleKey] = true;
                 $month = $matches[1];
                 $year = $matches[2];
                 $routeLabel = !empty($student->transport_route)
@@ -457,10 +565,18 @@ class ParentFeeVoucherController extends Controller
 
         // Include overdue monthly/transport as explicit arrears rows so app/web can display line items
         foreach ($arrearsPayments as $payment) {
-            $amount = (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
+            $titleKey = strtolower(trim((string) ($payment->payment_title ?? '')));
+            if ($titleKey === '') {
+                continue;
+            }
+            $amount = $dueByTitle->get($titleKey, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0));
             $title = (string) ($payment->payment_title ?? '');
 
             if (preg_match('/Monthly Fee - (\w+) (\d+)/', $title, $matches)) {
+                if (isset($addedFeeTitleKeys[$titleKey])) {
+                    continue;
+                }
+                $addedFeeTitleKeys[$titleKey] = true;
                 $month = $matches[1];
                 $year = $matches[2];
                 $monthlyFees->push([
@@ -469,6 +585,10 @@ class ParentFeeVoucherController extends Controller
                     'sort_order' => 0,
                 ]);
             } elseif (preg_match('/Transport Fee - (\w+) (\d+)/', $title, $matches)) {
+                if (isset($addedFeeTitleKeys[$titleKey])) {
+                    continue;
+                }
+                $addedFeeTitleKeys[$titleKey] = true;
                 $month = $matches[1];
                 $year = $matches[2];
                 $routeLabel = !empty($student->transport_route)
@@ -487,7 +607,12 @@ class ParentFeeVoucherController extends Controller
             return !$isMonthlyOrTransport($payment->payment_title ?? '');
         });
         foreach ($customFeePayments as $payment) {
-            $amount = (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
+            $titleKey = strtolower(trim((string) ($payment->payment_title ?? '')));
+            if ($titleKey === '' || isset($addedFeeTitleKeys[$titleKey])) {
+                continue;
+            }
+            $addedFeeTitleKeys[$titleKey] = true;
+            $amount = $dueByTitle->get($titleKey, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0));
             if (strtolower(trim($payment->payment_title)) === 'admission fee') {
                 $customFees->push([
                     'description' => 'Generate Admission Fee',
@@ -508,30 +633,67 @@ class ParentFeeVoucherController extends Controller
             return [
                 'description' => $fee['description'],
                 'amount' => $fee['amount'],
+                'due_amount' => $fee['amount'],
             ];
         })->values();
 
-        // Add discounts
-        $discounts = StudentDiscount::where('student_code', $student->student_code)->get();
-        if ($discounts->isNotEmpty()) {
-            foreach ($discounts as $discount) {
-                $discountAmount = (float) ($discount->discount_amount ?? 0);
-                if ($discountAmount <= 0) {
-                    continue;
-                }
-                $title = trim((string) ($discount->discount_title ?? ''));
-                $label = $title !== '' ? "Discount - {$title}" : 'Discount';
-                $pendingFeesList->push([
-                    'description' => $label,
-                    'amount' => -abs($discountAmount),
-                ]);
-            }
-        }
-        
-        // Calculate totals
+        // Calculate totals from fee rows.
+        // generated_total = total generated amount
+        // total/due_amount  = actual payable due amount (after partial payments/discounts)
+        $generatedTotal = (float) $feeRows->sum(function ($row) {
+            return (float) ($row['generated_fee'] ?? 0);
+        });
+        $dueTotal = (float) $feeRows->sum(function ($row) {
+            return (float) ($row['due'] ?? 0);
+        });
         $currentFeesSubtotal = $pendingFeesList->sum('amount');
-        $subtotal = max(0, $currentFeesSubtotal + $arrearsAmount);
-        $total = $subtotal + $lateFee;
+        $subtotal = max(0, $dueTotal);
+        $total = $dueTotal;
+
+        // For parent voucher API, payable subtotal should reflect due amount.
+        $currentFeesSubtotal = $dueTotal;
+        $arrearsAmount = 0;
+        $lateFee = 0;
+
+        $transportFeeGenerated = round((float) collect($feeRows)->sum(function ($row) {
+            $title = strtolower(trim((string) ($row['title'] ?? '')));
+            if (!str_contains($title, 'transport')) {
+                return 0.0;
+            }
+            return (float) ($row['generated_fee'] ?? 0);
+        }), 2);
+
+        $cardFeeGenerated = round((float) collect($feeRows)->sum(function ($row) {
+            $title = strtolower(trim((string) ($row['title'] ?? '')));
+            if (!str_contains($title, 'card')) {
+                return 0.0;
+            }
+            return (float) ($row['generated_fee'] ?? 0);
+        }), 2);
+
+        $admissionFeeGenerated = round((float) collect($feeRows)->sum(function ($row) {
+            $title = strtolower(trim((string) ($row['title'] ?? '')));
+            if (!str_contains($title, 'admission')) {
+                return 0.0;
+            }
+            return (float) ($row['generated_fee'] ?? 0);
+        }), 2);
+
+        $otherFeeGenerated = round((float) collect($feeRows)->sum(function ($row) {
+            $title = strtolower(trim((string) ($row['title'] ?? '')));
+            if (str_contains($title, 'monthly fee')
+                || str_contains($title, 'transport')
+                || str_contains($title, 'card')
+                || str_contains($title, 'admission')) {
+                return 0.0;
+            }
+            return (float) ($row['generated_fee'] ?? 0);
+        }), 2);
+
+        $generatedTitleKeys = collect($feeRows)
+            ->map(fn($row) => strtolower(trim((string) ($row['title'] ?? ''))))
+            ->filter(fn($t) => $t !== '')
+            ->values();
         
         return [
             'student_id' => $student->id,
@@ -543,12 +705,30 @@ class ParentFeeVoucherController extends Controller
             'campus' => $student->campus,
             'father_name' => $student->father_name ?? null,
             'father_phone' => $student->father_phone ?? null,
+            'discounted_student' => (bool) ($student->discounted_student ?? false),
+            'discount_reason' => $student->discount_reason ?? null,
+            'transport_route' => $student->transport_route ?? null,
+            'transport_fare' => round((float) ($student->transport_fare ?? 0), 2),
+            'generate_admission_fee' => $generatedTitleKeys->contains(fn($t) => str_contains($t, 'admission'))
+                || (bool) ($student->generate_admission_fee ?? false),
+            'generate_other_fee' => $otherFeeGenerated > 0
+                || (bool) ($student->generate_other_fee ?? false),
+            'other_fee_type' => $student->fee_type ?? null,
+            'admission_fee_configured_amount' => round((float) ($student->admission_fee_amount ?? 0), 2),
+            'other_fee_configured_amount' => round((float) ($student->other_fee_amount ?? 0), 2),
             'pending_fees' => $pendingFeesList,
+            'fee_rows' => $feeRows,
             'current_fees_subtotal' => round($currentFeesSubtotal, 2),
             'arrears_amount' => round($arrearsAmount, 2),
             'subtotal' => round($subtotal, 2),
             'late_fee' => round($lateFee, 2),
             'total' => round($total, 2),
+            'due_amount' => round($total, 2),
+            'generated_total' => round($generatedTotal, 2),
+            'transport_fee_generated' => $transportFeeGenerated,
+            'card_fee_generated' => $cardFeeGenerated,
+            'admission_fee_generated' => $admissionFeeGenerated,
+            'other_fee_generated' => $otherFeeGenerated,
             'due_date' => $dueDate->format('Y-m-d'),
             'due_date_formatted' => $dueDate->format('d M Y'),
             'voucher_validity' => $voucherValidity->format('Y-m-d'),
@@ -558,5 +738,98 @@ class ParentFeeVoucherController extends Controller
             'month' => $vouchersFor,
             'year' => $currentYear,
         ];
+    }
+
+    /**
+     * Per-calendar-month fee history for Monthly + Transport (matches web-style rows, incl. installments).
+     */
+    private function buildYearlyFeeHistory(string $normalizedStudentCode, int $year): array
+    {
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ];
+
+        $feeHistory = [];
+        foreach ($months as $month) {
+            $feeHistory[] = $this->feeHistoryRowForMonth($normalizedStudentCode, $month, $year);
+        }
+
+        return $feeHistory;
+    }
+
+    /**
+     * @return array{month: string, year: int, total: float, paid: float, pending: float}
+     */
+    private function feeHistoryRowForMonth(string $normalizedStudentCode, string $monthName, int $year): array
+    {
+        $rows = $this->paymentsForCalendarMonth($normalizedStudentCode, $monthName, $year);
+
+        $isGeneratedLike = static function ($payment): bool {
+            $m = strtolower(trim((string) ($payment->method ?? '')));
+
+            return in_array($m, ['generated', 'installment'], true);
+        };
+
+        $netAmount = static function ($payment): float {
+            return (float) ($payment->payment_amount ?? 0)
+                - (float) ($payment->discount ?? 0)
+                + (float) ($payment->late_fee ?? 0);
+        };
+
+        $generatedLike = $rows->filter($isGeneratedLike);
+        $paidLike = $rows->reject($isGeneratedLike);
+
+        $totalCharged = round((float) $generatedLike->sum(fn ($p) => $netAmount($p)), 2);
+        $totalPaid = round((float) $paidLike->sum(fn ($p) => $netAmount($p)), 2);
+
+        // If fee was paid without a separate Generated row (Cash-only), show total = paid so history is not 0/2000/0.
+        $effectiveTotal = $totalCharged > 0 ? $totalCharged : $totalPaid;
+        $pending = round(max(0.0, $effectiveTotal - $totalPaid), 2);
+
+        return [
+            'month' => $monthName,
+            'year' => $year,
+            'total' => round($effectiveTotal, 2),
+            'paid' => $totalPaid,
+            'pending' => $pending,
+        ];
+    }
+
+    /**
+     * All student_payments rows for this calendar month (Monthly Fee + Transport Fee), incl. "/1" installments.
+     * Also includes same-month Cash rows when payment_date falls in that month (title starts with Monthly/Transport).
+     */
+    private function paymentsForCalendarMonth(string $normalizedStudentCode, string $monthName, int $year): \Illuminate\Support\Collection
+    {
+        $prefixes = [
+            "Monthly Fee - {$monthName} {$year}",
+            "Transport Fee - {$monthName} {$year}",
+        ];
+
+        $byTitle = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$normalizedStudentCode])
+            ->where(function ($q) use ($prefixes) {
+                foreach ($prefixes as $p) {
+                    $q->orWhereRaw('LOWER(TRIM(payment_title)) LIKE ?', [strtolower($p) . '%']);
+                }
+            })
+            ->get();
+
+        try {
+            $monthStart = Carbon::createFromFormat('!F Y', "{$monthName} {$year}")->startOfMonth();
+        } catch (\Exception $e) {
+            return $byTitle;
+        }
+        $byDateInMonth = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$normalizedStudentCode])
+            ->whereYear('payment_date', $year)
+            ->whereMonth('payment_date', (int) $monthStart->format('n'))
+            ->where(function ($q) use ($year) {
+                $q->whereRaw('LOWER(TRIM(payment_title)) LIKE ?', ['monthly fee%'])
+                    ->orWhereRaw('LOWER(TRIM(payment_title)) LIKE ?', ['transport fee%']);
+            })
+            ->whereRaw('LOWER(TRIM(payment_title)) LIKE ?', ['%' . (string) $year . '%'])
+            ->get();
+
+        return $byTitle->merge($byDateInMonth)->unique('id')->values();
     }
 }

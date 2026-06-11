@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Accountant;
+use App\Models\AdminRole;
 use App\Models\Campus;
 use App\Models\StudentPayment;
 use App\Models\Student;
 use App\Models\ManagementExpense;
 use App\Models\GeneralSetting;
 use App\Models\FeeType;
+use App\Services\FeePaymentWebTables;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
@@ -17,6 +19,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Carbon\Carbon;
+
+// Prevent "Cannot declare class ... already in use" when this file is loaded more than once.
+if (! class_exists(__NAMESPACE__ . '\\AccountantController', false)) {
 
 class AccountantController extends Controller
 {
@@ -447,10 +452,15 @@ class AccountantController extends Controller
             }
         }
         
-        // Calculate Income Today - Sum of actual payments (excluding generated fees)
+        // Calculate Income Today - Net of discounts (excluding generated fees)
         $incomeToday = StudentPayment::whereDate('payment_date', today())
             ->where('method', '!=', 'Generated') // Only actual payments
-            ->sum('payment_amount');
+            ->get()
+            ->sum(function ($p) {
+                $amount = (float) ($p->payment_amount ?? 0);
+                $discount = (float) ($p->discount ?? 0);
+                return max(0.0, $amount - $discount);
+            });
         
         // Calculate Expense Today - Sum of management expenses
         $expenseToday = ManagementExpense::whereDate('date', today())
@@ -547,33 +557,48 @@ class AccountantController extends Controller
                 $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
             }
             
-            $matchedStudents = $query->select('id', 'student_name', 'student_code', 'father_name', 'father_id_card', 'parent_account_id', 'class', 'section', 'campus', 'monthly_fee')
+            $matchedStudents = $query->select(
+                'id',
+                'student_name',
+                'student_code',
+                'father_name',
+                'father_id_card',
+                'parent_account_id',
+                'class',
+                'section',
+                'campus',
+                'monthly_fee',
+                'transport_fare',
+                'transport_route',
+            )
                 ->orderBy('student_name', 'asc')
                 ->limit(50)
                 ->get();
 
-            $students = $matchedStudents->filter(function ($student) {
-                    // Filter out students without student_code before mapping
-                    return !empty($student->student_code);
-                })->map(function ($student) {
-                return (object) [
-                    'id' => $student->id,
-                    'student_name' => $student->student_name,
-                    'student_code' => $student->student_code,
-                    'father_name' => $student->father_name,
-                    'class' => $student->class,
-                    'section' => $student->section,
-                    'campus' => $student->campus,
-                    'monthly_fee' => $student->monthly_fee,
-                ];
-            });
-            
             return response()->json([
                 'success' => true,
-                'students' => $students->map(function ($student) {
-                // Skip if student_code is empty
-                if (empty($student->student_code)) {
-                    return [
+                'students' => $matchedStudents->map(function (Student $student) {
+                    if (empty($student->student_code)) {
+                        return [
+                            'id' => $student->id,
+                            'student_name' => $student->student_name,
+                            'student_code' => $student->student_code,
+                            'father_name' => $student->father_name,
+                            'class' => $student->class,
+                            'section' => $student->section,
+                            'campus' => $student->campus,
+                            'monthly_fee' => $student->monthly_fee,
+                            'transport_fare' => $student->transport_fare,
+                            'has_unpaid' => false,
+                            'unpaid_amount' => 0,
+                            'pending_fees' => [],
+                            'fee_rows' => [],
+                        ];
+                    }
+
+                    $feePayload = FeePaymentWebTables::feeSearchPayloadForStudent($student);
+
+                    return array_merge([
                         'id' => $student->id,
                         'student_name' => $student->student_name,
                         'student_code' => $student->student_code,
@@ -582,167 +607,10 @@ class AccountantController extends Controller
                         'section' => $student->section,
                         'campus' => $student->campus,
                         'monthly_fee' => $student->monthly_fee,
-                        'has_unpaid' => false,
-                        'unpaid_amount' => 0,
-                        'pending_fees' => [],
-                        'fee_rows' => [],
-                    ];
-                }
-                
-                // Include both "Generated" and "Installment" methods as unpaid fees
-                // This includes: Monthly Fees, Transport Fees, Custom Fees (all created with method='Generated'), and Installments
-                // Installments should be treated as unpaid (new) fees, not paid
-                // Custom fees are automatically included since they are created with method='Generated'
-                $generatedFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
-                    ->whereIn('method', ['Generated', 'Installment'])
-                    ->get();
-                // Exclude "Installment" method from paid fees - installments are unpaid fees
-                $paidFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
-                    ->where('method', '!=', 'Generated')
-                    ->where('method', '!=', 'Installment')
-                    ->get();
-
-                // Get StudentDiscount records for this student
-                $studentDiscounts = \App\Models\StudentDiscount::where('student_code', $student->student_code)
-                    ->get();
-                $totalStudentDiscount = $studentDiscounts->sum(function($discount) {
-                    return (float) ($discount->discount_amount ?? 0);
-                });
-
-                $pendingFees = [];
-                $feeRows = [];
-                $totalDue = 0;
-                $generatedByTitle = $generatedFees->groupBy('payment_title');
-                $paidByTitle = $paidFees->groupBy('payment_title');
-
-                // Collect all installment titles and their base fee titles
-                // Also count installments per base title for proportional discount calculation
-                $installmentBaseTitles = [];
-                $installmentCounts = []; // Track number of installments per base title
-                foreach ($generatedByTitle as $title => $items) {
-                    if (preg_match('/^(.+)\/\d+$/', $title, $matches)) {
-                        $baseTitle = $matches[1];
-                        $installmentBaseTitles[$baseTitle] = true;
-                        if (!isset($installmentCounts[$baseTitle])) {
-                            $installmentCounts[$baseTitle] = 0;
-                        }
-                        $installmentCounts[$baseTitle]++;
-                    }
-                }
-
-                foreach ($generatedByTitle as $title => $items) {
-                    $latestGenerated = $items->sortByDesc('id')->first();
-                    $isInstallment = preg_match('/\/\d+$/', $title);
-                    
-                    if (!$isInstallment && isset($installmentBaseTitles[$title])) {
-                        continue;
-                    }
-                    
-                    // Check if this is a monthly fee (title starts with "Monthly Fee - ")
-                    $isMonthlyFee = str_starts_with($title, 'Monthly Fee - ');
-                    
-                    // Calculate original amount (before discount) from generated records
-                    $originalAmount = $items->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0);
-                    });
-                    
-                    $generatedAmount = $items->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
-                    });
-                    $generatedLate = $items->sum(function ($item) {
-                        return (float) ($item->late_fee ?? 0);
-                    });
-                    
-                    // For installments, discount is stored in the generated record itself
-                    // For regular fees, discount comes from payment records
-                    $generatedDiscount = 0;
-                    if ($isInstallment) {
-                        // Get discount from generated records for installments
-                        $generatedDiscount = $items->sum(function ($item) {
-                            return (float) ($item->discount ?? 0);
-                        });
-                    }
-                    
-                    // Discount from payment records (for regular fees or additional discounts on installments)
-                    $paidDiscount = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->discount ?? 0);
-                    });
-                    
-                    // Apply StudentDiscount to monthly fees
-                    // Student discount should NOT be applied to installments - only to full (non-installment) fees
-                    // For regular fees, apply full student discount
-                    $appliedStudentDiscount = 0;
-                    if ($isMonthlyFee && $totalStudentDiscount > 0 && !$isInstallment) {
-                        // Only apply student discount to regular (non-installment) monthly fees
-                        $appliedStudentDiscount = round($totalStudentDiscount, 2);
-                    }
-                    
-                    // Total discount = generated discount (for installments) + payment discount + student discount (only for non-installment fees)
-                    $totalDiscount = $generatedDiscount + $paidDiscount + $appliedStudentDiscount;
-                    
-                    // Generated Fee = Original Amount - Total Discount + Late Fee
-                    // Late fees are part of the generated fee that needs to be paid
-                    $generatedFee = max(0, $originalAmount - $totalDiscount) + $generatedLate;
-                    
-                    $paidAmount = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0) + (float) ($item->discount ?? 0);
-                    });
-                    $paidLate = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->late_fee ?? 0);
-                    });
-
-                    $totalPaid = $paidAmount + $paidLate;
-                    // Due = Generated Fee (after discount) - Paid Amount (payment_amount only, discount already accounted in generatedFee)
-                    // paidAmount includes discount, so we need to subtract only payment_amount from paid records
-                    $paidAmountOnly = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0); // Only payment amount, not discount
-                    });
-                    $remainingAmount = max(0, ($originalAmount - $totalDiscount) - $paidAmountOnly);
-                    $remainingLate = max(0, $generatedLate - $paidLate);
-                    $remainingTotal = $remainingAmount + $remainingLate;
-
-                    if ($remainingTotal > 0) {
-                        $feeRows[] = [
-                            'title' => $title,
-                            'total' => round($originalAmount, 2), // Original amount before discount (full fee amount)
-                            'discount' => round($totalDiscount, 2), // Total discount (payment discount + student discount)
-                            'late_fee' => round($generatedLate, 2),
-                            'paid' => round($totalPaid, 2),
-                            'due' => round($remainingTotal, 2),
-                            'amount' => round($remainingAmount, 2),
-                            'remaining_late' => round($remainingLate, 2),
-                            'generated_fee' => round($generatedFee, 2), // Generated fee after discount + late fee (Total - Discount + Late Fee)
-                            'generated_id' => $latestGenerated ? $latestGenerated->id : null,
-                            'is_installment' => $isInstallment,
-                        ];
-                        $pendingFees[] = [
-                            'title' => $title,
-                            'amount' => round($remainingAmount, 2),
-                            'late_fee' => round($remainingLate, 2),
-                            'total' => round($remainingTotal, 2),
-                        ];
-                        $totalDue += $remainingTotal;
-                    }
-                }
-
-                // Installments are now included in generatedFees, so no need to add them separately
-
-                return [
-                    'id' => $student->id,
-                    'student_name' => $student->student_name,
-                    'student_code' => $student->student_code,
-                    'father_name' => $student->father_name,
-                    'class' => $student->class,
-                    'section' => $student->section,
-                    'campus' => $student->campus,
-                    'monthly_fee' => $student->monthly_fee,
-                    'has_unpaid' => $totalDue > 0,
-                    'unpaid_amount' => round($totalDue, 2),
-                    'pending_fees' => $pendingFees,
-                    'fee_rows' => $feeRows,
-                ];
-            })
-        ]);
+                        'transport_fare' => $student->transport_fare,
+                    ], $feePayload);
+                }),
+            ]);
         } catch (\Exception $e) {
             Log::error('Error in searchStudent method: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
@@ -764,6 +632,7 @@ class AccountantController extends Controller
      */
     public function searchStudentByCNIC(Request $request)
     {
+        try {
         $cnic = $request->get('cnic');
         
         if (!$cnic) {
@@ -802,7 +671,21 @@ class AccountantController extends Controller
             $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
         }
         
-        $studentsByFatherIdCard = $studentsQuery->select('id', 'student_name', 'student_code', 'class', 'section', 'campus', 'monthly_fee', 'father_name', 'father_phone', 'father_email', 'home_address')
+        $studentsByFatherIdCard = $studentsQuery->select(
+            'id',
+            'student_name',
+            'student_code',
+            'class',
+            'section',
+            'campus',
+            'monthly_fee',
+            'transport_fare',
+            'transport_route',
+            'father_name',
+            'father_phone',
+            'father_email',
+            'home_address',
+        )
             ->get();
         
         // If parent account exists, also get students connected via parent_account_id
@@ -824,148 +707,28 @@ class AccountantController extends Controller
         
         return response()->json([
             'success' => true,
-            'students' => $students->map(function ($student) {
-                // Include both "Generated" and "Installment" methods as unpaid fees
-                // Installments should be treated as unpaid (new) fees, not paid
-                $generatedFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
-                    ->whereIn('method', ['Generated', 'Installment'])
-                    ->get();
-                // Exclude "Installment" method from paid fees - installments are unpaid fees
-                $paidFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
-                    ->where('method', '!=', 'Generated')
-                    ->where('method', '!=', 'Installment')
-                    ->get();
-
-                // Get StudentDiscount records for this student
-                $studentDiscounts = \App\Models\StudentDiscount::where('student_code', $student->student_code)
-                    ->get();
-                $totalStudentDiscount = $studentDiscounts->sum(function($discount) {
-                    return (float) ($discount->discount_amount ?? 0);
-                });
-
-                $pendingFees = [];
-                $feeRows = [];
-                $totalDue = 0;
-                $generatedByTitle = $generatedFees->groupBy('payment_title');
-                $paidByTitle = $paidFees->groupBy('payment_title');
-
-                // Collect all installment titles and their base fee titles
-                // Also count installments per base title for proportional discount calculation
-                $installmentBaseTitles = [];
-                $installmentCounts = []; // Track number of installments per base title
-                foreach ($generatedByTitle as $title => $items) {
-                    if (preg_match('/^(.+)\/\d+$/', $title, $matches)) {
-                        $baseTitle = $matches[1];
-                        $installmentBaseTitles[$baseTitle] = true;
-                        if (!isset($installmentCounts[$baseTitle])) {
-                            $installmentCounts[$baseTitle] = 0;
-                        }
-                        $installmentCounts[$baseTitle]++;
-                    }
+            'students' => $students->map(function (Student $student) {
+                if (empty($student->student_code)) {
+                    return [
+                        'id' => $student->id,
+                        'student_name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'father_name' => $student->father_name ?? '',
+                        'class' => $student->class,
+                        'section' => $student->section,
+                        'campus' => $student->campus,
+                        'monthly_fee' => $student->monthly_fee,
+                        'transport_fare' => $student->transport_fare ?? null,
+                        'has_unpaid' => false,
+                        'unpaid_amount' => 0,
+                        'pending_fees' => [],
+                        'fee_rows' => [],
+                    ];
                 }
 
-                foreach ($generatedByTitle as $title => $items) {
-                    $latestGenerated = $items->sortByDesc('id')->first();
-                    $isInstallment = preg_match('/\/\d+$/', $title);
-                    
-                    if (!$isInstallment && isset($installmentBaseTitles[$title])) {
-                        continue;
-                    }
-                    
-                    // Check if this is a monthly fee (title starts with "Monthly Fee - ")
-                    $isMonthlyFee = str_starts_with($title, 'Monthly Fee - ');
-                    
-                    // Calculate original amount (before discount) from generated records
-                    $originalAmount = $items->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0);
-                    });
-                    
-                    $generatedAmount = $items->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
-                    });
-                    $generatedLate = $items->sum(function ($item) {
-                        return (float) ($item->late_fee ?? 0);
-                    });
-                    
-                    // For installments, discount is stored in the generated record itself
-                    // For regular fees, discount comes from payment records
-                    $generatedDiscount = 0;
-                    if ($isInstallment) {
-                        // Get discount from generated records for installments
-                        $generatedDiscount = $items->sum(function ($item) {
-                            return (float) ($item->discount ?? 0);
-                        });
-                    }
-                    
-                    // Discount from payment records (for regular fees or additional discounts on installments)
-                    $paidDiscount = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->discount ?? 0);
-                    });
-                    
-                    // Apply StudentDiscount to monthly fees
-                    // Student discount should NOT be applied to installments - only to full (non-installment) fees
-                    // For regular fees, apply full student discount
-                    $appliedStudentDiscount = 0;
-                    if ($isMonthlyFee && $totalStudentDiscount > 0 && !$isInstallment) {
-                        // Only apply student discount to regular (non-installment) monthly fees
-                        $appliedStudentDiscount = round($totalStudentDiscount, 2);
-                    }
-                    
-                    // Total discount = generated discount (for installments) + payment discount + student discount (only for non-installment fees)
-                    $totalDiscount = $generatedDiscount + $paidDiscount + $appliedStudentDiscount;
-                    
-                    // Generated Fee = Original Amount - Total Discount + Late Fee
-                    // Late fees are part of the generated fee that needs to be paid
-                    $generatedFee = max(0, $originalAmount - $totalDiscount) + $generatedLate;
-                    
-                    $paidAmount = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0) + (float) ($item->discount ?? 0);
-                    });
-                    $paidLate = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->late_fee ?? 0);
-                    });
+                $feePayload = FeePaymentWebTables::feeSearchPayloadForStudent($student);
 
-                    $totalPaid = $paidAmount + $paidLate;
-                    // Due = Generated Fee (after discount) - Paid Amount (payment_amount only, discount already accounted in generatedFee)
-                    // paidAmount includes discount, so we need to subtract only payment_amount from paid records
-                    $paidAmountOnly = $paidByTitle->get($title, collect())->sum(function ($item) {
-                        return (float) ($item->payment_amount ?? 0); // Only payment amount, not discount
-                    });
-                    $remainingAmount = max(0, ($originalAmount - $totalDiscount) - $paidAmountOnly);
-                    $remainingLate = max(0, $generatedLate - $paidLate);
-                    $remainingTotal = $remainingAmount + $remainingLate;
-
-                    if ($remainingTotal > 0) {
-                        // For installments, show only the per-installment fee discount in display
-                        // For regular fees, show total discount
-                        $displayDiscount = $isInstallment ? $generatedDiscount : $totalDiscount;
-                        
-                        $feeRows[] = [
-                            'title' => $title,
-                            'total' => round($originalAmount, 2), // Original amount before discount (full fee amount)
-                            'discount' => round($displayDiscount, 2), // Per-installment discount for installments, total discount for regular fees
-                            'late_fee' => round($generatedLate, 2),
-                            'paid' => round($totalPaid, 2),
-                            'due' => round($remainingTotal, 2),
-                            'amount' => round($remainingAmount, 2),
-                            'remaining_late' => round($remainingLate, 2),
-                            'generated_fee' => round($generatedFee, 2), // Generated fee after discount + late fee (Total - Discount + Late Fee)
-                            'generated_id' => $latestGenerated ? $latestGenerated->id : null,
-                            'is_installment' => $isInstallment,
-                        ];
-                        $pendingFees[] = [
-                            'title' => $title,
-                            'amount' => round($remainingAmount, 2),
-                            'late_fee' => round($remainingLate, 2),
-                            'total' => round($remainingTotal, 2),
-                        ];
-                        $totalDue += $remainingTotal;
-                    }
-                }
-
-                // Installments are now included in generatedFees, so no need to add them separately
-
-                return [
+                return array_merge([
                     'id' => $student->id,
                     'student_name' => $student->student_name,
                     'student_code' => $student->student_code,
@@ -974,21 +737,76 @@ class AccountantController extends Controller
                     'section' => $student->section,
                     'campus' => $student->campus,
                     'monthly_fee' => $student->monthly_fee,
-                    'has_unpaid' => $totalDue > 0,
-                    'unpaid_amount' => round($totalDue, 2),
-                    'pending_fees' => $pendingFees,
-                    'fee_rows' => $feeRows,
+                    'transport_fare' => $student->transport_fare ?? null,
+                ], $feePayload);
+            }),
+        ]);
+        } catch (\Exception $e) {
+            Log::error('Error in searchStudentByCNIC: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'cnic' => $request->get('cnic'),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while searching. Please try again.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Latest payments for Fee Payment search (accountant guard — same JSON as admin /fee-payment/history).
+     */
+    public function feePaymentHistory(Request $request)
+    {
+        $studentCode = trim((string) $request->get('student_code', ''));
+
+        if ($studentCode === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Student code is required',
+            ], 400);
+        }
+
+        $accountantCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $accountantCampus = auth()->guard('accountant')->user()->campus;
+        }
+
+        $history = FeePaymentWebTables::latestPaymentsForStudentCode(
+            $studentCode,
+            null,
+            $accountantCampus ? (string) $accountantCampus : null
+        );
+
+        return response()->json([
+            'success' => true,
+            'student_code' => $studentCode,
+            'payments' => collect($history['rows'] ?? [])->map(function (array $row) {
+                return [
+                    'id' => $row['id'] ?? null,
+                    'student_code' => $row['student_code'] ?? null,
+                    'student_name' => $row['student_name'] ?? null,
+                    'father_name' => $row['parent_name'] ?? null,
+                    'payment_title' => $row['title'] ?? null,
+                    'payment_amount' => (float) ($row['amount_paid'] ?? 0),
+                    'discount' => (float) ($row['discount'] ?? 0),
+                    'late_fee' => (float) ($row['late_fee'] ?? 0),
+                    'method' => $row['method'] ?? 'Cash Payment',
+                    'payment_date' => $row['payment_datetime'] ?? $row['payment_date'] ?? null,
+                    'accountant' => $row['received_by'] ?? null,
                 ];
-            })
+            })->values(),
         ]);
     }
 
     /**
-     * Accountant Pages - Family Fee Calculator
+     * Accountant Pages - Family Fee Calculator (delegates to shared calculator)
      */
-    public function familyFeeCalculator(): View
+    public function familyFeeCalculator(): View|RedirectResponse
     {
-        return view('accountant.family-fee-calculator');
+        return app(FamilyFeeCalculatorController::class)->accountantIndex();
     }
 
     /**
@@ -1073,10 +891,7 @@ class AccountantController extends Controller
     }
 
     /**
-     * Accountant Pages - Generate Custom Fee
-     */
-    /**
-     * Accountant Pages - Generate Custom Fee
+     * Accountant Pages - Generate Custom Fee (same data rules as super admin; campus locked for accountant).
      */
     public function generateCustomFee(): View
     {
@@ -1085,29 +900,26 @@ class AccountantController extends Controller
             $defaultCampus = auth()->guard('accountant')->user()->campus;
         }
 
-        // Get campuses from Campus model
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
-        
-        // If no campuses found, get from classes or sections
+
         if ($campuses->isEmpty()) {
             $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
                 ->distinct()
                 ->pluck('campus')
                 ->sort()
                 ->values();
-            
+
             $campusesFromSections = \App\Models\Section::whereNotNull('campus')
                 ->distinct()
                 ->pluck('campus')
                 ->sort()
                 ->values();
-            
+
             $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-            
-            // Convert to collection of objects with campus_name property
+
             $campuses = collect();
             foreach ($allCampuses as $campusName) {
-                $campuses->push((object)['campus_name' => $campusName]);
+                $campuses->push((object) ['campus_name' => $campusName]);
             }
         }
 
@@ -1116,36 +928,28 @@ class AccountantController extends Controller
                 return ($campus->campus_name ?? $campus) === $defaultCampus;
             })->values();
         }
-        
-        // Get classes from ClassModel
-        $classesQuery = \App\Models\ClassModel::orderBy('class_name', 'asc');
-        if ($defaultCampus) {
-            $classesQuery->where('campus', $defaultCampus);
-        }
-        $classes = $classesQuery->get();
-        
-        // If no classes found, provide empty collection
-        if ($classes->isEmpty()) {
-            $classes = collect();
-        }
-        
-        // Get sections from Section model
+
+        // Classes and fee types load via AJAX after campus (same as super admin).
+        $classes = collect();
         $sections = \App\Models\Section::whereNotNull('name')
             ->distinct()
             ->orderBy('name', 'asc')
             ->pluck('name')
             ->sort()
             ->values();
-        
-        // Get fee types from FeeType model
-        $feeTypes = \App\Models\FeeType::whereNotNull('fee_name')
-            ->distinct()
-            ->orderBy('fee_name', 'asc')
-            ->pluck('fee_name')
-            ->sort()
-            ->values();
-        
-        return view('accountant.generate-custom-fee', compact('campuses', 'classes', 'sections', 'feeTypes', 'defaultCampus'));
+
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ];
+
+        $currentYear = (int) date('Y');
+        $years = [];
+        for ($y = $currentYear - 2; $y <= $currentYear + 5; $y++) {
+            $years[] = $y;
+        }
+
+        return view('accountant.generate-custom-fee', compact('campuses', 'classes', 'sections', 'months', 'years', 'currentYear', 'defaultCampus'));
     }
 
     /**
@@ -1256,8 +1060,7 @@ class AccountantController extends Controller
         $skippedCount = 0;
 
         foreach ($students as $student) {
-            // Skip if student doesn't have transport fare or student_code
-            if (empty($student->transport_fare) || $student->transport_fare <= 0 || empty($student->student_code)) {
+            if (! $student->hasTransportConfigured()) {
                 $skippedCount++;
                 continue;
             }
@@ -1300,9 +1103,9 @@ class AccountantController extends Controller
         if ($generatedCount == 0) {
             $message = "No transport fees were generated. ";
             if ($skippedCount > 0) {
-                $message .= "All selected students were skipped (no transport fare set or fees already exist).";
+                $message .= 'All selected students were skipped (transport not configured on profile, or fee already exists).';
             } else {
-                $message .= "Selected students don't have transport fare configured.";
+                $message .= 'Selected students do not have transport route and fare on their profile.';
             }
 
             return redirect()
@@ -1310,14 +1113,53 @@ class AccountantController extends Controller
                 ->with('error', $message);
         }
 
+        FeeType::ensureExistsForCampus('Transport Fee', $validated['campus']);
+
         $message = "Transport fee generated successfully for {$generatedCount} student(s)!";
         if ($skippedCount > 0) {
-            $message .= " {$skippedCount} student(s) skipped (no transport fare set or already exists).";
+            $message .= " {$skippedCount} student(s) skipped (transport not configured or fee already exists).";
         }
+
+        $this->notifyAdminsAboutTransportFee($validated, $paymentTitle, $generatedCount);
 
         return redirect()
             ->route('accountant.generate-transport-fee')
             ->with('success', $message);
+    }
+
+    private function notifyAdminsAboutTransportFee(array $validated, string $paymentTitle, int $generatedCount): void
+    {
+        $accountant = auth()->guard('accountant')->user();
+        if (!$accountant) {
+            return;
+        }
+
+        $text = sprintf(
+            '%s generated transport fee "%s" for %d student(s). Campus: %s, Class: %s - %s.',
+            $accountant->name ?? 'Accountant',
+            $paymentTitle,
+            $generatedCount,
+            $validated['campus'],
+            $validated['class'],
+            $validated['section']
+        );
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($accountant, $text) {
+                \App\Models\Message::create([
+                    'from_type' => 'accountant',
+                    'from_id' => $accountant->id,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
     }
 
     /**
@@ -1622,19 +1464,28 @@ class AccountantController extends Controller
             $increaseAmount = (float) $validated['increase'];
             $advanceFee->available_credit = $currentCredit + $increaseAmount;
             $advanceFee->increase = $currentIncrease + $increaseAmount;
+            $currentCredit = (float) $advanceFee->available_credit;
         }
         
+        $requestedDecrease = 0.0;
+        $appliedDecrease = 0.0;
         if (isset($validated['decrease']) && $validated['decrease'] > 0) {
-            $decreaseAmount = (float) $validated['decrease'];
-            $advanceFee->available_credit = max(0, $currentCredit - $decreaseAmount);
-            $advanceFee->decrease = $currentDecrease + $decreaseAmount;
+            $requestedDecrease = (float) $validated['decrease'];
+            $appliedDecrease = min($requestedDecrease, max(0, $currentCredit));
+            $advanceFee->available_credit = max(0, $currentCredit - $appliedDecrease);
+            $advanceFee->decrease = $currentDecrease + $appliedDecrease;
         }
 
         $advanceFee->save();
 
+        $message = 'Credit updated successfully!';
+        if ($requestedDecrease > $appliedDecrease) {
+            $message = 'Credit updated successfully! Only Rs. ' . number_format($appliedDecrease, 2) . ' was deducted because that was the available wallet balance.';
+        }
+
         return redirect()
             ->route('accountant.parents-credit-system')
-            ->with('success', 'Credit updated successfully!');
+            ->with('success', $message);
     }
     
     /**
@@ -1865,116 +1716,18 @@ class AccountantController extends Controller
     }
 
     /**
-     * Store student payment for accountant.
+     * Store student payment for accountant (same wallet/discount/ledger rules as super admin).
      */
     public function storeStudentPayment(Request $request)
     {
-        try {
-            try {
-        $validated = $request->validate([
-            'campus' => ['nullable', 'string', 'max:255'],
-            'student_code' => ['required', 'string', 'max:255'],
-            'payment_title' => ['required', 'string', 'max:255'],
-            'payment_amount' => ['required', 'numeric', 'min:0'],
-            'discount' => ['nullable', 'numeric', 'min:0'],
-            'method' => ['required', 'string', 'max:255'],
-            'payment_date' => ['nullable', 'date'],
-            'generated_id' => ['nullable', 'integer'],
-                    'sms_notification' => ['nullable', 'string', 'in:Yes,No'],
-                ]);
-            } catch (\Illuminate\Validation\ValidationException $e) {
-                if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Validation failed',
-                        'errors' => $e->errors()
-                    ], 422);
-                }
-                throw $e;
-            }
-
-        // Set payment date to today if not provided
-        if (!isset($validated['payment_date'])) {
-            $validated['payment_date'] = now()->toDateString();
+        if (! $request->filled('payment_date')) {
+            $request->merge(['payment_date' => now()->toDateString()]);
+        }
+        if (! $request->filled('sms_notification')) {
+            $request->merge(['sms_notification' => 'Yes']);
         }
 
-            // Check if this is an installment (payment_title contains /number pattern)
-            $isInstallment = preg_match('/\/\d+$/', $validated['payment_title']);
-            
-            // For installments, create as "Generated" (unpaid) so they show as new/unpaid in search results
-            if ($isInstallment) {
-                $validated['method'] = 'Generated'; // Installments should be unpaid (Generated) initially
-            }
-            
-            // For installments, skip existing fee check
-            if (!$isInstallment && !empty($validated['generated_id'])) {
-            $generatedFee = \App\Models\StudentPayment::where('id', $validated['generated_id'])
-                ->where('student_code', $validated['student_code'])
-                ->where('method', 'Generated')
-                ->first();
-            if ($generatedFee && $generatedFee->payment_title) {
-                $validated['payment_title'] = $generatedFee->payment_title;
-            }
-        }
-
-        // Add default values
-            if (!isset($validated['sms_notification'])) {
-        $validated['sms_notification'] = 'Yes';
-            }
-        $validated['late_fee'] = 0;
-        
-        // Add accountant if available
-        if (auth()->check()) {
-            $validated['accountant'] = auth()->user()->name ?? null;
-        }
-
-            // Get student for response
-            $student = \App\Models\Student::where('student_code', $validated['student_code'])->first();
-
-        // Create payment record
-            $payment = \App\Models\StudentPayment::create($validated);
-
-            $successMessage = 'Payment recorded successfully!';
-
-            // If request is AJAX or expects JSON, return JSON response
-            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-                return response()->json([
-                    'success' => true,
-                    'message' => $successMessage,
-                    'payment' => [
-                        'id' => $payment->id,
-                        'student_code' => $payment->student_code,
-                        'student_name' => $student->student_name ?? null,
-                        'father_name' => $student->father_name ?? null,
-                        'class' => $student->class ?? null,
-                        'section' => $student->section ?? null,
-                        'payment_title' => $payment->payment_title,
-                        'payment_amount' => (float) ($payment->payment_amount ?? 0),
-                        'discount' => (float) ($payment->discount ?? 0),
-                        'late_fee' => (float) ($payment->late_fee ?? 0),
-                        'payment_date' => $payment->payment_date ? \Carbon\Carbon::parse($payment->payment_date)->format('d-m-Y h:i:s A') : null,
-                        'accountant' => $payment->accountant ?? null,
-                    ],
-                ]);
-            }
-
-        return redirect()
-            ->route('accountant.direct-payment.student')
-                ->with('success', $successMessage);
-        } catch (\Exception $e) {
-            // Catch any unexpected exceptions and return JSON response
-            if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-                \Log::error('Error in AccountantController@storeStudentPayment: ' . $e->getMessage(), [
-                    'exception' => $e,
-                    'request_data' => $request->all()
-                ]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error creating payment: ' . $e->getMessage()
-                ], 500);
-            }
-            throw $e;
-        }
+        return app(StudentPaymentController::class)->store($request);
     }
 
     /**
@@ -2054,6 +1807,11 @@ class AccountantController extends Controller
             
             // Check if this is a monthly fee (title starts with "Monthly Fee - ")
             $isMonthlyFee = str_starts_with($title, 'Monthly Fee - ');
+
+            $paidForTitle = \App\Models\StudentPayment::paidLedgerRowsForLatestGeneratedTitle(
+                $paidByTitle->get($title, collect()),
+                $latestGenerated
+            );
             
             // Calculate original amount (before discount) from generated records
             $originalAmount = $items->sum(function ($item) {
@@ -2075,7 +1833,7 @@ class AccountantController extends Controller
             }
             
             // Discount from payment records (for regular fees or additional discounts on installments)
-            $paidDiscount = $paidByTitle->get($title, collect())->sum(function ($item) {
+            $paidDiscount = $paidForTitle->sum(function ($item) {
                 return (float) ($item->discount ?? 0);
             });
             
@@ -2094,10 +1852,12 @@ class AccountantController extends Controller
             $generatedFee = max(0, $originalAmount - $totalDiscount) + $generatedLate;
             
             // Calculate paid amounts
-            $paidAmountOnly = $paidByTitle->get($title, collect())->sum(function ($item) {
-                return (float) ($item->payment_amount ?? 0); // Only payment amount, not discount
+            $paidAmountOnly = $paidForTitle->sum(function ($item) {
+                $amount = (float) ($item->payment_amount ?? 0);
+                $late = (float) ($item->late_fee ?? 0);
+                return max(0, $amount - $late);
             });
-            $paidLate = $paidByTitle->get($title, collect())->sum(function ($item) {
+            $paidLate = $paidForTitle->sum(function ($item) {
                 return (float) ($item->late_fee ?? 0);
             });
             
@@ -2200,11 +1960,13 @@ class AccountantController extends Controller
     {
         $validated = $request->validate([
             'campus' => ['nullable', 'string', 'max:255'],
+            'student_code' => ['required', 'string', 'max:255'],
             'payment_title' => ['required', 'string', 'max:255'],
             'payment_amount' => ['required', 'numeric', 'min:0'],
             'accountant' => ['nullable', 'string', 'max:255'],
             'method' => ['required', 'string', 'max:255'],
             'payment_date' => ['nullable', 'date'],
+            'generated_id' => ['nullable', 'integer'],
         ]);
 
         // Set payment date to today if not provided
@@ -2215,10 +1977,35 @@ class AccountantController extends Controller
         // Add default values
         $validated['notify_admin'] = 'Yes';
         
-        // If accountant not provided, use current logged in user
-        if (empty($validated['accountant']) && auth()->check()) {
-            $validated['accountant'] = auth()->user()->name ?? null;
+        if (empty($validated['accountant'])) {
+            $recordingAccountant = $this->resolveRecordingAccountantName();
+            if ($recordingAccountant !== null) {
+                $validated['accountant'] = $recordingAccountant;
+            }
         }
+
+        unset($validated['generated_id']);
+
+        $studentQuery = \App\Models\Student::where('student_code', $validated['student_code']);
+        if (! empty($validated['campus'])) {
+            $studentQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))]);
+        }
+        $student = $studentQuery->first();
+        if (! $student) {
+            $message = ! empty($validated['campus'])
+                ? 'Student not found with this code in the selected campus.'
+                : 'Student not found with this code.';
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['student_code' => $message]);
+        }
+        if (empty($validated['campus'])) {
+            $validated['campus'] = $student->campus;
+        }
+
+        \App\Models\CustomPayment::ensureStudentCodeColumn();
 
         // Create payment record
         \App\Models\CustomPayment::create($validated);
@@ -2321,15 +2108,12 @@ class AccountantController extends Controller
     public function restoreDeletedFee(\App\Models\DeletedFee $deletedFee)
     {
         try {
-            // Get original payment data
             $originalData = $deletedFee->original_data ?? [];
-            
-            // If original_data exists, restore from it
+
             if (!empty($originalData)) {
-                \App\Models\StudentPayment::create($originalData);
+                $paymentPayload = $originalData;
             } else {
-                // Otherwise, create from deleted_fee fields
-                \App\Models\StudentPayment::create([
+                $paymentPayload = [
                     'campus' => $deletedFee->campus,
                     'student_code' => $deletedFee->student_code,
                     'payment_title' => $deletedFee->payment_title,
@@ -2340,15 +2124,32 @@ class AccountantController extends Controller
                     'sms_notification' => 'Yes',
                     'accountant' => $deletedFee->deleted_by,
                     'late_fee' => 0,
-                ]);
+                ];
             }
-            
-            // Delete from deleted_fees table
+
+            $student = !empty($paymentPayload['student_code'])
+                ? Student::query()->where('student_code', $paymentPayload['student_code'])->first()
+                : null;
+
+            $walletCheck = \App\Services\AdvanceFeeWallet::deductCreditOnPaymentRestore($paymentPayload, $student);
+            if (!$walletCheck['ok']) {
+                return redirect()
+                    ->route('accountant.deleted-fees')
+                    ->with('error', $walletCheck['message']);
+            }
+
+            \App\Models\StudentPayment::create($paymentPayload);
+
             $deletedFee->delete();
-            
+
+            $successMessage = 'Fee restored successfully!';
+            if (($walletCheck['amount'] ?? 0) > 0) {
+                $successMessage .= ' Rs. ' . number_format((float) $walletCheck['amount'], 2) . ' deducted from parent wallet.';
+            }
+
             return redirect()
                 ->route('accountant.deleted-fees')
-                ->with('success', 'Fee restored successfully!');
+                ->with('success', $successMessage);
         } catch (\Exception $e) {
             return redirect()
                 ->route('accountant.deleted-fees')
@@ -2536,11 +2337,11 @@ class AccountantController extends Controller
     }
 
     /**
-     * Accountant Pages - Print Balance Sheet
+     * Accountant Pages - Print Balance Sheet (delegates to shared balance sheet logic).
      */
-    public function printBalanceSheet(): View
+    public function printBalanceSheet(Request $request): View
     {
-        return view('accountant.print-balance-sheet');
+        return app(BalanceSheetController::class)->accountantIndex($request);
     }
 
     /**
@@ -2645,13 +2446,53 @@ class AccountantController extends Controller
      */
     public function detailedExpense(Request $request): View
     {
-        // Use the same DetailedExpenseController logic
+        $defaultCampus = null;
+        if (auth()->guard('accountant')->check()) {
+            $defaultCampus = auth()->guard('accountant')->user()->campus;
+        }
+
+        if ($defaultCampus) {
+            $request->merge(['filter_campus' => $defaultCampus]);
+        }
+
         $controller = new \App\Http\Controllers\DetailedExpenseController();
         $view = $controller->index($request);
-        
-        // Change the view to accountant version
+
         $viewData = $view->getData();
-        return view('accountant.detailed-expense', $viewData);
+        if ($defaultCampus && isset($viewData['campuses'])) {
+            $viewData['campuses'] = collect($viewData['campuses'])
+                ->filter(fn ($campus) => $campus === $defaultCampus)
+                ->values();
+        }
+
+        $filterCampus = $defaultCampus ?: $request->get('filter_campus');
+        $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+
+        $classesQuery = \App\Models\ClassModel::query()->whereNotNull('class_name');
+        if ($filterCampus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $filterCampus))]);
+        }
+        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+
+        $sections = collect();
+        if ($filterClass) {
+            $sectionsQuery = \App\Models\Section::query()
+                ->whereNotNull('name')
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $filterClass))]);
+            if ($filterCampus) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $filterCampus))]);
+            }
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+        }
+
+        return view('accountant.detailed-expense', array_merge($viewData, [
+            'defaultCampus' => $defaultCampus,
+            'filterClass' => $filterClass,
+            'filterSection' => $filterSection,
+            'classes' => $classes,
+            'sections' => $sections,
+        ]));
     }
 
     /**
@@ -2736,8 +2577,18 @@ class AccountantController extends Controller
      */
     public function pointOfSale(Request $request): View
     {
-        // Use the same PointOfSaleController logic
-        $products = \App\Models\Product::orderBy('product_name', 'asc')->get();
+        $productsQuery = \App\Models\Product::orderBy('product_name', 'asc');
+        $defaultCampus = null;
+
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            if ($accountant && $accountant->campus) {
+                $defaultCampus = $accountant->campus;
+                $productsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountant->campus))]);
+            }
+        }
+
+        $products = $productsQuery->get();
         
         // Get campuses dynamically
         $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
@@ -2764,8 +2615,7 @@ class AccountantController extends Controller
             }
         }
         
-        // Return view with accountant layout - we'll use a shared partial
-        return view('accountant.point-of-sale', compact('products', 'campuses'));
+        return view('accountant.point-of-sale', compact('products', 'campuses', 'defaultCampus'));
     }
 
     /**
@@ -3186,4 +3036,21 @@ class AccountantController extends Controller
         
         return view('accountant.expense-categories', compact('categories', 'campuses', 'defaultCampus'));
     }
+
+    private function resolveRecordingAccountantName(): ?string
+    {
+        if (auth()->guard('accountant')->check()) {
+            return auth()->guard('accountant')->user()->name ?? null;
+        }
+
+        if (auth()->guard('admin')->check()) {
+            return auth()->guard('admin')->user()->name ?? null;
+        }
+
+        return auth()->user()->name ?? null;
+    }
 }
+
+} // end class_exists guard for AccountantController
+
+ 

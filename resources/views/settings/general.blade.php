@@ -92,6 +92,38 @@
                                     <input type="text" class="form-control" name="running_session" placeholder="e.g. 2024-2025, 2025-2026" value="{{ old('running_session', $settings->running_session ?? '') }}">
                                     <small class="text-muted">Type and add your current session (e.g. 2024-2025)</small>
                                 </div>
+
+                                <div class="col-md-12 mb-3">
+                                    <label class="form-label fw-medium">Fee Voucher Notice</label>
+                                    <textarea class="form-control" name="fee_voucher_notice" rows="2" placeholder="Enter notice text for fee voucher print">{{ old('fee_voucher_notice', $settings->fee_voucher_notice ?? 'This is a computer generated fee voucher, No manual corrections will be acceptable.') }}</textarea>
+                                    <small class="text-muted">This notice will appear at the bottom of printed fee vouchers.</small>
+                                </div>
+
+                                <div class="col-md-12 mb-3">
+                                    <label class="form-label fw-medium">Accounts Settlement Print Note</label>
+                                    <textarea class="form-control" name="accounts_settlement_print_note" rows="2" placeholder="Enter note text for accounts settlement print">{{ old('accounts_settlement_print_note', $settings->accounts_settlement_print_note ?? '') }}</textarea>
+                                    <small class="text-muted">This note will appear at the bottom of accounts settlement print.</small>
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-medium">Fee Voucher Bank Name</label>
+                                    <input type="text" class="form-control" name="fee_voucher_bank_name" placeholder="Enter bank name" value="{{ old('fee_voucher_bank_name', $settings->fee_voucher_bank_name ?? '') }}">
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-medium">Fee Voucher Account Title</label>
+                                    <input type="text" class="form-control" name="fee_voucher_account_title" placeholder="Enter account title" value="{{ old('fee_voucher_account_title', $settings->fee_voucher_account_title ?? '') }}">
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-medium">Fee Voucher Account Number</label>
+                                    <input type="text" class="form-control" name="fee_voucher_account_number" placeholder="Enter account number" value="{{ old('fee_voucher_account_number', $settings->fee_voucher_account_number ?? '') }}">
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-medium">Fee Voucher IBAN</label>
+                                    <input type="text" class="form-control" name="fee_voucher_iban" placeholder="Enter IBAN" value="{{ old('fee_voucher_iban', $settings->fee_voucher_iban ?? '') }}">
+                                </div>
                                 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">Show Class List On Dashboard</label>

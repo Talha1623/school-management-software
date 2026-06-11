@@ -246,18 +246,23 @@
         <div class="section-title">Paid Fees</div>
 
         @foreach($payments as $payment)
+            @php
+                $gross = (float) ($payment->payment_amount ?? 0);
+                $lf = (float) ($payment->late_fee ?? 0);
+                $feeExclLate = max(0, $gross - $lf);
+            @endphp
             <div class="item">
                 <div class="item-title">{{ $payment->payment_title }}</div>
 
                 <div class="flex-row small">
-                    <span>Amount</span>
-                    <span>{{ number_format($payment->payment_amount ?? 0, 2) }}</span>
+                    <span>Fee</span>
+                    <span>{{ number_format($feeExclLate, 2) }}</span>
                 </div>
 
-                @if($payment->late_fee > 0)
+                @if($lf > 0)
                 <div class="flex-row small">
                     <span>Late Fee</span>
-                    <span>{{ number_format($payment->late_fee, 2) }}</span>
+                    <span>{{ number_format($lf, 2) }}</span>
                 </div>
                 @endif
 
@@ -277,17 +282,24 @@
             </div>
         @endforeach
 
-        <div class="total-box">
-            <span>Total Paid</span>
-            <span>{{ number_format($totalPaid ?? 0, 2) }}</span>
+        @if(($totalFeeExclLate ?? 0) > 0 || ($totalLate ?? 0) > 0)
+        <div class="flex-row small bold">
+            <span>Total Fee</span>
+            <span>{{ number_format($totalFeeExclLate ?? 0, 2) }}</span>
         </div>
+        @endif
 
-        @if($totalLate > 0)
+        @if(($totalLate ?? 0) > 0)
         <div class="flex-row small bold">
             <span>Total Late Fee</span>
             <span>{{ number_format($totalLate, 2) }}</span>
         </div>
         @endif
+
+        <div class="total-box">
+            <span>Total Received</span>
+            <span>{{ number_format($totalPaid ?? 0, 2) }}</span>
+        </div>
 
         @if($totalDiscount > 0)
         <div class="flex-row small bold">

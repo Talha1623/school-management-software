@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AdvanceFee;
 use App\Models\ParentAccount;
+use App\Models\StudentPayment;
+use App\Services\ParentWalletHistory;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -191,12 +194,12 @@ class ParentWalletController extends Controller
                 ], 404);
             }
 
-            $availableCredit = (float) ($advanceFee->available_credit ?? 0);
+            $availableCredit = max(0, (float) ($advanceFee->available_credit ?? 0));
 
-            if ($availableCredit < $amount) {
+            if ($availableCredit <= 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Insufficient wallet balance. Available: Rs. ' . number_format($availableCredit, 2) . ', Required: Rs. ' . number_format($amount, 2),
+                    'message' => 'Insufficient wallet balance. Available: Rs. ' . number_format($availableCredit, 2),
                     'data' => [
                         'available_balance' => $availableCredit,
                         'required_amount' => $amount,
@@ -219,6 +222,7 @@ class ParentWalletController extends Controller
             }
 
             // Deduct from wallet
+            $amount = min($amount, $availableCredit);
             $currentDecrease = (float) ($advanceFee->decrease ?? 0);
             $advanceFee->available_credit = max(0, $availableCredit - $amount);
             $advanceFee->decrease = $currentDecrease + $amount;
@@ -249,8 +253,7 @@ class ParentWalletController extends Controller
     }
 
     /**
-     * Get wallet transaction history (if needed in future)
-     * For now, we can show increase and decrease totals
+     * Get wallet transaction history — aligned with web/fee-payment/history (ledger, amounts, date format).
      * 
      * GET /api/parent/wallet/history
      * 
@@ -288,17 +291,47 @@ class ParentWalletController extends Controller
                 ], 200);
             }
 
+            $filters = array_filter([
+                'month' => $request->filled('month') ? (int) $request->get('month') : null,
+                'year' => $request->filled('year') ? (int) $request->get('year') : null,
+                'search' => $request->filled('search') ? (string) $request->get('search') : null,
+            ]);
+
+            $built = ParentWalletHistory::buildTransactions($advanceFee, $parent, $filters);
+            $transactions = $built['transactions'];
+
+            $perPage = (int) $request->get('per_page', 20);
+            if ($perPage <= 0) {
+                $perPage = 20;
+            }
+            $page = max(1, (int) $request->get('page', 1));
+            $total = $transactions->count();
+            $offset = ($page - 1) * $perPage;
+            $paginatedTransactions = $transactions->slice($offset, $perPage)->values();
+
+            $ledgerNet = $built['ledgerNet'];
+
             return response()->json([
                 'success' => true,
                 'message' => 'Wallet history retrieved successfully.',
                 'data' => [
+                    'transactions' => $paginatedTransactions,
+                    'pagination' => [
+                        'current_page' => $page,
+                        'per_page' => $perPage,
+                        'total' => $total,
+                        'last_page' => (int) ceil($total / $perPage),
+                    ],
                     'summary' => [
-                        'total_increase' => (float) ($advanceFee->increase ?? 0),
-                        'total_decrease' => (float) ($advanceFee->decrease ?? 0),
-                        'current_balance' => (float) ($advanceFee->available_credit ?? 0),
-                        'formatted_total_increase' => 'Rs. ' . number_format($advanceFee->increase ?? 0, 2),
-                        'formatted_total_decrease' => 'Rs. ' . number_format($advanceFee->decrease ?? 0, 2),
-                        'formatted_current_balance' => 'Rs. ' . number_format($advanceFee->available_credit ?? 0, 2),
+                        'total_increase' => $built['totalIncrease'],
+                        'total_decrease' => $built['totalDecrease'],
+                        'current_balance' => $built['currentBalance'],
+                        'ledger_net' => $ledgerNet,
+                        'had_excess_debit' => $ledgerNet < 0,
+                        'formatted_total_increase' => 'Rs. ' . number_format($built['totalIncrease'], 2),
+                        'formatted_total_decrease' => 'Rs. ' . number_format($built['totalDecrease'], 2),
+                        'formatted_current_balance' => 'Rs. ' . number_format($built['currentBalance'], 2),
+                        'formatted_ledger_net' => 'Rs. ' . number_format($ledgerNet, 2),
                     ],
                     'wallet_id' => $advanceFee->id,
                     'created_at' => $advanceFee->created_at ? $advanceFee->created_at->format('Y-m-d H:i:s') : null,

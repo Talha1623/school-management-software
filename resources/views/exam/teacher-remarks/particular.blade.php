@@ -24,6 +24,12 @@
                 </div>
             @endif
 
+            @if(!empty($isStaffExamRemarksUser))
+                <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                    Select only <strong>your assigned subject</strong> from Manage Subjects (e.g. Urdu). You can enter remarks for that subject only.
+                </div>
+            @endif
+
             <!-- Filter Form -->
             <form action="{{ route('exam.teacher-remarks.particular') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
@@ -38,19 +44,6 @@
                                 @endphp
                                 <option value="{{ $campusName }}" {{ $filterCampus == $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
                             @endforeach
-                        </select>
-                    </div>
-
-                    <!-- Exam -->
-                    <div class="col-md-3">
-                        <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam</label>
-                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;" {{ !$filterCampus || !$filterClass ? 'disabled' : '' }}>
-                            <option value="">All Exams</option>
-                            @if($filterCampus && $filterClass)
-                                @foreach($exams as $examName)
-                                    <option value="{{ $examName }}" {{ $filterExam == $examName ? 'selected' : '' }}>{{ $examName }}</option>
-                                @endforeach
-                            @endif
                         </select>
                     </div>
 
@@ -77,6 +70,32 @@
                             @endif
                         </select>
                     </div>
+
+                    <!-- Subject -->
+                    <div class="col-md-3">
+                        <label for="filter_subject" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Subject</label>
+                        <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;" {{ !$filterClass ? 'disabled' : '' }}>
+                            <option value="">All Subjects</option>
+                            @if($filterClass)
+                                @foreach($subjects as $subjectName)
+                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
+                                @endforeach
+                            @endif
+                        </select>
+                    </div>
+
+                    <!-- Exam -->
+                    <div class="col-md-3">
+                        <label for="filter_exam" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Exam</label>
+                        <select class="form-select form-select-sm" id="filter_exam" name="filter_exam" style="height: 32px;" {{ !$filterCampus || !$filterClass || !$filterSubject ? 'disabled' : '' }}>
+                            <option value="">All Exams</option>
+                            @if($filterCampus && $filterClass && $filterSubject)
+                                @foreach($exams as $examName)
+                                    <option value="{{ $examName }}" {{ $filterExam == $examName ? 'selected' : '' }}>{{ $examName }}</option>
+                                @endforeach
+                            @endif
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Filter Button -->
@@ -91,8 +110,17 @@
             </form>
 
             <!-- Results Table - Only show when all required filters are applied -->
-            @if($filterCampus && $filterExam && $filterClass)
+            @if($filterCampus && $filterClass && $filterSubject && $filterExam)
             <div class="mt-3">
+                @php
+                    $canEditExamRemarks = $canEditExamRemarks ?? true;
+                    $examRemarksReadonly = isset($canEditExamRemarks) && !$canEditExamRemarks;
+                @endphp
+                @if(!empty($isStaffExamRemarksUser) && $examRemarksReadonly)
+                    <div class="alert alert-warning py-2 mb-3" style="font-size: 13px;">
+                        This subject is not assigned to you. Remarks are <strong>view only</strong> — choose your own subject in the filter.
+                    </div>
+                @endif
                 <!-- Navigation Guide -->
                 <div class="mb-3 p-3 rounded-8" style="background-color: #ff9800; border: 1px solid #f57c00;">
                     <div class="d-flex align-items-center gap-2">
@@ -124,6 +152,7 @@
                             <input type="hidden" name="campus" value="{{ request('filter_campus') }}">
                             <input type="hidden" name="class" value="{{ request('filter_class') }}">
                             <input type="hidden" name="section" value="{{ request('filter_section') }}">
+                            <input type="hidden" name="subject" value="{{ request('filter_subject') }}">
                             
                             <table class="table table-sm table-hover">
                                 <thead>
@@ -153,7 +182,7 @@
                                             <input type="text" class="form-control form-control-sm marks-input" value="{{ isset($student->mark) && $student->mark && $student->mark->marks_obtained !== null ? number_format($student->mark->marks_obtained, 0) : '0' }}" readonly>
                                         </td>
                                         <td>
-                                            <textarea name="remarks[{{ $student->id }}]" class="form-control form-control-sm remarks-input" placeholder="Type Teacher Remarks for {{ $student->student_name }}" rows="2" style="min-width: 300px;">{{ isset($student->mark) && $student->mark ? ($student->mark->teacher_remarks ?? '') : '' }}</textarea>
+                                            <textarea name="remarks[{{ $student->id }}]" class="form-control form-control-sm remarks-input" placeholder="{{ $examRemarksReadonly ? 'View only — not your subject' : 'Type Teacher Remarks for ' . $student->student_name }}" rows="2" style="min-width: 300px;" @if($examRemarksReadonly) readonly disabled @endif>{{ isset($student->mark) && $student->mark ? ($student->mark->teacher_remarks ?? '') : '' }}</textarea>
                                         </td>
                                     </tr>
                                     @empty
@@ -169,7 +198,7 @@
                                 </tbody>
                             </table>
                             
-                            @if($students->count() > 0)
+                            @if($students->count() > 0 && !$examRemarksReadonly)
                             <div class="text-center mt-3">
                                 <button type="submit" class="btn save-remarks-btn px-4 py-2">
                                     <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">save</span>
@@ -297,9 +326,10 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('filter_campus');
-    const examSelect = document.getElementById('filter_exam');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const subjectSelect = document.getElementById('filter_subject');
+    const examSelect = document.getElementById('filter_exam');
     const allClassOptions = classSelect ? classSelect.innerHTML : '';
 
     function loadClasses() {
@@ -311,6 +341,8 @@ document.addEventListener('DOMContentLoaded', function() {
             classSelect.value = '';
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
             sectionSelect.disabled = true;
+            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+            subjectSelect.disabled = true;
             examSelect.innerHTML = '<option value="">All Exams</option>';
             examSelect.disabled = true;
             return;
@@ -320,6 +352,8 @@ document.addEventListener('DOMContentLoaded', function() {
         classSelect.disabled = true;
         sectionSelect.innerHTML = '<option value="">All Sections</option>';
         sectionSelect.disabled = true;
+        subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+        subjectSelect.disabled = true;
         examSelect.innerHTML = '<option value="">All Exams</option>';
         examSelect.disabled = true;
 
@@ -340,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.classes && data.classes.includes('{{ $filterClass }}')) {
                     classSelect.value = '{{ $filterClass }}';
                     loadSections(classSelect.value);
-                    loadExams();
+                    loadSubjects();
                 }
                 @endif
             })
@@ -354,17 +388,23 @@ document.addEventListener('DOMContentLoaded', function() {
     function loadExams() {
         const campus = campusSelect ? campusSelect.value : '';
         const classValue = classSelect ? classSelect.value : '';
+        const sectionValue = sectionSelect ? sectionSelect.value : '';
+        const subjectValue = subjectSelect ? subjectSelect.value : '';
         
         if (!examSelect) return;
         
-        // Require campus and class to load exams
-        if (campus && classValue) {
+        // Require campus, class, and subject to load exams
+        if (campus && classValue && subjectValue) {
             examSelect.disabled = false;
             examSelect.innerHTML = '<option value="">Loading...</option>';
             
             const params = new URLSearchParams();
             params.append('campus', campus);
             params.append('class', classValue);
+            params.append('subject', subjectValue);
+            if (sectionValue) {
+                params.append('section', sectionValue);
+            }
             
             fetch(`{{ route('exam.teacher-remarks.get-exams') }}?${params.toString()}`)
                 .then(response => response.json())
@@ -426,6 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             sectionSelect.appendChild(option);
                         });
                     }
+                    loadSubjects();
                 })
                 .catch(error => {
                     console.error('Error loading sections:', error);
@@ -434,6 +475,54 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             sectionSelect.disabled = true;
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            subjectSelect.disabled = true;
+            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+        }
+    }
+
+    function loadSubjects() {
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const sectionValue = sectionSelect ? sectionSelect.value : '';
+
+        if (!subjectSelect) return;
+
+        if (classValue) {
+            subjectSelect.disabled = false;
+            subjectSelect.innerHTML = '<option value="">Loading...</option>';
+
+            const params = new URLSearchParams();
+            params.append('class', classValue);
+            if (campus) params.append('campus', campus);
+            if (sectionValue) params.append('section', sectionValue);
+
+            fetch(`{{ route('exam.teacher-remarks.get-subjects') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                    if (data && data.length > 0) {
+                        data.forEach(subject => {
+                            const option = document.createElement('option');
+                            option.value = subject;
+                            option.textContent = subject;
+                            @if($filterSubject)
+                            if (subject === '{{ $filterSubject }}') {
+                                option.selected = true;
+                            }
+                            @endif
+                            subjectSelect.appendChild(option);
+                        });
+                    }
+                    loadExams();
+                })
+                .catch(error => {
+                    console.error('Error loading subjects:', error);
+                    subjectSelect.innerHTML = '<option value="">Error loading subjects</option>';
+                });
+        } else {
+            subjectSelect.disabled = true;
+            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+            loadExams();
         }
     }
 
@@ -448,7 +537,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (classSelect) {
         classSelect.addEventListener('change', function() {
             loadSections(this.value);
-            loadExams(); // Reload exams when class changes
+        });
+    }
+
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            loadSubjects();
+        });
+    }
+
+    if (subjectSelect) {
+        subjectSelect.addEventListener('change', function() {
+            loadExams();
         });
     }
 
@@ -460,7 +560,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loadClasses();
     } else if (initialClass) {
         loadSections(initialClass);
-        loadExams();
+        loadSubjects();
     }
 
     // Search functionality

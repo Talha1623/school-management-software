@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ManagementExpense;
 use App\Models\ExpenseCategory;
+use App\Models\GeneralSetting;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
@@ -12,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class ManagementExpenseController extends Controller
 {
@@ -238,7 +240,10 @@ class ManagementExpenseController extends Controller
     {
         return view('expense-management.print', [
             'managementExpense' => $managementExpense,
-            'printedAt' => now()->format('d-m-Y H:i'),
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => Carbon::now()->format('d M Y, h:i A'),
+            'hasReceiptFile' => $managementExpense->invoice_receipt
+                && Storage::disk('public')->exists($managementExpense->invoice_receipt),
         ]);
     }
 

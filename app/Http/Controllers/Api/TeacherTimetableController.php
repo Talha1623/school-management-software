@@ -8,6 +8,7 @@ use App\Models\Subject;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
+use App\Models\StaffAttendance;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -379,14 +380,55 @@ class TeacherTimetableController extends Controller
             ->orderBy('starting_time')
             ->get();
 
+            // Resolve assigned teacher per subject/campus for this class/section
+            $className = strtolower(trim((string)($request->class ?? '')));
+            $sectionName = strtolower(trim((string)($request->section ?? '')));
+            $subjectTeacherBySubjectCampus = Subject::query()
+                ->when($className !== '', function($q) use ($className) {
+                    $q->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
+                })
+                ->when($sectionName !== '', function($q) use ($sectionName) {
+                    $q->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
+                })
+                ->get()
+                ->reduce(function($carry, $row) {
+                    $subjectKey = strtolower(trim((string)($row->subject_name ?? '')));
+                    $campusKey = strtolower(trim((string)($row->campus ?? '')));
+                    if ($subjectKey === '') {
+                        return $carry;
+                    }
+
+                    $subjectCampusKey = $subjectKey . '|' . $campusKey;
+                    if (!array_key_exists($subjectCampusKey, $carry) && !empty(trim((string)($row->teacher ?? '')))) {
+                        $carry[$subjectCampusKey] = trim((string)($row->teacher ?? ''));
+                    }
+
+                    // Fallback by subject only when campus-specific is not available
+                    if (!array_key_exists($subjectKey, $carry) && !empty(trim((string)($row->teacher ?? '')))) {
+                        $carry[$subjectKey] = trim((string)($row->teacher ?? ''));
+                    }
+                    return $carry;
+                }, []);
+
             // Format timetable data
-            $timetableData = $timetables->map(function($timetable) use ($dayForDate, $monthForDate, $yearForDate) {
+            $timetableData = $timetables->map(function($timetable) use ($teacher, $subjectTeacherBySubjectCampus, $dayForDate, $monthForDate, $yearForDate) {
+                $subjectKey = strtolower(trim((string)($timetable->subject ?? '')));
+                $campusKey = strtolower(trim((string)($timetable->campus ?? '')));
+                $subjectCampusKey = $subjectKey . '|' . $campusKey;
+
+                $resolvedTeacherName = $subjectTeacherBySubjectCampus[$subjectCampusKey]
+                    ?? $subjectTeacherBySubjectCampus[$subjectKey]
+                    ?? ($teacher->name ?? null);
+
                 $item = [
                     'id' => $timetable->id,
                     'campus' => $timetable->campus ?? null,
                     'class' => $timetable->class,
                     'section' => $timetable->section,
+                    'class_section' => trim((string)($timetable->class ?? '')) . (!empty($timetable->section) ? ' - ' . trim((string)$timetable->section) : ''),
                     'subject' => $timetable->subject,
+                    'teacher_name' => $resolvedTeacherName,
+                    'teacher_emp_id' => $teacher->emp_id ?? null,
                     'day' => $timetable->day,
                     'starting_time' => $timetable->starting_time,
                     'ending_time' => $timetable->ending_time,
@@ -446,6 +488,7 @@ class TeacherTimetableController extends Controller
                     'name' => $teacher->name,
                     'emp_id' => $teacher->emp_id ?? null,
                 ],
+                'timetable_for' => 'Teacher assigned timetable',
                 'timetable' => $timetableData->values()->toArray(),
                 'timetable_by_day' => $timetableByDay,
                 'total_periods' => $timetables->count(),
@@ -472,6 +515,321 @@ class TeacherTimetableController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving timetable.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'token' => $request->bearerToken(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Teacher "My Timetable" for today.
+     * Returns teacher info and whether teacher has any class/timetable entries for the given day.
+     *
+     * Query params:
+     * - date (optional, format YYYY-MM-DD). Default: today.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getTeacherTodayTimetable(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access timetable.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'date' => ['nullable', 'string', 'max:25'],
+            ]);
+
+            $dateStr = !empty($validated['date']) ? trim((string) $validated['date']) : date('Y-m-d');
+            $timestamp = strtotime($dateStr);
+            if ($timestamp === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid date format.',
+                    'token' => null,
+                ], 422);
+            }
+
+            $dayName = date('l', $timestamp); // Monday..Sunday
+            $dayNameLower = strtolower(trim($dayName));
+
+            // Teacher/staff salary type (lecture / per hour / full time).
+            // Web salary flow uses: "lecture" and "per hour" and defaults to "full time".
+            $salaryTypeRaw = strtolower(trim((string) ($teacher->salary_type ?? '')));
+            $isPerLecture = $salaryTypeRaw === 'lecture'
+                || $salaryTypeRaw === 'per lecture'
+                || $salaryTypeRaw === 'per_lecture'
+                || str_contains($salaryTypeRaw, 'lecture');
+            $isPerHour = $salaryTypeRaw === 'per hour' || str_contains($salaryTypeRaw, 'hour');
+            $normalizedSalaryType = $isPerLecture ? 'lecture' : ($isPerHour ? 'per hour' : 'full time');
+
+            // Get teacher's assigned subjects
+            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->whereNotNull('class')
+                ->get();
+
+            // Check teacher check-in/check-out for this date.
+            $attendanceToday = StaffAttendance::query()
+                ->where('staff_id', $teacher->id)
+                ->whereDate('attendance_date', date('Y-m-d', $timestamp))
+                ->first();
+
+            $attendanceStatusNormalized = strtolower(trim((string) ($attendanceToday->status ?? '')));
+            $presentLike = in_array($attendanceStatusNormalized, ['present', 'half day'], true);
+            $isCheckedIn = $attendanceToday && $presentLike && !empty($attendanceToday->start_time);
+            $isCheckedOut = $attendanceToday && $presentLike && !empty($attendanceToday->end_time);
+            $checkOutRequired = $isCheckedIn && !$isCheckedOut;
+
+            $checkInTimeFormatted = !empty($attendanceToday?->start_time) ? date('h:i A', strtotime((string) $attendanceToday->start_time)) : null;
+            $checkOutTimeFormatted = !empty($attendanceToday?->end_time) ? date('h:i A', strtotime((string) $attendanceToday->end_time)) : null;
+
+            if ($teacherSubjects->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No timetable found for today.',
+                    'data' => [
+                        'teacher' => [
+                            'name' => $teacher->name,
+                            'emp_id' => $teacher->emp_id ?? null,
+                            'salary_type' => $normalizedSalaryType,
+                        ],
+                        'timetable_for' => 'Teacher assigned timetable (today)',
+                        'date' => date('Y-m-d', $timestamp),
+                        'day' => $dayName,
+                        'has_class_today' => false,
+                        'classes_today' => [],
+                    'today_salary_summary' => [
+                        'salary_type' => $normalizedSalaryType,
+                        'lecture_count_today' => 0,
+                        'total_hours_today' => 0,
+                        'full_time_active_today' => 0,
+                    ],
+                        'timetable' => [],
+                    ],
+                    'token' => $request->bearerToken(),
+                ], 200);
+            }
+
+            $teacherSubjectNames = $teacherSubjects->pluck('subject_name')->unique()->filter()->map(function ($subject) {
+                return trim((string) $subject);
+            })->filter()->toArray();
+
+            $teacherClasses = $teacherSubjects->pluck('class')->unique()->filter()->map(function ($class) {
+                return trim((string) $class);
+            })->filter()->toArray();
+
+            $teacherSections = $teacherSubjects->pluck('section')->unique()->filter()->map(function ($section) {
+                return trim((string) $section);
+            })->filter()->toArray();
+
+            $staticSubjects = $this->getStaticSubjects();
+
+            // Build timetable query for this day only.
+            $query = Timetable::query();
+            $query->whereRaw('LOWER(TRIM(day)) = ?', [$dayNameLower]);
+
+            // subject filter: teacher assigned subjects OR static subjects
+            if (!empty($teacherSubjectNames) || !empty($staticSubjects)) {
+                $query->where(function ($q) use ($teacherSubjectNames, $staticSubjects) {
+                    if (!empty($teacherSubjectNames)) {
+                        foreach ($teacherSubjectNames as $subjectName) {
+                            $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))]);
+                        }
+                    }
+                    if (!empty($staticSubjects)) {
+                        foreach ($staticSubjects as $staticSubject) {
+                            $q->orWhereRaw('TRIM(subject) = ?', [trim($staticSubject)]);
+                        }
+                    }
+                });
+            } else {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No timetable found for today.',
+                    'data' => [
+                        'teacher' => [
+                            'name' => $teacher->name,
+                            'emp_id' => $teacher->emp_id ?? null,
+                        ],
+                        'timetable_for' => 'Teacher assigned timetable (today)',
+                        'date' => date('Y-m-d', $timestamp),
+                        'day' => $dayName,
+                        'has_class_today' => false,
+                        'classes_today' => [],
+                        'timetable' => [],
+                    'checkin_checkout' => [
+                        'is_checked_in' => $isCheckedIn,
+                        'is_checked_out' => $isCheckedOut,
+                        'check_out_required' => $checkOutRequired,
+                        'attendance_status' => $attendanceToday->status ?? null,
+                        'check_in_time' => $checkInTimeFormatted,
+                        'check_out_time' => $checkOutTimeFormatted,
+                    ],
+                    'today_salary_summary' => [
+                        'salary_type' => $normalizedSalaryType,
+                        'lecture_count_today' => 0,
+                        'total_hours_today' => 0,
+                        'full_time_active_today' => 0,
+                    ],
+                    ],
+                    'token' => $request->bearerToken(),
+                ], 200);
+            }
+
+            // restrict by class/section combinations (similar to getTimetable)
+            if (!empty($teacherClasses) || !empty($teacherSections)) {
+                $query->where(function ($q) use ($teacherClasses, $teacherSections) {
+                    if (!empty($teacherClasses) && !empty($teacherSections)) {
+                        foreach ($teacherClasses as $class) {
+                            foreach ($teacherSections as $section) {
+                                $q->orWhere(function ($csQuery) use ($class, $section) {
+                                    $csQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+                                });
+                            }
+                        }
+                    }
+
+                    if (!empty($teacherClasses) && empty($teacherSections)) {
+                        foreach ($teacherClasses as $class) {
+                            $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+                        }
+                    }
+
+                    if (empty($teacherClasses) && !empty($teacherSections)) {
+                        foreach ($teacherSections as $section) {
+                            $q->orWhereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+                        }
+                    }
+                });
+            }
+
+            $timetables = $query
+                ->orderBy('starting_time')
+                ->get();
+
+            // Resolve assigned teacher per subject/campus for the teacher's context.
+            // (Best-effort; the detailed mapping by class/section is already handled in /timetable/by-class.)
+            $teacherSubjectNamesForMapping = $teacherSubjectNames;
+            $subjectTeacherBySubjectCampus = Subject::query()
+                ->when(!empty($teacherSubjectNamesForMapping), function ($q) use ($teacherSubjectNamesForMapping) {
+                    $q->whereIn('subject_name', $teacherSubjectNamesForMapping);
+                })
+                ->get()
+                ->reduce(function ($carry, $row) {
+                    $subjectKey = strtolower(trim((string) ($row->subject_name ?? '')));
+                    $campusKey = strtolower(trim((string) ($row->campus ?? '')));
+                    if ($subjectKey === '') {
+                        return $carry;
+                    }
+
+                    $subjectCampusKey = $subjectKey . '|' . $campusKey;
+                    if (!array_key_exists($subjectCampusKey, $carry) && !empty(trim((string) ($row->teacher ?? '')))) {
+                        $carry[$subjectCampusKey] = trim((string) ($row->teacher ?? ''));
+                    }
+
+                    // Fallback by subject only when campus-specific is not available
+                    if (!array_key_exists($subjectKey, $carry) && !empty(trim((string) ($row->teacher ?? '')))) {
+                        $carry[$subjectKey] = trim((string) ($row->teacher ?? ''));
+                    }
+
+                    return $carry;
+                }, []);
+
+            $timetableData = $timetables->map(function ($timetable) use ($teacher, $subjectTeacherBySubjectCampus, $timestamp, $dayName) {
+                $subjectKey = strtolower(trim((string) ($timetable->subject ?? '')));
+                $campusKey = strtolower(trim((string) ($timetable->campus ?? '')));
+                $subjectCampusKey = $subjectKey . '|' . $campusKey;
+
+                $resolvedTeacherName = $subjectTeacherBySubjectCampus[$subjectCampusKey]
+                    ?? $subjectTeacherBySubjectCampus[$subjectKey]
+                    ?? ($teacher->name ?? null);
+
+                return [
+                    'id' => $timetable->id,
+                    'campus' => $timetable->campus ?? null,
+                    'class' => $timetable->class,
+                    'section' => $timetable->section,
+                    'class_section' => trim((string) ($timetable->class ?? '')) . (!empty($timetable->section) ? ' - ' . trim((string) $timetable->section) : ''),
+                    'subject' => $timetable->subject,
+                    'teacher_name' => $resolvedTeacherName,
+                    'teacher_emp_id' => $teacher->emp_id ?? null,
+                    'day' => $timetable->day ?? $dayName,
+                    'starting_time' => $timetable->starting_time,
+                    'ending_time' => $timetable->ending_time,
+                    'starting_time_formatted' => date('h:i A', strtotime($timetable->starting_time)),
+                    'ending_time_formatted' => date('h:i A', strtotime($timetable->ending_time)),
+                    'date' => date('Y-m-d', $timestamp),
+                    'date_formatted' => date('d M Y', $timestamp),
+                    'day_number' => (int) date('j', $timestamp),
+                ];
+            })->values();
+
+            $classesToday = $timetableData->pluck('class_section')->unique()->values();
+
+            // Compute duration based summary for salary-type (best-effort from timetable periods).
+            $totalPeriodsToday = $timetableData->count();
+            $totalMinutesToday = 0;
+            foreach ($timetableData as $period) {
+                $startTs = strtotime(date('Y-m-d', $timestamp) . ' ' . ($period['starting_time'] ?? ''));
+                $endTs = strtotime(date('Y-m-d', $timestamp) . ' ' . ($period['ending_time'] ?? ''));
+                if ($startTs !== false && $endTs !== false && $endTs > $startTs) {
+                    $totalMinutesToday += (int) round(($endTs - $startTs) / 60);
+                }
+            }
+            $totalHoursToday = round($totalMinutesToday / 60, 2);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Timetable retrieved successfully.',
+                'data' => [
+                    'teacher' => [
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id ?? null,
+                        'salary_type' => $normalizedSalaryType,
+                    ],
+                    'timetable_for' => 'Teacher assigned timetable (today)',
+                    'date' => date('Y-m-d', $timestamp),
+                    'day' => $dayName,
+                    'has_class_today' => $timetableData->isNotEmpty(),
+                    'classes_today' => $classesToday,
+                    'today_salary_summary' => [
+                        'salary_type' => $normalizedSalaryType,
+                        'lecture_count_today' => $normalizedSalaryType === 'lecture' ? $totalPeriodsToday : 0,
+                        'total_hours_today' => $normalizedSalaryType === 'per hour' ? $totalHoursToday : 0,
+                        'full_time_active_today' => $normalizedSalaryType === 'full time' && $timetableData->isNotEmpty() ? 1 : 0,
+                    ],
+                    'checkin_checkout' => [
+                        'is_checked_in' => $isCheckedIn,
+                        'is_checked_out' => $isCheckedOut,
+                        'check_out_required' => $checkOutRequired,
+                        'attendance_status' => $attendanceToday->status ?? null,
+                        'check_in_time' => $checkInTimeFormatted,
+                        'check_out_time' => $checkOutTimeFormatted,
+                    ],
+                    'timetable' => $timetableData->toArray(),
+                ],
+                'token' => $request->bearerToken(),
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving teacher timetable.',
                 'error' => config('app.debug') ? $e->getMessage() : null,
                 'token' => $request->bearerToken(),
             ], 500);
@@ -599,46 +957,23 @@ class TeacherTimetableController extends Controller
             }
             
             // Campus handling:
-            // 1) If provided, filter by it (case-insensitive), also include null-campus for backward compatibility.
-            // 2) If NOT provided, try to auto-detect a single campus from Timetable or Subject for this class/section.
-            $campusName = null;
-            if (!empty($validated['campus'])) {
-                $campusName = strtolower(trim($validated['campus']));
-                $query->where(function($q) use ($campusName) {
-                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusName])
-                      ->orWhereNull('campus');
-                });
-            } else {
-                // Auto-detect campus
-                $autoCampus = null;
-                // First try Timetable
-                $campusProbe = Timetable::query()
-                    ->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
-                if (!empty($validated['section'])) {
-                    $campusProbe->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
-                }
-                $ttCampuses = $campusProbe->whereNotNull('campus')->pluck('campus')->filter()->map(function($c){ return trim((string)$c); })->unique()->values();
-                if ($ttCampuses->count() === 1) {
-                    $autoCampus = strtolower($ttCampuses->first());
-                } else {
-                    // Fallback to Subject table
-                    $subProbe = Subject::query()
-                        ->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
-                    if (!empty($validated['section'])) {
-                        $subProbe->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
-                    }
-                    $subCampuses = $subProbe->whereNotNull('campus')->pluck('campus')->filter()->map(function($c){ return trim((string)$c); })->unique()->values();
-                    if ($subCampuses->count() === 1) {
-                        $autoCampus = strtolower($subCampuses->first());
-                    }
-                }
-                if (!empty($autoCampus)) {
-                    $campusName = $autoCampus;
-                    $query->where(function($q) use ($campusName) {
-                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusName])
-                          ->orWhereNull('campus');
-                    });
-                }
+            // 1) Default campus is always teacher's own campus to avoid cross-campus leakage.
+            // 2) If caller passes campus, it must match teacher campus (teacher cannot query another campus).
+            // 3) No OR NULL campus fallback here; only strict campus match.
+            $teacherCampus = strtolower(trim((string) ($teacher->campus ?? '')));
+            $requestedCampus = !empty($validated['campus']) ? strtolower(trim((string) $validated['campus'])) : null;
+            $campusName = $requestedCampus ?: ($teacherCampus !== '' ? $teacherCampus : null);
+
+            if ($requestedCampus && $teacherCampus !== '' && $requestedCampus !== $teacherCampus) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied for selected campus.',
+                    'token' => $request->bearerToken(),
+                ], 403);
+            }
+
+            if (!empty($campusName)) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [$campusName]);
             }
             
             // Include static subjects list
@@ -761,14 +1096,48 @@ class TeacherTimetableController extends Controller
                 }
             }
 
+            // Resolve teacher by subject/campus so each row shows assigned staff (not logged-in teacher for all rows)
+            $subjectTeacherMap = Subject::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [$className])
+                ->when(!empty($validated['section']), function($q) use ($validated) {
+                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))]);
+                })
+                ->get()
+                ->reduce(function($carry, $row) {
+                    $subjectKey = strtolower(trim((string)($row->subject_name ?? '')));
+                    $campusKey = strtolower(trim((string)($row->campus ?? '')));
+                    $teacherName = trim((string)($row->teacher ?? ''));
+                    if ($subjectKey === '' || $teacherName === '') {
+                        return $carry;
+                    }
+
+                    $subjectCampusKey = $subjectKey . '|' . $campusKey;
+                    if (!isset($carry[$subjectCampusKey])) {
+                        $carry[$subjectCampusKey] = $teacherName;
+                    }
+                    if (!isset($carry[$subjectKey])) {
+                        $carry[$subjectKey] = $teacherName;
+                    }
+                    return $carry;
+                }, []);
+
             // Format timetable data
-            $timetableData = $timetables->map(function($timetable) use ($dayForDate, $monthForDate, $yearForDate) {
+            $timetableData = $timetables->map(function($timetable) use ($teacher, $subjectTeacherMap, $dayForDate, $monthForDate, $yearForDate) {
+                $subjectKey = strtolower(trim((string)($timetable->subject ?? '')));
+                $campusKey = strtolower(trim((string)($timetable->campus ?? '')));
+                $resolvedTeacher = $subjectTeacherMap[$subjectKey . '|' . $campusKey]
+                    ?? $subjectTeacherMap[$subjectKey]
+                    ?? ($teacher->name ?? null);
+
                 $item = [
                     'id' => $timetable->id,
                     'campus' => $timetable->campus ?? null,
                     'class' => $timetable->class,
                     'section' => $timetable->section,
+                    'class_section' => trim((string)($timetable->class ?? '')) . (!empty($timetable->section) ? ' - ' . trim((string)$timetable->section) : ''),
                     'subject' => $timetable->subject,
+                    'teacher_name' => $resolvedTeacher,
+                    'teacher_emp_id' => $teacher->emp_id ?? null,
                     'day' => $timetable->day,
                     'starting_time' => $timetable->starting_time,
                     'ending_time' => $timetable->ending_time,
@@ -934,8 +1303,14 @@ class TeacherTimetableController extends Controller
             }
 
             $responseData = [
+                'teacher' => [
+                    'name' => $teacher->name ?? null,
+                    'emp_id' => $teacher->emp_id ?? null,
+                ],
                 'class' => $validated['class'],
                 'section' => $validated['section'] ?? null,
+                'class_section' => trim((string)$validated['class']) . (!empty($validated['section']) ? ' - ' . trim((string)$validated['section']) : ''),
+                'timetable_for' => 'Class timetable',
                 'campus' => $validated['campus'] ?? ($campusName ? ucwords($campusName) : null),
                 'timetable' => $timetableData->values()->toArray(),
                 'timetable_by_day' => $timetableByDay,

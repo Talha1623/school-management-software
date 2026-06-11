@@ -135,6 +135,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    async function readJsonFromResponse(response) {
+        const raw = await response.text();
+        const t = raw.replace(/^\uFEFF/, '').trim();
+        if (!t) {
+            return {};
+        }
+        try {
+            return JSON.parse(t);
+        } catch (e) {
+            const plain = t.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            const hint = plain.slice(0, 140);
+            throw new Error(hint ? ('Not JSON (login or error page): ' + hint) : 'Invalid JSON from server');
+        }
+    }
+
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
@@ -161,7 +176,8 @@ document.addEventListener('DOMContentLoaded', function() {
         feeTypeSelect.innerHTML = '<option value="">All</option>';
         feeTypeSelect.disabled = false;
 
-        fetch(`{{ route('accounting.custom-fee.get-fee-types-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+        fetch(`{{ route('accounting.custom-fee.get-fee-types-by-campus', [], false) }}?campus=${encodeURIComponent(campus)}`, {
+            credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -199,18 +215,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         classSelect.innerHTML = '<option value="">Loading classes...</option>';
+        classSelect.disabled = true;
 
-        fetch(`{{ route('accounting.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+        fetch(`{{ route('accounting.parent-wallet.bulk-fee-payment.ajax.classes', [], false) }}?campus=${encodeURIComponent(campus)}`, {
+            credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => {
+        .then(async response => {
+            const data = await readJsonFromResponse(response);
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(data.error || data.message || `HTTP ${response.status}`);
             }
-            return response.json();
+            return data;
         })
         .then(data => {
             classSelect.innerHTML = '<option value="">All Classes</option>';
@@ -221,13 +240,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.textContent = className;
                     classSelect.appendChild(option);
                 });
-                classSelect.disabled = false;
             } else {
-                classSelect.innerHTML = '<option value="">No classes found</option>';
+                classSelect.innerHTML = '<option value="">No classes found for this campus</option>';
             }
+            classSelect.disabled = false;
         })
-        .catch(() => {
-            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+        .catch(error => {
+            classSelect.innerHTML = '<option value="">' + (error.message ? ('Error: ' + error.message) : 'Error loading classes') + '</option>';
+            classSelect.disabled = false;
         });
     }
 
@@ -246,28 +266,39 @@ document.addEventListener('DOMContentLoaded', function() {
             class: selectedClass,
             campus: selectedCampus || ''
         });
-        fetch(`{{ route('accounting.get-sections-by-class') }}?${params.toString()}`, {
+        fetch(`{{ route('accounting.parent-wallet.bulk-fee-payment.ajax.sections', [], false) }}?${params.toString()}`, {
+            credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => response.json())
+        .then(async response => {
+            const data = await readJsonFromResponse(response);
+            if (!response.ok) {
+                throw new Error(data.error || data.message || `HTTP ${response.status}`);
+            }
+            return data;
+        })
         .then(data => {
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
             if (data.sections && data.sections.length > 0) {
                 data.sections.forEach(section => {
                     const option = document.createElement('option');
-                    option.value = section.name;
-                    option.textContent = section.name;
+                    const sectionName = typeof section === 'string' ? section : (section.name || section);
+                    option.value = sectionName;
+                    option.textContent = sectionName;
                     sectionSelect.appendChild(option);
                 });
                 sectionSelect.disabled = false;
+            } else {
+                sectionSelect.innerHTML = '<option value="">No sections found</option>';
+                sectionSelect.disabled = false;
             }
         })
-        .catch(() => {
-            sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
-            sectionSelect.disabled = true;
+        .catch(error => {
+            sectionSelect.innerHTML = '<option value="">' + (error.message ? ('Error: ' + error.message) : 'Error loading sections') + '</option>';
+            sectionSelect.disabled = false;
         });
     });
 });
@@ -283,7 +314,8 @@ function loadBulkFees() {
     const tbody = document.getElementById('bulkFeeBody');
     tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">Loading...</td></tr>';
 
-    fetch(`{{ route('accounting.parent-wallet.bulk-fee-payment.data') }}?${params.toString()}`, {
+    fetch(`{{ route('accounting.parent-wallet.bulk-fee-payment.data', [], false) }}?${params.toString()}`, {
+        credentials: 'same-origin',
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
@@ -428,7 +460,7 @@ function saveBulkPayments() {
         return;
     }
 
-    fetch(`{{ route('accounting.parent-wallet.bulk-fee-payment.store') }}`, {
+    fetch(`{{ route('accounting.parent-wallet.bulk-fee-payment.store', [], false) }}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

@@ -417,6 +417,7 @@
                                         <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">credit_card</span></span>
                                         <input type="text" class="form-control border-start-0 py-1" id="admit_father_id_card" name="father_id_card" placeholder="Father ID Card" style="height: 32px; font-size: 13px;">
                                     </div>
+                                    <div id="admit_parent_found_message" class="mt-1" style="display: none;"></div>
                                 </div>
                                 
                                 <div class="mb-2">
@@ -678,7 +679,7 @@
                                     <label for="admit_campus" class="form-label mb-0 fs-13 fw-medium">Campus</label>
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">business</span></span>
-                                        <select class="form-select border-start-0 py-1" id="admit_campus" name="campus" style="height: 32px; font-size: 13px;" onchange="loadAdmitClassesForCampus(this.value)">
+                                        <select class="form-select border-start-0 py-1" id="admit_campus" name="campus" style="height: 32px; font-size: 13px;" onchange="handleAdmitCampusChange(this.value)">
                                             <option value="">Select Campus</option>
                                             @foreach($campuses as $campus)
                                                 <option value="{{ $campus }}">{{ $campus }}</option>
@@ -1226,6 +1227,10 @@ function printTable() {
 // Admit Student Modal Functions
 let admitStream = null;
 let admitCapturedPhotoBase64 = null;
+let admitClassesRequestId = 0;
+let admitTransportRoutesRequestId = 0;
+let admitSectionsRequestId = 0;
+let admitParentSearchTimeout = null;
 
 function openAdmitModal(inquiryId) {
     // Fetch inquiry data
@@ -1246,6 +1251,25 @@ function openAdmitModal(inquiryId) {
                 admitCapturedPhotoBase64 = null;
                 document.getElementById('admit_captured_photo_input').value = '';
                 document.getElementById('admit_captured-image-container').style.display = 'none';
+
+                // Always reset dependent dropdowns so same-campus reselect works reliably.
+                const campusSelect = document.getElementById('admit_campus');
+                const classSelect = document.getElementById('admit_class');
+                const sectionSelect = document.getElementById('admit_section');
+                const studentCodeInput = document.getElementById('admit_student_code');
+                const transportRouteSelect = document.getElementById('admit_transport_route');
+                const feeTypeSelect = document.getElementById('admit_fee_type');
+                const parentFoundMessage = document.getElementById('admit_parent_found_message');
+                if (campusSelect) campusSelect.value = '';
+                if (classSelect) classSelect.innerHTML = '<option value="">Select Class</option>';
+                if (sectionSelect) sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                if (studentCodeInput) studentCodeInput.value = '';
+                if (transportRouteSelect) transportRouteSelect.innerHTML = '<option value="">Select Transport Route</option>';
+                if (feeTypeSelect) feeTypeSelect.innerHTML = '<option value="">Select Fee Type</option>';
+                if (parentFoundMessage) {
+                    parentFoundMessage.style.display = 'none';
+                    parentFoundMessage.innerHTML = '';
+                }
                 
                 // Show modal
                 new bootstrap.Modal(document.getElementById('admitStudentModal')).show();
@@ -1335,10 +1359,101 @@ function toggleAdmitParentPasswordField() {
     }
 }
 
+function handleAdmitCampusChange(campusValue) {
+    const normalizedCampus = (campusValue || '').trim();
+    loadAdmitClassesForCampus(normalizedCampus);
+    loadAdmitTransportRoutesByCampus(normalizedCampus);
+    loadAdmitFeeTypesByCampus(normalizedCampus);
+    loadAdmitTransportFare('');
+    searchAdmitParentByIdCard();
+}
+
+function searchAdmitParentByIdCard() {
+    const fatherIdCardInput = document.getElementById('admit_father_id_card');
+    const campusSelect = document.getElementById('admit_campus');
+    const parentFoundMessage = document.getElementById('admit_parent_found_message');
+    const createParentAccountSelect = document.getElementById('admit_create_parent_account');
+
+    if (!fatherIdCardInput || !parentFoundMessage) {
+        return;
+    }
+
+    const fatherIdCard = (fatherIdCardInput.value || '').trim();
+    const campusValue = (campusSelect ? campusSelect.value : '').trim();
+
+    if (!fatherIdCard) {
+        parentFoundMessage.style.display = 'none';
+        parentFoundMessage.innerHTML = '';
+        if (createParentAccountSelect) {
+            createParentAccountSelect.disabled = false;
+        }
+        return;
+    }
+
+    if (!campusValue) {
+        parentFoundMessage.style.display = 'block';
+        parentFoundMessage.className = 'mt-1';
+        parentFoundMessage.innerHTML = '<small class="text-warning"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">warning</span> Pehle campus select karein.</small>';
+        if (createParentAccountSelect) {
+            createParentAccountSelect.disabled = false;
+        }
+        return;
+    }
+
+    parentFoundMessage.style.display = 'block';
+    parentFoundMessage.className = 'mt-1';
+    parentFoundMessage.innerHTML = '<small class="text-info"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">search</span> Parent account search ho raha hai...</small>';
+
+    fetch(`{{ route('admission.get-parent-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}&campus=${encodeURIComponent(campusValue)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.found && data.parent) {
+                const parent = data.parent;
+                const fatherNameInput = document.getElementById('admit_father_name');
+                const fatherEmailInput = document.getElementById('admit_father_email');
+                const fatherPhoneInput = document.getElementById('admit_father_phone');
+                const whatsappInput = document.getElementById('admit_whatsapp_number');
+                const homeAddressInput = document.getElementById('admit_home_address');
+
+                if (fatherNameInput && parent.name) fatherNameInput.value = parent.name;
+                if (fatherEmailInput && parent.email) fatherEmailInput.value = parent.email;
+                if (fatherPhoneInput && parent.phone) fatherPhoneInput.value = parent.phone;
+                if (whatsappInput && parent.whatsapp) whatsappInput.value = parent.whatsapp;
+                if (homeAddressInput && parent.address) homeAddressInput.value = parent.address;
+
+                const campusChildren = parent.students_count ?? 0;
+                const totalChildren = parent.total_students_count ?? campusChildren;
+                parentFoundMessage.className = 'mt-1';
+                parentFoundMessage.innerHTML = `<small class="text-success"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">check_circle</span> Account already maujood hai. Is parent ke ${campusChildren} bachay is campus me aur ${totalChildren} total bachay linked hain.</small>`;
+
+                if (createParentAccountSelect) {
+                    createParentAccountSelect.value = '0';
+                    createParentAccountSelect.disabled = true;
+                    toggleAdmitParentPasswordField();
+                }
+            } else {
+                parentFoundMessage.className = 'mt-1';
+                parentFoundMessage.innerHTML = '<small class="text-warning"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">info</span> Is ID Card par koi existing parent account nahi mila.</small>';
+                if (createParentAccountSelect) {
+                    createParentAccountSelect.disabled = false;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching parent details:', error);
+            parentFoundMessage.className = 'mt-1';
+            parentFoundMessage.innerHTML = '<small class="text-danger"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">error</span> Parent account search me masla aya. Dobara try karein.</small>';
+            if (createParentAccountSelect) {
+                createParentAccountSelect.disabled = false;
+            }
+        });
+}
+
 function loadAdmitClassesForCampus(campusValue) {
     const classSelect = document.getElementById('admit_class');
     const sectionSelect = document.getElementById('admit_section');
     const studentCodeInput = document.getElementById('admit_student_code');
+    const currentRequestId = ++admitClassesRequestId;
     
     classSelect.innerHTML = '<option value="">Select Class</option>';
     sectionSelect.innerHTML = '<option value="">Select Section</option>';
@@ -1351,8 +1466,18 @@ function loadAdmitClassesForCampus(campusValue) {
     fetch(`{{ route('admission.get-classes') }}?campus=${encodeURIComponent(campusValue)}`)
         .then(response => response.json())
         .then(data => {
+            if (currentRequestId !== admitClassesRequestId) {
+                return;
+            }
+
             if (data.classes && data.classes.length > 0) {
-                data.classes.forEach(className => {
+                const uniqueClasses = [...new Set(
+                    data.classes
+                        .map(className => String(className || '').trim())
+                        .filter(className => className !== '')
+                )];
+
+                uniqueClasses.forEach(className => {
                     const option = document.createElement('option');
                     option.value = className;
                     option.textContent = className;
@@ -1386,6 +1511,7 @@ function loadAdmitSectionsForClass(classValue) {
     const sectionSelect = document.getElementById('admit_section');
     const campusSelect = document.getElementById('admit_campus');
     const campusValue = campusSelect ? campusSelect.value : '';
+    const currentRequestId = ++admitSectionsRequestId;
     
     sectionSelect.innerHTML = '<option value="">Select Section</option>';
     
@@ -1397,8 +1523,18 @@ function loadAdmitSectionsForClass(classValue) {
     fetch(`{{ route('admission.get-sections') }}?${query}`)
         .then(response => response.json())
         .then(data => {
+            if (currentRequestId !== admitSectionsRequestId) {
+                return;
+            }
+
             if (data.sections && data.sections.length > 0) {
-                data.sections.forEach(section => {
+                const uniqueSections = [...new Set(
+                    data.sections
+                        .map(section => String(section || '').trim())
+                        .filter(section => section !== '')
+                )];
+
+                uniqueSections.forEach(section => {
                     const option = document.createElement('option');
                     option.value = section;
                     option.textContent = section;
@@ -1409,6 +1545,116 @@ function loadAdmitSectionsForClass(classValue) {
         .catch(error => {
             console.error('Error loading sections:', error);
         });
+}
+
+function loadAdmitTransportRoutesByCampus(campusValue, selectedRoute = '') {
+    const transportSelect = document.getElementById('admit_transport_route');
+    if (!transportSelect) return;
+    const currentRequestId = ++admitTransportRoutesRequestId;
+
+    transportSelect.innerHTML = '<option value="">Select Transport Route</option>';
+
+    if (!campusValue) {
+        return;
+    }
+
+    fetch(`{{ route('admission.get-transport-routes') }}?campus=${encodeURIComponent(campusValue)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (currentRequestId !== admitTransportRoutesRequestId) {
+                return;
+            }
+
+            const routes = Array.isArray(data.routes) ? data.routes : [];
+            const uniqueRoutes = [...new Set(routes
+                .map(routeName => String(routeName || '').trim())
+                .filter(routeName => routeName !== '')
+            )];
+
+            uniqueRoutes.forEach(routeName => {
+                const option = document.createElement('option');
+                option.value = routeName;
+                option.textContent = routeName;
+                if (selectedRoute && selectedRoute === routeName) {
+                    option.selected = true;
+                }
+                transportSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading transport routes:', error);
+        });
+}
+
+function loadAdmitFeeTypesByCampus(campusValue, selectedFeeType = '') {
+    const feeTypeSelect = document.getElementById('admit_fee_type');
+    if (!feeTypeSelect) return;
+
+    feeTypeSelect.innerHTML = '<option value="">Select Fee Type</option>';
+
+    if (!campusValue) {
+        return;
+    }
+
+    fetch(`{{ route('admission.get-fee-types') }}?campus=${encodeURIComponent(campusValue)}`)
+        .then(response => response.json())
+        .then(data => {
+            const feeTypes = Array.isArray(data.fee_types) ? data.fee_types : [];
+            const uniqueFeeTypes = [...new Set(feeTypes
+                .map(feeType => String(feeType || '').trim())
+                .filter(feeType => feeType !== '')
+            )];
+
+            uniqueFeeTypes.forEach(feeType => {
+                const option = document.createElement('option');
+                option.value = feeType;
+                option.textContent = feeType;
+                if (selectedFeeType && selectedFeeType === feeType) {
+                    option.selected = true;
+                }
+                feeTypeSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading fee types:', error);
+        });
+}
+
+function bindAdmitDependentDropdowns() {
+    const campusSelect = document.getElementById('admit_campus');
+    const classSelect = document.getElementById('admit_class');
+    const fatherIdCardInput = document.getElementById('admit_father_id_card');
+
+    const hasInlineCampusChange = campusSelect && (campusSelect.getAttribute('onchange') || '').trim() !== '';
+    const hasInlineClassChange = classSelect && (classSelect.getAttribute('onchange') || '').trim() !== '';
+
+    if (campusSelect && !hasInlineCampusChange && !campusSelect.dataset.bound) {
+        campusSelect.addEventListener('change', function() {
+            handleAdmitCampusChange((this.value || '').trim());
+        });
+        campusSelect.dataset.bound = '1';
+    }
+
+    if (classSelect && !hasInlineClassChange && !classSelect.dataset.bound) {
+        classSelect.addEventListener('change', function() {
+            loadAdmitSectionsForClass((this.value || '').trim());
+        });
+        classSelect.dataset.bound = '1';
+    }
+
+    if (fatherIdCardInput && !fatherIdCardInput.dataset.bound) {
+        fatherIdCardInput.addEventListener('input', function() {
+            clearTimeout(admitParentSearchTimeout);
+            admitParentSearchTimeout = setTimeout(searchAdmitParentByIdCard, 700);
+        });
+        fatherIdCardInput.dataset.bound = '1';
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindAdmitDependentDropdowns, { once: true });
+} else {
+    bindAdmitDependentDropdowns();
 }
 
 // Handle form submission
@@ -1489,14 +1735,18 @@ function toggleAdmitOtherFeeFields() {
     const generateOtherFee = document.getElementById('admit_generate_other_fee');
     const feeTypeContainer = document.getElementById('admit_fee_type_container');
     const otherFeeAmountContainer = document.getElementById('admit_other_fee_amount_container');
+    const campusSelect = document.getElementById('admit_campus');
+    const feeTypeSelect = document.getElementById('admit_fee_type');
     
-    if (generateOtherFee && feeTypeContainer && otherFeeAmountContainer) {
+    if (generateOtherFee && feeTypeContainer && otherFeeAmountContainer && feeTypeSelect) {
         if (generateOtherFee.value === '1') {
             feeTypeContainer.style.display = 'block';
+            // Always refresh fee heads for the currently selected campus.
+            loadAdmitFeeTypesByCampus((campusSelect ? campusSelect.value : '').trim(), feeTypeSelect.value || '');
         } else {
             feeTypeContainer.style.display = 'none';
             otherFeeAmountContainer.style.display = 'none';
-            document.getElementById('admit_fee_type').value = '';
+            feeTypeSelect.value = '';
             document.getElementById('admit_other_fee_amount').value = '';
         }
     }

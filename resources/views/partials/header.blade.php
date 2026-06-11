@@ -74,59 +74,114 @@
                     </li>
                     <li class="header-right-item messages-item">
                         <div class="dropdown notifications noti messages">
+                            @php
+                                $mailUnreadCount = 0;
+                                $mailMessages = collect();
+
+                                if (Auth::guard('admin')->check()) {
+                                    $admin = Auth::guard('admin')->user();
+                                    if ($admin) {
+                                        $sourceTypes = ['teacher', 'student', 'parent'];
+                                        $mailUnreadCount = \App\Models\Message::whereIn('from_type', $sourceTypes)
+                                            ->where('to_type', 'admin')
+                                            ->where('to_id', $admin->id)
+                                            ->whereNull('read_at')
+                                            ->count();
+
+                                        $mailMessages = \App\Models\Message::whereIn('from_type', $sourceTypes)
+                                            ->where('to_type', 'admin')
+                                            ->where('to_id', $admin->id)
+                                            ->whereNull('read_at')
+                                            ->orderBy('created_at', 'desc')
+                                            ->limit(10)
+                                            ->get()
+                                            ->map(function ($message) {
+                                                $name = 'Unknown';
+                                                if ($message->from_type === 'teacher') {
+                                                    $sender = \App\Models\Staff::find($message->from_id);
+                                                    $name = $sender?->name ?? 'Teacher';
+                                                } elseif ($message->from_type === 'student') {
+                                                    $sender = \App\Models\Student::find($message->from_id);
+                                                    $name = $sender?->student_name ?? 'Student';
+                                                } elseif ($message->from_type === 'parent') {
+                                                    $sender = \App\Models\ParentAccount::find($message->from_id);
+                                                    $name = $sender?->name ?? 'Parent';
+                                                } elseif ($message->from_type === 'accountant') {
+                                                    $sender = \App\Models\Accountant::find($message->from_id);
+                                                    $name = $sender?->name ?? 'Accountant';
+                                                }
+
+                                                return [
+                                                    'from_type' => $message->from_type,
+                                                    'from_id' => $message->from_id,
+                                                    'sender_name' => $name,
+                                                    'href' => $message->from_type === 'accountant'
+                                                        ? (str_contains(strtolower((string) $message->text), 'transport fee')
+                                                            ? route('accounting.generate-transport-fee')
+                                                            : (str_contains(strtolower((string) $message->text), 'fee payment')
+                                                                ? route('fee-payment')
+                                                                : (str_contains(strtolower((string) $message->text), 'task')
+                                                                    ? route('task-management')
+                                                                    : (str_contains(strtolower((string) $message->text), 'balance sheet settlement')
+                                                                        ? route('reports.balance-sheet')
+                                                                        : route('accounting.generate-custom-fee')))))
+                                                        : route('live-chat', ['recipient_type' => $message->from_type, 'recipient_id' => $message->from_id]),
+                                                    'text' => $message->text
+                                                        ? (strlen($message->text) > 50 ? substr($message->text, 0, 50) . '...' : $message->text)
+                                                        : 'Attachment sent',
+                                                    'time_ago' => $message->created_at->diffForHumans(),
+                                                ];
+                                            });
+                                    }
+                                }
+                            @endphp
                             <button class="btn btn-secondary border-0 p-0 position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <span class="material-symbols-outlined">mail</span>
-                                <span class="count bg-primary">5</span>
+                                @if($mailUnreadCount > 0)
+                                    <span class="count bg-primary">{{ $mailUnreadCount > 99 ? '99+' : $mailUnreadCount }}</span>
+                                @endif
                             </button>
                             <div class="dropdown-menu dropdown-lg p-0 border-0 p-0 dropdown-menu-end">
                                 <div class="d-flex justify-content-between align-items-center title">
-                                    <span class="fw-medium fs-16 text-secondary">Messages <span class="fw-normal text-body fs-16">(03)</span></span>
-                                    <button class="p-0 m-0 bg-transparent border-0 fs-15 text-primary fw-medium">Mark all as read</button>
+                                    <span class="fw-medium fs-16 text-secondary">Messages <span class="fw-normal text-body fs-16">({{ $mailUnreadCount }})</span></span>
+                                    @if($mailUnreadCount > 0)
+                                        <form action="{{ route('notifications.mark-all-read') }}" method="POST" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="p-0 m-0 bg-transparent border-0 fs-15 text-primary fw-medium">Mark all as read</button>
+                                        </form>
+                                    @endif
                                 </div> 
 
                                 <div style="max-height: 300px;" data-simplebar>
-                                    <div class="notification-menu unseen">
-                                        <a href="{{ route('chat') }}" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/user1.jpg') }}" class="rounded-circle" style="width: 44px; height: 44px;" alt="images">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <p class="fs-16 fw-medium text-secondary mb-2">Jacob Liwiski <span class="fs-14 fw-normal text-body ms-2">35 min ago</span></p>
-                                                    <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">Hey Victor! Could you please...</span>
-                                                </div>
+                                    @if($mailMessages->count() > 0)
+                                        @foreach($mailMessages as $message)
+                                            <div class="notification-menu unseen">
+                                                <a href="{{ $message['href'] }}" class="dropdown-item">
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="flex-shrink-0">
+                                                            <i class="material-symbols-outlined text-primary">sms</i>
+                                                        </div>
+                                                        <div class="flex-grow-1 ms-10">
+                                                            <p class="fs-16 fw-medium text-secondary mb-2">
+                                                                {{ $message['sender_name'] }}
+                                                                <span class="fs-14 fw-normal text-body ms-2">{{ $message['time_ago'] }}</span>
+                                                            </p>
+                                                            <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">{{ $message['text'] }}</span>
+                                                        </div>
+                                                    </div>
+                                                </a>
                                             </div>
-                                        </a>
-                                    </div>
-                                    <div class="notification-menu unseen">
-                                        <a href="{{ route('chat') }}" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/user2.jpg') }}" class="rounded-circle" style="width: 44px; height: 44px;" alt="images">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <p class="fs-16 fw-medium text-secondary mb-2">Angela Carter <span class="fs-14 fw-normal text-body ms-2">1 day ago</span></p>
-                                                    <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">How are you Angela? Would you please...</span>
-                                                </div>
+                                        @endforeach
+                                    @else
+                                        <div class="notification-menu">
+                                            <div class="dropdown-item text-center py-3">
+                                                <span class="fs-14 text-muted">No new messages</span>
                                             </div>
-                                        </a>
-                                    </div>
-                                    <div class="notification-menu">
-                                        <a href="{{ route('chat') }}" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/user3.jpg') }}" class="rounded-circle" style="width: 44px; height: 44px;" alt="images">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <p class="fs-16 fw-medium text-secondary mb-2">Brad Traversy <span class="fs-14 fw-normal text-body ms-2">2 days ago</span></p>
-                                                    <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">Hey Brad Traversy! Could you please...</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
+                                        </div>
+                                    @endif
                                 </div>
 
-                                <a href="{{ route('chat') }}" class="dropdown-item text-center text-primary d-block view-all fw-medium rounded-bottom-3">
+                                <a href="{{ route('live-chat') }}" class="dropdown-item text-center text-primary d-block view-all fw-medium rounded-bottom-3">
                                     <span>See All Messages</span>
                                 </a>
                             </div>
@@ -137,34 +192,97 @@
                             @php
                                 $unreadChatCount = 0;
                                 $recentChatMessages = collect();
-                                
+
+                                $canMarkAdminNotifications = false;
+
                                 if (Auth::guard('admin')->check()) {
                                     $admin = Auth::guard('admin')->user();
                                     if ($admin) {
-                                        // Get unread messages from teachers to this admin
-                                        $unreadChatCount = \App\Models\Message::where('from_type', 'teacher')
+                                        $canMarkAdminNotifications = true;
+                                        $notificationSourceTypes = ['teacher', 'accountant', 'staff_notification'];
+
+                                        $unreadChatCount = \App\Models\Message::whereIn('from_type', $notificationSourceTypes)
                                             ->where('to_type', 'admin')
                                             ->where('to_id', $admin->id)
                                             ->whereNull('read_at')
                                             ->count();
-                                        
-                                        // Get recent unread messages (last 10)
-                                        $recentChatMessages = \App\Models\Message::where('from_type', 'teacher')
+
+                                        $recentChatMessages = \App\Models\Message::whereIn('from_type', $notificationSourceTypes)
                                             ->where('to_type', 'admin')
                                             ->where('to_id', $admin->id)
                                             ->whereNull('read_at')
                                             ->orderBy('created_at', 'desc')
                                             ->limit(10)
                                             ->get()
-                                            ->map(function($message) {
-                                                $teacher = \App\Models\Staff::find($message->from_id);
+                                            ->map(function ($message) {
+                                                if ($message->from_type === 'accountant') {
+                                                    $sender = \App\Models\Accountant::find($message->from_id);
+                                                    $senderName = $sender?->name ?? 'Accountant';
+                                                    $recipientType = 'accountant';
+                                                } elseif ($message->from_type === 'staff_notification') {
+                                                    $sender = \App\Models\Staff::find($message->from_id);
+                                                    $senderName = $sender?->name ?? 'Staff';
+                                                    $recipientType = 'staff_notification';
+                                                } else {
+                                                    $sender = \App\Models\Staff::find($message->from_id);
+                                                    $senderName = $sender?->name ?? 'Teacher';
+                                                    $recipientType = 'teacher';
+                                                }
+
                                                 return [
                                                     'id' => $message->id,
-                                                    'teacher_id' => $message->from_id,
-                                                    'teacher_name' => $teacher ? $teacher->name : 'Unknown',
-                                                    'text' => $message->text ? (strlen($message->text) > 50 ? substr($message->text, 0, 50) . '...' : $message->text) : 'Attachment sent',
+                                                    'recipient_type' => $recipientType,
+                                                    'recipient_id' => $message->from_id,
+                                                    'sender_name' => $senderName,
+                                                    'href' => $message->from_type === 'accountant'
+                                                        ? (str_contains(strtolower((string) $message->text), 'transport fee')
+                                                            ? route('accounting.generate-transport-fee')
+                                                            : (str_contains(strtolower((string) $message->text), 'fee payment')
+                                                                ? route('fee-payment')
+                                                                : (str_contains(strtolower((string) $message->text), 'task')
+                                                                    ? route('task-management')
+                                                                    : (str_contains(strtolower((string) $message->text), 'balance sheet settlement')
+                                                                        ? route('reports.balance-sheet')
+                                                                        : route('accounting.generate-custom-fee')))))
+                                                        : route('live-chat', ['recipient_type' => $recipientType, 'recipient_id' => $message->from_id]),
+                                                    'full_text' => $message->text ?: 'Attachment sent',
+                                                    'text' => $message->text
+                                                        ? (strlen($message->text) > 80 ? substr($message->text, 0, 80) . '...' : $message->text)
+                                                        : 'Attachment sent',
                                                     'time_ago' => $message->created_at->diffForHumans(),
-                                                    'created_at' => $message->created_at,
+                                                ];
+                                            });
+                                    }
+                                } elseif (Auth::guard('staff')->check()) {
+                                    $staffUser = Auth::guard('staff')->user();
+                                    if ($staffUser) {
+                                        $unreadChatCount = \App\Models\Message::whereIn('from_type', ['admin', 'super_admin'])
+                                            ->where('to_type', 'teacher')
+                                            ->where('to_id', $staffUser->id)
+                                            ->whereNull('read_at')
+                                            ->count();
+
+                                        $recentChatMessages = \App\Models\Message::whereIn('from_type', ['admin', 'super_admin'])
+                                            ->where('to_type', 'teacher')
+                                            ->where('to_id', $staffUser->id)
+                                            ->whereNull('read_at')
+                                            ->orderBy('created_at', 'desc')
+                                            ->limit(10)
+                                            ->get()
+                                            ->map(function ($message) {
+                                                $admin = \App\Models\AdminRole::find($message->from_id);
+
+                                                return [
+                                                    'id' => $message->id,
+                                                    'recipient_type' => 'admin',
+                                                    'recipient_id' => $message->from_id,
+                                                    'sender_name' => $admin?->name ?? 'Admin',
+                                                    'href' => '#',
+                                                    'full_text' => $message->text ?: 'Attachment sent',
+                                                    'text' => $message->text
+                                                        ? (strlen($message->text) > 80 ? substr($message->text, 0, 80) . '...' : $message->text)
+                                                        : 'Attachment sent',
+                                                    'time_ago' => $message->created_at->diffForHumans(),
                                                 ];
                                             });
                                     }
@@ -179,7 +297,7 @@
                             <div class="dropdown-menu dropdown-lg p-0 border-0 p-0 dropdown-menu-end">
                                 <div class="d-flex justify-content-between align-items-center title">
                                     <span class="fw-medium fs-16 text-secondary">Notifications <span class="fw-normal text-body fs-16">({{ $unreadChatCount }})</span></span>
-                                    @if($unreadChatCount > 0)
+                                    @if($unreadChatCount > 0 && $canMarkAdminNotifications)
                                         <form action="{{ route('notifications.mark-all-read') }}" method="POST" class="d-inline">
                                             @csrf
                                             <button type="submit" class="p-0 m-0 bg-transparent border-0 fs-15 text-primary fw-medium">Mark all as read</button>
@@ -190,18 +308,19 @@
                                     @if($recentChatMessages->count() > 0)
                                         @foreach($recentChatMessages as $message)
                                             <div class="notification-menu unseen">
-                                                <a href="{{ route('live-chat', ['teacher_id' => $message['teacher_id']]) }}" class="dropdown-item">
+                                                <div class="dropdown-item admin-notification-toggle" role="button" style="cursor: pointer;" onclick="toggleAdminNotificationText(this, event)">
                                                     <div class="d-flex align-items-center">
                                                         <div class="flex-shrink-0">
-                                                            <i class="material-symbols-outlined text-primary">sms</i>
+                                                            <i class="material-symbols-outlined text-primary">notifications</i>
                                                         </div>
                                                         <div class="flex-grow-1 ms-3">
-                                                            <p class="fs-16 fw-medium text-secondary mb-1">{{ $message['teacher_name'] }} se SMS aaya hai</p>
-                                                            <p class="fs-14 fw-normal text-body mb-1">{{ $message['text'] }}</p>
+                                                            <p class="fs-16 fw-medium text-secondary mb-1">{{ $message['sender_name'] }}</p>
+                                                            <p class="fs-14 fw-normal text-body mb-1 admin-notification-preview">{{ $message['text'] }}</p>
+                                                            <p class="fs-14 fw-normal text-body mb-1 admin-notification-full d-none">{{ $message['full_text'] }}</p>
                                                             <span class="fs-14 fw-medium text-muted">{{ $message['time_ago'] }}</span>
                                                         </div>
                                                     </div>
-                                                </a>
+                                                </div>
                                             </div>
                                         @endforeach
                                     @else
@@ -212,11 +331,6 @@
                                         </div>
                                     @endif
                                 </div>
-                                @if($unreadChatCount > 0)
-                                    <a href="{{ route('live-chat') }}" class="dropdown-item text-center text-primary d-block view-all fw-medium rounded-bottom-3">
-                                        <span>See All Notifications</span>
-                                    </a>
-                                @endif
                             </div>
                         </div>
                     </li>
@@ -303,6 +417,22 @@
 @endif
 
 <script>
+function toggleAdminNotificationText(element, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    var preview = element.querySelector('.admin-notification-preview');
+    var full = element.querySelector('.admin-notification-full');
+    if (!preview || !full) {
+        return;
+    }
+
+    preview.classList.toggle('d-none');
+    full.classList.toggle('d-none');
+}
+
 function handleLogout() {
     // Check for admin logout form first
     var adminForm = document.getElementById('admin-logout-form');

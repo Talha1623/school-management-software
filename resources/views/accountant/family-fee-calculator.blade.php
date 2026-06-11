@@ -2,6 +2,11 @@
 
 @section('title', 'Fee Calculator')
 
+@php
+    $ffcSearchUrl = $ffcSearchUrl ?? route('accountant.family-fee-calculator.search-by-id-card');
+    $ffcPayAllUrl = $ffcPayAllUrl ?? route('accountant.family-fee-calculator.pay-all');
+@endphp
+
 @section('content')
 <div class="row">
     <div class="col-12">
@@ -280,15 +285,46 @@ function hasFeeFlag(value) {
     return value === 1 || value === '1' || value === true || value === 'true';
 }
 
+function resolveFeeAmount(dueValue, fallbackValue, options = {}) {
+    const { enabled = true } = options;
+
+    if (!enabled) {
+        return 0;
+    }
+
+    const dueAmount = toNumber(dueValue);
+    if (dueAmount > 0) {
+        return dueAmount;
+    }
+
+    return toNumber(fallbackValue);
+}
+
 function computeStudentTotal(student) {
-    const monthlyFee = toNumber(student.due_monthly_fee ?? student.monthly_fee);
-    const transportFee = toNumber(student.due_transport_fare ?? student.transport_fare);
-    const admissionFee = hasFeeFlag(student.generate_admission_fee)
-        ? toNumber(student.due_admission_fee ?? student.admission_fee_amount)
-        : 0;
-    const otherFee = hasFeeFlag(student.generate_other_fee)
-        ? toNumber(student.due_other_fee ?? student.other_fee_amount)
-        : 0;
+    // Search API sends due_* from generated vs paid (same as pay-all / print). Do not fall back to
+    // profile monthly_fee when due is 0 — that inflated the summary vs the receipt.
+    if (student && student.due_total !== undefined && student.due_total !== null) {
+        const monthlyFee = toNumber(student.due_monthly_fee);
+        const transportFee = toNumber(student.due_transport_fare);
+        const admissionFee = toNumber(student.due_admission_fee);
+        const otherFee = toNumber(student.due_other_fee);
+        return {
+            monthlyFee,
+            transportFee,
+            admissionFee,
+            otherFee,
+            total: toNumber(student.due_total),
+        };
+    }
+
+    const monthlyFee = resolveFeeAmount(student.due_monthly_fee, student.monthly_fee);
+    const transportFee = resolveFeeAmount(student.due_transport_fare, student.transport_fare);
+    const admissionFee = resolveFeeAmount(student.due_admission_fee, student.admission_fee_amount, {
+        enabled: hasFeeFlag(student.generate_admission_fee)
+    });
+    const otherFee = resolveFeeAmount(student.due_other_fee, student.other_fee_amount, {
+        enabled: hasFeeFlag(student.generate_other_fee) || toNumber(student.due_other_fee) > 0
+    });
     return {
         monthlyFee,
         transportFee,
@@ -296,6 +332,45 @@ function computeStudentTotal(student) {
         otherFee,
         total: monthlyFee + transportFee + admissionFee + otherFee
     };
+}
+
+function studentHasUnpaidDue(student) {
+    return computeStudentTotal(student).total > 0.01;
+}
+
+function studentsWithUnpaidDue(students) {
+    return (Array.isArray(students) ? students : []).filter(studentHasUnpaidDue);
+}
+
+function formatCustomFeeLines(student) {
+    if (!student || !Array.isArray(student.pending_fee_lines)) {
+        return '';
+    }
+
+    const customLines = student.pending_fee_lines.filter((line) => {
+        const title = (line.title || '').trim();
+        if (!title) {
+            return false;
+        }
+        if (title.startsWith('Monthly Fee - ')) {
+            return false;
+        }
+        if (title.startsWith('Transport Fee')) {
+            return false;
+        }
+        if (title.toLowerCase() === 'admission fee') {
+            return false;
+        }
+        return toNumber(line.total) > 0;
+    });
+
+    if (customLines.length === 0) {
+        return '';
+    }
+
+    return customLines
+        .map((line) => `${line.title}: ${toNumber(line.total).toFixed(2)}`)
+        .join(' | ');
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -335,7 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let totalSum = 0;
         studentsSummaryBody.innerHTML = '';
 
-        students.forEach((student) => {
+        studentsWithUnpaidDue(students).forEach((student) => {
             const feeBreakdown = computeStudentTotal(student);
             totalSum += feeBreakdown.total;
 
@@ -384,7 +459,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Make AJAX call to search by Father ID Card
-        fetch(`{{ route('accountant.family-fee-calculator.search-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}`, {
+        fetch(`{{ $ffcSearchUrl }}?father_id_card=${encodeURIComponent(fatherIdCard)}`, {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
@@ -419,51 +494,60 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Display students in receipt style
                     console.log('Students array:', data.students);
                     if (hasStudents) {
+                        const unpaidStudents = studentsWithUnpaidDue(studentsList);
                         let totalAmount = 0;
                         const receiptStudentsList = document.getElementById('receiptStudentsList');
                         receiptStudentsList.innerHTML = '';
 
-                        // Store students data for payment processing
+                        // Store only students with outstanding dues (same as Fee Payment search)
                         window.feeCalculatorData = {
                             father: fatherInfo,
-                            students: studentsList
+                            students: unpaidStudents
                         };
 
-                        studentsList.forEach((student, index) => {
-                            const feeBreakdown = computeStudentTotal(student);
-                            totalAmount += feeBreakdown.total;
+                        if (unpaidStudents.length === 0) {
+                            receiptStudentsList.innerHTML = '<div class="text-center" style="padding: 10px; color: white;">All fees are paid for this family.</div>';
+                            document.getElementById('receiptTotalAmount').textContent = '0.00';
+                            document.getElementById('receiptFatherName').textContent = fatherInfo.name || 'N/A';
+                            document.getElementById('receiptFatherIdCard').textContent = fatherInfo.id_card_number || fatherIdCard;
+                            document.getElementById('receiptDate').textContent = new Date().toLocaleDateString('en-GB');
+                            document.getElementById('printBtn').style.display = 'inline-block';
+                            document.getElementById('payAllBtn').style.display = 'none';
+                            document.getElementById('partialPaymentBtn').style.display = 'none';
+                            if (studentsSummaryCard) {
+                                studentsSummaryCard.style.display = 'none';
+                            }
+                        } else {
+                            unpaidStudents.forEach((student, index) => {
+                                const feeBreakdown = computeStudentTotal(student);
+                                const customFeeText = formatCustomFeeLines(student);
+                                totalAmount += feeBreakdown.total;
 
-                            // Receipt style display (Terminal Print Style)
-                            const receiptItem = document.createElement('div');
-                            receiptItem.style.cssText = 'margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px dotted rgba(255,255,255,0.5);';
-                            receiptItem.innerHTML = `
-                                <div style="display: flex; justify-content: space-between; font-size: 10px; color: white;">
-                                    <span style="color: white;">${index + 1}. ${student.student_name || 'N/A'}</span>
-                                    <span style="font-weight: bold; font-size: 11px; color: white;">${feeBreakdown.total.toFixed(2)}</span>
-                                </div>
-                                <div style="font-size: 9px; color: rgba(255,255,255,0.8); margin-left: 12px; margin-top: 2px;">
-                                    ${student.student_code || ''} | ${student.class || ''}/${student.section || ''} | ${student.campus || ''} | M:${feeBreakdown.monthlyFee.toFixed(2)} T:${feeBreakdown.transportFee.toFixed(2)} A:${feeBreakdown.admissionFee.toFixed(2)} O:${feeBreakdown.otherFee.toFixed(2)}
-                                    ${student.monthly_fee_status ? ` | ${student.monthly_fee_status}` : ''}
-                                </div>
-                            `;
-                            receiptStudentsList.appendChild(receiptItem);
-                        });
+                                const receiptItem = document.createElement('div');
+                                receiptItem.style.cssText = 'margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px dotted rgba(255,255,255,0.5);';
+                                receiptItem.innerHTML = `
+                                    <div style="display: flex; justify-content: space-between; font-size: 10px; color: white;">
+                                        <span style="color: white;">${index + 1}. ${student.student_name || 'N/A'}</span>
+                                        <span style="font-weight: bold; font-size: 11px; color: white;">${feeBreakdown.total.toFixed(2)}</span>
+                                    </div>
+                                    <div style="font-size: 9px; color: rgba(255,255,255,0.8); margin-left: 12px; margin-top: 2px;">
+                                        ${student.student_code || ''} | ${student.class || ''}/${student.section || ''} | ${student.campus || ''} | M:${feeBreakdown.monthlyFee.toFixed(2)} T:${feeBreakdown.transportFee.toFixed(2)} A:${feeBreakdown.admissionFee.toFixed(2)} O:${feeBreakdown.otherFee.toFixed(2)}
+                                        ${student.monthly_fee_status ? ` | ${student.monthly_fee_status}` : ''}
+                                        ${customFeeText ? `<br><span style="color: #ffe082;">Custom: ${customFeeText}</span>` : ''}
+                                    </div>
+                                `;
+                                receiptStudentsList.appendChild(receiptItem);
+                            });
 
-                        // Update total amount
-                        document.getElementById('receiptTotalAmount').textContent = totalAmount.toFixed(2);
-
-                        // Update receipt header
-                        document.getElementById('receiptFatherName').textContent = fatherInfo.name || 'N/A';
-                        document.getElementById('receiptFatherIdCard').textContent = fatherInfo.id_card_number || fatherIdCard;
-                        document.getElementById('receiptDate').textContent = new Date().toLocaleDateString('en-GB');
-
-                        // Show buttons
-                        document.getElementById('printBtn').style.display = 'inline-block';
-                        document.getElementById('payAllBtn').style.display = 'inline-block';
-                        document.getElementById('partialPaymentBtn').style.display = 'inline-block';
-
-                        // Render summary table for visibility
-                        renderSummaryTable(studentsList);
+                            document.getElementById('receiptTotalAmount').textContent = totalAmount.toFixed(2);
+                            document.getElementById('receiptFatherName').textContent = fatherInfo.name || 'N/A';
+                            document.getElementById('receiptFatherIdCard').textContent = fatherInfo.id_card_number || fatherIdCard;
+                            document.getElementById('receiptDate').textContent = new Date().toLocaleDateString('en-GB');
+                            document.getElementById('printBtn').style.display = 'inline-block';
+                            document.getElementById('payAllBtn').style.display = 'inline-block';
+                            document.getElementById('partialPaymentBtn').style.display = 'inline-block';
+                            renderSummaryTable(unpaidStudents);
+                        }
                     } else {
                         document.getElementById('receiptStudentsList').innerHTML = '<div class="text-center" style="padding: 10px; color: white;">No students found for this father.</div>';
                         document.getElementById('receiptTotalAmount').textContent = '0.00';
@@ -704,26 +788,27 @@ function printReceipt() {
     
     // Pay All Fees Function
     function payAllFees() {
-        if (!window.feeCalculatorData || !window.feeCalculatorData.students || window.feeCalculatorData.students.length === 0) {
-            alert('No students found to process payment.');
+        const unpaidStudents = studentsWithUnpaidDue(window.feeCalculatorData?.students || []);
+        if (!window.feeCalculatorData || unpaidStudents.length === 0) {
+            alert('No unpaid fees found for this family.');
             return;
         }
 
-        const totalAmount = window.feeCalculatorData.students.reduce((sum, student) => {
+        const totalAmount = unpaidStudents.reduce((sum, student) => {
             return sum + computeStudentTotal(student).total;
         }, 0);
 
-        if (!confirm(`Are you sure you want to pay all fees for all children?\n\nTotal Amount: ${totalAmount.toFixed(2)}\nNumber of Students: ${window.feeCalculatorData.students.length}`)) {
+        if (!confirm(`Are you sure you want to pay all fees for all children?\n\nTotal Amount: ${totalAmount.toFixed(2)}\nNumber of Students: ${unpaidStudents.length}`)) {
             return;
         }
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         const payload = {
             father_id_card: window.feeCalculatorData.father?.id_card_number || '',
-            method: 'Cash'
+            method: 'Cash Payment'
         };
 
-        fetch(`{{ route('accountant.family-fee-calculator.pay-all') }}`, {
+        fetch(`{{ $ffcPayAllUrl }}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -835,27 +920,28 @@ function printReceipt() {
     
     // Partial Payment Function
     function partialPayment() {
-        if (!window.feeCalculatorData || !window.feeCalculatorData.students || window.feeCalculatorData.students.length === 0) {
-            alert('No students found to process payment.');
+        const unpaidStudents = studentsWithUnpaidDue(window.feeCalculatorData?.students || []);
+        if (!window.feeCalculatorData || unpaidStudents.length === 0) {
+            alert('No unpaid fees found for this family.');
             return;
         }
-        
-        const totalAmount = window.feeCalculatorData.students.reduce((sum, student) => {
+
+        const totalAmount = unpaidStudents.reduce((sum, student) => {
             return sum + computeStudentTotal(student).total;
         }, 0);
-        
+
         const paymentAmount = prompt(`Enter payment amount:\n\nTotal Due: ${totalAmount.toFixed(2)}\n\nNote: This will be distributed proportionally among all students.`, totalAmount.toFixed(2));
-        
+
         if (paymentAmount && !isNaN(paymentAmount) && parseFloat(paymentAmount) > 0) {
             const amount = parseFloat(paymentAmount);
             if (amount > totalAmount) {
                 alert('Payment amount cannot be greater than total amount.');
                 return;
             }
-            
+
             // Store data in sessionStorage for payment page
             sessionStorage.setItem('feeCalculatorPayment', JSON.stringify({
-                students: window.feeCalculatorData.students,
+                students: unpaidStudents,
                 father: window.feeCalculatorData.father,
                 father_id_card: window.feeCalculatorData.father?.id_card_number || '',
                 totalAmount: totalAmount,

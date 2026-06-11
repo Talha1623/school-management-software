@@ -11,10 +11,22 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('parent_complaints')) {
+            return;
+        }
+
         Schema::table('parent_complaints', function (Blueprint $table) {
-            $table->text('reply')->nullable()->after('complain');
-            $table->timestamp('reply_date')->nullable()->after('reply');
-            $table->boolean('sms_notification')->default(false)->after('reply_date');
+            if (!Schema::hasColumn('parent_complaints', 'reply')) {
+                $table->text('reply')->nullable()->after('complain');
+            }
+
+            if (!Schema::hasColumn('parent_complaints', 'reply_date')) {
+                $table->timestamp('reply_date')->nullable()->after('reply');
+            }
+
+            if (!Schema::hasColumn('parent_complaints', 'sms_notification')) {
+                $table->boolean('sms_notification')->default(false)->after('reply_date');
+            }
         });
     }
 
@@ -23,8 +35,20 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (!Schema::hasTable('parent_complaints')) {
+            return;
+        }
+
         Schema::table('parent_complaints', function (Blueprint $table) {
-            $table->dropColumn(['reply', 'reply_date', 'sms_notification']);
+            if (Schema::hasColumn('parent_complaints', 'sms_notification')) {
+                $table->dropColumn('sms_notification');
+            }
+            if (Schema::hasColumn('parent_complaints', 'reply_date')) {
+                $table->dropColumn('reply_date');
+            }
+            if (Schema::hasColumn('parent_complaints', 'reply')) {
+                $table->dropColumn('reply');
+            }
         });
     }
 };

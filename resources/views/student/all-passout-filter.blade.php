@@ -94,6 +94,8 @@
 </style>
 
 <script>
+const PASSOUT_REPORT_PARAM = 'report=passout';
+
 function openPrintFromForm(event) {
     event.preventDefault();
     const form = document.getElementById('filterForm');
@@ -149,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
         classSelect.innerHTML = '<option value="">Loading...</option>';
         classSelect.disabled = true;
         
-        fetch(`{{ route('student.info-report.get-classes') }}`)
+        fetch(`{{ route('student.info-report.get-classes') }}?${PASSOUT_REPORT_PARAM}`)
             .then(response => response.json())
             .then(data => {
                 classSelect.innerHTML = '<option value="">All Classes</option>';
@@ -180,6 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
         classSelect.disabled = true;
         
         const params = new URLSearchParams();
+        params.append('report', 'passout');
         params.append('campus', campus);
         
         fetch(`{{ route('student.info-report.get-classes') }}?${params.toString()}`)
@@ -218,6 +221,7 @@ document.addEventListener('DOMContentLoaded', function() {
         sectionSelect.disabled = true;
         
         const params = new URLSearchParams();
+        params.append('report', 'passout');
         params.append('class', className);
         if (campus) {
             params.append('campus', campus);
@@ -255,7 +259,7 @@ function resetFilters() {
     classSelect.innerHTML = '<option value="">Loading...</option>';
     classSelect.disabled = true;
     
-    fetch(`{{ route('student.info-report.get-classes') }}`)
+    fetch(`{{ route('student.info-report.get-classes') }}?${PASSOUT_REPORT_PARAM}`)
         .then(response => response.json())
         .then(data => {
             classSelect.innerHTML = '<option value="">All Classes</option>';

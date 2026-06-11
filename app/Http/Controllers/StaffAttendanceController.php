@@ -8,6 +8,7 @@ use App\Models\Campus;
 use App\Models\Subject;
 use App\Models\Timetable;
 use App\Models\SalarySetting;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +58,7 @@ class StaffAttendanceController extends Controller
                 
                 // For per hour teachers, check if they have classes on this day
                 if ($isPerHour) {
-                    $hasClassOnDate = $this->hasClassOnDate($staff, $date, $dayName);
+                    $hasClassOnDate = $this->hasClassOnDate($staff, $dayName, $campus);
                     if ($hasClassOnDate) {
                         $filteredStaffList->push($staff);
                     }
@@ -94,7 +95,7 @@ class StaffAttendanceController extends Controller
                 $timetableTime = null;
                 
                 if ($isPerHour) {
-                    $timetableTime = $this->getTimeFromTimetable($staff, $date);
+                    $timetableTime = $this->getTimeFromTimetable($staff, $date, $campus);
                     if ($timetableTime) {
                         // Store timetable time for JavaScript use
                         $timetableTimesByStaff[$staff->id] = $timetableTime;
@@ -475,7 +476,7 @@ class StaffAttendanceController extends Controller
                 $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
                 if ($isPerHour) {
                     $dayName = Carbon::parse($date)->format('l');
-                    $hasClassOnDate = $this->hasClassOnDate($staff, $date, $dayName);
+                    $hasClassOnDate = $this->hasClassOnDate($staff, $dayName, $request->input('campus'));
                     if (!$hasClassOnDate) {
                         // Skip per hour teachers who don't have classes on this date
                         continue;
@@ -502,7 +503,7 @@ class StaffAttendanceController extends Controller
                 
                 if ($isPerHour && $status === 'Present') {
                     // Get time from timetable for per hour teacher
-                    $timetableTime = $this->getTimeFromTimetable($staff, $date);
+                    $timetableTime = $this->getTimeFromTimetable($staff, $date, $request->input('campus'));
                     if ($timetableTime) {
                         if (empty($startTime)) {
                             $startTime = $timetableTime['start_time'];
@@ -583,149 +584,209 @@ class StaffAttendanceController extends Controller
     }
 
     /**
-     * Check if per hour teacher has classes scheduled on a specific date
+     * Check if per hour teacher has classes scheduled on a specific day (from Manage Timetable).
      */
-    private function hasClassOnDate(Staff $staff, string $date, string $dayName): bool
+    private function hasClassOnDate(Staff $staff, string $dayName, ?string $campus = null): bool
     {
-        $staffName = trim($staff->name ?? '');
-        if (empty($staffName)) {
-            return false;
-        }
-
-        // Get staff's assigned subjects from Subject table
-        $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
-            ->whereNotNull('subject_name')
-            ->whereNotNull('class')
-            ->whereNotNull('section')
-            ->get();
-
-        if ($assignedSubjects->isEmpty()) {
-            return false;
-        }
-
-        // Subject name mapping for flexible matching
-        $subjectNameMap = [
-            'maths' => ['maths', 'mathematics', 'math'],
-            'mathematics' => ['maths', 'mathematics', 'math'],
-            'english' => ['english', 'eng'],
-            'urdu' => ['urdu'],
-            'science' => ['science', 'sci'],
-            'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
-            'social studies' => ['social studies', 'social', 'sst'],
-        ];
-
-        // Check if any of the staff's subjects have timetable entries on this day
-        foreach ($assignedSubjects as $subject) {
-            $subjectName = trim($subject->subject_name ?? '');
-            $subjectClass = trim($subject->class ?? '');
-            $subjectSection = trim($subject->section ?? '');
-            $subjectCampus = trim($subject->campus ?? '');
-            
-            if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
-                continue;
-            }
-            
-            $subjectNameLower = strtolower($subjectName);
-            
-            // Build timetable query
-            $timetableQuery = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
-                $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                
-                if (isset($subjectNameMap[$subjectNameLower])) {
-                    foreach ($subjectNameMap[$subjectNameLower] as $variant) {
-                        $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
-                    }
-                }
-            })
-            ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
-            ->where(function($query) use ($subjectClass) {
-                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
-                if (is_numeric($subjectClass)) {
-                    $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
-                } else {
-                    $wordToNumber = $this->wordToNumber($subjectClass);
-                    if ($wordToNumber !== null) {
-                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
-                    }
-                }
-            })
-            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
-            
-            // Add campus filter if both subject and timetable have campus
-            if (!empty($subjectCampus)) {
-                $timetableQuery->where(function($query) use ($subjectCampus) {
-                    $query->whereNull('campus')
-                        ->orWhereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)]);
-                });
-            }
-            
-            // Check if timetable entry exists
-            if ($timetableQuery->exists()) {
-                return true;
-            }
-            
-            // Try without campus filter if first query didn't find anything
-            if (!empty($subjectCampus)) {
-                $timetableQueryWithoutCampus = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
-                    $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                    if (isset($subjectNameMap[$subjectNameLower])) {
-                        foreach ($subjectNameMap[$subjectNameLower] as $variant) {
-                            $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
-                        }
-                    }
-                })
-                ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
-                ->where(function($query) use ($subjectClass) {
-                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
-                    if (is_numeric($subjectClass)) {
-                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
-                    } else {
-                        $wordToNumber = $this->wordToNumber($subjectClass);
-                        if ($wordToNumber !== null) {
-                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
-                        }
-                    }
-                })
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
-                
-                if ($timetableQueryWithoutCampus->exists()) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return $this->getStaffTimetableEntriesForDay($staff, $dayName, $campus)->isNotEmpty();
     }
 
     /**
-     * Get time from timetable for per hour teacher
+     * Get arrival/exit times from Manage Timetable for per hour teacher on the selected date.
      */
-    private function getTimeFromTimetable(Staff $staff, string $date): ?array
+    protected function getTimeFromTimetable(Staff $staff, string $date, ?string $campus = null): ?array
     {
-        $staffName = trim($staff->name ?? '');
-        if (empty($staffName)) {
+        $dayName = Carbon::parse($date)->format('l');
+        $entries = $this->getStaffTimetableEntriesForDay($staff, $dayName, $campus);
+
+        if ($entries->isEmpty()) {
             return null;
         }
 
-        // Get staff's assigned subjects from Subject table
-        $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower($staffName)])
-            ->whereNotNull('subject_name')
-            ->whereNotNull('class')
-            ->whereNotNull('section')
-            ->get();
-
-        if ($assignedSubjects->isEmpty()) {
-            return null;
-        }
-
-        // Get day name from date
-        $dayName = Carbon::parse($date)->format('l'); // Monday, Tuesday, etc.
-        
         $earliestStartTime = null;
         $latestEndTime = null;
-        $totalHours = 0; // Total hours count from all timetable entries
+        $totalHours = 0;
 
-        // Subject name mapping for flexible matching (Maths = Mathematics, etc.)
+        foreach ($entries as $entry) {
+            $startTime = $this->parseTimetableTime($entry->starting_time);
+            $endTime = $this->parseTimetableTime($entry->ending_time);
+
+            if (!$startTime || !$endTime) {
+                continue;
+            }
+
+            $totalHours += $startTime->diffInMinutes($endTime) / 60;
+
+            if ($earliestStartTime === null || $startTime->lt($earliestStartTime)) {
+                $earliestStartTime = $startTime;
+            }
+
+            if ($latestEndTime === null || $endTime->gt($latestEndTime)) {
+                $latestEndTime = $endTime;
+            }
+        }
+
+        if (!$earliestStartTime || !$latestEndTime) {
+            return null;
+        }
+
+        return [
+            'start_time' => $earliestStartTime->format('H:i'),
+            'end_time' => $latestEndTime->format('H:i'),
+            'total_hours' => round($totalHours, 2),
+        ];
+    }
+
+    /**
+     * Timetable entries assigned to staff for a day (same source as Manage Timetable).
+     */
+    private function getStaffTimetableEntriesForDay(Staff $staff, string $dayName, ?string $campus = null): \Illuminate\Support\Collection
+    {
+        $staffName = strtolower(trim($staff->name ?? ''));
+        if ($staffName === '') {
+            return collect();
+        }
+
+        $campusFilter = $campus ?? $staff->campus;
+        $campusNorm = $campusFilter ? strtolower(trim($campusFilter)) : '';
+
+        $query = Timetable::whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
+            ->where('subject', 'not like', '[%');
+
+        if ($campusNorm !== '') {
+            $query->where(function ($q) use ($campusNorm) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                    ->orWhereNull('campus')
+                    ->orWhere('campus', '');
+            });
+        }
+
+        return $query->get()->filter(function (Timetable $entry) use ($staffName) {
+            $teacher = $this->resolveTeacherForTimetableEntry($entry);
+
+            return $teacher !== null && strtolower(trim($teacher)) === $staffName;
+        })->values();
+    }
+
+    /**
+     * Resolve teacher for a timetable row (aligned with Manage Timetable).
+     */
+    private function resolveTeacherForTimetableEntry(Timetable $entry): ?string
+    {
+        $subject = trim((string) ($entry->subject ?? ''));
+        if ($subject === '' || str_starts_with($subject, '[')) {
+            return null;
+        }
+
+        $subjectVariants = $this->getSubjectNameVariants($subject);
+        $campusNorm = !empty($entry->campus) ? strtolower(trim($entry->campus)) : '';
+        $classNorm = !empty($entry->class) ? strtolower(trim($entry->class)) : '';
+        $sectionNorm = !empty($entry->section) ? strtolower(trim($entry->section)) : '';
+
+        $scopedQuery = function () use ($subjectVariants, $campusNorm) {
+            $q = Subject::query()
+                ->where(function ($query) use ($subjectVariants) {
+                    foreach ($subjectVariants as $variant) {
+                        $query->orWhereRaw('LOWER(TRIM(subject_name)) = ?', [$variant]);
+                    }
+                })
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '');
+
+            if ($campusNorm !== '') {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm]);
+            }
+
+            return $q;
+        };
+
+        if ($campusNorm !== '' && $classNorm !== '' && $sectionNorm !== '') {
+            $exact = $scopedQuery()
+                ->where(function ($query) use ($classNorm) {
+                    $query->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+                    if (is_numeric($classNorm)) {
+                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($classNorm))]);
+                    } else {
+                        $wordToNumber = $this->wordToNumber($classNorm);
+                        if ($wordToNumber !== null) {
+                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string) $wordToNumber)]);
+                        }
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(section)) = ?', [$sectionNorm])
+                ->first();
+
+            if ($exact?->teacher) {
+                return trim($exact->teacher);
+            }
+        }
+
+        if ($campusNorm !== '' && $classNorm !== '') {
+            $byClass = $scopedQuery()
+                ->where(function ($query) use ($classNorm) {
+                    $query->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+                    if (is_numeric($classNorm)) {
+                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($classNorm))]);
+                    } else {
+                        $wordToNumber = $this->wordToNumber($classNorm);
+                        if ($wordToNumber !== null) {
+                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string) $wordToNumber)]);
+                        }
+                    }
+                })
+                ->first();
+
+            if ($byClass?->teacher) {
+                return trim($byClass->teacher);
+            }
+        }
+
+        if ($campusNorm !== '') {
+            $byCampus = $scopedQuery()->first();
+            if ($byCampus?->teacher) {
+                return trim($byCampus->teacher);
+            }
+
+            return null;
+        }
+
+        $query = Subject::query()
+            ->where(function ($subjectQuery) use ($subjectVariants) {
+                foreach ($subjectVariants as $variant) {
+                    $subjectQuery->orWhereRaw('LOWER(TRIM(subject_name)) = ?', [$variant]);
+                }
+            })
+            ->whereNotNull('teacher')
+            ->where('teacher', '!=', '');
+
+        if ($classNorm !== '') {
+            $query->where(function ($classQuery) use ($classNorm) {
+                $classQuery->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+                if (is_numeric($classNorm)) {
+                    $classQuery->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($classNorm))]);
+                } else {
+                    $wordToNumber = $this->wordToNumber($classNorm);
+                    if ($wordToNumber !== null) {
+                        $classQuery->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string) $wordToNumber)]);
+                    }
+                }
+            });
+        }
+
+        if ($sectionNorm !== '') {
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [$sectionNorm]);
+        }
+
+        $match = $query->first();
+
+        return $match?->teacher ? trim($match->teacher) : null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getSubjectNameVariants(string $subjectName): array
+    {
         $subjectNameMap = [
             'maths' => ['maths', 'mathematics', 'math'],
             'mathematics' => ['maths', 'mathematics', 'math'],
@@ -736,142 +797,43 @@ class StaffAttendanceController extends Controller
             'social studies' => ['social studies', 'social', 'sst'],
         ];
 
-        // Get all timetable entries for this staff's subjects on this day
-        foreach ($assignedSubjects as $subject) {
-            $subjectName = trim($subject->subject_name ?? '');
-            $subjectClass = trim($subject->class ?? '');
-            $subjectSection = trim($subject->section ?? '');
-            $subjectCampus = trim($subject->campus ?? '');
-            
-            if (empty($subjectName) || empty($subjectClass) || empty($subjectSection)) {
+        $lower = strtolower(trim($subjectName));
+        $variants = [$lower];
+
+        if (isset($subjectNameMap[$lower])) {
+            $variants = array_merge($variants, $subjectNameMap[$lower]);
+        }
+
+        return array_values(array_unique($variants));
+    }
+
+    /**
+     * Parse timetable time values from database (H:i, H:i:s, or DateTime).
+     */
+    private function parseTimetableTime($time): ?Carbon
+    {
+        if (empty($time)) {
+            return null;
+        }
+
+        if ($time instanceof \DateTimeInterface) {
+            return Carbon::instance($time);
+        }
+
+        $timeStr = trim((string) $time);
+        foreach (['H:i:s', 'H:i', 'h:i A', 'h:i a'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, $timeStr);
+            } catch (\Exception $e) {
                 continue;
             }
-            
-            // Build timetable query with flexible subject name matching
-            $subjectNameLower = strtolower($subjectName);
-            
-            // First try with campus match if campus is provided
-            $timetableQuery = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
-                // Exact match
-                $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                
-                // Flexible matching for common subject name variations
-                if (isset($subjectNameMap[$subjectNameLower])) {
-                    foreach ($subjectNameMap[$subjectNameLower] as $variant) {
-                        $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
-                    }
-                }
-            })
-            ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
-            ->where(function($query) use ($subjectClass) {
-                // Match class name (handle variations like "Four" = "4" = "four")
-                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
-                // Also try numeric matching if class is numeric
-                if (is_numeric($subjectClass)) {
-                    $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
-                } else {
-                    $wordToNumber = $this->wordToNumber($subjectClass);
-                    if ($wordToNumber !== null) {
-                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
-                    }
-                }
-            })
-            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
-            
-            // Add campus filter if both subject and timetable have campus
-            if (!empty($subjectCampus)) {
-                $timetableQuery->where(function($query) use ($subjectCampus) {
-                    // Match campus (case-insensitive)
-                    $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($subjectCampus)])
-                          // Also allow entries without campus if subject has campus
-                          ->orWhereNull('campus')
-                          ->orWhere('campus', '');
-                });
-            }
-            
-            $timetableEntries = $timetableQuery->get();
-            
-            // If no results with campus filter, try without campus filter (more flexible)
-            if ($timetableEntries->isEmpty() && !empty($subjectCampus)) {
-                $timetableQuery = Timetable::where(function($query) use ($subjectNameLower, $subjectNameMap) {
-                    $query->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
-                    if (isset($subjectNameMap[$subjectNameLower])) {
-                        foreach ($subjectNameMap[$subjectNameLower] as $variant) {
-                            $query->orWhereRaw('LOWER(TRIM(subject)) = ?', [$variant]);
-                        }
-                    }
-                })
-                ->whereRaw('LOWER(TRIM(day)) = ?', [strtolower($dayName)])
-                ->where(function($query) use ($subjectClass) {
-                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($subjectClass)]);
-                    if (is_numeric($subjectClass)) {
-                        $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower($this->numberToWord($subjectClass))]);
-                    } else {
-                        $wordToNumber = $this->wordToNumber($subjectClass);
-                        if ($wordToNumber !== null) {
-                            $query->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower((string)$wordToNumber)]);
-                        }
-                    }
-                })
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($subjectSection)]);
-                
-                $timetableEntries = $timetableQuery->get();
-            }
-            
-            // Find earliest start time, latest end time, and calculate total hours
-            foreach ($timetableEntries as $entry) {
-                if (!empty($entry->starting_time) && !empty($entry->ending_time)) {
-                    try {
-                        // Parse time properly - handle both time string and Carbon object
-                        $startTimeStr = is_object($entry->starting_time) ? $entry->starting_time->format('H:i') : $entry->starting_time;
-                        $endTimeStr = is_object($entry->ending_time) ? $entry->ending_time->format('H:i') : $entry->ending_time;
-                        
-                        // Create Carbon instances from time format (H:i)
-                        $startTime = Carbon::createFromFormat('H:i:s', $startTimeStr . ':00');
-                        if (!$startTime) {
-                            $startTime = Carbon::createFromFormat('H:i', $startTimeStr);
-                        }
-                        
-                        $endTime = Carbon::createFromFormat('H:i:s', $endTimeStr . ':00');
-                        if (!$endTime) {
-                            $endTime = Carbon::createFromFormat('H:i', $endTimeStr);
-                        }
-                        
-                        if ($startTime && $endTime) {
-                            // Calculate hours for this period
-                            $hours = $startTime->diffInMinutes($endTime) / 60;
-                            $totalHours += $hours;
-                            
-                            if ($earliestStartTime === null || $startTime->lt($earliestStartTime)) {
-                                $earliestStartTime = $startTime;
-                            }
-                            
-                            if ($latestEndTime === null || $endTime->gt($latestEndTime)) {
-                                $latestEndTime = $endTime;
-                            }
-                        }
-                    } catch (\Exception $e) {
-                        // Skip invalid times - log error for debugging
-                        \Log::warning('Error parsing timetable time', [
-                            'entry_id' => $entry->id ?? null,
-                            'starting_time' => $entry->starting_time ?? null,
-                            'ending_time' => $entry->ending_time ?? null,
-                            'error' => $e->getMessage()
-                        ]);
-                    }
-                }
-            }
         }
 
-        if ($earliestStartTime && $latestEndTime) {
-            return [
-                'start_time' => $earliestStartTime->format('H:i'),
-                'end_time' => $latestEndTime->format('H:i'),
-                'total_hours' => round($totalHours, 2), // Total hours from all timetable entries
-            ];
+        try {
+            return Carbon::parse($timeStr);
+        } catch (\Exception $e) {
+            return null;
         }
-
-        return null;
     }
 
     /**
@@ -904,7 +866,7 @@ class StaffAttendanceController extends Controller
     /**
      * Calculate late arrival using timetable time for per hour teacher
      */
-    private function calculateLateArrivalWithTimetable($startTime, $timetableStartTime): ?string
+    protected function calculateLateArrivalWithTimetable($startTime, $timetableStartTime): ?string
     {
         if (!$startTime || !$timetableStartTime) {
             return null;
@@ -933,7 +895,7 @@ class StaffAttendanceController extends Controller
     /**
      * Calculate early exit using timetable time for per hour teacher
      */
-    private function calculateEarlyExitWithTimetable($endTime, $timetableEndTime): ?string
+    protected function calculateEarlyExitWithTimetable($endTime, $timetableEndTime): ?string
     {
         if (!$endTime || !$timetableEndTime) {
             return null;
@@ -962,7 +924,7 @@ class StaffAttendanceController extends Controller
     /**
      * Calculate late arrival (assuming 9:00 AM is the standard time).
      */
-    private function calculateLateArrival($startTime)
+    protected function calculateLateArrival($startTime)
     {
         if (!$startTime) {
             return null;
@@ -993,7 +955,7 @@ class StaffAttendanceController extends Controller
     /**
      * Calculate early exit based on early exit time from salary settings.
      */
-    private function calculateEarlyExit($endTime)
+    protected function calculateEarlyExit($endTime)
     {
         if (!$endTime) {
             return null;
@@ -1166,6 +1128,353 @@ class StaffAttendanceController extends Controller
             'years',
             'monthNames'
         ));
+    }
+
+    /**
+     * Staff ID card / QR scan — check-in or check-out (gate; no login required).
+     *
+     * POST /attendance/staff-barcode/scan
+     */
+    public function scanIdCardGate(Request $request): JsonResponse
+    {
+        $this->mergeScanInputsIntoRequest($request);
+
+        $staff = $this->resolveStaffFromCardScan($request);
+        if (!$staff) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Staff not found for this ID card.',
+            ], 404);
+        }
+
+        return $this->processStaffIdCardScan($staff);
+    }
+
+    /**
+     * Staff ID card / QR scan — logged-in staff must match card (mobile API).
+     *
+     * POST /api/teacher/attendance/scan-id-card
+     * POST /api/staff/attendance/scan-id-card
+     */
+    public function scanIdCardApi(Request $request): JsonResponse
+    {
+        $this->mergeScanInputsIntoRequest($request);
+
+        $authStaff = $request->user();
+        if (!$authStaff instanceof Staff) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied. Staff login required.',
+                'token' => null,
+            ], 403);
+        }
+
+        $selfCheckIn = filter_var(
+            $request->input('self_check_in', $request->boolean('self_check_in')),
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        $barcode = $this->resolveScanRawFromRequest($request);
+
+        if ($barcode === '' && $selfCheckIn) {
+            $staff = $authStaff;
+        } elseif ($barcode === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'ID card / QR value is required (send barcode, emp_id, or QR string in JSON body with Content-Type: application/json, or use self_check_in: true).',
+                'token' => null,
+            ], 422);
+        } else {
+            $staff = $this->resolveStaffFromCardScan($request);
+            if (!$staff) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Staff not found for this ID card.',
+                    'token' => null,
+                    'hint' => [
+                        'your_emp_id' => $authStaff->emp_id,
+                        'your_id' => $authStaff->id,
+                    ],
+                ], 404);
+            }
+
+            if ((int) $staff->id !== (int) $authStaff->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This ID card does not match your logged-in account.',
+                    'token' => null,
+                ], 403);
+            }
+        }
+
+        $response = $this->processStaffIdCardScan($staff);
+        $payload = $response->getData(true);
+        if (is_array($payload)) {
+            $payload['token'] = $authStaff->currentAccessToken()->token ?? null;
+            return response()->json($payload, $response->getStatusCode());
+        }
+
+        return $response;
+    }
+
+    /**
+     * Accept JSON body even when Content-Type is missing (common in Postman/mobile clients).
+     */
+    protected function mergeScanInputsIntoRequest(Request $request): void
+    {
+        if ($this->resolveScanRawFromRequest($request) !== '') {
+            return;
+        }
+
+        $json = $request->json()->all();
+        if (is_array($json) && $json !== []) {
+            $request->merge($json);
+
+            return;
+        }
+
+        $content = trim((string) $request->getContent());
+        if ($content !== '' && str_starts_with($content, '{')) {
+            $decoded = json_decode($content, true);
+            if (is_array($decoded)) {
+                $request->merge($decoded);
+            }
+        }
+    }
+
+    protected function resolveScanRawFromRequest(Request $request): string
+    {
+        foreach (['barcode', 'id_card', 'scan', 'emp_id', 'qr', 'qr_code', 'data', 'code'] as $key) {
+            $value = $request->input($key);
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return '';
+    }
+
+    protected function resolveStaffFromCardScan(Request $request): ?Staff
+    {
+        $raw = $this->resolveScanRawFromRequest($request);
+
+        if ($raw === '') {
+            return null;
+        }
+
+        foreach ($this->parseStaffCardScanValues($raw) as $candidate) {
+            $staff = $this->findStaffByCardValue($candidate);
+            if ($staff) {
+                return $staff;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function parseStaffCardScanValues(string $raw): array
+    {
+        $values = [];
+        $trimmed = trim($raw);
+        if ($trimmed === '') {
+            return [];
+        }
+
+        $values[] = $trimmed;
+        $decoded = trim(urldecode($trimmed));
+        if ($decoded !== $trimmed) {
+            $values[] = $decoded;
+        }
+
+        foreach ([$trimmed, $decoded] as $text) {
+            if (preg_match('/\bID:\s*([^|]+)/iu', $text, $matches)) {
+                $values[] = trim($matches[1]);
+            }
+        }
+
+        return array_values(array_unique(array_filter($values, static fn ($v) => $v !== '')));
+    }
+
+    protected function findStaffByCardValue(string $value): ?Staff
+    {
+        $lower = strtolower(trim($value));
+
+        $query = Staff::query()->where(function ($q) use ($lower, $value) {
+            $q->whereRaw('LOWER(TRIM(emp_id)) = ?', [$lower]);
+            if (is_numeric($value)) {
+                $q->orWhere('id', (int) $value);
+            }
+        });
+
+        return $query->first();
+    }
+
+    protected function processStaffIdCardScan(Staff $staff): JsonResponse
+    {
+        $today = Carbon::today()->format('Y-m-d');
+        $nowTime = Carbon::now()->format('H:i:s');
+        $salaryType = strtolower(trim($staff->salary_type ?? ''));
+        $isFullTime = $salaryType === '' || $salaryType === 'full time';
+        $isPerHour = $salaryType === 'per hour';
+        $isPerLecture = $salaryType === 'lecture';
+
+        $settings = SalarySetting::getSettings();
+        $standardIn = $settings->late_arrival_time ?? '09:00:00';
+        $standardOut = $settings->early_exit_time ?? null;
+
+        $attendance = StaffAttendance::where('staff_id', $staff->id)
+            ->whereDate('attendance_date', $today)
+            ->first();
+
+        $hasCheckIn = $attendance && !empty($attendance->start_time);
+        $hasCheckOut = $attendance && !empty($attendance->end_time);
+
+        if ($hasCheckIn && $hasCheckOut) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance already completed for today (check-in and check-out recorded).',
+                'data' => $this->formatStaffScanResponse($staff, $attendance, 'completed', $isFullTime, $isPerHour, $isPerLecture, $standardIn, $standardOut),
+            ], 200);
+        }
+
+        if ($hasCheckIn && !$hasCheckOut) {
+            $lateArrival = null;
+            $earlyExit = null;
+            $timetableTime = $isPerHour ? $this->getTimeFromTimetable($staff, $today) : null;
+
+            if ($isPerHour && $timetableTime) {
+                $earlyExit = $this->calculateEarlyExitWithTimetable($nowTime, $timetableTime['end_time']);
+            } elseif ($isFullTime) {
+                $earlyExit = $this->calculateEarlyExit($nowTime);
+            }
+
+            $remarks = $this->appendAttendanceRemark($attendance->remarks ?? '', 'ID card scan (check-out)');
+            if ($earlyExit) {
+                $remarks = $this->appendAttendanceRemark($remarks, 'Early Exit: ' . $earlyExit);
+            }
+
+            $attendance->update([
+                'end_time' => $nowTime,
+                'remarks' => $remarks,
+            ]);
+            $attendance->refresh();
+
+            return response()->json([
+                'success' => true,
+                'message' => $earlyExit
+                    ? 'Check-out recorded. Early exit: ' . $earlyExit
+                    : 'Check-out recorded successfully.',
+                'data' => $this->formatStaffScanResponse($staff, $attendance, 'check_out', $isFullTime, $isPerHour, $isPerLecture, $standardIn, $standardOut, null, $earlyExit),
+            ], 200);
+        }
+
+        $lateArrival = null;
+        $timetableTime = $isPerHour ? $this->getTimeFromTimetable($staff, $today) : null;
+
+        if ($isPerHour && $timetableTime) {
+            $lateArrival = $this->calculateLateArrivalWithTimetable($nowTime, $timetableTime['start_time']);
+        } elseif ($isFullTime || $isPerHour) {
+            $lateArrival = $this->calculateLateArrival($nowTime);
+        }
+
+        $remarks = 'ID card scan (check-in)';
+        if ($lateArrival) {
+            $remarks = $this->appendAttendanceRemark($remarks, 'Late Arrival: ' . $lateArrival);
+        }
+
+        $payload = [
+            'staff_id' => $staff->id,
+            'attendance_date' => $today,
+            'status' => 'Present',
+            'start_time' => $nowTime,
+            'campus' => $staff->campus,
+            'designation' => $staff->designation,
+            'remarks' => $remarks,
+        ];
+
+        if ($isPerLecture) {
+            $existing = $attendance ? (int) ($attendance->conducted_lectures ?? 0) : 0;
+            $payload['conducted_lectures'] = max(1, $existing);
+        }
+
+        $attendance = StaffAttendance::updateOrCreate(
+            [
+                'staff_id' => $staff->id,
+                'attendance_date' => $today,
+            ],
+            $payload
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => $lateArrival
+                ? 'Check-in recorded. Late arrival: ' . $lateArrival
+                : 'Check-in recorded successfully.',
+            'data' => $this->formatStaffScanResponse($staff, $attendance, 'check_in', $isFullTime, $isPerHour, $isPerLecture, $standardIn, $standardOut, $lateArrival, null),
+        ], 200);
+    }
+
+    protected function appendAttendanceRemark(?string $existing, string $snippet): string
+    {
+        $existing = trim((string) $existing);
+        if ($existing === '') {
+            return $snippet;
+        }
+        if (stripos($existing, $snippet) !== false) {
+            return $existing;
+        }
+
+        return $existing . ' | ' . $snippet;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function formatStaffScanResponse(
+        Staff $staff,
+        StaffAttendance $attendance,
+        string $action,
+        bool $isFullTime,
+        bool $isPerHour,
+        bool $isPerLecture,
+        ?string $standardIn,
+        ?string $standardOut,
+        ?string $lateArrival = null,
+        ?string $earlyExit = null
+    ): array {
+        $salaryTypeLabel = $isPerLecture ? 'per lecture' : ($isPerHour ? 'per hour' : 'full time');
+
+        return [
+            'person_type' => 'staff',
+            'action' => $action,
+            'staff' => [
+                'id' => $staff->id,
+                'name' => $staff->name,
+                'emp_id' => $staff->emp_id,
+                'designation' => $staff->designation,
+                'campus' => $staff->campus,
+                'salary_type' => $salaryTypeLabel,
+            ],
+            'attendance' => [
+                'date' => $attendance->attendance_date?->format('Y-m-d'),
+                'status' => $attendance->status,
+                'check_in' => $attendance->start_time ? date('h:i A', strtotime($attendance->start_time)) : null,
+                'check_out' => $attendance->end_time ? date('h:i A', strtotime($attendance->end_time)) : null,
+                'start_time' => $attendance->start_time,
+                'end_time' => $attendance->end_time,
+                'conducted_lectures' => $attendance->conducted_lectures,
+                'late_arrival' => $lateArrival,
+                'early_exit' => $earlyExit,
+                'remarks' => $attendance->remarks,
+            ],
+            'salary_settings' => [
+                'late_arrival_time' => $standardIn,
+                'early_exit_time' => $standardOut,
+            ],
+        ];
     }
 }
 

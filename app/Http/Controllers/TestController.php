@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Test;
+use App\Models\Staff;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
 use App\Models\GeneralSetting;
 use App\Models\StudentMark;
+use App\Models\Message;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +19,51 @@ use Illuminate\Support\Facades\Auth;
 
 class TestController extends Controller
 {
+    private function notifyStaffAboutCreatedTest(array $validated): void
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin) {
+            return;
+        }
+
+        $text = sprintf(
+            '%s created test "%s" for %s - %s. Subject: %s. Campus: %s. Date: %s.',
+            $admin->name ?? 'Admin',
+            $validated['test_name'],
+            $validated['for_class'],
+            $validated['section'],
+            $validated['subject'],
+            $validated['campus'],
+            $validated['date']
+        );
+
+        Staff::query()
+            ->orderBy('name')
+            ->get()
+            ->filter(function (Staff $staff) use ($validated) {
+                return $staff->isTeacher()
+                    && method_exists($staff, 'canUploadMarksForSubject')
+                    && $staff->canUploadMarksForSubject(
+                        $validated['campus'],
+                        $validated['for_class'],
+                        $validated['section'],
+                        $validated['subject']
+                    );
+            })
+            ->each(function (Staff $staff) use ($admin, $text) {
+                Message::create([
+                    'from_type' => 'admin',
+                    'from_id' => $admin->id,
+                    'to_type' => 'teacher',
+                    'to_id' => $staff->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
+    }
+
     /**
      * Display a listing of tests.
      */
@@ -24,67 +71,23 @@ class TestController extends Controller
     {
         $query = Test::query();
         
-        // Filter tests for teachers based on their assigned subjects
         $staff = Auth::guard('staff')->user();
-        if ($staff && $staff->isTeacher()) {
-            // Get teacher's assigned subjects
-            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->whereNotNull('subject_name')
-                ->whereNotNull('class')
-                ->get();
+        $isStaffTestUser = Auth::guard('staff')->check();
 
-            if ($teacherSubjects->isNotEmpty()) {
-                // Get teacher's subject names
-                $teacherSubjectNames = $teacherSubjects->pluck('subject_name')->unique()->filter()->toArray();
-                
-                // Get all test names from StudentMark where teacher has entered marks
-                $teacherTestNames = [];
-                if (!empty($teacherSubjectNames)) {
-                    $teacherTestNames = StudentMark::query()
-                        ->whereIn('subject', $teacherSubjectNames)
-                        ->distinct()
-                        ->pluck('test_name')
-                        ->filter()
-                        ->unique()
-                        ->toArray();
-                }
-
-                // Filter tests: Method 1 - Tests from StudentMark (where teacher entered marks)
-                // Method 2 - Match by subject and class from Subject table
-                $query->where(function($q) use ($teacherTestNames, $teacherSubjects, $teacherSubjectNames) {
-                    // Primary: Tests from StudentMark (where teacher entered marks)
-                    if (!empty($teacherTestNames)) {
-                        $q->whereIn('test_name', $teacherTestNames);
-                    }
-                    
-                    // Fallback: Match by subject and class (section is optional)
-                    // Match any test where subject matches teacher's assigned subjects
-                    if (!empty($teacherSubjectNames)) {
-                        $q->orWhere(function($subjectQ) use ($teacherSubjectNames) {
-                            foreach ($teacherSubjectNames as $subjectName) {
-                                $subjectQ->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))]);
-                            }
-                        });
-                    }
-                    
-                    // Also match by subject + class combination
-                    if ($teacherSubjects->isNotEmpty()) {
-                        $q->orWhere(function($subQ) use ($teacherSubjects) {
-                            foreach ($teacherSubjects as $subject) {
-                                $subQ->orWhere(function($subSubQ) use ($subject) {
-                                    $subSubQ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject->subject_name ?? ''))])
-                                         ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($subject->class ?? ''))]);
-                                });
-                            }
-                        });
+        // Staff: show tests in classes where they teach (all subjects in that class); declare only own subject in the view/API.
+        if ($isStaffTestUser && $staff) {
+            $allowedClasses = $staff->assignedSubjectClassNames();
+            if ($allowedClasses->isEmpty()) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->where(function ($q) use ($allowedClasses) {
+                    foreach ($allowedClasses as $className) {
+                        $classKey = Staff::normalizeClassKey((string) $className);
+                        $q->orWhereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim((string) $className))])
+                            ->orWhereRaw('LOWER(TRIM(for_class)) = ?', [$classKey])
+                            ->orWhereRaw("LOWER(TRIM(REPLACE(REPLACE(for_class, 'Class ', ''), 'class ', ''))) = ?", [$classKey]);
                     }
                 });
-                
-                // Remove duplicates
-                $query->distinct();
-            } else {
-                // Teacher has no assigned subjects, show no tests
-                $query->whereRaw('1 = 0');
             }
         }
         
@@ -109,54 +112,35 @@ class TestController extends Controller
         
         $tests = $query->orderBy('date', 'desc')->paginate($perPage)->withQueryString();
 
-        // Get classes - filter by teacher's assigned classes if teacher
         $classes = collect();
-        $staff = Auth::guard('staff')->user();
-        
-        // Get campuses for dropdown - filter by teacher's assigned campuses if teacher
-        if ($staff && $staff->isTeacher()) {
-            $teacherName = strtolower(trim($staff->name ?? ''));
-            
-            if (!empty($teacherName)) {
-                // Get campuses from teacher's assigned subjects
-                $teacherCampuses = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                    ->whereNotNull('campus')
-                    ->distinct()
-                    ->pluck('campus')
-                    ->merge(
-                        Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                            ->whereNotNull('campus')
-                            ->distinct()
-                            ->pluck('campus')
-                    )
-                    ->map(fn($c) => trim($c))
-                    ->filter(fn($c) => !empty($c))
-                    ->unique()
-                    ->sort()
-                    ->values();
-                
-                // Filter Campus model results to only show assigned campuses
-                if ($teacherCampuses->isNotEmpty()) {
-                    $campuses = Campus::orderBy('campus_name', 'asc')
-                        ->get()
-                        ->filter(function($campus) use ($teacherCampuses) {
-                            return $teacherCampuses->contains(strtolower(trim($campus->campus_name ?? '')));
-                        });
-                    
-                    // If no campuses found in Campus model, create objects from teacher campuses
-                    if ($campuses->isEmpty()) {
-                        $campuses = $teacherCampuses->map(function($campus) {
-                            return (object)['campus_name' => $campus];
-                        });
-                    }
-                } else {
-                    // If teacher has no assigned campuses, show empty
-                    $campuses = collect();
+
+        if ($isStaffTestUser && $staff) {
+            $campusFilter = null;
+            $assignedCampusesQuery = Subject::query();
+            $staff->scopeQueryToTeacherAssignments($assignedCampusesQuery);
+            $teacherCampuses = $assignedCampusesQuery
+                ->whereNotNull('campus')
+                ->distinct()
+                ->pluck('campus')
+                ->map(fn ($c) => trim((string) $c))
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($teacherCampuses->isNotEmpty()) {
+                $campuses = Campus::orderBy('campus_name', 'asc')
+                    ->get()
+                    ->filter(fn ($campus) => $teacherCampuses->contains(strtolower(trim($campus->campus_name ?? ''))));
+
+                if ($campuses->isEmpty()) {
+                    $campuses = $teacherCampuses->map(fn ($campus) => (object) ['campus_name' => $campus]);
                 }
             } else {
-                // If teacher name is empty, show no campuses
                 $campuses = collect();
             }
+
+            $classes = $staff->assignedSubjectClassNames($campusFilter);
         } else {
             // For non-teachers (admin, staff, etc.), get all campuses
             $campuses = Campus::orderBy('campus_name', 'asc')->get();
@@ -169,33 +153,9 @@ class TestController extends Controller
                     return (object)['campus_name' => $campus];
                 });
             }
-        }
-        
-        if ($staff && $staff->isTeacher()) {
-            // Get classes from teacher's assigned subjects
-            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
-            
-            // Get classes from teacher's assigned sections
-            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
-            
-            // Merge classes from both sources
-            $classes = $assignedSubjects->pluck('class')
-                ->merge($assignedSections->pluck('class'))
-                ->map(function($class) {
-                    return trim($class);
-                })
-                ->filter(function($class) {
-                    return !empty($class);
-                })
-                ->unique()
-                ->sort()
-                ->values();
-        } else {
-            // For non-teachers, get all classes
+
             $classes = ClassModel::whereNotNull('class_name')->distinct()->pluck('class_name')->sort()->values();
-            
+
             if ($classes->isEmpty()) {
                 $classes = collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']);
             }
@@ -213,44 +173,32 @@ class TestController extends Controller
             return strtolower(trim($name));
         })->toArray();
         
-        if ($staff && $staff->isTeacher()) {
-            // Teacher: Only show subjects assigned to this teacher
-            $teacherName = strtolower(trim($staff->name ?? ''));
-            
-            if (!empty($teacherName)) {
-                // Get subjects assigned to this teacher, filtered by active classes
-                $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                    ->whereNotNull('subject_name');
-                
-                // Filter out subjects with deleted classes
-                if (!empty($existingClassNames)) {
-                    $assignedSubjectsQuery->where(function($q) use ($existingClassNames) {
-                        foreach ($existingClassNames as $className) {
-                            $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
-                        }
-                    });
-                } else {
-                    // If no classes exist, show no subjects
-                    $assignedSubjectsQuery->whereRaw('1 = 0');
-                }
-                
-                $assignedSubjects = $assignedSubjectsQuery->get();
-                
-                // Get unique subject names (case-insensitive, keep original case)
-                $subjectsMap = [];
-                foreach ($assignedSubjects as $subject) {
-                    $subjectName = trim($subject->subject_name ?? '');
-                    if (!empty($subjectName)) {
-                        $key = strtolower($subjectName);
-                        if (!isset($subjectsMap[$key])) {
-                            $subjectsMap[$key] = $subjectName;
-                        }
+        if ($isStaffTestUser && $staff) {
+            $assignedSubjectsQuery = Subject::query();
+            $staff->scopeQueryToTeacherAssignments($assignedSubjectsQuery);
+            $assignedSubjectsQuery->whereNotNull('subject_name');
+
+            if (!empty($existingClassNames)) {
+                $assignedSubjectsQuery->where(function ($q) use ($existingClassNames) {
+                    foreach ($existingClassNames as $className) {
+                        $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
                     }
+                });
+            } else {
+                $assignedSubjectsQuery->whereRaw('1 = 0');
+            }
+
+            $subjectsMap = [];
+            foreach ($assignedSubjectsQuery->get() as $subject) {
+                $subjectName = trim($subject->subject_name ?? '');
+                if ($subjectName !== '') {
+                    $key = strtolower($subjectName);
+                    $subjectsMap[$key] = $subjectName;
                 }
-                
-                if (!empty($subjectsMap)) {
-                    $subjects = collect(array_values($subjectsMap))->sort()->values();
-                }
+            }
+
+            if (!empty($subjectsMap)) {
+                $subjects = collect(array_values($subjectsMap))->sort()->values();
             }
         } else {
             // For non-teachers (admin, staff, etc.), get all subjects filtered by active classes
@@ -295,7 +243,17 @@ class TestController extends Controller
             $sessions = collect([$runningSession]);
         }
         
-        return view('test.list', compact('tests', 'campuses', 'classes', 'sections', 'subjects', 'testTypes', 'sessions'));
+        return view('test.list', compact(
+            'tests',
+            'campuses',
+            'classes',
+            'sections',
+            'subjects',
+            'testTypes',
+            'sessions',
+            'isStaffTestUser',
+            'staff'
+        ));
     }
 
     /**
@@ -315,7 +273,36 @@ class TestController extends Controller
             'session' => ['required', 'string', 'max:255'],
         ]);
 
+        $staff = Auth::guard('staff')->user();
+        if (Auth::guard('staff')->check() && $staff) {
+            $allowed = $staff->assignedSubjectClassNames($validated['campus']);
+            $classKey = Staff::normalizeClassKey($validated['for_class']);
+            $isAllowed = $allowed->contains(
+                fn ($class) => Staff::normalizeClassKey((string) $class) === $classKey
+            );
+            if (!$isAllowed) {
+                return redirect()
+                    ->route('test.list')
+                    ->with('error', 'You can only add tests for classes where you teach a subject (Manage Subjects).');
+            }
+
+            if (method_exists($staff, 'uploadableSubjectNamesForMarks')) {
+                $allowedSubjects = $staff->uploadableSubjectNamesForMarks(
+                    $validated['campus'],
+                    $validated['for_class'],
+                    $validated['section']
+                );
+                $subjectKey = strtolower(trim($validated['subject']));
+                if (!$allowedSubjects->contains(fn ($name) => strtolower(trim((string) $name)) === $subjectKey)) {
+                    return redirect()
+                        ->route('test.list')
+                        ->with('error', 'You can only add tests for subjects assigned to you in Manage Subjects.');
+                }
+            }
+        }
+
         Test::create($validated);
+        $this->notifyStaffAboutCreatedTest($validated);
 
         return redirect()
             ->route('test.list')
@@ -360,9 +347,25 @@ class TestController extends Controller
 
     /**
      * Toggle result status for a test.
+     * Staff may only declare/reset results for subjects assigned to them (Manage Subjects).
      */
     public function toggleResultStatus(Request $request, Test $test): JsonResponse
     {
+        $staff = Auth::guard('staff')->user();
+        if (Auth::guard('staff')->check() && $staff && method_exists($staff, 'canDeclareResultForTest')) {
+            if (!$staff->canDeclareResultForTest(
+                $test->campus,
+                $test->for_class,
+                $test->section,
+                $test->subject
+            )) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You can only declare results for subjects assigned to you in Manage Subjects (your own subject only).',
+                ], 403);
+            }
+        }
+
         $test->result_status = !$test->result_status;
         $test->save();
 
@@ -383,12 +386,21 @@ class TestController extends Controller
             return response()->json(['classes' => []]);
         }
         $campus = trim($campus);
+
+        $staff = Auth::guard('staff')->user();
+        if ($staff && method_exists($staff, 'assignedSubjectClassNames')) {
+            $classes = $staff->assignedSubjectClassNames($campus);
+
+            return response()->json(['classes' => $classes->values()->all()]);
+        }
+
         $classes = ClassModel::whereNotNull('class_name')
             ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)])
             ->distinct()
             ->pluck('class_name')
             ->sort()
             ->values();
+
         return response()->json(['classes' => $classes]);
     }
 
@@ -398,11 +410,19 @@ class TestController extends Controller
     public function getSections(Request $request): JsonResponse
     {
         $class = $request->get('class');
-        
+        $campus = $request->get('campus');
+
         if (!$class) {
             return response()->json(['sections' => []]);
         }
-        
+
+        $staff = Auth::guard('staff')->user();
+        if ($staff && method_exists($staff, 'assignedTeachingSectionsForClass')) {
+            $sections = $staff->assignedTeachingSectionsForClass($class, $campus);
+
+            return response()->json(['sections' => $sections->values()->all()]);
+        }
+
         // Use case-insensitive matching for class
         $sections = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
             ->whereNotNull('name')
@@ -470,18 +490,15 @@ class TestController extends Controller
             $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
         
-        // Filter by teacher if teacher
         $staff = Auth::guard('staff')->user();
-        if ($staff && $staff->isTeacher()) {
-            $teacherName = strtolower(trim($staff->name ?? ''));
-            if (!empty($teacherName)) {
-                $subjectsQuery->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
-            }
+        if ($staff && method_exists($staff, 'uploadableSubjectNamesForMarks')) {
+            $subjects = $staff->uploadableSubjectNamesForMarks($campus, $class, $section);
+
+            return response()->json(['subjects' => $subjects->values()->all()]);
         }
-        
-        // Get unique subject names
+
         $subjects = $subjectsQuery->distinct()->pluck('subject_name')->sort()->values();
-        
+
         return response()->json(['subjects' => $subjects]);
     }
 

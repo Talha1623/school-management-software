@@ -25,7 +25,6 @@ class StaffAttendanceReportController extends Controller
         $filterMonth = (int) $request->get('filter_month', date('m'));
         $filterYear = (int) $request->get('filter_year', date('Y'));
         $filterStaffId = $request->get('staff_id');
-        $reportType = $request->get('report_type');
 
         // Check if staff is logged in and is a teacher
         $loggedInStaff = Auth::guard('staff')->user();
@@ -101,7 +100,7 @@ class StaffAttendanceReportController extends Controller
         $attendanceData = [];
         $daysInMonth = 0;
         $monthName = '';
-        
+
         if ($filterStaffId) {
             $staff = Staff::where('id', $filterStaffId)->first();
             if ($staff) {
@@ -111,66 +110,41 @@ class StaffAttendanceReportController extends Controller
             }
         } elseif ($filterCampus && $filterDesignation) {
             $staffQuery = Staff::query();
-            
+
             $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
             $staffQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
             $staffQuery->whereRaw('LOWER(TRIM(designation)) = ?', [strtolower(trim($filterDesignation))]);
-            
+
             // If teacher, only show their own attendance
             if ($isTeacher && $teacherName) {
                 $staffQuery->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($teacherName)]);
             }
-            
-            $staffList = $staffQuery->orderBy('name', 'asc')->get();
 
-            // Get days in month
+            $staffList = $staffQuery->orderBy('name', 'asc')->get();
+        }
+
+        if ($staffList->isNotEmpty()) {
             $date = Carbon::create($filterYear, $filterMonth, 1);
             $daysInMonth = $date->daysInMonth;
             $monthName = $date->format('F');
 
-            // Fetch actual attendance data from attendance table
             $staffIds = $staffList->pluck('id');
-            
-            // Get attendance for the entire month
             $attendances = StaffAttendance::whereIn('staff_id', $staffIds)
                 ->whereYear('attendance_date', $filterYear)
                 ->whereMonth('attendance_date', $filterMonth)
                 ->get()
                 ->groupBy('staff_id');
-            
-            // Build attendance data array for each staff
+
             foreach ($staffList as $staff) {
                 $attendanceData[$staff->id] = [];
-                
-                // Initialize all days as empty
                 for ($day = 1; $day <= $daysInMonth; $day++) {
                     $attendanceData[$staff->id][$day] = '';
                 }
-                
-                // Fill in actual attendance data
-                if (isset($attendances[$staff->id])) {
-                    foreach ($attendances[$staff->id] as $attendance) {
-                        $attendanceDate = Carbon::parse($attendance->attendance_date);
-                        $day = $attendanceDate->day;
-                        
-                        // Convert status to single letter
-                        $status = strtoupper($attendance->status);
-                        if ($status === 'PRESENT') {
-                            $attendanceData[$staff->id][$day] = 'P';
-                        } elseif ($status === 'ABSENT') {
-                            $attendanceData[$staff->id][$day] = 'A';
-                        } elseif ($status === 'HOLIDAY') {
-                            $attendanceData[$staff->id][$day] = 'H';
-                        } elseif ($status === 'SUNDAY') {
-                            $attendanceData[$staff->id][$day] = 'S';
-                        } elseif ($status === 'LEAVE') {
-                            $attendanceData[$staff->id][$day] = 'L';
-                        } elseif ($status === 'HALF DAY' || $status === 'HALFDAY' || $status === 'HALF-DAY') {
-                            $attendanceData[$staff->id][$day] = 'HD';
-                        } else {
-                            $attendanceData[$staff->id][$day] = '';
-                        }
-                    }
+
+                $staffAttendances = $attendances->get($staff->id, collect());
+                foreach ($staffAttendances as $attendance) {
+                    $day = Carbon::parse($attendance->attendance_date)->day;
+                    $attendanceData[$staff->id][$day] = $this->mapAttendanceStatusToCode($attendance->status);
                 }
             }
         }
@@ -202,8 +176,22 @@ class StaffAttendanceReportController extends Controller
             'filterDesignation',
             'filterMonth',
             'filterYear',
-            'filterStaffId',
-            'reportType'
+            'filterStaffId'
         ));
+    }
+
+    private function mapAttendanceStatusToCode(?string $status): string
+    {
+        $status = strtoupper(trim((string) $status));
+
+        return match (true) {
+            $status === 'PRESENT' => 'P',
+            $status === 'ABSENT' => 'A',
+            $status === 'HOLIDAY' => 'H',
+            $status === 'SUNDAY' => 'S',
+            $status === 'LEAVE' => 'L',
+            in_array($status, ['HALF DAY', 'HALFDAY', 'HALF-DAY'], true) => 'HD',
+            default => '',
+        };
     }
 }

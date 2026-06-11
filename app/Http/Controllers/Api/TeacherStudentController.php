@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Staff;
 use App\Models\Student;
 use App\Models\Campus;
 use App\Models\ClassModel;
@@ -12,10 +13,111 @@ use App\Models\Leave;
 use App\Models\StudentAttendance;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Eloquent\Builder;
 use Carbon\Carbon;
 
 class TeacherStudentController extends Controller
 {
+    /**
+     * Apply the same campus/class/section/search filters as the students list API.
+     * Used by {@see index} and teacher chat contacts. Returns a 403 response when the teacher requests a class they are not assigned to.
+     */
+    public static function applyStudentsIndexFilters(Request $request, $teacher, Builder $query): ?JsonResponse
+    {
+        $className = $request->query('class') ?? $request->input('class');
+        $sectionName = $request->query('section') ?? $request->input('section');
+
+        if ($teacher instanceof Staff && $teacher->isTeacher()) {
+            $assignedClasses = $teacher instanceof Staff
+                ? $teacher->assignedTeachingClassNames()
+                : collect();
+
+            if ($assignedClasses->isEmpty()) {
+                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                    ->get();
+                $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                    ->get();
+
+                $assignedClasses = $assignedSubjects->pluck('class')
+                    ->merge($assignedSections->pluck('class'))
+                    ->map(fn ($class) => trim((string) $class))
+                    ->filter()
+                    ->unique()
+                    ->values();
+            }
+
+            if ($teacher->campus) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($teacher->campus))]);
+            }
+
+            if ($className) {
+                $className = trim($className);
+                $classKey = Staff::normalizeClassKey($className);
+                $isClassAssigned = $assignedClasses->contains(function ($class) use ($className, $classKey) {
+                    $assigned = trim((string) $class);
+
+                    return strcasecmp($assigned, $className) === 0
+                        || Staff::normalizeClassKey($assigned) === $classKey;
+                });
+
+                if (!$isClassAssigned && $assignedClasses->isNotEmpty()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You are not assigned to this class.',
+                        'token' => null,
+                    ], 403);
+                }
+            }
+
+            if (!$className && $assignedClasses->isNotEmpty()) {
+                $query->where(function ($q) use ($assignedClasses) {
+                    foreach ($assignedClasses as $class) {
+                        $class = trim((string) $class);
+                        $classKey = Staff::normalizeClassKey($class);
+                        $q->orWhere(function ($inner) use ($class, $classKey) {
+                            $inner->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                                ->orWhereRaw('LOWER(TRIM(class)) = ?', [$classKey])
+                                ->orWhereRaw("LOWER(TRIM(REPLACE(REPLACE(class, 'Class ', ''), 'class ', ''))) = ?", [$classKey]);
+                        });
+                    }
+                });
+            } elseif (!$className && $assignedClasses->isEmpty()) {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        $campus = $request->query('campus') ?? $request->input('campus');
+        if ($campus && !($teacher instanceof Staff && $teacher->isTeacher())) {
+            $campus = trim($campus);
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+        }
+
+        if ($className) {
+            $className = trim($className);
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)]);
+        }
+
+        if ($sectionName) {
+            $sectionName = trim($sectionName);
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+        }
+
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            if (!empty($search)) {
+                $searchLower = strtolower($search);
+                $query->where(function ($q) use ($search, $searchLower) {
+                    $q->whereRaw('LOWER(student_name) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhere('student_code', 'like', "%{$search}%")
+                        ->orWhereRaw('LOWER(class) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(section) LIKE ?', ["%{$searchLower}%"]);
+                });
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Get Students List API
      * Filter by Campus, Class, Section (from URL query parameters or request body)
@@ -28,100 +130,17 @@ class TeacherStudentController extends Controller
         try {
             $teacher = $request->user();
             $query = Student::query();
-            
-            // Get class and section from URL query parameters or request body
+
+            $deny = self::applyStudentsIndexFilters($request, $teacher, $query);
+            if ($deny) {
+                return $deny;
+            }
+
             $className = $request->query('class') ?? $request->input('class');
             $sectionName = $request->query('section') ?? $request->input('section');
-            
-            // Filter by teacher's assigned classes if teacher
-            if ($teacher && $teacher->isTeacher()) {
-                // Get teacher's assigned subjects
-                $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
-                    ->get();
-                
-                // Get teacher's assigned sections
-                $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
-                    ->get();
-                
-                // Get unique classes from both sources
-                $assignedClasses = $assignedSubjects->pluck('class')
-                    ->merge($assignedSections->pluck('class'))
-                    ->map(function($class) {
-                        return trim($class);
-                    })
-                    ->filter(function($class) {
-                        return !empty($class);
-                    })
-                    ->unique()
-                    ->values();
-                
-                // Filter by teacher's campus
-                if ($teacher->campus) {
-                    $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($teacher->campus))]);
-                }
-                
-                // If class is provided in URL/request, verify it's assigned to teacher
-                if ($className) {
-                    $className = trim($className);
-                    $isClassAssigned = $assignedClasses->contains(function($class) use ($className) {
-                        return strtolower(trim($class)) === strtolower($className);
-                    });
-                    
-                    if (!$isClassAssigned && $assignedClasses->isNotEmpty()) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'You are not assigned to this class.',
-                            'token' => null,
-                        ], 403);
-                    }
-                }
-                
-                // Filter by assigned classes ONLY (if class not specified in URL)
-                if (!$className && $assignedClasses->isNotEmpty()) {
-                    $query->where(function($q) use ($assignedClasses) {
-                        foreach ($assignedClasses as $class) {
-                            $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-                        }
-                    });
-                } else if (!$className && $assignedClasses->isEmpty()) {
-                    // If no classes assigned, return empty result
-                    $query->whereRaw('1 = 0');
-                }
-            }
-            
-            // Filter by Campus (case-insensitive) - from URL or body (only if not already filtered by teacher)
-            $campus = $request->query('campus') ?? $request->input('campus');
-            if ($campus && (!$teacher || !$teacher->isTeacher())) {
-                $campus = trim($campus);
-                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
-            }
-            
-            // Filter by Class (case-insensitive, exact match) - from URL query params or body
-            if ($className) {
-                $className = trim($className);
-                $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)]);
-            }
-            
-            // Filter by Section (case-insensitive) - from URL query params or body
-            if ($sectionName) {
-                $sectionName = trim($sectionName);
-                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
-            }
-            
-            // Search functionality - from body
-            if ($request->filled('search')) {
-                $search = trim($request->search);
-                if (!empty($search)) {
-                    $searchLower = strtolower($search);
-                    $query->where(function($q) use ($search, $searchLower) {
-                        $q->whereRaw('LOWER(student_name) LIKE ?', ["%{$searchLower}%"])
-                          ->orWhere('student_code', 'like', "%{$search}%")
-                          ->orWhereRaw('LOWER(class) LIKE ?', ["%{$searchLower}%"])
-                          ->orWhereRaw('LOWER(section) LIKE ?', ["%{$searchLower}%"]);
-                    });
-                }
-            }
-            
+            $className = $className !== null && $className !== '' ? trim($className) : null;
+            $sectionName = $sectionName !== null && $sectionName !== '' ? trim($sectionName) : null;
+
             // Pagination
             $perPage = $request->get('per_page', 10);
             $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
@@ -254,7 +273,7 @@ class TeacherStudentController extends Controller
             
             // Get Classes - filter by teacher's assigned classes if teacher
             $classes = collect();
-            if ($teacher && $teacher->isTeacher()) {
+            if ($teacher instanceof Staff && $teacher->isTeacher()) {
                 // Get classes from teacher's assigned subjects
                 $teacherName = strtolower(trim($teacher->name ?? ''));
                 $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
@@ -320,7 +339,7 @@ class TeacherStudentController extends Controller
             // Get Sections (filtered by class if provided) - filter by teacher's assigned subjects if teacher
             $sections = collect();
             if ($request->filled('class')) {
-                if ($teacher && $teacher->isTeacher()) {
+                if ($teacher instanceof Staff && $teacher->isTeacher()) {
                     // Get sections from teacher's assigned subjects for this class
                     $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
                         ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))])

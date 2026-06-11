@@ -56,11 +56,6 @@
                 </div>
             </div>
             
-            <div class="p-20 border-bottom child">
-                <a href="#" class="btn btn-primary text-white">
-                    Buy Fila
-                </a>
-            </div>
         </div>
     </div>
 </div>

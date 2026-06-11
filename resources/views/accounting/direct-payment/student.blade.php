@@ -299,8 +299,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const generatedFeeSelect = document.getElementById('generated_fee_select');
     const paymentTitleInput = document.getElementById('payment_title');
     const paymentAmountInput = document.getElementById('payment_amount');
+    const discountInput = document.getElementById('discount');
     const generatedIdInput = document.getElementById('generated_id');
     let searchTimer = null;
+    let selectedFeeDue = 0;
 
     function resetGeneratedFees() {
         generatedFeeSelect.innerHTML = '<option value="">Generated fees will appear here</option>';
@@ -408,11 +410,32 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         paymentTitleInput.value = selectedOption.dataset.title;
-        paymentAmountInput.value = selectedOption.dataset.amount || '';
+        selectedFeeDue = parseFloat(selectedOption.dataset.amount || 0) || 0;
+        paymentAmountInput.value = selectedFeeDue > 0 ? selectedFeeDue.toFixed(2) : '';
+        if (discountInput) {
+            discountInput.value = '0';
+        }
         if (generatedIdInput) {
             generatedIdInput.value = selectedOption.value || '';
         }
     });
+
+    function syncPaymentFromDiscount() {
+        if (!discountInput || !paymentAmountInput || selectedFeeDue <= 0) {
+            return;
+        }
+        const discount = parseFloat(discountInput.value || 0) || 0;
+        const maxPayment = Math.max(0, selectedFeeDue - discount);
+        const currentPayment = parseFloat(paymentAmountInput.value || 0) || 0;
+        if (currentPayment > maxPayment + 0.009) {
+            paymentAmountInput.value = maxPayment.toFixed(2);
+        }
+    }
+
+    if (discountInput) {
+        discountInput.addEventListener('input', syncPaymentFromDiscount);
+        discountInput.addEventListener('change', syncPaymentFromDiscount);
+    }
 });
 </script>
 @endsection

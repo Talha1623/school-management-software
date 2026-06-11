@@ -11,9 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('staff_attendances')) {
+            return;
+        }
+
         Schema::table('staff_attendances', function (Blueprint $table) {
-            $table->time('start_time')->nullable()->after('status');
-            $table->time('end_time')->nullable()->after('start_time');
+            if (!Schema::hasColumn('staff_attendances', 'start_time')) {
+                $table->time('start_time')->nullable()->after('status');
+            }
+
+            if (!Schema::hasColumn('staff_attendances', 'end_time')) {
+                $table->time('end_time')->nullable()->after('start_time');
+            }
         });
     }
 
@@ -22,8 +31,18 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (!Schema::hasTable('staff_attendances')) {
+            return;
+        }
+
         Schema::table('staff_attendances', function (Blueprint $table) {
-            $table->dropColumn(['start_time', 'end_time']);
+            if (Schema::hasColumn('staff_attendances', 'end_time')) {
+                $table->dropColumn('end_time');
+            }
+
+            if (Schema::hasColumn('staff_attendances', 'start_time')) {
+                $table->dropColumn('start_time');
+            }
         });
     }
 };

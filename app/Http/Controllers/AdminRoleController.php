@@ -80,12 +80,9 @@ class AdminRoleController extends Controller
             'super_admin' => ['nullable', 'boolean'],
         ]);
 
-        // Only update password if provided
+        // Plain password only — AdminRole mutator hashes once
         if (empty($validated['password'])) {
             unset($validated['password']);
-        } else {
-            // Hash the password manually if provided
-            $validated['password'] = \Hash::make($validated['password']);
         }
 
         $validated['super_admin'] = $request->has('super_admin') ? 1 : 0;

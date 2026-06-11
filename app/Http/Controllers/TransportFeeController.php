@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TransportFee;
+use App\Models\FeeType;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
@@ -116,8 +117,7 @@ class TransportFeeController extends Controller
         $skippedCount = 0;
 
         foreach ($students as $student) {
-            // Skip if student doesn't have transport fare or student_code
-            if (empty($student->transport_fare) || $student->transport_fare <= 0 || empty($student->student_code)) {
+            if (! $student->hasTransportConfigured()) {
                 $skippedCount++;
                 continue;
             }
@@ -160,9 +160,9 @@ class TransportFeeController extends Controller
         if ($generatedCount == 0) {
             $message = "No transport fees were generated. ";
             if ($skippedCount > 0) {
-                $message .= "All selected students were skipped (no transport fare set or fees already exist).";
+                $message .= 'All selected students were skipped (transport not configured on profile, or fee already exists).';
             } else {
-                $message .= "Selected students don't have transport fare configured.";
+                $message .= 'Selected students do not have transport route and fare on their profile.';
             }
 
             return redirect()
@@ -170,9 +170,11 @@ class TransportFeeController extends Controller
                 ->with('error', $message);
         }
 
+        FeeType::ensureExistsForCampus('Transport Fee', $validated['campus']);
+
         $message = "Transport fee generated successfully for {$generatedCount} student(s)!";
         if ($skippedCount > 0) {
-            $message .= " {$skippedCount} student(s) skipped (no transport fare set or already exists).";
+            $message .= " {$skippedCount} student(s) skipped (transport not configured or fee already exists).";
         }
 
         return redirect()
@@ -236,7 +238,10 @@ class TransportFeeController extends Controller
             $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
         }
 
-        $students = $studentsQuery->orderBy('student_code', 'asc')->get();
+        $students = $studentsQuery
+            ->eligibleForTransportFee()
+            ->orderBy('student_code', 'asc')
+            ->get();
 
         // Build payment title if month and year are provided
         $paymentTitle = null;

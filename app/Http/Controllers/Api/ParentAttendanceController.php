@@ -3,14 +3,320 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ParentAccount;
 use App\Models\Student;
 use App\Models\StudentAttendance;
+use App\Models\StudentDiscount;
+use App\Models\StudentPayment;
+use App\Services\FeePaymentWebTables;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class ParentAttendanceController extends Controller
 {
+    /**
+     * Get one-year fee record for a specific child of authenticated parent.
+     *
+     * URL: /api/parent/attendance/student/{studentId}/yearly-record
+     */
+    public function yearlyStudentRecord(Request $request, int $studentId): JsonResponse
+    {
+        try {
+            $parent = $this->resolveAuthenticatedParent($request);
+            if (!$parent) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid token. Please login with parent account.',
+                    'data' => null,
+                    'token' => null,
+                ], 401);
+            }
+
+            // Ensure requested student belongs to authenticated parent
+            $student = $parent->students()->find($studentId);
+            if (!$student) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not allowed to view this student attendance record.',
+                    'data' => null,
+                    'token' => null,
+                ], 403);
+            }
+
+            // Last 12 months record (including today)
+            $endDate = Carbon::today()->endOfDay();
+            $startDate = Carbon::today()->subYear()->addDay()->startOfDay();
+
+            $studentCodeCandidates = $this->buildStudentCodeCandidates($student);
+            if ($studentCodeCandidates->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student code not found for this student.',
+                    'data' => null,
+                    'token' => null,
+                ], 400);
+            }
+
+            $recordsQuery = StudentPayment::query();
+            $this->applyStudentCodeFilter($recordsQuery, $studentCodeCandidates);
+
+            $records = $recordsQuery
+                ->where(function ($q) use ($startDate, $endDate) {
+                    $q->where(function ($q2) use ($startDate, $endDate) {
+                        $q2->whereNotNull('payment_date')
+                            ->whereDate('payment_date', '>=', $startDate->format('Y-m-d'))
+                            ->whereDate('payment_date', '<=', $endDate->format('Y-m-d'));
+                    })->orWhere(function ($q2) use ($startDate, $endDate) {
+                        // Include generated rows that may not have payment_date set.
+                        $q2->whereNull('payment_date')
+                            ->whereBetween('created_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()]);
+                    });
+                })
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            $isSystemGenerated = static function ($payment): bool {
+                $method = strtolower(trim((string) ($payment->method ?? '')));
+                return in_array($method, ['generated', 'installment'], true);
+            };
+
+            $paidRecords = $records->filter(function ($payment) use ($isSystemGenerated) {
+                return !$isSystemGenerated($payment);
+            })->values();
+
+            $generatedRecords = $records->filter(function ($payment) use ($isSystemGenerated) {
+                return $isSystemGenerated($payment);
+            })->values();
+
+            $annualMonthlyFee = round(((float) ($student->monthly_fee ?? 0)) * 12, 2);
+            $totalGeneratedFee = round((float) $generatedRecords->sum(function ($payment) {
+                return max(0.0, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0))
+                    + (float) ($payment->late_fee ?? 0);
+            }), 2);
+            // Keep backward compatibility for `total_fee`, but prefer generated fee if available.
+            $totalFee = $totalGeneratedFee > 0 ? $totalGeneratedFee : $annualMonthlyFee;
+
+            $transportFeeGenerated = round((float) $generatedRecords
+                ->filter(function ($payment) {
+                    $title = strtolower(trim((string) ($payment->payment_title ?? '')));
+                    return str_contains($title, 'transport');
+                })
+                ->sum(function ($payment) {
+                    return max(0.0, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0))
+                        + (float) ($payment->late_fee ?? 0);
+                }), 2);
+
+            $cardFeeGenerated = round((float) $generatedRecords
+                ->filter(function ($payment) {
+                    $title = strtolower(trim((string) ($payment->payment_title ?? '')));
+                    return str_contains($title, 'card');
+                })
+                ->sum(function ($payment) {
+                    return max(0.0, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0))
+                        + (float) ($payment->late_fee ?? 0);
+                }), 2);
+
+            $admissionFeeGenerated = round((float) $generatedRecords
+                ->filter(function ($payment) {
+                    $title = strtolower(trim((string) ($payment->payment_title ?? '')));
+                    return str_contains($title, 'admission');
+                })
+                ->sum(function ($payment) {
+                    return max(0.0, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0))
+                        + (float) ($payment->late_fee ?? 0);
+                }), 2);
+
+            $otherFeeGenerated = round((float) $generatedRecords
+                ->filter(function ($payment) {
+                    $title = strtolower(trim((string) ($payment->payment_title ?? '')));
+                    return !str_contains($title, 'monthly fee')
+                        && !str_contains($title, 'transport')
+                        && !str_contains($title, 'card')
+                        && !str_contains($title, 'admission');
+                })
+                ->sum(function ($payment) {
+                    return max(0.0, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0))
+                        + (float) ($payment->late_fee ?? 0);
+                }), 2);
+
+            $generatedByTitle = $generatedRecords
+                ->groupBy(function ($payment) {
+                    return trim((string) ($payment->payment_title ?? 'Untitled'));
+                })
+                ->map(function ($items, $title) {
+                    $amount = (float) $items->sum(function ($payment) {
+                        return max(0.0, (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0))
+                            + (float) ($payment->late_fee ?? 0);
+                    });
+
+                    return [
+                        'title' => $title,
+                        'amount' => round($amount, 2),
+                        'transactions_count' => $items->count(),
+                        'status' => $amount > 0 ? 'unpaid' : 'paid',
+                    ];
+                })
+                ->values();
+
+            // Align generated-fee heads with web pending-fee table to avoid drift.
+            $webPending = FeePaymentWebTables::searchResultsForStudent($student);
+            $webPendingRows = collect($webPending['rows'] ?? []);
+            $webGeneratedTotal = round((float) (($webPending['totals']['generated_fee'] ?? 0)), 2);
+
+            if ($webGeneratedTotal > 0 || $webPendingRows->isNotEmpty()) {
+                $titleAmount = function (callable $predicate) use ($webPendingRows): float {
+                    return (float) $webPendingRows
+                        ->filter(function ($row) use ($predicate) {
+                            $title = strtolower(trim((string) ($row['fee_type'] ?? '')));
+                            return $predicate($title);
+                        })
+                        ->sum(function ($row) {
+                            return (float) ($row['generated_fee'] ?? 0);
+                        });
+                };
+
+                $transportFeeGenerated = round($titleAmount(fn ($title) => str_contains($title, 'transport')), 2);
+                $cardFeeGenerated = round($titleAmount(fn ($title) => str_contains($title, 'card')), 2);
+                $admissionFeeGenerated = round($titleAmount(fn ($title) => str_contains($title, 'admission')), 2);
+                $otherFeeGenerated = round($titleAmount(fn ($title) => !str_contains($title, 'monthly fee') && !str_contains($title, 'transport') && !str_contains($title, 'card') && !str_contains($title, 'admission')), 2);
+                $totalGeneratedFee = $webGeneratedTotal;
+                $totalFee = $totalGeneratedFee > 0 ? $totalGeneratedFee : $totalFee;
+
+                $generatedByTitle = $webPendingRows
+                    ->map(function ($row) {
+                        return [
+                            'title' => (string) ($row['fee_type'] ?? 'Untitled'),
+                            'amount' => round((float) ($row['generated_fee'] ?? 0), 2),
+                            'transactions_count' => 1,
+                            'status' => strtolower((string) ($row['status'] ?? 'unpaid')),
+                            'paid' => round((float) ($row['paid'] ?? 0), 2),
+                            'due' => round((float) ($row['due'] ?? 0), 2),
+                        ];
+                    })
+                    ->values();
+            }
+            $totalPaid = round((float) $paidRecords->sum('payment_amount'), 2);
+            $totalDiscount = round((float) $paidRecords->sum('discount'), 2);
+            $totalLateFee = round((float) $paidRecords->sum('late_fee'), 2);
+            $totalNetPaid = round(max(0, $totalPaid - $totalDiscount + $totalLateFee), 2);
+            // Web / student API parity: outstanding due (not "annual - rolling window paid")
+            $remainingFee = 0.0;
+            foreach ($studentCodeCandidates as $candidateCode) {
+                $remainingFee = max($remainingFee, $this->calculateFeeDueLikeWeb((string) $candidateCode));
+            }
+
+            // Group by fee month (payment title month when present) — same idea as web voucher / fee breakdown
+            $historyRecords = $records->values();
+
+            $paymentByDate = $historyRecords
+                ->groupBy(function ($payment) {
+                    $bucket = $this->resolveFeeMonthDate($payment);
+                    if ($bucket) {
+                        return $bucket->format('Y-m-01');
+                    }
+
+                    return !empty($payment->payment_date)
+                        ? Carbon::parse($payment->payment_date)->startOfMonth()->format('Y-m-01')
+                        : 'N/A';
+                })
+                ->map(function ($dayPayments, $dateKey) use ($isSystemGenerated) {
+                    $first = $dayPayments->first();
+                    $paidDayPayments = $dayPayments->filter(function ($payment) use ($isSystemGenerated) {
+                        return !$isSystemGenerated($payment);
+                    })->values();
+                    $hasGenerated = $dayPayments->contains(function ($payment) use ($isSystemGenerated) {
+                        return $isSystemGenerated($payment);
+                    });
+
+                    return [
+                        'date' => $dateKey !== 'N/A' ? $dateKey : null,
+                        'date_formatted' => $dateKey !== 'N/A' ? Carbon::parse($dateKey)->format('d M Y') : null,
+                        'payment_titles' => $dayPayments
+                            ->groupBy(function ($payment) {
+                                return trim((string) ($payment->payment_title ?? 'Untitled'));
+                            })
+                            ->map(function ($titlePayments, $title) {
+                                $titleAmount = round((float) $titlePayments->sum('payment_amount'), 2);
+                                return $title . ':' . $titleAmount;
+                            })
+                            ->values(),
+                        'methods' => $dayPayments->pluck('method')->filter()->unique()->values(),
+                        'has_generated' => $hasGenerated,
+                        'payment_amount' => round((float) $paidDayPayments->sum('payment_amount'), 2),
+                        'discount' => round((float) $paidDayPayments->sum('discount'), 2),
+                        'late_fee' => round((float) $paidDayPayments->sum('late_fee'), 2),
+                        // Net paid for paid rows; if only generated rows exist, expose generated amount.
+                        'net_amount' => $paidDayPayments->isNotEmpty()
+                            ? round(
+                                (float) $paidDayPayments->sum('payment_amount')
+                                - (float) $paidDayPayments->sum('discount')
+                                + (float) $paidDayPayments->sum('late_fee'),
+                                2
+                            )
+                            : round((float) $dayPayments->sum('payment_amount'), 2),
+                        'transactions_count' => $dayPayments->count(),
+                        'first_method' => $first?->method,
+                        'status' => $paidDayPayments->isNotEmpty()
+                            ? 'paid'
+                            : ($hasGenerated ? 'unpaid' : 'pending'),
+                    ];
+                })
+                ->sortBy('date')
+                ->values();
+
+            $overallStatus = $remainingFee > 0 ? 'unpaid' : 'paid';
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Student yearly fee record retrieved successfully',
+                'data' => [
+                    'student' => [
+                        'id' => $student->id,
+                        'student_name' => $student->student_name,
+                        'student_code' => $student->student_code,
+                        'class' => $student->class,
+                        'section' => $student->section,
+                        'campus' => $student->campus,
+                    ],
+                    'range' => [
+                        'from' => $startDate->format('Y-m-d'),
+                        'to' => $endDate->format('Y-m-d'),
+                        'label' => 'Last 1 Year',
+                    ],
+                    'summary' => [
+                        'monthly_fee' => round((float) ($student->monthly_fee ?? 0), 2),
+                        'annual_monthly_fee' => $annualMonthlyFee,
+                        'total_fee' => $totalFee,
+                        'generated_total_fee' => $totalGeneratedFee,
+                        'transport_fee_generated' => $transportFeeGenerated,
+                        'card_fee_generated' => $cardFeeGenerated,
+                        'admission_fee_generated' => $admissionFeeGenerated,
+                        'other_fee_generated' => $otherFeeGenerated,
+                        'total_paid' => $totalPaid,
+                        'total_discount' => $totalDiscount,
+                        'total_late_fee' => $totalLateFee,
+                        'total_net_paid' => $totalNetPaid,
+                        'remaining_fee' => $remainingFee,
+                        'status' => $overallStatus,
+                        'total_transactions' => $records->count(),
+                        'generated_breakdown' => $generatedByTitle,
+                    ],
+                    'payments_by_date' => $paymentByDate,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving yearly fee record: ' . $e->getMessage(),
+                'data' => null,
+                'token' => null,
+            ], 500);
+        }
+    }
+
     /**
      * Get Class Attendance List
      * Returns list of all students in the same class/section with their attendance status for a specific date
@@ -21,15 +327,15 @@ class ParentAttendanceController extends Controller
     public function classAttendance(Request $request): JsonResponse
     {
         try {
-            $parent = $request->user();
+            $parent = $this->resolveAuthenticatedParent($request);
             
             if (!$parent) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not found',
+                    'message' => 'Invalid token. Please login with parent account.',
                     'data' => null,
                     'token' => null,
-                ], 404);
+                ], 401);
             }
 
             // Optional filter: specific student_id (must belong to this parent)
@@ -294,6 +600,165 @@ class ParentAttendanceController extends Controller
                 'token' => null,
             ], 200);
         }
+    }
+
+    /**
+     * Ensure authenticated user is a ParentAccount model.
+     */
+    private function resolveAuthenticatedParent(Request $request): ?ParentAccount
+    {
+        $user = $request->user();
+        return $user instanceof ParentAccount ? $user : null;
+    }
+
+    /**
+     * Same due math as Fee Payment web + /api/student/fees (StudentFeeController / ParentFeeController).
+     */
+    private function calculateFeeDueLikeWeb(string $studentCode): float
+    {
+        $norm = strtolower(trim($studentCode));
+
+        $generatedFees = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$norm])
+            ->whereIn('method', ['Generated', 'Installment'])
+            ->get();
+
+        $paidFees = StudentPayment::whereRaw('LOWER(TRIM(student_code)) = ?', [$norm])
+            ->where('method', '!=', 'Generated')
+            ->where('method', '!=', 'Installment')
+            ->get();
+
+        $studentDiscounts = StudentDiscount::whereRaw('LOWER(TRIM(student_code)) = ?', [$norm])->get();
+        $totalStudentDiscount = $studentDiscounts->sum(function ($discount) {
+            return (float) ($discount->discount_amount ?? 0);
+        });
+
+        $totalDue = 0.0;
+        $generatedByTitle = $generatedFees->groupBy('payment_title');
+        $paidByTitle = $paidFees->groupBy('payment_title');
+
+        $installmentBaseTitles = [];
+        foreach ($generatedByTitle as $title => $items) {
+            if (preg_match('/^(.+)\/\d+$/', (string) $title, $matches)) {
+                $installmentBaseTitles[$matches[1]] = true;
+            }
+        }
+
+        foreach ($generatedByTitle as $title => $items) {
+            $isInstallment = preg_match('/\/\d+$/', (string) $title);
+
+            if (!$isInstallment && isset($installmentBaseTitles[$title])) {
+                continue;
+            }
+
+            $isMonthlyFee = str_starts_with((string) $title, 'Monthly Fee - ');
+
+            $originalAmount = (float) $items->sum(function ($item) {
+                return (float) ($item->payment_amount ?? 0);
+            });
+
+            $generatedLate = (float) $items->sum(function ($item) {
+                return (float) ($item->late_fee ?? 0);
+            });
+
+            $generatedDiscount = 0.0;
+            if ($isInstallment) {
+                $generatedDiscount = (float) $items->sum(function ($item) {
+                    return (float) ($item->discount ?? 0);
+                });
+            }
+
+            $paidDiscount = (float) $paidByTitle->get($title, collect())->sum(function ($item) {
+                return (float) ($item->discount ?? 0);
+            });
+
+            $appliedStudentDiscount = 0.0;
+            if ($isMonthlyFee && $totalStudentDiscount > 0 && !$isInstallment) {
+                $appliedStudentDiscount = round($totalStudentDiscount, 2);
+            }
+
+            $totalDiscount = $generatedDiscount + $paidDiscount + $appliedStudentDiscount;
+
+            $paidAmountOnly = (float) $paidByTitle->get($title, collect())->sum(function ($item) {
+                return (float) ($item->payment_amount ?? 0);
+            });
+
+            $paidLate = (float) $paidByTitle->get($title, collect())->sum(function ($item) {
+                return (float) ($item->late_fee ?? 0);
+            });
+
+            $remainingAmount = max(0, ($originalAmount - $totalDiscount) - $paidAmountOnly);
+            $remainingLate = max(0, $generatedLate - $paidLate);
+            $remainingTotal = $remainingAmount + $remainingLate;
+
+            if ($remainingTotal > 0) {
+                $totalDue += $remainingTotal;
+            }
+        }
+
+        return round($totalDue, 2);
+    }
+
+    /**
+     * Resolve fee month using payment title first, then payment date fallback.
+     */
+    private function resolveFeeMonthDate($payment): ?Carbon
+    {
+        $title = trim((string) ($payment->payment_title ?? ''));
+        if ($title !== '' && preg_match('/([A-Za-z]+)\s+(\d{4})/', $title, $m)) {
+            try {
+                return Carbon::createFromFormat('F Y', $m[1] . ' ' . $m[2])->startOfMonth();
+            } catch (\Exception $e) {
+                // Ignore parse errors and fallback to payment_date.
+            }
+        }
+
+        if (!empty($payment->payment_date)) {
+            return Carbon::parse($payment->payment_date)->startOfMonth();
+        }
+
+        return null;
+    }
+
+    /**
+     * Build robust student code candidates (student_code + gr_number variants).
+     */
+    private function buildStudentCodeCandidates(Student $student)
+    {
+        $raw = collect([
+            (string) ($student->student_code ?? ''),
+            (string) ($student->gr_number ?? ''),
+        ])->map(fn ($v) => trim(strtolower($v)))
+            ->filter(fn ($v) => $v !== '');
+
+        $expanded = $raw->flatMap(function ($code) {
+            $compact = preg_replace('/[^a-z0-9]/', '', $code);
+            return collect([$code, str_replace(' ', '', $code), str_replace('-', '', $code), $compact]);
+        });
+
+        return $expanded
+            ->map(fn ($v) => trim(strtolower((string) $v)))
+            ->filter(fn ($v) => $v !== '')
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Apply flexible student code matching on student_payments.student_code.
+     */
+    private function applyStudentCodeFilter(Builder $query, $studentCodeCandidates): void
+    {
+        $studentCodeCandidates = collect($studentCodeCandidates)
+            ->map(fn ($v) => trim(strtolower((string) $v)))
+            ->filter(fn ($v) => $v !== '')
+            ->unique()
+            ->values();
+
+        $query->where(function ($q) use ($studentCodeCandidates) {
+            foreach ($studentCodeCandidates as $code) {
+                $q->orWhereRaw('LOWER(TRIM(student_code)) = ?', [$code]);
+                $q->orWhereRaw("REPLACE(REPLACE(LOWER(TRIM(student_code)), '-', ''), ' ', '') = ?", [str_replace(['-', ' '], '', $code)]);
+            }
+        });
     }
 }
 

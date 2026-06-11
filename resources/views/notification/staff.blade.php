@@ -11,7 +11,20 @@
             </div>
 
             <!-- Notification Form -->
-            <form action="#" method="POST" id="notificationForm">
+            @if(session('success'))
+                <div class="alert alert-success">{{ session('success') }}</div>
+            @endif
+            @if($errors->any())
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            <form action="{{ route('notification.staff.send') }}" method="POST" id="notificationForm">
                 @csrf
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->

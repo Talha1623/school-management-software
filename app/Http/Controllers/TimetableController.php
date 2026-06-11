@@ -7,14 +7,22 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
 use App\Models\Subject;
+use App\Models\Staff;
 use App\Models\GeneralSetting;
+use App\Services\MobilePushNotificationService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class TimetableController extends Controller
 {
+    public function __construct(
+        private readonly MobilePushNotificationService $pushNotifications,
+    ) {
+    }
+
     /**
      * Static timetable subjects that are not stored in Subject table.
      */
@@ -253,22 +261,13 @@ class TimetableController extends Controller
                         return $timetable;
                     }
                     
-                    // Find teacher assigned to this subject
-                    $subjectRecord = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($timetable->subject))])
-                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($timetable->class))])
-                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($timetable->section))])
-                        ->whereNotNull('teacher')
-                        ->first();
-                    
-                    if ($subjectRecord && $subjectRecord->teacher) {
-                        $timetable->assigned_teacher = $subjectRecord->teacher;
-                    } else {
-                        // Try to find any teacher assigned to this subject (different class/section)
-                        $anyTeacher = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($timetable->subject))])
-                            ->whereNotNull('teacher')
-                            ->first();
-                        $timetable->assigned_teacher = $anyTeacher ? $anyTeacher->teacher : null;
-                    }
+                    $resolved = $this->resolveAssignedTeacher(
+                        (string) $timetable->subject,
+                        $timetable->campus,
+                        $timetable->class,
+                        $timetable->section
+                    );
+                    $timetable->assigned_teacher = $resolved['teacher'];
                     
                     return $timetable;
                 });
@@ -406,7 +405,8 @@ class TimetableController extends Controller
                 ->withInput();
         }
 
-        Timetable::create($validated);
+        $timetable = Timetable::create($validated);
+        $this->notifyTeacherForTimetable($timetable);
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -529,10 +529,114 @@ class TimetableController extends Controller
         }
 
         $timetable->update($validated);
+        $this->notifyTeacherForTimetable($timetable->fresh());
 
         return redirect()
             ->route('timetable.manage')
             ->with('success', 'Timetable updated successfully!');
+    }
+
+    private function notifyTeacherForTimetable(Timetable $timetable): void
+    {
+        try {
+            $staff = $this->findStaffForTimetable($timetable);
+            if (!$staff) {
+                Log::info('Timetable notification skipped: teacher not resolved', [
+                    'timetable_id' => $timetable->id,
+                    'subject' => $timetable->subject,
+                    'campus' => $timetable->campus,
+                    'class' => $timetable->class,
+                    'section' => $timetable->section,
+                ]);
+
+                return;
+            }
+
+            $this->pushNotifications->notifyStaffTimetableAssigned($staff, $timetable);
+
+            Log::info('Timetable notification dispatched', [
+                'timetable_id' => $timetable->id,
+                'staff_id' => $staff->id,
+                'staff_name' => $staff->name,
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private function findStaffForTimetable(Timetable $timetable): ?Staff
+    {
+        if (in_array((string) $timetable->subject, $this->getStaticSubjects(), true)) {
+            return null;
+        }
+
+        $teacherNames = [];
+        $resolved = $this->resolveAssignedTeacher(
+            (string) $timetable->subject,
+            $timetable->campus,
+            $timetable->class,
+            $timetable->section
+        );
+
+        if (!empty($resolved['teacher'])) {
+            $teacherNames[] = trim((string) $resolved['teacher']);
+        }
+
+        $subjectNorm = strtolower(trim((string) $timetable->subject));
+        $campusNorm = strtolower(trim((string) ($timetable->campus ?? '')));
+        $classNorm = strtolower(trim((string) ($timetable->class ?? '')));
+        $sectionNorm = strtolower(trim((string) ($timetable->section ?? '')));
+
+        $directQuery = Subject::query()
+            ->whereRaw('LOWER(TRIM(subject_name)) = ?', [$subjectNorm])
+            ->whereNotNull('teacher')
+            ->where('teacher', '!=', '');
+
+        if ($classNorm !== '') {
+            $directQuery->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+        }
+        if ($sectionNorm !== '') {
+            $directQuery->whereRaw('LOWER(TRIM(section)) = ?', [$sectionNorm]);
+        }
+        if ($campusNorm !== '') {
+            $directQuery->where(function ($q) use ($campusNorm) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                    ->orWhereNull('campus')
+                    ->orWhereRaw("TRIM(COALESCE(campus, '')) = ''");
+            });
+        }
+
+        foreach ($directQuery->pluck('teacher') as $name) {
+            $name = trim((string) $name);
+            if ($name !== '') {
+                $teacherNames[] = $name;
+            }
+        }
+
+        foreach (array_unique($teacherNames) as $teacherName) {
+            $staff = $this->findStaffByTeacherName($teacherName);
+            if ($staff) {
+                return $staff;
+            }
+        }
+
+        return null;
+    }
+
+    private function findStaffByTeacherName(string $teacherName): ?Staff
+    {
+        $normalized = strtolower(trim($teacherName));
+        if ($normalized === '') {
+            return null;
+        }
+
+        return Staff::query()
+            ->where(function ($q) use ($normalized) {
+                $q->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
+                    ->orWhereRaw('LOWER(TRIM(email)) = ?', [$normalized])
+                    ->orWhereRaw('LOWER(TRIM(emp_id)) = ?', [$normalized]);
+            })
+            ->first();
     }
 
     /**
@@ -631,20 +735,13 @@ class TimetableController extends Controller
                 return $timetable;
             }
 
-            $subjectRecord = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim((string) $timetable->subject))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $timetable->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $timetable->section))])
-                ->whereNotNull('teacher')
-                ->first();
-
-            if ($subjectRecord && $subjectRecord->teacher) {
-                $timetable->assigned_teacher = $subjectRecord->teacher;
-            } else {
-                $anyTeacher = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim((string) $timetable->subject))])
-                    ->whereNotNull('teacher')
-                    ->first();
-                $timetable->assigned_teacher = $anyTeacher ? $anyTeacher->teacher : null;
-            }
+            $resolved = $this->resolveAssignedTeacher(
+                (string) $timetable->subject,
+                $timetable->campus,
+                $timetable->class,
+                $timetable->section
+            );
+            $timetable->assigned_teacher = $resolved['teacher'];
 
             return $timetable;
         });
@@ -662,56 +759,133 @@ class TimetableController extends Controller
      * Get sections by class name (AJAX).
      */
     /**
+     * Resolve staff for a subject — always scoped to campus when campus is known.
+     *
+     * @return array{teacher: ?string, note: ?string}
+     */
+    private function resolveAssignedTeacher(
+        string $subject,
+        ?string $campus = null,
+        ?string $class = null,
+        ?string $section = null,
+    ): array {
+        if (in_array($subject, $this->getStaticSubjects(), true)) {
+            return ['teacher' => null, 'note' => null];
+        }
+
+        $subjectNorm = strtolower(trim($subject));
+        $campusNorm = $campus !== null ? strtolower(trim($campus)) : '';
+        $classNorm = $class !== null ? strtolower(trim($class)) : '';
+        $sectionNorm = $section !== null ? strtolower(trim($section)) : '';
+
+        $scopedQuery = function () use ($subjectNorm, $campusNorm) {
+            $q = Subject::query()
+                ->whereRaw('LOWER(TRIM(subject_name)) = ?', [$subjectNorm])
+                ->whereNotNull('teacher')
+                ->where('teacher', '!=', '');
+
+            if ($campusNorm !== '') {
+                $q->where(function ($inner) use ($campusNorm) {
+                    $inner->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                        ->orWhereNull('campus')
+                        ->orWhereRaw("TRIM(COALESCE(campus, '')) = ''");
+                });
+            }
+
+            return $q;
+        };
+
+        if ($campusNorm !== '' && $classNorm !== '' && $sectionNorm !== '') {
+            $exact = $scopedQuery()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [$sectionNorm])
+                ->first();
+
+            if ($exact?->teacher) {
+                return ['teacher' => $exact->teacher, 'note' => null];
+            }
+        }
+
+        if ($campusNorm !== '' && $classNorm !== '') {
+            $byClass = $scopedQuery()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm])
+                ->first();
+
+            if ($byClass?->teacher) {
+                return [
+                    'teacher' => $byClass->teacher,
+                    'note' => 'Assigned to this class (different section)',
+                ];
+            }
+        }
+
+        if ($campusNorm !== '') {
+            $byCampus = $scopedQuery()->first();
+
+            if ($byCampus?->teacher) {
+                return [
+                    'teacher' => $byCampus->teacher,
+                    'note' => 'Assigned in this campus (different class/section)',
+                ];
+            }
+
+            return ['teacher' => null, 'note' => null];
+        }
+
+        // Legacy: no campus on request — still avoid cross-campus by preferring class/section match first.
+        $query = Subject::query()
+            ->whereRaw('LOWER(TRIM(subject_name)) = ?', [$subjectNorm])
+            ->whereNotNull('teacher')
+            ->where('teacher', '!=', '');
+
+        if ($classNorm !== '') {
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+        }
+        if ($sectionNorm !== '') {
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [$sectionNorm]);
+        }
+
+        $match = $query->first();
+        if ($match?->teacher) {
+            return ['teacher' => $match->teacher, 'note' => null];
+        }
+
+        return ['teacher' => null, 'note' => null];
+    }
+
+    /**
      * Get teacher assigned to a subject (AJAX)
      */
     public function getTeacherBySubject(Request $request): JsonResponse
     {
-        $subject = $request->get('subject');
+        $subject = trim((string) $request->get('subject', ''));
+        $campus = $request->get('campus');
         $class = $request->get('class');
         $section = $request->get('section');
-        
-        if (!$subject) {
+
+        if ($subject === '') {
             return response()->json(['teacher' => null]);
         }
-        
-        // Check if it's a static subject (like [Assembly], [Lunch Break], etc.)
-        $staticSubjects = $this->getStaticSubjects();
-        if (in_array($subject, $staticSubjects)) {
+
+        if (in_array($subject, $this->getStaticSubjects(), true)) {
             return response()->json(['teacher' => null, 'message' => 'Static subject - no teacher assigned']);
         }
-        
-        // Find teacher assigned to this subject
-        $query = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($subject))]);
-        
-        // If class is provided, filter by class
-        if ($class) {
-            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-        }
-        
-        // If section is provided, filter by section
-        if ($section) {
-            $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-        }
-        
-        $subjectRecord = $query->whereNotNull('teacher')->first();
-        
-        if ($subjectRecord && $subjectRecord->teacher) {
-            return response()->json(['teacher' => $subjectRecord->teacher]);
-        }
-        
-        // If no exact match, try to find any teacher assigned to this subject
-        $anyTeacher = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($subject))])
-            ->whereNotNull('teacher')
-            ->first();
-        
-        if ($anyTeacher && $anyTeacher->teacher) {
+
+        $resolved = $this->resolveAssignedTeacher($subject, $campus, $class, $section);
+
+        if ($resolved['teacher']) {
             return response()->json([
-                'teacher' => $anyTeacher->teacher,
-                'note' => 'Assigned to different class/section'
+                'teacher' => $resolved['teacher'],
+                'note' => $resolved['note'],
             ]);
         }
-        
-        return response()->json(['teacher' => null, 'message' => 'No teacher assigned']);
+
+        return response()->json([
+            'teacher' => null,
+            'message' => $campus
+                ? 'No teacher assigned for this subject in the selected campus.'
+                : 'No teacher assigned',
+        ]);
     }
 
     public function getSectionsByClass(Request $request)

@@ -27,7 +27,7 @@
                     <!-- Class -->
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" data-selected-class="{{ $filterClass ?? '' }}" style="height: 32px;">
                             <option value="">All Classes</option>
                             @foreach($classes as $className)
                                 <option value="{{ $className }}" {{ $filterClass == $className ? 'selected' : '' }}>{{ $className }}</option>
@@ -38,7 +38,7 @@
                     <!-- Section -->
                     <div class="col-md-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
-                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" data-selected-section="{{ $filterSection ?? '' }}" style="height: 32px;">
                             <option value="">All Sections</option>
                             @foreach($sections as $sectionName)
                                 <option value="{{ $sectionName }}" {{ $filterSection == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
@@ -80,6 +80,27 @@
                         <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
                         <span>Admission Data Reports</span>
                     </h5>
+                </div>
+
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('reports.admission-data.export', ['format' => 'excel']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
+                            <span>Excel</span>
+                        </a>
+                        <a href="{{ route('reports.admission-data.export', ['format' => 'csv']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">table_view</span>
+                            <span>CSV</span>
+                        </a>
+                        <a href="{{ route('reports.admission-data.export', ['format' => 'pdf']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <a href="{{ route('reports.admission-data.print') }}?{{ http_build_query(array_merge(request()->except(['page']), ['auto_print' => 1])) }}" class="btn btn-sm px-2 py-1 export-btn print-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                            <span>Print</span>
+                        </a>
+                    </div>
                 </div>
 
                 <div class="default-table-area" style="margin-top: 0;">
@@ -151,28 +172,33 @@ document.addEventListener('DOMContentLoaded', function () {
         selectEl.innerHTML = `<option value="">${placeholder}</option>`;
     }
 
-    function loadClassesByCampus(campus) {
+    function loadClassesByCampus(campus, selectedClass = '', selectedSection = '') {
         resetSelect(classSelect, 'All Classes');
         resetSelect(sectionSelect, 'All Sections');
-
-        if (!campus) {
-            return;
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
         }
-
-        fetch(`{{ route('reports.admission-data.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+        fetch(`{{ route('reports.admission-data.get-classes-by-campus') }}?${params.toString()}`)
             .then(response => response.json())
             .then(classes => {
                 classes.forEach(className => {
                     const option = document.createElement('option');
                     option.value = className;
                     option.textContent = className;
+                    if (selectedClass && selectedClass === className) {
+                        option.selected = true;
+                    }
                     classSelect.appendChild(option);
                 });
+                if (selectedClass) {
+                    loadSectionsByClass(campus, selectedClass, selectedSection);
+                }
             })
             .catch(() => {});
     }
 
-    function loadSectionsByClass(campus, className) {
+    function loadSectionsByClass(campus, className, selectedSection = '') {
         resetSelect(sectionSelect, 'All Sections');
 
         if (!className) {
@@ -192,6 +218,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     const option = document.createElement('option');
                     option.value = sectionName;
                     option.textContent = sectionName;
+                    if (selectedSection && selectedSection === sectionName) {
+                        option.selected = true;
+                    }
                     sectionSelect.appendChild(option);
                 });
             })
@@ -205,6 +234,10 @@ document.addEventListener('DOMContentLoaded', function () {
     classSelect.addEventListener('change', function () {
         loadSectionsByClass(campusSelect.value, this.value);
     });
+
+    const selectedClass = classSelect.dataset.selectedClass || '';
+    const selectedSection = sectionSelect.dataset.selectedSection || '';
+    loadClassesByCampus(campusSelect.value, selectedClass, selectedSection);
 
     if (yearSelect && yearSelectAll) {
         const updateSelectAllState = () => {
@@ -246,6 +279,58 @@ document.addEventListener('DOMContentLoaded', function () {
     background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
+}
+
+.export-btn {
+    border: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    font-size: 13px;
+}
+
+.excel-btn {
+    background-color: #28a745;
+    color: white;
+}
+
+.excel-btn:hover {
+    background-color: #218838;
+    color: white;
+}
+
+.csv-btn {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.csv-btn:hover {
+    background-color: #138496;
+    color: white;
+}
+
+.pdf-btn {
+    background-color: #dc3545;
+    color: white;
+}
+
+.pdf-btn:hover {
+    background-color: #c82333;
+    color: white;
+}
+
+.print-btn {
+    background-color: #6c757d;
+    color: white;
+}
+
+.print-btn:hover {
+    background-color: #5a6268;
+    color: white;
 }
 
 .default-table-area {

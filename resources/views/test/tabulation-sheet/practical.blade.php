@@ -151,7 +151,7 @@
                                     
                                     // Calculate grade based on marks
                                     $calculatedGrade = null;
-                                    if ($marksObtained && $totalMarks && $totalMarks > 0) {
+                                    if ($marksObtained !== null && $marksObtained !== '' && $totalMarks && $totalMarks > 0) {
                                         $percentage = ($marksObtained / $totalMarks) * 100;
                                         foreach ($gradeDefinitions as $gradeDef) {
                                             if ($percentage >= $gradeDef->from_percentage && $percentage <= $gradeDef->to_percentage) {
@@ -188,13 +188,13 @@
                                     </td>
                                     <td>
                                         @if($filterType == 'editable')
-                                            <span class="grade-display-calculated badge bg-success" 
+                                            <span class="grade-display-calculated badge {{ $calculatedGrade ? 'bg-success' : 'bg-secondary' }}" 
                                                   data-student-id="{{ $student->id }}" 
                                                   style="font-size: 12px; padding: 4px 8px;">
                                                 {{ $calculatedGrade ?? '-' }}
                                             </span>
                                         @else
-                                            <span class="grade-display badge bg-success" data-student-id="{{ $student->id }}" style="font-size: 12px; padding: 4px 8px;">
+                                            <span class="grade-display badge {{ $calculatedGrade ? 'bg-success' : 'bg-secondary' }}" data-student-id="{{ $student->id }}" style="font-size: 12px; padding: 4px 8px;">
                                                 {{ $calculatedGrade ?? '-' }}
                                             </span>
                                         @endif
@@ -578,7 +578,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const gradeDefinitions = @json($gradeDefsArray);
     
     function calculateGradeFromMarks(marks, totalMarks) {
-        if (!marks || !totalMarks || totalMarks == 0) {
+        if (marks === null || marks === undefined || Number.isNaN(marks) || !totalMarks || totalMarks == 0) {
             return null;
         }
         

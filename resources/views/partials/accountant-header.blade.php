@@ -115,59 +115,89 @@
                     </li>
                     <li class="header-right-item messages-item">
                         <div class="dropdown notifications noti messages">
+                            @php
+                                $accountantMailUnread = 0;
+                                $accountantMailMessages = collect();
+
+                                if (Auth::guard('accountant')->check()) {
+                                    $accountantUser = Auth::guard('accountant')->user();
+                                    if ($accountantUser) {
+                                        $accountantMailUnread = \App\Models\Message::where('from_type', 'accountant')
+                                            ->where('to_type', 'accountant')
+                                            ->where('to_id', $accountantUser->id)
+                                            ->whereNull('read_at')
+                                            ->count();
+
+                                        $accountantMailMessages = \App\Models\Message::where('from_type', 'accountant')
+                                            ->where('to_type', 'accountant')
+                                            ->where('to_id', $accountantUser->id)
+                                            ->whereNull('read_at')
+                                            ->orderBy('created_at', 'desc')
+                                            ->limit(10)
+                                            ->get()
+                                            ->map(function ($message) {
+                                                $accountant = \App\Models\Accountant::find($message->from_id);
+
+                                                return [
+                                                    'recipient_type' => 'accountant',
+                                                    'recipient_id' => $message->from_id,
+                                                    'sender_name' => $accountant?->name ?? 'Accountant',
+                                                    'text' => $message->text
+                                                        ? (strlen($message->text) > 50 ? substr($message->text, 0, 50) . '...' : $message->text)
+                                                        : 'Attachment sent',
+                                                    'time_ago' => $message->created_at->diffForHumans(),
+                                                ];
+                                            });
+                                    }
+                                }
+                            @endphp
                             <button class="btn btn-secondary border-0 p-0 position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <span class="material-symbols-outlined">mail</span>
-                                <span class="count bg-primary">5</span>
+                                @if($accountantMailUnread > 0)
+                                    <span class="count bg-primary">{{ $accountantMailUnread > 99 ? '99+' : $accountantMailUnread }}</span>
+                                @endif
                             </button>
                             <div class="dropdown-menu dropdown-lg p-0 border-0 p-0 dropdown-menu-end">
                                 <div class="d-flex justify-content-between align-items-center title">
-                                    <span class="fw-medium fs-16 text-secondary">Messages <span class="fw-normal text-body fs-16">(03)</span></span>
-                                    <button class="p-0 m-0 bg-transparent border-0 fs-15 text-primary fw-medium">Mark all as read</button>
-                                </div> 
-
-                                <div style="max-height: 300px;" data-simplebar>
-                                    <div class="notification-menu unseen">
-                                        <a href="{{ route('chat') }}" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/user1.jpg') }}" class="rounded-circle" style="width: 44px; height: 44px;" alt="images">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <p class="fs-16 fw-medium text-secondary mb-2">Jacob Liwiski <span class="fs-14 fw-normal text-body ms-2">35 min ago</span></p>
-                                                    <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">Hey Victor! Could you please...</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
-                                    <div class="notification-menu unseen">
-                                        <a href="{{ route('chat') }}" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/user2.jpg') }}" class="rounded-circle" style="width: 44px; height: 44px;" alt="images">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <p class="fs-16 fw-medium text-secondary mb-2">Angela Carter <span class="fs-14 fw-normal text-body ms-2">1 day ago</span></p>
-                                                    <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">How are you Angela? Would you please...</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
-                                    <div class="notification-menu">
-                                        <a href="{{ route('chat') }}" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/user3.jpg') }}" class="rounded-circle" style="width: 44px; height: 44px;" alt="images">
-                                                </div>
-                                                <div class="flex-grow-1 ms-10">
-                                                    <p class="fs-16 fw-medium text-secondary mb-2">Brad Traversy <span class="fs-14 fw-normal text-body ms-2">2 days ago</span></p>
-                                                    <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">Hey Brad Traversy! Could you please...</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
+                                    <span class="fw-medium fs-16 text-secondary">Messages <span class="fw-normal text-body fs-16">({{ $accountantMailUnread }})</span></span>
+                                    @if($accountantMailUnread > 0)
+                                        <form action="{{ route('accountant.notifications.mark-all-read') }}" method="POST" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="p-0 m-0 bg-transparent border-0 fs-15 text-primary fw-medium">Mark all as read</button>
+                                        </form>
+                                    @endif
                                 </div>
 
-                                <a href="{{ route('chat') }}" class="dropdown-item text-center text-primary d-block view-all fw-medium rounded-bottom-3">
+                                <div style="max-height: 300px;" data-simplebar>
+                                    @if($accountantMailMessages->count() > 0)
+                                        @foreach($accountantMailMessages as $message)
+                                            <div class="notification-menu unseen">
+                                                <a href="{{ route('accountant.chat', ['recipient_type' => $message['recipient_type'], 'recipient_id' => $message['recipient_id']]) }}" class="dropdown-item">
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="flex-shrink-0">
+                                                            <i class="material-symbols-outlined text-primary">mail</i>
+                                                        </div>
+                                                        <div class="flex-grow-1 ms-10">
+                                                            <p class="fs-16 fw-medium text-secondary mb-2">
+                                                                {{ $message['sender_name'] }}
+                                                                <span class="fs-14 fw-normal text-body ms-2">{{ $message['time_ago'] }}</span>
+                                                            </p>
+                                                            <span class="fs-14-5 fw-medium d-inline-block" style="line-height: 1.4;">{{ $message['text'] }}</span>
+                                                        </div>
+                                                    </div>
+                                                </a>
+                                            </div>
+                                        @endforeach
+                                    @else
+                                        <div class="notification-menu">
+                                            <div class="dropdown-item text-center py-3">
+                                                <span class="fs-14 text-muted">No new messages</span>
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
+
+                                <a href="{{ route('accountant.chat') }}" class="dropdown-item text-center text-primary d-block view-all fw-medium rounded-bottom-3">
                                     <span>See All Messages</span>
                                 </a>
                             </div>
@@ -175,31 +205,85 @@
                     </li>
                     <li class="header-right-item">
                         <div class="dropdown notifications noti">
+                            @php
+                                $accountantNotifUnread = 0;
+                                $accountantNotifications = collect();
+
+                                if (Auth::guard('accountant')->check()) {
+                                    $accountantUser = Auth::guard('accountant')->user();
+                                    if ($accountantUser) {
+                                        $accountantNotifUnread = \App\Models\Message::where('from_type', 'accountant')
+                                            ->where('to_type', 'accountant')
+                                            ->where('to_id', $accountantUser->id)
+                                            ->whereNull('read_at')
+                                            ->count();
+
+                                        $accountantNotifications = \App\Models\Message::where('from_type', 'accountant')
+                                            ->where('to_type', 'accountant')
+                                            ->where('to_id', $accountantUser->id)
+                                            ->whereNull('read_at')
+                                            ->orderBy('created_at', 'desc')
+                                            ->limit(10)
+                                            ->get()
+                                            ->map(function ($message) {
+                                                $accountant = \App\Models\Accountant::find($message->from_id);
+
+                                                return [
+                                                    'recipient_type' => 'accountant',
+                                                    'recipient_id' => $message->from_id,
+                                                    'sender_name' => $accountant?->name ?? 'Accountant',
+                                                    'text' => $message->text
+                                                        ? (strlen($message->text) > 80 ? substr($message->text, 0, 80) . '...' : $message->text)
+                                                        : 'Notification',
+                                                    'time_ago' => $message->created_at->diffForHumans(),
+                                                ];
+                                            });
+                                    }
+                                }
+                            @endphp
                             <button class="btn btn-secondary border-0 p-0 position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <span class="material-symbols-outlined">notifications</span>
-                                <span class="count">3</span>
+                                @if($accountantNotifUnread > 0)
+                                    <span class="count">{{ $accountantNotifUnread > 99 ? '99+' : $accountantNotifUnread }}</span>
+                                @endif
                             </button>
                             <div class="dropdown-menu dropdown-lg p-0 border-0 p-0 dropdown-menu-end">
                                 <div class="d-flex justify-content-between align-items-center title">
-                                    <span class="fw-medium fs-16 text-secondary">Notifications <span class="fw-normal text-body fs-16">(03)</span></span>
-                                    <button class="p-0 m-0 bg-transparent border-0 fs-15 text-primary fw-medium">Clear All</button>
-                                </div> 
-                                <div style="max-height: 300px;" data-simplebar>
-                                    <div class="notification-menu unseen">
-                                        <a href="#" class="dropdown-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <i class="material-symbols-outlined text-primary">sms</i>
-                                                </div>
-                                                <div class="flex-grow-1 ms-3">
-                                                    <p class="fs-16 fw-medium text-secondary">You have requested to withdrawal</p>
-                                                    <span class="fs-14 fw-medium">2 hrs ago</span>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
+                                    <span class="fw-medium fs-16 text-secondary">Notifications <span class="fw-normal text-body fs-16">({{ $accountantNotifUnread }})</span></span>
+                                    @if($accountantNotifUnread > 0)
+                                        <form action="{{ route('accountant.notifications.mark-all-read') }}" method="POST" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="p-0 m-0 bg-transparent border-0 fs-15 text-primary fw-medium">Mark all as read</button>
+                                        </form>
+                                    @endif
                                 </div>
-                                <a href="#" class="dropdown-item text-center text-primary d-block view-all fw-medium rounded-bottom-3">
+                                <div style="max-height: 300px;" data-simplebar>
+                                    @if($accountantNotifications->count() > 0)
+                                        @foreach($accountantNotifications as $notification)
+                                            <div class="notification-menu unseen">
+                                                <a href="{{ route('accountant.chat', ['recipient_type' => $notification['recipient_type'], 'recipient_id' => $notification['recipient_id']]) }}" class="dropdown-item">
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="flex-shrink-0">
+                                                            <i class="material-symbols-outlined text-primary">notifications</i>
+                                                        </div>
+                                                        <div class="flex-grow-1 ms-3">
+                                                            <p class="fs-16 fw-medium text-secondary mb-1">{{ $notification['sender_name'] }}</p>
+                                                            <p class="fs-14 fw-normal text-body mb-1">{{ $notification['text'] }}</p>
+                                                            <span class="fs-14 fw-medium text-muted">{{ $notification['time_ago'] }}</span>
+                                                        </div>
+                                                    </div>
+                                                </a>
+                                            </div>
+                                        @endforeach
+                                    @else
+                                        <div class="notification-menu">
+                                            <div class="dropdown-item text-center py-3">
+                                                <span class="fs-14 text-muted">No new notifications</span>
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
+                                <a href="{{ route('accountant.chat') }}" class="dropdown-item text-center text-primary d-block view-all fw-medium rounded-bottom-3">
                                     <span>See All Notifications</span>
                                 </a>
                             </div>

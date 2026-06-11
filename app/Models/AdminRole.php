@@ -30,13 +30,23 @@ class AdminRole extends Authenticatable
     ];
 
     /**
-     * Set the password attribute (hash it)
+     * Hash plain-text passwords only (avoid double-hash when controller already used Hash::make).
      */
-    public function setPasswordAttribute($value)
+    public function setPasswordAttribute($value): void
     {
-        if (!empty($value)) {
-            $this->attributes['password'] = Hash::make($value);
+        if ($value === null || $value === '') {
+            return;
         }
+
+        $value = (string) $value;
+
+        if (preg_match('/^\$2[ayb]\$.{56}$/', $value)) {
+            $this->attributes['password'] = $value;
+
+            return;
+        }
+
+        $this->attributes['password'] = Hash::make($value);
     }
 
     /**

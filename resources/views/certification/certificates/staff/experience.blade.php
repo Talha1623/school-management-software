@@ -175,13 +175,7 @@
         <div class="certificate-border">
             <!-- Header -->
             <div class="certificate-header">
-                <div class="school-logo">
-                    <img src="{{ asset('assets/images/logo-icon.png') }}" alt="School Logo" class="logo-img" onerror="this.style.display='none'">
-                </div>
                 <h1 class="school-name">{{ $schoolName }}</h1>
-                @if($schoolAddress)
-                <p class="school-address">{{ $schoolAddress }}</p>
-                @endif
             </div>
 
             <!-- Title -->

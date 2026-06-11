@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('custom_payments', function (Blueprint $table) {
             $table->id();
             $table->string('campus')->nullable();
+            $table->string('student_code')->nullable();
             $table->string('payment_title');
             $table->decimal('payment_amount', 10, 2);
             $table->string('accountant')->nullable();

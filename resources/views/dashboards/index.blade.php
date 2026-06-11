@@ -83,7 +83,7 @@
                 </div>
             </div>
             <h6 class="mb-0 text-white" style="font-size: 11px; font-weight: 500;">Days Left</h6>
-            <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">24</h5>
+            <h5 class="mb-0 text-white fw-medium" style="font-size: 14px;">{{ $daysLeft ?? 0 }}</h5>
         </div>
     </div>
     <div class="col">
@@ -162,7 +162,7 @@
                         <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">St. Monthly Attendance Award</h6>
                         <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
                             <span class="badge bg-warning" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
-                            C1-011 | Hamza - Presents: 1
+                            {{ $studentMonthlyTop->student->student_code ?? 'N/A' }} | {{ $studentMonthlyTop->student->student_name ?? 'N/A' }} - Presents: {{ $studentMonthlyTop->present_count ?? 0 }}
                         </p>
                     </div>
                 </div>
@@ -178,7 +178,7 @@
                         <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">Staff Monthly Att. Award</h6>
                         <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
                             <span class="badge bg-warning" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
-                            N/A | N/A - Presents: 0
+                            {{ $staffMonthlyTop->staff->emp_id ?? 'N/A' }} | {{ $staffMonthlyTop->staff->name ?? 'N/A' }} - Presents: {{ $staffMonthlyTop->present_count ?? 0 }}
                         </p>
                     </div>
                 </div>
@@ -194,7 +194,7 @@
                         <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">Student with Highest Dues</h6>
                         <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
                             <span class="badge bg-danger" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
-                            N/A | N/A - Due: 0.00
+                            {{ $studentWithHighestDue->student_code ?? 'N/A' }} | {{ $studentWithHighestDue->student_name ?? 'N/A' }} - Due: {{ number_format($highestDueAmount ?? 0, 2) }}
                         </p>
                     </div>
                 </div>
@@ -210,7 +210,7 @@
                         <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">Best Performance (Teacher)</h6>
                         <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
                             <span class="badge bg-warning" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
-                            N/A | N/A (N/A/N/A) - Pass St.: 0
+                            {{ $bestTeacherPerformance->staff->emp_id ?? 'N/A' }} | {{ $bestTeacherPerformance->staff->name ?? 'N/A' }} - Presents: {{ $bestTeacherPerformance->present_count ?? 0 }}
                         </p>
                     </div>
                 </div>
@@ -276,7 +276,7 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_downward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">1000</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($yearlyIncome ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Yearly Income</h6>
                     <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
@@ -287,7 +287,7 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_upward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">0</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($yearlyExpense ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Yearly Expenses</h6>
                     <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
@@ -298,7 +298,7 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">pie_chart</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">1000</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($yearlyProfit ?? 0, 2) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Profit This Year</h6>
                     <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
@@ -309,7 +309,7 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">calendar_today</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 26px;">2025-2026</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 26px;">{{ $currentSession ?? 'N/A' }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Current Session</h6>
                     <a href="{{ route('settings.general') }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">Change Session <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
@@ -686,7 +686,7 @@ function initializeCharts() {
     const admissionsChartId = document.getElementById('admissions_overview_chart');
     if (admissionsChartId) {
         var options = {
-            series: [85, 12, 2, 1],
+            series: @json($admissionsOverviewSeries),
             chart: {
                 type: 'pie',
                 height: 300
@@ -699,13 +699,13 @@ function initializeCharts() {
             dataLabels: {
                 enabled: true,
                 formatter: function(val) {
-                    return val.toFixed(0) + "%";
+                    return val.toFixed(0);
                 }
             },
             tooltip: {
                 y: {
                     formatter: function(val) {
-                        return val + "%";
+                        return val;
                     }
                 }
             }

@@ -131,6 +131,11 @@
                         <tbody>
                             @if(isset($quizzes) && $quizzes->count() > 0)
                                 @forelse($quizzes as $quiz)
+                                    @php
+                                        $startAtTz = $quiz->startAtLocal();
+                                        $quizHasStarted = $quiz->hasStarted();
+                                        $startAtTimestamp = $startAtTz ? $startAtTz->timestamp : 0;
+                                    @endphp
                                     <tr>
                                         <td>{{ $loop->iteration + (($quizzes->currentPage() - 1) * $quizzes->perPage()) }}</td>
                                         <td>
@@ -143,20 +148,15 @@
                                         <td>{{ $quiz->for_class }}</td>
                                         <td>{{ $quiz->section }}</td>
                                         <td>{{ $quiz->total_questions }}</td>
-                                        <td>{{ $quiz->start_date_time->format('d M Y H:i') }}</td>
+                                        <td>{{ $startAtTz ? $startAtTz->format('d M Y h:i A') : '—' }}</td>
                                         <td>
-                                            @php
-                                                $duration = (int) ($quiz->duration_minutes ?? 60);
-                                                $endTime = $quiz->start_date_time->copy()->addMinutes($duration);
-                                                $isCompleted = now()->greaterThan($endTime);
-                                            @endphp
-                                            @if($isCompleted)
-                                                <button type="button" class="btn btn-sm btn-success px-2 py-1" title="Check Result" onclick="openCheckResultModal({{ $quiz->id }})">
+                                            @if($quizHasStarted)
+                                                <button type="button" class="btn btn-sm btn-success px-2 py-1 quiz-table-text-btn" title="Quiz has started — view questions and marks (no editing)" onclick="openCheckResultModal({{ $quiz->id }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px;">description</span>
-                                                    Check Result
+                                                    Check the Result
                                                 </button>
                                             @else
-                                                <button type="button" class="btn btn-sm btn-warning px-2 py-1" title="Update Questions" onclick="openUpdateQuestionsModal({{ $quiz->id }}, {{ $quiz->total_questions }})">
+                                                <button type="button" class="btn btn-sm btn-warning px-2 py-1 quiz-table-text-btn" title="Update Questions" onclick="openUpdateQuestionsModal({{ $quiz->id }}, {{ $quiz->total_questions }}, {{ $startAtTimestamp }})">
                                                     <span class="material-symbols-outlined" style="font-size: 14px;">+</span>
                                                     Update Questions
                                                 </button>
@@ -164,10 +164,10 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editQuiz({{ $quiz->id }}, '{{ addslashes($quiz->campus) }}', '{{ addslashes($quiz->quiz_name) }}', '{{ addslashes($quiz->description ?? '') }}', '{{ addslashes($quiz->for_class) }}', '{{ addslashes($quiz->section) }}', {{ $quiz->total_questions }}, '{{ $quiz->start_date_time->format('Y-m-d\TH:i') }}', {{ $quiz->duration_minutes ?? 60 }})">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1 quiz-table-icon-btn" title="Edit" onclick="editQuiz({{ $quiz->id }}, '{{ addslashes($quiz->campus) }}', '{{ addslashes($quiz->quiz_name) }}', '{{ addslashes($quiz->description ?? '') }}', '{{ addslashes($quiz->for_class) }}', '{{ addslashes($quiz->section) }}', {{ $quiz->total_questions }}, '{{ $startAtTz ? $startAtTz->format('Y-m-d\TH:i') : '' }}', {{ $quiz->duration_minutes ?? 60 }})">
                                                     <span class="material-symbols-outlined">edit</span>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this quiz?')) { document.getElementById('delete-form-{{ $quiz->id }}').submit(); }">
+                                                <button type="button" class="btn btn-sm btn-danger px-2 py-1 quiz-table-icon-btn" title="Delete" onclick="if(confirm('Are you sure you want to delete this quiz?')) { document.getElementById('delete-form-{{ $quiz->id }}').submit(); }">
                                                     <span class="material-symbols-outlined">delete</span>
                                                 </button>
                                                 <form id="delete-form-{{ $quiz->id }}" action="{{ route('quiz.manage.destroy', $quiz->id) }}" method="POST" class="d-none">
@@ -562,16 +562,44 @@
     .default-table-area .btn-sm {
         font-size: 11px;
         padding: 4px 8px;
-        min-height: auto;
+        min-height: 28px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        line-height: 1;
-        height: 28px;
-        width: 28px;
+        line-height: 1.2;
+        height: auto;
+        width: auto;
         border-radius: 6px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         transition: all 0.2s ease;
+    }
+
+    /* Icon-only row actions stay square; text buttons (Check the Result / Update Questions) use natural width */
+    .default-table-area .btn-sm.quiz-table-icon-btn {
+        width: 28px;
+        min-width: 28px;
+        padding-left: 0;
+        padding-right: 0;
+        height: 28px;
+    }
+
+    .default-table-area .btn-sm.quiz-table-text-btn {
+        white-space: nowrap;
+        gap: 4px;
+        padding-left: 8px;
+        padding-right: 10px;
+        min-height: 28px;
+    }
+
+    .default-table-area .quiz-table-text-badge {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 6px 10px;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 6px;
     }
     
     .default-table-area .btn-sm:hover {
@@ -908,20 +936,53 @@ function openUpdateQuestionsModal(quizId, totalQuestions) {
     document.getElementById('updateQuestionsModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">+</span><span style="color: white;">Update Quiz Questions</span>';
     document.getElementById('updateQuestionsForm').action = '{{ route("quiz.questions.update", ":id") }}'.replace(':id', quizId);
     document.getElementById('quizIdInput').value = quizId;
-    
-    // Clear existing questions
+
+    applyQuestionsEditability(true);
+
     const questionsContainer = document.getElementById('questionsContainer');
     questionsContainer.innerHTML = '';
-    
-    // Generate question fields based on total questions
+
     for (let i = 1; i <= totalQuestions; i++) {
         addQuestionField(i);
     }
-    
-    // Load existing questions if any
-    loadQuizQuestions(quizId);
-    
-    new bootstrap.Modal(document.getElementById('updateQuestionsModal')).show();
+
+    loadQuizQuestions(quizId)
+        .then((data) => {
+            const canEdit = data?.can_edit !== false;
+            applyQuestionsEditability(canEdit);
+            const modalEl = document.getElementById('updateQuestionsModal');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        })
+        .catch((error) => {
+            console.error('Error loading questions:', error);
+            applyQuestionsEditability(true);
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('updateQuestionsModal')).show();
+        });
+}
+
+function applyQuestionsEditability(canEdit) {
+    const saveBtn = document.getElementById('updateQuestionsSaveBtn');
+    const notice = document.getElementById('updateQuestionsLockedNotice');
+    const form = document.getElementById('updateQuestionsForm');
+    document.querySelectorAll('#questionsContainer input').forEach((el) => {
+        el.readOnly = !canEdit;
+        el.disabled = !canEdit;
+        el.classList.toggle('bg-light', !canEdit);
+    });
+    document.querySelectorAll('#questionsContainer button.btn-danger').forEach((btn) => {
+        btn.disabled = !canEdit;
+    });
+    if (saveBtn) {
+        saveBtn.disabled = !canEdit;
+        saveBtn.classList.toggle('d-none', !canEdit);
+    }
+    if (notice) {
+        notice.classList.toggle('d-none', canEdit);
+    }
+    if (form) {
+        form.dataset.locked = canEdit ? '0' : '1';
+    }
 }
 
 function addQuestionField(questionNumber) {
@@ -980,8 +1041,15 @@ function removeQuestion(questionNumber) {
     }
 }
 
+document.getElementById('updateQuestionsForm')?.addEventListener('submit', function (e) {
+    if (this.dataset.locked === '1') {
+        e.preventDefault();
+        alert('This quiz has already started. Questions can no longer be updated.');
+    }
+});
+
 function loadQuizQuestions(quizId) {
-    fetch(`{{ route('quiz.questions.get', ':id') }}`.replace(':id', quizId))
+    return fetch(`{{ route('quiz.questions.get', ':id') }}`.replace(':id', quizId))
         .then(response => response.json())
         .then(data => {
             if (data.questions && data.questions.length > 0) {
@@ -994,7 +1062,7 @@ function loadQuizQuestions(quizId) {
                     const marks1Input = document.getElementById(`marks1_${questionNum}`);
                     const marks2Input = document.getElementById(`marks2_${questionNum}`);
                     const marks3Input = document.getElementById(`marks3_${questionNum}`);
-                    
+
                     if (questionInput) questionInput.value = q.question || '';
                     if (answer1Input) answer1Input.value = q.answer1 || '';
                     if (answer2Input) answer2Input.value = q.answer2 || '';
@@ -1004,9 +1072,11 @@ function loadQuizQuestions(quizId) {
                     if (marks3Input) marks3Input.value = q.marks3 || 0;
                 });
             }
+            return data;
         })
         .catch(error => {
             console.error('Error loading questions:', error);
+            throw error;
         });
 }
 
@@ -1016,9 +1086,111 @@ function openCheckResultModal(quizId) {
         .then(data => {
             const modalBody = document.getElementById('checkResultModalBody');
             modalBody.innerHTML = '';
+
+            const escapeHtml = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value === null || value === undefined || value === '' ? 'N/A' : value;
+                return div.innerHTML;
+            };
+
+            const formatMarks = (value) => {
+                const number = Number(value || 0);
+                return Number.isInteger(number) ? number : number.toFixed(2);
+            };
+
+            const quiz = data.quiz || {};
+            const students = Array.isArray(data.students) ? data.students : [];
+            const submittedCount = Number(quiz.submitted_count || students.filter(student => student.submitted).length);
+            const totalStudents = Number(quiz.total_students || students.length);
+            const pendingCount = Number(quiz.pending_count || Math.max(0, totalStudents - submittedCount));
+
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'result-summary mb-3 p-3 bg-light rounded';
+            summaryDiv.innerHTML = `
+                <h5 class="fw-bold mb-3">Quiz Result Summary</h5>
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <div class="p-2 rounded bg-white border">
+                            <div class="text-muted fs-12">Quiz</div>
+                            <div class="fw-semibold">${escapeHtml(quiz.quiz_name || 'N/A')}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-2 rounded bg-white border">
+                            <div class="text-muted fs-12">Class / Section</div>
+                            <div class="fw-semibold">${escapeHtml(`${quiz.for_class || ''} ${quiz.section ? '- ' + quiz.section : ''}`.trim())}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="p-2 rounded bg-white border">
+                            <div class="text-muted fs-12">Total Students</div>
+                            <div class="fw-semibold">${totalStudents}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="p-2 rounded bg-white border">
+                            <div class="text-muted fs-12">Submitted</div>
+                            <div class="fw-semibold text-success">${submittedCount}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="p-2 rounded bg-white border">
+                            <div class="text-muted fs-12">Pending</div>
+                            <div class="fw-semibold text-danger">${pendingCount}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            modalBody.appendChild(summaryDiv);
+
+            const studentsDiv = document.createElement('div');
+            studentsDiv.className = 'mb-3';
+            if (students.length > 0) {
+                const rows = students.map((student, index) => {
+                    const statusBadge = student.submitted
+                        ? '<span class="badge bg-success">Submitted</span>'
+                        : '<span class="badge bg-warning text-dark">Pending</span>';
+
+                    return `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${escapeHtml(student.student_code)}</td>
+                            <td>${escapeHtml(student.student_name)}</td>
+                            <td>${escapeHtml(student.father_name)}</td>
+                            <td>${escapeHtml(`${student.class || ''} ${student.section ? '- ' + student.section : ''}`.trim())}</td>
+                            <td class="text-center fw-semibold">${formatMarks(student.obtained_marks)} / ${formatMarks(student.total_marks)}</td>
+                            <td class="text-center">${statusBadge}</td>
+                            <td>${student.submitted_at ? escapeHtml(student.submitted_at) : 'N/A'}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                studentsDiv.innerHTML = `
+                    <h6 class="fw-bold mb-2">Students Marks</h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Student Code</th>
+                                    <th>Student</th>
+                                    <th>Parent</th>
+                                    <th>Class/Sec</th>
+                                    <th class="text-center">Marks</th>
+                                    <th class="text-center">Status</th>
+                                    <th>Submitted At</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                studentsDiv.innerHTML = '<p class="text-muted mb-3">No students found for this quiz class/section.</p>';
+            }
+            modalBody.appendChild(studentsDiv);
             
             if (data.questions && data.questions.length > 0) {
-                let totalMarks = 0;
                 let maxMarks = 0;
                 
                 data.questions.forEach((q, index) => {
@@ -1030,11 +1202,11 @@ function openCheckResultModal(quizId) {
                     questionDiv.className = 'question-result mb-3 p-3 border rounded';
                     questionDiv.innerHTML = `
                         <h6 class="fw-bold mb-2">Question ${questionNum}</h6>
-                        <p class="mb-2"><strong>Q:</strong> ${q.question || 'N/A'}</p>
+                        <p class="mb-2"><strong>Q:</strong> ${escapeHtml(q.question)}</p>
                         <div class="answers-section">
                             <div class="row g-2 mb-2">
                                 <div class="col-md-8">
-                                    <strong>Answer 1:</strong> ${q.answer1 || 'N/A'}
+                                    <strong>Answer 1:</strong> ${escapeHtml(q.answer1)}
                                 </div>
                                 <div class="col-md-4">
                                     <strong>Marks:</strong> ${q.marks1 || 0}
@@ -1042,7 +1214,7 @@ function openCheckResultModal(quizId) {
                             </div>
                             <div class="row g-2 mb-2">
                                 <div class="col-md-8">
-                                    <strong>Answer 2:</strong> ${q.answer2 || 'N/A'}
+                                    <strong>Answer 2:</strong> ${escapeHtml(q.answer2)}
                                 </div>
                                 <div class="col-md-4">
                                     <strong>Marks:</strong> ${q.marks2 || 0}
@@ -1050,7 +1222,7 @@ function openCheckResultModal(quizId) {
                             </div>
                             <div class="row g-2">
                                 <div class="col-md-8">
-                                    <strong>Answer 3:</strong> ${q.answer3 || 'N/A'}
+                                    <strong>Answer 3:</strong> ${escapeHtml(q.answer3)}
                                 </div>
                                 <div class="col-md-4">
                                     <strong>Marks:</strong> ${q.marks3 || 0}
@@ -1062,13 +1234,12 @@ function openCheckResultModal(quizId) {
                         </div>
                     `;
                     modalBody.appendChild(questionDiv);
-                    totalMarks += questionMarks;
                 });
                 
-                const summaryDiv = document.createElement('div');
-                summaryDiv.className = 'result-summary mt-3 p-3 bg-light rounded';
-                summaryDiv.innerHTML = `
-                    <h5 class="fw-bold mb-2">Result Summary</h5>
+                const questionsSummaryDiv = document.createElement('div');
+                questionsSummaryDiv.className = 'result-summary mt-3 p-3 bg-light rounded';
+                questionsSummaryDiv.innerHTML = `
+                    <h5 class="fw-bold mb-2">Questions Summary</h5>
                     <div class="row">
                         <div class="col-md-6">
                             <strong>Total Questions:</strong> ${data.questions.length}
@@ -1078,9 +1249,12 @@ function openCheckResultModal(quizId) {
                         </div>
                     </div>
                 `;
-                modalBody.appendChild(summaryDiv);
+                modalBody.appendChild(questionsSummaryDiv);
             } else {
-                modalBody.innerHTML = '<p class="text-muted">No questions found for this quiz.</p>';
+                const noQuestionsDiv = document.createElement('p');
+                noQuestionsDiv.className = 'text-muted';
+                noQuestionsDiv.textContent = 'No questions found for this quiz.';
+                modalBody.appendChild(noQuestionsDiv);
             }
             
             new bootstrap.Modal(document.getElementById('checkResultModal')).show();
@@ -1108,6 +1282,10 @@ function openCheckResultModal(quizId) {
                 @method('PUT')
                 <input type="hidden" id="quizIdInput" name="quiz_id" value="">
                 <div class="modal-body p-3" style="max-height: 70vh; overflow-y: auto;">
+                    <div id="updateQuestionsLockedNotice" class="alert alert-warning d-none mb-3" role="alert">
+                        <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">lock</span>
+                        This quiz has reached its Start Date &amp; Time. Questions are locked and cannot be edited or saved.
+                    </div>
                     <div id="questionsContainer">
                         <!-- Questions will be dynamically added here -->
                     </div>
@@ -1117,7 +1295,7 @@ function openCheckResultModal(quizId) {
                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
                         Close
                     </button>
-                    <button type="submit" class="btn btn-sm py-2 px-4 rounded-8 quiz-submit-btn">
+                    <button type="submit" id="updateQuestionsSaveBtn" class="btn btn-sm py-2 px-4 rounded-8 quiz-submit-btn">
                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
                         Save Questions
                     </button>
@@ -1157,7 +1335,7 @@ function openCheckResultModal(quizId) {
             <div class="modal-header p-3" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none;">
                 <h5 class="modal-title fs-15 fw-semibold mb-0 d-flex align-items-center gap-2 text-white" id="checkResultModalLabel" style="color: white !important;">
                     <span class="material-symbols-outlined" style="font-size: 20px; color: white;">description</span>
-                    <span style="color: white;">Check Result</span>
+                    <span style="color: white;">Check the Result</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>

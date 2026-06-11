@@ -46,7 +46,7 @@
                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_back</span>
                         Back
                     </button>
-                    <a href="{{ route(request()->route()->getName() === 'accountant.add-manage-expense.show' ? 'accountant.add-manage-expense.print' : 'expense-management.add.print', $managementExpense->id) }}" target="_blank" class="btn btn-sm btn-dark">
+                    <a href="{{ route(request()->route()->getName() === 'accountant.add-manage-expense.show' ? 'accountant.add-manage-expense.print' : 'expense-management.add.print', $managementExpense->id) }}?auto_print=1" target="_blank" class="btn btn-sm btn-dark">
                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
                         Print
                     </a>

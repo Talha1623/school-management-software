@@ -5,7 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -55,6 +58,7 @@ class Student extends Authenticatable
         'previous_section',
         'previous_school',
         'admission_date',
+        'status',
         'reference_remarks',
         'parent_account_id',
         'email',
@@ -103,6 +107,76 @@ class Student extends Authenticatable
     public function hasLoginAccess(): bool
     {
         return !empty($this->student_code) && !empty($this->password);
+    }
+
+    /**
+     * Tenant DBs may exist before the status column migration ran — add column on first use.
+     */
+    public static function ensureStatusColumn(): void
+    {
+        if (!Schema::hasTable('students') || Schema::hasColumn('students', 'status')) {
+            return;
+        }
+
+        try {
+            Schema::table('students', function (Blueprint $table) {
+                $table->string('status', 20)->default('active');
+            });
+
+            DB::table('students')->update(['status' => 'active']);
+        } catch (\Throwable $e) {
+            if (Schema::hasColumn('students', 'status')) {
+                return;
+            }
+
+            throw $e;
+        }
+    }
+
+    public static function hasStatusColumn(): bool
+    {
+        self::ensureStatusColumn();
+
+        return Schema::hasTable('students') && Schema::hasColumn('students', 'status');
+    }
+
+    public function isActiveStudent(): bool
+    {
+        if (!self::hasStatusColumn()) {
+            return $this->admission_date !== null;
+        }
+
+        return strtolower(trim((string) ($this->status ?? 'active'))) === 'active';
+    }
+
+    public function isInactiveStudent(): bool
+    {
+        if (!self::hasStatusColumn()) {
+            return $this->admission_date === null;
+        }
+
+        return strtolower(trim((string) ($this->status ?? 'active'))) === 'inactive';
+    }
+
+    public function scopeActive($query)
+    {
+        if (!self::hasStatusColumn()) {
+            return $query->whereNotNull('admission_date');
+        }
+
+        return $query->where(function ($q) {
+            $q->where('status', 'active')
+                ->orWhereNull('status');
+        });
+    }
+
+    public function scopeInactive($query)
+    {
+        if (!self::hasStatusColumn()) {
+            return $query->whereNull('admission_date');
+        }
+
+        return $query->where('status', 'inactive');
     }
 
     /**

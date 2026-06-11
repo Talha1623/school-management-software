@@ -62,11 +62,8 @@
                             
                             <div class="mb-1">
                                 <label for="class" class="form-label mb-0 fs-13 fw-medium">Class <span class="text-danger">*</span></label>
-                                <select class="form-select form-select-sm py-1" id="class" name="class" required style="height: 32px;">
-                                    <option value="">Select Class</option>
-                                    @foreach($classes as $classItem)
-                                        <option value="{{ $classItem->class_name ?? $classItem }}">{{ $classItem->class_name ?? $classItem }}</option>
-                                    @endforeach
+                                <select class="form-select form-select-sm py-1" id="class" name="class" required style="height: 32px;" disabled>
+                                    <option value="">Select Campus first</option>
                                 </select>
                             </div>
                         </div>
@@ -94,16 +91,9 @@
                             
                             <div class="mb-1">
                                 <label for="fee_type" class="form-label mb-0 fs-13 fw-medium">Fee Type <span class="text-danger">*</span></label>
-                                @if(isset($feeTypes) && $feeTypes->count() > 0)
-                                    <select class="form-select form-select-sm py-1" id="fee_type" name="fee_type" required style="height: 32px;">
-                                        <option value="">Select Fee Type</option>
-                                        @foreach($feeTypes as $feeType)
-                                            <option value="{{ $feeType }}">{{ $feeType }}</option>
-                                        @endforeach
-                                    </select>
-                                @else
-                                    <input type="text" class="form-control form-control-sm py-1" id="fee_type" name="fee_type" placeholder="Enter fee type (e.g., Library Fee, Sports Fee, etc.)" required style="height: 32px;">
-                                @endif
+                                <select class="form-select form-select-sm py-1" id="fee_type" name="fee_type" required style="height: 32px;">
+                                    <option value="">Select Campus first</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -114,7 +104,7 @@
                             
                             <div class="mb-1">
                                 <label for="amount" class="form-label mb-0 fs-13 fw-medium">Amount <span class="text-danger">*</span></label>
-                                <input type="number" class="form-control form-control-sm py-1" id="amount" name="amount" placeholder="Enter amount" step="0.01" min="0" required style="height: 32px;">
+                                <input type="number" class="form-control form-control-sm py-1" id="amount" name="amount" value="{{ old('amount') }}" placeholder="Enter amount" step="0.01" min="0" required style="height: 32px;">
                             </div>
                         </div>
                     </div>
@@ -204,6 +194,10 @@
 </style>
 
 <script>
+const customFeeRestoreCampus = @json(old('campus', $defaultCampus ?? ''));
+const customFeeOldFeeType = @json(old('fee_type'));
+const customFeeOldClass = @json(old('class'));
+
 document.addEventListener('DOMContentLoaded', function() {
     const classSelect = document.getElementById('class');
     const sectionSelect = document.getElementById('section');
@@ -220,31 +214,58 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Function to load fee types by campus
+    // Function to load fee types by campus (must match Fee Type rows for this campus, plus global/null campus heads)
     function loadFeeTypesByCampus(campus) {
         const feeTypeSelect = document.getElementById('fee_type');
         if (!feeTypeSelect) {
             return;
         }
 
-        // Clear existing options except the first one
-        feeTypeSelect.innerHTML = '<option value="">Select Fee Type</option>';
-
         if (!campus || campus === '') {
+            feeTypeSelect.innerHTML = '<option value="">Select Campus first</option>';
+            const amountEl = document.getElementById('amount');
+            if (amountEl) {
+                amountEl.value = '';
+            }
             return;
         }
 
-        // Fetch fee types for the selected campus
-        fetch(`{{ route('accountant.custom-fee.get-fee-types-by-campus') }}?campus=${encodeURIComponent(campus)}`)
-            .then(response => response.json())
+        feeTypeSelect.innerHTML = '<option value="">Select Fee Type</option>';
+        const amountClear = document.getElementById('amount');
+        if (amountClear && String(campus).trim() !== String(customFeeRestoreCampus || '').trim()) {
+            amountClear.value = '';
+        }
+
+        fetch(`{{ route('accountant.custom-fee.get-fee-types-by-campus') }}?campus=${encodeURIComponent(campus)}&master_only=1`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                if (data.fee_types && data.fee_types.length > 0) {
-                    data.fee_types.forEach(feeType => {
-                        const option = document.createElement('option');
-                        option.value = feeType;
-                        option.textContent = feeType;
-                        feeTypeSelect.appendChild(option);
+                const names = (data.fee_types && data.fee_types.length > 0) ? data.fee_types : [];
+                names.forEach(feeType => {
+                    const option = document.createElement('option');
+                    option.value = feeType;
+                    option.textContent = feeType;
+                    feeTypeSelect.appendChild(option);
+                });
+
+                const reuseOld = customFeeRestoreCampus && customFeeOldFeeType
+                    && String(customFeeRestoreCampus).trim() === String(campus).trim();
+                if (reuseOld && String(customFeeOldFeeType).trim() !== '') {
+                    const lowerOld = String(customFeeOldFeeType).toLowerCase().trim();
+                    const hasOld = names.some(function (ft) {
+                        return String(ft).toLowerCase().trim() === lowerOld;
                     });
+                    if (!hasOld) {
+                        const option = document.createElement('option');
+                        option.value = customFeeOldFeeType;
+                        option.textContent = customFeeOldFeeType;
+                        feeTypeSelect.appendChild(option);
+                    }
+                    feeTypeSelect.value = customFeeOldFeeType;
                 }
             })
             .catch(error => {
@@ -252,10 +273,17 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
     
-    function loadClassesForCampus() {
+    function loadClassesForCampus(opts) {
+        opts = opts || {};
+        const fromCampusPicker = opts.fromCampusPicker !== false;
         const campus = campusSelect ? campusSelect.value : '';
 
-        resetClassAndSection();
+        if (fromCampusPicker) {
+            resetClassAndSection();
+        } else if (sectionSelect) {
+            sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+            sectionSelect.disabled = true;
+        }
         loadStudents();
 
         if (!campus || !classSelect) {
@@ -263,6 +291,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         classSelect.innerHTML = '<option value="">Loading classes...</option>';
+        classSelect.disabled = false;
 
         fetch(`{{ route('accountant.custom-fee.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
             headers: {
@@ -282,6 +311,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     classSelect.appendChild(option);
                 });
                 classSelect.disabled = false;
+                if (!fromCampusPicker && customFeeOldClass) {
+                    classSelect.value = customFeeOldClass;
+                    if (classSelect.value === customFeeOldClass) {
+                        classSelect.dispatchEvent(new Event('change'));
+                    }
+                }
             } else {
                 classSelect.innerHTML = '<option value="">No classes found</option>';
             }
@@ -382,11 +417,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Initialize class/section state on load
     if (campusSelect && !campusSelect.value) {
         resetClassAndSection();
-    } else {
-        loadClassesForCampus();
+    } else if (campusSelect && campusSelect.value) {
+        loadFeeTypesByCampus(campusSelect.value);
+        loadClassesForCampus({ fromCampusPicker: false });
     }
 
     // Event listeners
@@ -402,6 +437,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (!selectedClass) {
                 sectionSelect.innerHTML = '<option value="">Select Class First</option>';
+                const amtEl = document.getElementById('amount');
+                if (amtEl) {
+                    amtEl.value = '';
+                }
                 loadStudents();
                 return;
             }
@@ -449,16 +488,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
-            loadClassesForCampus();
+            loadClassesForCampus({ fromCampusPicker: true });
             loadFeeTypesByCampus(this.value);
         });
     }
-    
-    // Load fee types on page load if campus is already selected
-    @if(old('campus') || isset($defaultCampus))
-        loadFeeTypesByCampus('{{ old('campus', $defaultCampus ?? '') }}');
-    @endif
-    
+
     // Load students on page load if all fields are already filled
     setTimeout(function() {
         const campus = campusSelect ? campusSelect.value : '';

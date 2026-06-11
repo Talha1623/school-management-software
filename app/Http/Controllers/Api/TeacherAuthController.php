@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Staff;
 use App\Models\Subject;
+use App\Services\MobileDeviceTokenService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
@@ -13,19 +14,40 @@ use Illuminate\Validation\ValidationException;
 
 class TeacherAuthController extends Controller
 {
+    public function __construct(
+        private readonly MobileDeviceTokenService $mobileDeviceTokenService,
+    ) {
+    }
+
     /**
      * Teacher Login API
-     * 
-     * @param Request $request
-     * @return JsonResponse
+     *
+     * Body:
+     * {
+     *   "email": "uzair@gmail.com",
+     *   "password": "staff",
+     *   "mobileToken": {
+     *     "deviceId": "device-uuid",
+     *     "fcmToken": "firebase-token"
+     *   }
+     * }
+     *
+     * mobileToken is optional; email + password are required.
      */
     public function login(Request $request): JsonResponse
     {
         try {
-            // Validate request
             $credentials = $request->validate([
                 'email' => ['required', 'email'],
                 'password' => ['required', 'string'],
+                'mobileToken' => ['nullable', 'array'],
+                'mobileToken.deviceId' => ['nullable', 'string', 'max:255'],
+                'mobileToken.fcmToken' => ['nullable', 'string'],
+                'mobile_token' => ['nullable', 'array'],
+                'deviceId' => ['nullable', 'string', 'max:255'],
+                'device_id' => ['nullable', 'string', 'max:255'],
+                'fcmToken' => ['nullable', 'string'],
+                'fcm_token' => ['nullable', 'string'],
             ]);
 
             // Find staff by email (case-insensitive)
@@ -78,7 +100,8 @@ class TeacherAuthController extends Controller
 
             // Check if teacher already has a stored token
             if (!empty($teacher->api_token)) {
-                // Return existing stored token
+                $this->mobileDeviceTokenService->storeForUser('teacher', (int) $teacher->id, $request);
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
@@ -95,6 +118,8 @@ class TeacherAuthController extends Controller
             // Store the token in staff table for future logins
             $teacher->api_token = $token;
             $teacher->save();
+
+            $this->mobileDeviceTokenService->storeForUser('teacher', (int) $teacher->id, $request);
 
             // Return token with success message
             return response()->json([

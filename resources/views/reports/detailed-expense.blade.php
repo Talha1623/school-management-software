@@ -13,6 +13,17 @@
             <!-- Filter Form -->
             <form action="{{ route('reports.detailed-expense') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
+                    <!-- Campus -->
+                    <div class="col-md-2">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                <option value="{{ $campus }}" {{ $filterCampus == $campus ? 'selected' : '' }}>{{ $campus }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <!-- Month -->
                     <div class="col-md-2">
                         <label for="filter_month" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Month</label>
@@ -44,7 +55,7 @@
                     <!-- Method -->
                     <div class="col-md-2">
                         <label for="filter_method" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Method</label>
-                        <select class="form-select form-select-sm" id="filter_method" name="filter_method" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_method" name="filter_method" data-selected-method="{{ $filterMethod ?? '' }}" style="height: 32px;">
                             <option value="">All Methods</option>
                             @foreach($methods as $method)
                                 <option value="{{ $method }}" {{ $filterMethod == $method ? 'selected' : '' }}>{{ $method }}</option>
@@ -63,13 +74,34 @@
             </form>
 
             <!-- Results Table -->
-            @if(request()->hasAny(['filter_month', 'filter_date', 'filter_year', 'filter_method']))
+            @if(request()->hasAny(['filter_campus', 'filter_month', 'filter_date', 'filter_year', 'filter_method']))
             <div class="mt-3">
                 <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
                         <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
                         <span>Detailed Expense Reports</span>
                     </h5>
+                </div>
+
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('reports.detailed-expense.export', ['format' => 'excel']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
+                            <span>Excel</span>
+                        </a>
+                        <a href="{{ route('reports.detailed-expense.export', ['format' => 'csv']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">table_view</span>
+                            <span>CSV</span>
+                        </a>
+                        <a href="{{ route('reports.detailed-expense.export', ['format' => 'pdf']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <a href="{{ route('reports.detailed-expense.print') }}?{{ http_build_query(array_merge(request()->except(['page']), ['auto_print' => 1])) }}" class="btn btn-sm px-2 py-1 export-btn print-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                            <span>Print</span>
+                        </a>
+                    </div>
                 </div>
 
                 <div class="default-table-area" style="margin-top: 0;">
@@ -85,7 +117,7 @@
                                     <th>Date & Time</th>
                                     <th>Description</th>
                                     <th>Method</th>
-                                    <th>Action</th>
+                                    <th class="no-print">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -101,7 +133,7 @@
                                     <td>{{ $record['date'] ? \Carbon\Carbon::parse($record['date'])->format('d M Y h:i A') : 'N/A' }}</td>
                                     <td>{{ $record['description'] ? (strlen($record['description']) > 50 ? substr($record['description'], 0, 50) . '...' : $record['description']) : 'N/A' }}</td>
                                     <td>{{ $record['method'] }}</td>
-                                    <td>
+                                    <td class="no-print">
                                         @if($record['invoice_receipt'])
                                             <a href="{{ asset('storage/' . $record['invoice_receipt']) }}" target="_blank" class="text-primary me-2">
                                                 <span class="material-symbols-outlined" style="font-size: 18px;">description</span>
@@ -139,18 +171,6 @@
                             </tfoot>
                             @endif
                         </table>
-                    </div>
-                </div>
-
-                <div class="mt-3 p-2 rounded-8" style="background: #f8f9fa; border: 1px solid #e9ecef; font-size: 13px;">
-                    <div><strong>Total Expense On Month {{ $monthLabel }}:</strong> {{ number_format($totalExpense, 2) }}</div>
-                    <div><strong>Total Income On Month {{ $monthLabel }}:</strong> {{ number_format($totalIncome, 2) }}</div>
-                    <div><strong>Profit/Loss On Month {{ $monthLabel }}:</strong>
-                        @if($profitLoss >= 0)
-                            <span class="text-success">+{{ number_format($profitLoss, 2) }}</span>
-                        @else
-                            <span class="text-danger">{{ number_format($profitLoss, 2) }}</span>
-                        @endif
                     </div>
                 </div>
             </div>
@@ -214,6 +234,87 @@
     font-size: 11px;
     padding: 4px 8px;
 }
+
+.export-btn {
+    border: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    font-size: 12px;
+}
+.excel-btn { background-color: #28a745; color: white; }
+.excel-btn:hover { background-color: #218838; color: white; }
+.csv-btn { background-color: #17a2b8; color: white; }
+.csv-btn:hover { background-color: #138496; color: white; }
+.pdf-btn { background-color: #dc3545; color: white; }
+.pdf-btn:hover { background-color: #c82333; color: white; }
+.print-btn { background-color: #6c757d; color: white; }
+.print-btn:hover { background-color: #5a6268; color: white; }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const campusSelect = document.getElementById('filter_campus');
+    const methodSelect = document.getElementById('filter_method');
+    const methodsUrl = @json(route('reports.detailed-expense.get-methods-by-campus'));
+
+    function resetMethodOptions(selectedMethod = '') {
+        if (!methodSelect) {
+            return;
+        }
+
+        methodSelect.innerHTML = '<option value="">All Methods</option>';
+        if (selectedMethod) {
+            const selectedOption = document.createElement('option');
+            selectedOption.value = selectedMethod;
+            selectedOption.textContent = selectedMethod;
+            selectedOption.selected = true;
+            methodSelect.appendChild(selectedOption);
+        }
+    }
+
+    function loadMethods(selectedMethod = '') {
+        if (!methodSelect) {
+            return;
+        }
+
+        const params = new URLSearchParams();
+        if (campusSelect && campusSelect.value) {
+            params.append('filter_campus', campusSelect.value);
+        }
+
+        fetch(methodsUrl + '?' + params.toString())
+            .then(response => response.json())
+            .then(data => {
+                const methods = Array.isArray(data.methods) ? data.methods : [];
+                methodSelect.innerHTML = '<option value="">All Methods</option>';
+
+                methods.forEach(method => {
+                    const option = document.createElement('option');
+                    option.value = method;
+                    option.textContent = method;
+                    if (selectedMethod && selectedMethod === method) {
+                        option.selected = true;
+                    }
+                    methodSelect.appendChild(option);
+                });
+            })
+            .catch(() => resetMethodOptions(selectedMethod));
+    }
+
+    if (campusSelect && !campusSelect.disabled) {
+        campusSelect.addEventListener('change', function () {
+            methodSelect.dataset.selectedMethod = '';
+            loadMethods();
+        });
+    }
+
+    loadMethods(methodSelect ? (methodSelect.dataset.selectedMethod || '') : '');
+});
+</script>
 
 @endsection

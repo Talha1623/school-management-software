@@ -10,9 +10,59 @@ use App\Models\ParentAccount;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\Schema;
 
 class ParentTestResultController extends Controller
 {
+    /**
+     * Keep only marks tied to an existing announced Test/Exam.
+     * If announcement is deleted, its marks should disappear from API.
+     */
+    private function visibleStudentMarksQuery(int $studentId): EloquentBuilder
+    {
+        $markModel = new StudentMark;
+
+        return StudentMark::query()
+            ->where($markModel->qualifyColumn('student_id'), $studentId)
+            ->where(function (EloquentBuilder $outer) use ($markModel) {
+                $outer->whereExists(function (QueryBuilder $sub) use ($markModel) {
+                    $tests = new Test;
+                    $testsTable = $tests->getTable();
+
+                    $sub->selectRaw('1')
+                        ->from($testsTable)
+                        ->whereRaw(
+                            'LOWER(TRIM(' . $tests->qualifyColumn('test_name') . ')) = LOWER(TRIM(' . $markModel->qualifyColumn('test_name') . '))'
+                        );
+
+                    if (Schema::hasColumn($testsTable, 'result_status')) {
+                        $sub->where(function (QueryBuilder $w) use ($tests) {
+                            $w->whereNull($tests->qualifyColumn('result_status'))
+                                ->orWhere($tests->qualifyColumn('result_status'), true);
+                        });
+                    }
+                })->orWhereExists(function (QueryBuilder $sub) use ($markModel) {
+                    $exams = new Exam;
+                    $examsTable = $exams->getTable();
+
+                    $sub->selectRaw('1')
+                        ->from($examsTable)
+                        ->whereRaw(
+                            'LOWER(TRIM(' . $exams->qualifyColumn('exam_name') . ')) = LOWER(TRIM(' . $markModel->qualifyColumn('test_name') . '))'
+                        );
+
+                    if (Schema::hasColumn($examsTable, 'result_status')) {
+                        $sub->where(function (QueryBuilder $w) use ($exams) {
+                            $w->whereNull($exams->qualifyColumn('result_status'))
+                                ->orWhere($exams->qualifyColumn('result_status'), true);
+                        });
+                    }
+                });
+            });
+    }
+
     /**
      * Get Test Results for Parent's Student
      * Returns: subject_name (test_name), session, subject, total, pass, obtained
@@ -105,7 +155,7 @@ class ParentTestResultController extends Controller
             // This ensures marks entered via Marks Entry are always shown
             // Don't filter by class/section here - get ALL marks for the student
             // We'll filter later if needed, but marks should show regardless of class/section match
-            $marksQuery = StudentMark::where('student_id', $studentId);
+            $marksQuery = $this->visibleStudentMarksQuery($studentId);
 
             // Filter by test_name if provided
             if ($request->filled('test_name')) {
@@ -470,29 +520,48 @@ class ParentTestResultController extends Controller
                     return empty($mark->subject) || $mark->subject === null || trim($mark->subject) === '';
                 })->first();
                 
-                // Get teacher remarks from particular mark (subject = null)
+                // Get teacher remarks:
+                // 1) Prefer particular mark row (subject = null)
+                // 2) Fallback to first non-empty subject-wise remark
                 $teacherRemarks = $particularMark ? ($particularMark->teacher_remarks ?? null) : null;
+                if (empty(trim((string) $teacherRemarks))) {
+                    $teacherRemarks = $subjectMarks
+                        ->pluck('teacher_remarks')
+                        ->first(function ($remark) {
+                            return !empty(trim((string) $remark));
+                        }) ?? null;
+                }
+                $teacherRemarks = trim((string) ($teacherRemarks ?? ''));
                 
-                // Calculate total obtained and total marks from all subject marks
-                $totalObtained = $subjectMarks->sum(function($mark) {
+                // Build subject-wise marks array (deduplicated by subject, keep latest row per subject)
+                $latestSubjectMarks = $subjectMarks
+                    ->sortByDesc('id')
+                    ->groupBy(function ($mark) {
+                        return strtolower(trim((string) ($mark->subject ?? '')));
+                    })
+                    ->map(function ($group) {
+                        return $group->first();
+                    })
+                    ->values();
+
+                // Calculate totals from deduplicated subject rows
+                $totalObtained = $latestSubjectMarks->sum(function($mark) {
                     return (float) ($mark->marks_obtained ?? 0);
                 });
                 
-                $totalMarks = $subjectMarks->sum(function($mark) {
+                $totalMarks = $latestSubjectMarks->sum(function($mark) {
                     return (float) ($mark->total_marks ?? 0);
                 });
                 
-                // Build subject-wise marks array
-                $subjects = [];
-                foreach ($subjectMarks as $mark) {
-                    $subjects[] = [
+                $subjects = $latestSubjectMarks->map(function ($mark) {
+                    return [
                         'subject' => $mark->subject ?? null,
                         'obtained' => $mark->marks_obtained ? (float) $mark->marks_obtained : null,
                         'total' => $mark->total_marks ? (float) $mark->total_marks : null,
                         'pass' => $mark->passing_marks ? (float) $mark->passing_marks : null,
                         'grade' => $mark->grade ?? null,
                     ];
-                }
+                })->values()->toArray();
                 
                 // Add result with subject-wise marks, total obtained, and teacher remarks
                 $results->push([
@@ -503,7 +572,7 @@ class ParentTestResultController extends Controller
                     'subjects' => $subjects, // Subject-wise marks array
                     'total_obtained' => round($totalObtained, 2), // Total obtained from all subjects
                     'total_marks' => round($totalMarks, 2), // Total marks from all subjects
-                    'teacher_remarks' => $teacherRemarks, // Teacher remarks from particular mark
+                    'teacher_remarks' => $teacherRemarks, // Always string (empty if not available)
                     // Legacy fields (for backward compatibility)
                     'subject' => null, // Not a single subject, it's an exam with multiple subjects
                     'total' => round($totalMarks, 2),
@@ -552,7 +621,7 @@ class ParentTestResultController extends Controller
                             'subjects' => [], // No subjects yet (no marks)
                             'total_obtained' => null,
                             'total_marks' => null,
-                            'teacher_remarks' => null,
+                            'teacher_remarks' => '',
                             // Legacy fields
                             'subject' => null,
                             'total' => null,
@@ -591,16 +660,17 @@ class ParentTestResultController extends Controller
                     // If it has subjects array with data, it has marks
                     $hasActualMarks = !empty($result['subjects']) && is_array($result['subjects']) && count($result['subjects']) > 0;
                     
-                    // If this result has actual marks from StudentMark, ALWAYS include it
-                    // (marks entered via Marks Entry should never be filtered out, even if test is in Exam table)
+                    // If this result has marks, include only when it is NOT an exam-type.
+                    // This keeps test-results aligned with web flow (tests only).
                     if ($hasActualMarks) {
+                        $isExamType = $testType !== null && strtolower(trim((string) $testType)) === 'exam';
                         \Log::info('Including mark from StudentMark (always show marks)', [
                             'test_name' => $result['exam_name'] ?? $result['subject_name'],
                             'test_type' => $testType,
                             'total_obtained' => $result['total_obtained'],
                             'total_marks' => $result['total_marks'],
                         ]);
-                        return true;
+                        return !$isExamType;
                     }
                     
                     // For announced tests without marks, filter by test_type

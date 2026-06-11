@@ -86,6 +86,20 @@
                     </div>
                 </div>
 
+                @php
+                    $canEditCombinedRemarks = $canEditCombinedRemarks ?? true;
+                    $combinedRemarksReadonly = isset($canEditCombinedRemarks) && !$canEditCombinedRemarks;
+                @endphp
+                @if(!empty($isStaffCombinedUser) && $combinedRemarksReadonly)
+                    <div class="alert alert-warning py-2 mb-3" style="font-size: 13px;">
+                        Combined result remarks are <strong>view only</strong> for you. Only the class teacher (Manage Section) can add or edit remarks.
+                    </div>
+                @elseif(!empty($isStaffCombinedUser) && !empty($canEditCombinedRemarks))
+                    <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                        You are the class teacher for this class/section — you can add or edit combined result remarks.
+                    </div>
+                @endif
+
                 <!-- Search Bar -->
                 <div class="mb-3">
                     <div class="input-group input-group-sm search-input-group" style="max-width: 400px;">
@@ -135,7 +149,7 @@
                                             <input type="text" class="form-control form-control-sm" value="{{ isset($student->combinedObtained) && $student->combinedObtained !== null ? number_format($student->combinedObtained, 2) : '0' }}" readonly style="width: 80px; text-align: center; background-color: #f8f9fa; font-weight: 500;">
                                         </td>
                                         <td>
-                                            <textarea name="remarks[{{ $student->id }}]" class="form-control form-control-sm remarks-input" placeholder="Type Teacher Remarks for {{ $student->student_name }}" rows="2" style="min-width: 300px;">{{ $student->combinedRemark->teacher_remarks ?? '' }}</textarea>
+                                            <textarea name="remarks[{{ $student->id }}]" class="form-control form-control-sm remarks-input" placeholder="{{ $combinedRemarksReadonly ? 'View only' : 'Type Teacher Remarks for ' . $student->student_name }}" rows="2" style="min-width: 300px;" @if($combinedRemarksReadonly) readonly disabled @endif>{{ optional($student->combinedRemark)->teacher_remarks ?? '' }}</textarea>
                                         </td>
                                     </tr>
                                     @empty
@@ -151,7 +165,7 @@
                                 </tbody>
                             </table>
                             
-                            @if($students->count() > 0)
+                            @if($students->count() > 0 && !$combinedRemarksReadonly)
                             <div class="text-center mt-3">
                                 <button type="submit" class="btn btn-success px-4 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none; font-weight: 500;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">thumb_up</span>

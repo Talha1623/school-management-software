@@ -7,13 +7,14 @@ use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\FeeType;
+use App\Models\AdminRole;
+use App\Models\Message;
 use App\Models\Student;
 use App\Models\StudentPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class CustomFeeController extends Controller
@@ -49,13 +50,8 @@ class CustomFeeController extends Controller
             }
         }
         
-        // Get classes from ClassModel
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
-        
-        // If no classes found, provide empty collection
-        if ($classes->isEmpty()) {
-            $classes = collect();
-        }
+        // Classes load via AJAX after campus (same as fee types) â€” avoids wrong class before campus.
+        $classes = collect();
         
         // Get sections from Section model
         $sections = Section::whereNotNull('name')
@@ -65,15 +61,20 @@ class CustomFeeController extends Controller
             ->sort()
             ->values();
         
-        // Get fee types from FeeType model
-        $feeTypes = FeeType::whereNotNull('fee_name')
-            ->distinct()
-            ->orderBy('fee_name', 'asc')
-            ->pluck('fee_name')
-            ->sort()
-            ->values();
-        
-        return view('accounting.generate-custom-fee', compact('campuses', 'classes', 'sections', 'feeTypes'));
+        // Fee types load in the view via AJAX after campus is chosen (accounting / super admin only).
+
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ];
+
+        $currentYear = (int) date('Y');
+        $years = [];
+        for ($y = $currentYear - 2; $y <= $currentYear + 5; $y++) {
+            $years[] = $y;
+        }
+
+        return view('accounting.generate-custom-fee', compact('campuses', 'classes', 'sections', 'months', 'years', 'currentYear'));
     }
 
     /**
@@ -86,243 +87,585 @@ class CustomFeeController extends Controller
             'class' => ['required', 'string', 'max:255'],
             'section' => ['nullable', 'string', 'max:255'],
             'fee_type' => ['required', 'string', 'max:255'],
+            'fee_month' => ['nullable', 'string', 'max:255'],
+            'fee_year' => ['nullable', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'min:0'],
-            'selected_students' => ['nullable', 'array'],
+            'selected_students' => ['required', 'array', 'min:1'],
             'selected_students.*' => ['exists:students,id'],
         ]);
 
-        // Check if students are selected
-        $selectedStudentIds = $request->input('selected_students', []);
+        $selectedStudentIds = array_values(array_unique(array_map('intval', $request->input('selected_students', []))));
 
-        // Determine redirect route based on which route was used (accountant or accounting)
         $isAccountantRoute = request()->route()->getName() === 'accountant.generate-custom-fee.store';
-        $redirectRoute = $isAccountantRoute 
-            ? 'accountant.generate-custom-fee' 
+        $redirectRoute = $isAccountantRoute
+            ? 'accountant.generate-custom-fee'
             : 'accounting.generate-custom-fee';
-        
-        $sectionValue = trim((string) ($validated['section'] ?? ''));
-        $sectionValue = $sectionValue !== '' ? $sectionValue : null;
 
-        $studentsQuery = Student::query()
-            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
-            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))]);
+        $paymentTitle = $this->buildCustomFeePaymentTitle(
+            $validated['fee_type'],
+            $validated['fee_month'] ?? null,
+            $validated['fee_year'] ?? null
+        );
+        $amount = round((float) $validated['amount'], 2);
 
-        if ($sectionValue !== null) {
-            $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionValue)]);
-        }
-
-        if (!empty($selectedStudentIds)) {
-            $studentsQuery->whereIn('id', $selectedStudentIds);
-        }
-
-        // Create the custom fee configuration (if it doesn't exist)
-        $customFee = CustomFee::firstOrCreate([
-            'campus' => $validated['campus'],
-            'class' => $validated['class'],
-            'section' => $sectionValue,
-            'fee_type' => $validated['fee_type'],
-        ], [
-            'amount' => $validated['amount'],
-        ]);
-
-        // Get selected students or whole class/section if none selected
-        $students = $studentsQuery->get();
+        $students = Student::whereIn('id', $selectedStudentIds)->orderBy('student_code')->get();
 
         if ($students->isEmpty()) {
             return redirect()
                 ->route($redirectRoute)
-                ->with('error', 'No students found for the selected campus, class, and section.');
+                ->with('error', 'No students found for the selected IDs.');
         }
-        
-        // Generate fee for each selected student
-        $paymentTitle = $validated['fee_type'];
-        $amount = (float) $validated['amount'];
-        $dueDate = Carbon::now()->addDays((int) 15); // Default due date
-        
+
+        $studentCodes = $students->pluck('student_code')->unique()->filter()->values();
+        $discountTotals = \App\Models\StudentDiscount::query()
+            ->whereIn('student_code', $studentCodes)
+            ->get()
+            ->groupBy('student_code')
+            ->map(function ($rows) {
+                return $rows->sum(function ($d) {
+                    return (float) ($d->discount_amount ?? 0);
+                });
+            });
+
+        $dueDate = Carbon::now()->addDays(15);
+        $accountantName = $this->resolveRecordingAccountantName();
+
         $generatedCount = 0;
-        $skippedCount = 0;
-        $generatedStudentCodes = [];
-        
+        $skippedNoCode = 0;
+        $skippedPaid = 0;
+
         foreach ($students as $student) {
-            // Skip if student doesn't have student_code
             if (empty($student->student_code)) {
-                $skippedCount++;
+                $skippedNoCode++;
                 continue;
             }
-            
-            // Check if unpaid fee already exists for this student and fee type
-            // Only skip if there's an unpaid fee (method = 'Generated' means unpaid)
-            $existingGeneratedFee = StudentPayment::where('student_code', $student->student_code)
-                ->where('payment_title', $paymentTitle)
-                ->where('method', 'Generated')
-                ->first();
-            
-            if ($existingGeneratedFee) {
-                // Check if this fee has been paid
-                $totalGenerated = (float) ($existingGeneratedFee->payment_amount ?? 0) - (float) ($existingGeneratedFee->discount ?? 0);
-                $totalPaid = StudentPayment::where('student_code', $student->student_code)
-                    ->where('payment_title', $paymentTitle)
-                    ->where('method', '!=', 'Generated')
-                    ->sum(DB::raw('COALESCE(payment_amount, 0)'));
-                
-                // Only skip if there's an unpaid balance
-                if ($totalGenerated > $totalPaid) {
-                    $skippedCount++;
-                    continue;
-                }
-                // If fee is fully paid, allow generating a new one
+
+            $result = $this->generateCustomFeeForStudent(
+                $student,
+                $paymentTitle,
+                $amount,
+                $dueDate,
+                $accountantName,
+                $validated['campus'],
+                (float) ($discountTotals->get($student->student_code, 0) ?: 0)
+            );
+
+            if ($result === 'generated') {
+                $generatedCount++;
+            } elseif ($result === 'paid') {
+                $skippedPaid++;
             }
-            
-            // Get accountant name based on guard
-            $accountantName = 'System';
-            if (auth()->guard('accountant')->check()) {
-                $accountantName = auth()->guard('accountant')->user()->name ?? 'System';
-            } elseif (auth()->guard('admin')->check()) {
-                $accountantName = auth()->guard('admin')->user()->name ?? 'System';
-            }
-            
-            // Create fee record for this student
-            StudentPayment::create([
-                'campus' => $student->campus ?? $validated['campus'],
-                'student_code' => $student->student_code,
-                'payment_title' => $paymentTitle,
-                'payment_amount' => $amount,
-                'discount' => 0,
-                'method' => 'Generated', // Indicates this is a generated fee, not actual payment
-                'payment_date' => $dueDate->format('Y-m-d'), // Due date (will be updated when payment is made)
-                'sms_notification' => 'Yes',
-                'late_fee' => 0,
-                'accountant' => $accountantName,
-            ]);
-            
-            $generatedStudentCodes[] = $student->student_code;
-            $generatedCount++;
         }
 
-        // If no fees were generated, show warning/error message
-        if ($generatedCount == 0) {
-            $message = "No fees were generated. ";
-            if ($skippedCount > 0) {
-                $message .= "All selected students were skipped (fees already exist for this fee type).";
-            } else {
-                $message .= "Selected students don't have student codes.";
+        if ($generatedCount === 0) {
+            $message = 'No fees were generated. ';
+            if ($skippedPaid > 0) {
+                $message .= "{$skippedPaid} student(s) already have this fee head fully paid (\"{$paymentTitle}\"). ";
             }
-            
+            if ($skippedNoCode > 0) {
+                $message .= "{$skippedNoCode} student(s) have no student code — assign a code first.";
+            }
+            if ($skippedPaid === 0 && $skippedNoCode === 0) {
+                $message .= 'Check that students are selected and the fee type is correct.';
+            }
+
             return redirect()
                 ->route($redirectRoute)
-                ->with('error', $message);
+                ->with('error', trim($message));
         }
 
-        // Success message only if fees were generated
+        $sectionValue = $this->normalizeSectionFilter($validated['section'] ?? null);
+
+        CustomFee::updateOrCreate(
+            [
+                'campus' => $validated['campus'],
+                'class' => $validated['class'],
+                'section' => $sectionValue,
+                'fee_type' => trim($validated['fee_type']),
+            ],
+            [
+                'amount' => $amount,
+            ]
+        );
+
+        // Fee Type dropdown uses base head only — not "Card Fees - June 2026" ledger titles.
+        FeeType::ensureExistsForCampus(trim($validated['fee_type']), $validated['campus']);
+
         $message = "Custom fee generated successfully for {$generatedCount} student(s)!";
-        if ($skippedCount > 0) {
-            $message .= " {$skippedCount} student(s) skipped (fees already exist).";
+        $skippedTotal = $skippedPaid + $skippedNoCode;
+        if ($skippedTotal > 0) {
+            $message .= " {$skippedTotal} student(s) skipped";
+            if ($skippedPaid > 0 && $skippedNoCode > 0) {
+                $message .= " ({$skippedPaid} already paid, {$skippedNoCode} without student code).";
+            } elseif ($skippedPaid > 0) {
+                $message .= ' (fee already fully paid).';
+            } else {
+                $message .= ' (no student code).';
+            }
+        }
+
+        if ($isAccountantRoute) {
+            $this->notifyAdminsAboutAccountantCustomFee($validated, $paymentTitle, $amount, $generatedCount);
         }
 
         return redirect()
             ->route($redirectRoute)
-            ->with('success', $message);
+            ->with('success', $message); 
+    }
+
+    private function notifyAdminsAboutAccountantCustomFee(array $validated, string $paymentTitle, float $amount, int $generatedCount): void
+    {
+        $accountant = auth()->guard('accountant')->user();
+        if (!$accountant) {
+            return;
+        }
+
+        $section = trim((string) ($validated['section'] ?? ''));
+        $classSection = trim($validated['class'] . ($section !== '' ? ' - ' . $section : ''));
+        $text = sprintf(
+            '%s generated custom fee "%s" (%s) for %d student(s). Campus: %s, Class: %s.',
+            $accountant->name ?? 'Accountant',
+            $paymentTitle,
+            number_format($amount, 2),
+            $generatedCount,
+            $validated['campus'],
+            $classSection
+        );
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($accountant, $text) {
+                Message::create([
+                    'from_type' => 'accountant',
+                    'from_id' => $accountant->id,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
     }
 
     /**
-     * Get fee types by campus (AJAX)
+     * Fee types for Generate Custom Fee dropdown — master + templates only (never ledger month rows).
      */
     public function getFeeTypesByCampus(Request $request): JsonResponse
     {
         $campus = $request->get('campus');
 
-        $query = FeeType::query();
+        $query = FeeType::query()->whereNotNull('fee_name')->where('fee_name', '!=', '');
+
         if ($campus) {
-            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            $campusLower = strtolower(trim((string) $campus));
+            $query->where(function ($q) use ($campusLower) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower])
+                    ->orWhereNull('campus')
+                    ->orWhereRaw('TRIM(campus) = ?', ['']);
+            });
         }
 
-        $feeTypes = $query->orderBy('fee_name', 'asc')
-            ->pluck('fee_name')
-            ->unique()
-            ->values();
+        $merged = $query->orderBy('fee_name', 'asc')->pluck('fee_name');
+
+        if ($campus && trim((string) $campus) !== '') {
+            $campusLower = strtolower(trim((string) $campus));
+            $fromCustomFee = CustomFee::query()
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower])
+                ->whereNotNull('fee_type')
+                ->where('fee_type', '!=', '')
+                ->distinct()
+                ->orderBy('fee_type')
+                ->pluck('fee_type');
+            $merged = $merged->merge($fromCustomFee);
+        }
+
+        $feeTypes = $this->feeTypesForCustomFeeDropdown($merged);
 
         return response()->json(['fee_types' => $feeTypes]);
     }
 
     /**
-     * Get sections by class name (AJAX).
+     * Saved template amount (custom_fees) for campus + class + section + fee type â€” accounting form only.
      */
-    public function getSectionsByClass(Request $request)
+    public function getCustomFeeAmount(Request $request): JsonResponse
     {
-        $className = $request->get('class');
-        $campus = $request->get('campus');
-        
-        if (!$className) {
-            return response()->json(['sections' => []]);
+        $campus = trim((string) $request->get('campus', ''));
+        $class = trim((string) $request->get('class', ''));
+        $section = trim((string) $request->get('section', ''));
+        $feeType = trim((string) $request->get('fee_type', ''));
+
+        if ($campus === '' || $class === '' || $feeType === '') {
+            return response()->json(['amount' => null]);
         }
 
-        // Get sections for the selected class
-        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
-        if ($campus) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-        }
-        $sections = $sectionsQuery
-            ->orderBy('name', 'asc')
-            ->get(['id', 'name'])
-            ->map(function($section) {
-                return [
-                    'id' => $section->id,
-                    'name' => $section->name
-                ];
-            });
+        $sectionValue = $section !== '' ? $section : null;
 
-        return response()->json(['sections' => $sections]);
+        $row = CustomFee::query()
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+            ->where(function ($q) use ($sectionValue) {
+                if ($sectionValue === null) {
+                    $q->whereNull('section')->orWhereRaw('TRIM(section) = ?', ['']);
+                } else {
+                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionValue)]);
+                }
+            })
+            ->whereRaw('LOWER(TRIM(fee_type)) = ?', [strtolower($feeType)])
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $row) {
+            return response()->json(['amount' => null]);
+        }
+
+        return response()->json(['amount' => round((float) $row->amount, 2)]);
     }
 
     /**
-     * Get students by campus, class, and section (AJAX).
+     * Get sections by class name (AJAX).
      */
-    public function getStudents(Request $request)
+    public function getSectionsByClass(Request $request): JsonResponse
+    {
+        $className = $request->get('class');
+        $campus = $request->get('campus');
+
+        if (! $className) {
+            return response()->json(['sections' => []]);
+        }
+
+        $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $className))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $campus))]);
+        }
+        $sections = $sectionsQuery
+            ->orderBy('name', 'asc')
+            ->pluck('name')
+            ->map(fn ($name) => trim((string) $name))
+            ->filter(fn ($name) => $name !== '')
+            ->unique()
+            ->values();
+
+        if ($sections->isEmpty() && $campus && $className) {
+            $sections = Student::query()
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $campus))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $className))])
+                ->whereNotNull('section')
+                ->whereRaw('TRIM(section) != ?', [''])
+                ->distinct()
+                ->orderBy('section')
+                ->pluck('section')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter(fn ($name) => $name !== '')
+                ->unique()
+                ->values();
+        }
+
+        return response()->json([
+            'sections' => $sections->map(fn ($name) => ['id' => $name, 'name' => $name])->values(),
+        ]);
+    }
+
+    /**
+     * Get students by campus, class, and section (AJAX) — same filters as store + fee status per head.
+     */
+    public function getStudents(Request $request): JsonResponse
     {
         $campus = $request->get('campus');
         $class = $request->get('class');
         $section = $request->get('section');
+        $feeType = $request->get('fee_type');
+        $feeMonth = $request->get('fee_month');
+        $feeYear = $request->get('fee_year');
 
-        if (!$campus || !$class) {
+        if (! $campus || ! $class) {
             return response()->json(['students' => []]);
         }
 
-        // Get students matching the criteria
-        $studentsQuery = Student::query();
-        
-        if ($campus) {
-            $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-        }
-        
-        if ($class) {
-            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-        }
-        
-        if ($section) {
-            // Include students with matching section OR null section (for transferred students)
-            $studentsQuery->where(function($query) use ($section) {
-                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
-                      ->orWhereNull('section')
-                      ->orWhere('section', '');
-            });
-        }
+        $paymentTitle = $feeType
+            ? $this->buildCustomFeePaymentTitle($feeType, $feeMonth, $feeYear)
+            : null;
 
-        $students = $studentsQuery->orderBy('student_code', 'asc')->get();
+        $students = $this->studentsQueryForCustomFee($campus, $class, $section)
+            ->orderBy('student_code', 'asc')
+            ->get();
 
-        // Map students
-        $studentsList = $students->map(function($student) {
-            // Get parent name
-            $parentName = $student->father_name ?? '';
+        $studentsList = $students->map(function (Student $student) use ($paymentTitle) {
+            $status = $this->customFeeStatusForStudent($student, $paymentTitle);
 
             return [
                 'id' => $student->id,
                 'student_code' => $student->student_code ?? '',
                 'student_name' => $student->student_name ?? '',
-                'parent_name' => $parentName,
+                'parent_name' => $student->father_name ?? '',
+                'section' => $student->section ?? '',
+                'has_fee_generated' => $status['has_generated'],
+                'can_generate' => $status['can_generate'],
+                'status' => $status['label'],
+                'remaining_due' => $status['remaining_due'],
             ];
         });
 
         return response()->json(['students' => $studentsList]);
+    }
+
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = $request->get('campus');
+
+        if (! $campus || trim((string) $campus) === '') {
+            return response()->json(['classes' => []]);
+        }
+
+        $campusNorm = strtolower(trim((string) $campus));
+
+        $classes = ClassModel::whereNotNull('class_name')
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+            ->distinct()
+            ->orderBy('class_name', 'asc')
+            ->pluck('class_name')
+            ->values();
+
+        if ($classes->isEmpty()) {
+            $fromStudents = Student::query()
+                ->whereNotNull('class')
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                ->distinct()
+                ->pluck('class')
+                ->sort()
+                ->values();
+            $classes = $fromStudents->isEmpty()
+                ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                : $fromStudents;
+        }
+
+        $classes = $classes->map(fn ($c) => trim((string) $c))
+            ->filter(fn ($c) => $c !== '')
+            ->unique()
+            ->sort()
+            ->values();
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    private function buildCustomFeePaymentTitle(string $feeType, ?string $feeMonth, ?string $feeYear): string
+    {
+        $feeType = $this->baseCustomFeeTypeName($feeType);
+        $month = trim((string) ($feeMonth ?? ''));
+        $year = trim((string) ($feeYear ?? ''));
+
+        if ($month !== '' && $year !== '') {
+            return "{$feeType} - {$month} {$year}";
+        }
+
+        return $feeType;
+    }
+
+    /**
+     * Dropdown shows "Card Fees", not "Card Fees - June 2026" (ledger period titles stay off the list).
+     */
+    private function baseCustomFeeTypeName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return '';
+        }
+
+        $months = 'January|February|March|April|May|June|July|August|September|October|November|December';
+        $stripped = preg_replace('/\s+-\s+(' . $months . ')\s+\d{4}$/i', '', $name);
+
+        return trim((string) ($stripped !== null && $stripped !== '' ? $stripped : $name));
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, mixed>|\Illuminate\Support\Collection<int, string>  $names
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    private function feeTypesForCustomFeeDropdown($names): \Illuminate\Support\Collection
+    {
+        return collect($names)
+            ->map(fn ($name) => $this->baseCustomFeeTypeName((string) $name))
+            ->filter(fn ($name) => $name !== '')
+            ->unique(fn ($name) => strtolower($name))
+            ->sortBy(fn ($name) => strtolower($name))
+            ->values();
+    }
+
+    private function normalizeSectionFilter(?string $section): ?string
+    {
+        $section = trim((string) ($section ?? ''));
+
+        return $section !== '' ? $section : null;
+    }
+
+    private function studentsQueryForCustomFee(string $campus, string $class, ?string $section)
+    {
+        $sectionValue = $this->normalizeSectionFilter($section);
+
+        $query = Student::query()
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+
+        if ($sectionValue !== null) {
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionValue)]);
+        }
+
+        return $query;
+    }
+
+    /**
+     * @return array{has_generated: bool, can_generate: bool, label: string, remaining_due: float}
+     */
+    private function customFeeStatusForStudent(Student $student, ?string $paymentTitle): array
+    {
+        if (empty($student->student_code)) {
+            return [
+                'has_generated' => false,
+                'can_generate' => false,
+                'label' => 'No student code',
+                'remaining_due' => 0.0,
+            ];
+        }
+
+        if ($paymentTitle === null || trim($paymentTitle) === '') {
+            return [
+                'has_generated' => false,
+                'can_generate' => true,
+                'label' => 'Ready',
+                'remaining_due' => 0.0,
+            ];
+        }
+
+        $generatedRows = StudentPayment::ledgerActive()
+            ->where('student_code', $student->student_code)
+            ->paymentTitleKey($paymentTitle)
+            ->where('method', 'Generated')
+            ->exists();
+
+        $remainingDue = StudentPayment::remainingDueForTitle($student->student_code, $paymentTitle, 0.0);
+
+        if ($remainingDue > 0.00001) {
+            return [
+                'has_generated' => $generatedRows,
+                'can_generate' => true,
+                'label' => $generatedRows ? 'Unpaid (update amount)' : 'Ready',
+                'remaining_due' => round($remainingDue, 2),
+            ];
+        }
+
+        if ($generatedRows) {
+            return [
+                'has_generated' => true,
+                'can_generate' => false,
+                'label' => 'Paid',
+                'remaining_due' => 0.0,
+            ];
+        }
+
+        $anyRow = StudentPayment::ledgerActive()
+            ->where('student_code', $student->student_code)
+            ->paymentTitleKey($paymentTitle)
+            ->exists();
+
+        return [
+            'has_generated' => false,
+            'can_generate' => ! $anyRow,
+            'label' => $anyRow ? 'Paid' : 'Ready',
+            'remaining_due' => 0.0,
+        ];
+    }
+
+    /**
+     * @return 'generated'|'paid'
+     */
+    private function generateCustomFeeForStudent(
+        Student $student,
+        string $paymentTitle,
+        float $amount,
+        Carbon $dueDate,
+        string $accountantName,
+        string $campus,
+        float $totalStudentDiscount
+    ): string {
+        $code = (string) $student->student_code;
+        $remainingDue = StudentPayment::remainingDueForTitle($code, $paymentTitle, $totalStudentDiscount);
+
+        $generatedRows = StudentPayment::ledgerActive()
+            ->where('student_code', $code)
+            ->paymentTitleKey($paymentTitle)
+            ->where('method', 'Generated')
+            ->orderByDesc('id')
+            ->get();
+
+        $canonicalTitle = $generatedRows->isNotEmpty()
+            ? (string) $generatedRows->first()->payment_title
+            : $paymentTitle;
+
+        if ($generatedRows->isNotEmpty()) {
+            if ($remainingDue <= 0.00001) {
+                return 'paid';
+            }
+
+            $latest = $generatedRows->first();
+            $latest->update([
+                'campus' => $student->campus ?? $campus,
+                'payment_title' => $canonicalTitle,
+                'payment_amount' => $amount,
+                'discount' => 0,
+                'late_fee' => 0,
+                'payment_date' => $dueDate->format('Y-m-d'),
+                'sms_notification' => 'Yes',
+                'accountant' => $accountantName,
+            ]);
+
+            $duplicateIds = $generatedRows->pluck('id')->filter(fn ($id) => (int) $id !== (int) $latest->id)->all();
+            if ($duplicateIds !== []) {
+                StudentPayment::whereIn('id', $duplicateIds)->delete();
+            }
+
+            return 'generated';
+        }
+
+        if ($remainingDue <= 0.00001) {
+            $alreadyPaid = StudentPayment::ledgerActive()
+                ->where('student_code', $code)
+                ->paymentTitleKey($paymentTitle)
+                ->whereNotIn('method', ['Generated', 'Installment'])
+                ->exists();
+
+            if ($alreadyPaid) {
+                return 'paid';
+            }
+        }
+
+        StudentPayment::create([
+            'campus' => $student->campus ?? $campus,
+            'student_code' => $code,
+            'payment_title' => $canonicalTitle,
+            'payment_amount' => $amount,
+            'discount' => 0,
+            'method' => 'Generated',
+            'payment_date' => $dueDate->format('Y-m-d'),
+            'sms_notification' => 'Yes',
+            'late_fee' => 0,
+            'accountant' => $accountantName,
+        ]);
+
+        return 'generated';
+    }
+
+    private function resolveRecordingAccountantName(): string
+    {
+        if (auth()->guard('accountant')->check()) {
+            return auth()->guard('accountant')->user()->name ?? 'System';
+        }
+        if (auth()->guard('admin')->check()) {
+            return auth()->guard('admin')->user()->name ?? 'System';
+        }
+
+        return auth()->user()->name ?? 'System';
     }
 }
 

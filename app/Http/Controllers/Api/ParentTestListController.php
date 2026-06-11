@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Test;
 use App\Models\Student;
-use App\Models\StudentMark;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -93,20 +92,8 @@ class ParentTestListController extends Controller
             // Get tests from Tests table
             $testsFromTable = $testsQuery->get();
 
-            // Get tests from StudentMarks table (where marks have been entered)
-            $marksQuery = StudentMark::whereIn('student_id', $studentIds);
-            
-            // Filter by campus if all students have same campus
-            if ($studentCampuses->count() === 1 && $studentCampuses->first()) {
-                $marksQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($studentCampuses->first()))]);
-            }
-
-            // Get unique tests from StudentMarks
-            $marksTests = $marksQuery->select('test_name', 'campus', 'class', 'section', 'subject')
-                ->distinct()
-                ->get();
-
-            // Merge tests from both sources
+            // Use only Tests table for parent test list.
+            // This prevents showing deleted/legacy tests that may still exist in StudentMark.
             $allTests = collect();
             
             // Add tests from Tests table
@@ -125,37 +112,6 @@ class ParentTestListController extends Controller
                     'section' => $test->section,
                     'result_status' => (bool) $test->result_status,
                 ]);
-            }
-
-            // Add tests from StudentMarks (if not already in Tests table)
-            foreach ($marksTests as $markTest) {
-                // Check if this test already exists in Tests table
-                $exists = $testsFromTable->first(function($test) use ($markTest) {
-                    return strtolower(trim($test->test_name)) === strtolower(trim($markTest->test_name)) &&
-                           strtolower(trim($test->for_class ?? '')) === strtolower(trim($markTest->class ?? ''));
-                });
-
-                if (!$exists) {
-                    // Try to find test in Tests table by test_name to get date and session
-                    $testFromTable = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($markTest->test_name))])
-                        ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($markTest->class ?? ''))])
-                        ->first();
-
-                    $allTests->push([
-                        'source' => 'student_marks',
-                        'id' => $testFromTable ? $testFromTable->id : null,
-                        'test_name' => $markTest->test_name,
-                        'subject' => $markTest->subject,
-                        'test_type' => $testFromTable ? $testFromTable->test_type : null,
-                        'description' => $testFromTable ? $testFromTable->description : null,
-                        'date' => $testFromTable ? $testFromTable->date : null,
-                        'session' => $testFromTable ? $testFromTable->session : null,
-                        'campus' => $markTest->campus,
-                        'class' => $markTest->class,
-                        'section' => $markTest->section,
-                        'result_status' => $testFromTable ? (bool) $testFromTable->result_status : true, // If marks exist, result is declared
-                    ]);
-                }
             }
 
             // Remove duplicates based on test_name + class combination

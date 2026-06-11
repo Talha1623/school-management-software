@@ -355,37 +355,54 @@ class TeacherHomeworkDiaryController extends Controller
                 ], 403);
             }
 
-            // Get teacher's assigned subject IDs first
-            $teacherSubjectIds = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
-                ->pluck('id')
-                ->toArray();
-
-            if (empty($teacherSubjectIds)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No subjects assigned to you. Please contact administrator.',
-                ], 403);
-            }
-
             $validated = $request->validate([
                 'campus' => ['required', 'string'],
                 'class' => ['required', 'string'],
                 'section' => ['required', 'string'],
                 'date' => ['required', 'date'],
-                'subject_id' => ['required', 'integer', 'in:' . implode(',', $teacherSubjectIds)],
+                'subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
                 'homework_content' => ['nullable', 'string'],
             ], [
-                'subject_id.in' => 'The selected subject is not assigned to you. You can only add homework for your assigned subjects.',
-                'subject_id.required' => 'Subject ID is required.',
                 'subject_id.integer' => 'Subject ID must be a valid number.',
+                'subject_id.exists' => 'Subject not found.',
             ]);
 
-            // Get subject for further use
-            $subject = Subject::findOrFail($validated['subject_id']);
+            // Check if teacher is class teacher for requested class/section/campus.
+            $isClassTeacher = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($validated['section']))])
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
+                ->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim((string) ($teacher->name ?? '')))])
+                ->exists();
 
-            // Additional security check: Verify subject is assigned to this teacher
-            // and matches the provided class, section, and campus
-            if (strtolower(trim($subject->teacher ?? '')) !== strtolower(trim($teacher->name ?? ''))) {
+            // Resolve subject for further use.
+            $subject = null;
+            if (!empty($validated['subject_id'])) {
+                $subject = Subject::find($validated['subject_id']);
+            }
+
+            // Class teacher can create homework without explicit subject_id.
+            if (!$subject && $isClassTeacher) {
+                $subject = Subject::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))])
+                    ->orderBy('subject_name', 'asc')
+                    ->first();
+            }
+
+            if (!$subject) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subject not found.',
+                    'errors' => [
+                        'subject_id' => ['Subject not found.'],
+                    ],
+                ], 422);
+            }
+
+            // Additional security check: Verify subject is assigned to this teacher.
+            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
+            $subjectTeacher = strtolower(trim((string) ($subject->teacher ?? '')));
+            if (!$isClassTeacher && $subjectTeacher !== $teacherName) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This subject is not assigned to you. You can only add homework for your assigned subjects.',
@@ -417,7 +434,7 @@ class TeacherHomeworkDiaryController extends Controller
             // Skip if homework content is empty
             if (empty($validated['homework_content'])) {
                 // Delete existing entry if content is empty
-                HomeworkDiary::where('subject_id', $validated['subject_id'])
+                HomeworkDiary::where('subject_id', $subject->id)
                     ->whereDate('date', $validated['date'])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
                     ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))])
@@ -432,7 +449,7 @@ class TeacherHomeworkDiaryController extends Controller
             // Create or update homework entry
             $homeworkDiary = HomeworkDiary::updateOrCreate(
                 [
-                    'subject_id' => $validated['subject_id'],
+                    'subject_id' => $subject->id,
                     'date' => $validated['date'],
                     'class' => $validated['class'],
                     'section' => $validated['section'],
@@ -442,6 +459,32 @@ class TeacherHomeworkDiaryController extends Controller
                     'homework_content' => $validated['homework_content'],
                 ]
             );
+
+            $currentHomework = HomeworkDiary::where('subject_id', $subject->id)
+                ->whereDate('date', $validated['date'])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))])
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            $previousHomework = HomeworkDiary::where('subject_id', $subject->id)
+                ->whereDate('date', '<', $validated['date'])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))])
+                ->orderBy('date', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            $mapHomework = static function ($entry) {
+                return [
+                    'id' => $entry->id,
+                    'homeworkContent' => $entry->homework_content,
+                    'date' => $entry->date ? $entry->date->format('Y-m-d') : null,
+                    'dateFormatted' => $entry->date ? $entry->date->format('d M Y') : null,
+                    'createdAt' => $entry->created_at ? $entry->created_at->format('Y-m-d H:i:s') : null,
+                    'createdAtFormatted' => $entry->created_at ? $entry->created_at->format('d M Y, h:i A') : null,
+                ];
+            };
 
             return response()->json([
                 'success' => true,
@@ -456,6 +499,21 @@ class TeacherHomeworkDiaryController extends Controller
                         'class' => $homeworkDiary->class,
                         'section' => $homeworkDiary->section,
                         'date' => $homeworkDiary->date->format('Y-m-d'),
+                        'date_formatted' => $homeworkDiary->date->format('d M Y'),
+                        'created_at' => $homeworkDiary->created_at ? $homeworkDiary->created_at->format('Y-m-d H:i:s') : null,
+                        'created_at_formatted' => $homeworkDiary->created_at ? $homeworkDiary->created_at->format('d M Y, h:i A') : null,
+                    ],
+                    'subject' => [
+                        'id' => $subject->id,
+                        'subjectName' => $subject->subject_name,
+                        'campus' => $subject->campus,
+                        'subjectClass' => $subject->class,
+                        'section' => $subject->section,
+                        'teacher' => $subject->teacher,
+                        'homework' => $currentHomework->map($mapHomework)->values(),
+                        'homeworkCount' => $currentHomework->count(),
+                        'previousHomework' => $previousHomework->map($mapHomework)->values(),
+                        'previousHomeworkCount' => $previousHomework->count(),
                     ],
                 ],
             ], 200);
@@ -1179,6 +1237,192 @@ class TeacherHomeworkDiaryController extends Controller
     }
 
     /**
+     * Get all assigned subjects by class/section (not limited to logged-in teacher).
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getAllAssignedSubjects(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                ], 403);
+            }
+
+            $request->validate([
+                'class' => ['required', 'string'],
+                'section' => ['nullable', 'string'],
+                'campus' => ['nullable', 'string'],
+                'date' => ['nullable', 'date'],
+            ]);
+
+            $class = trim((string) $request->get('class'));
+            $section = trim((string) $request->get('section', ''));
+            $campus = trim((string) $request->get('campus', ''));
+            $date = $request->get('date');
+            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
+
+            // Guard: teacher must be assigned to requested class context first.
+            $teacherAssignmentsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+
+            if ($section !== '') {
+                $teacherAssignmentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+            }
+
+            if ($campus !== '') {
+                $teacherAssignmentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            }
+
+            $teacherAssignments = $teacherAssignmentsQuery->get();
+
+            if ($teacherAssignments->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this class/section context.',
+                ], 403);
+            }
+
+            // If campus not provided, resolve it from teacher assignments.
+            if ($campus === '') {
+                $assignedCampuses = $teacherAssignments
+                    ->pluck('campus')
+                    ->filter(function ($value) {
+                        return trim((string) $value) !== '';
+                    })
+                    ->map(function ($value) {
+                        return trim((string) $value);
+                    })
+                    ->unique(function ($value) {
+                        return strtolower($value);
+                    })
+                    ->values();
+
+                if ($assignedCampuses->count() > 1) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Multiple campuses found for this class/section. Please provide campus.',
+                        'data' => [
+                            'available_campuses' => $assignedCampuses,
+                        ],
+                    ], 422);
+                }
+
+                $campus = $assignedCampuses->first() ?? '';
+            }
+
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereNotNull('subject_name')
+                ->whereNotNull('class');
+
+            if ($section !== '') {
+                $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+            }
+
+            if ($campus !== '') {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            }
+
+            $subjects = $subjectsQuery
+                ->orderBy('section', 'asc')
+                ->orderBy('subject_name', 'asc')
+                ->get()
+                ->unique(function ($subject) {
+                    return strtolower(trim(
+                        ($subject->subject_name ?? '') . '|' .
+                        ($subject->class ?? '') . '|' .
+                        ($subject->section ?? '') . '|' .
+                        ($subject->campus ?? '') . '|' .
+                        ($subject->teacher ?? '')
+                    ));
+                })
+                ->values();
+
+            $subjectsData = $subjects->map(function ($subject) use ($class, $section, $campus, $date) {
+                $homeworkQuery = HomeworkDiary::where('subject_id', $subject->id)
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+
+                if ($section !== '') {
+                    $homeworkQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+                }
+
+                if ($campus !== '') {
+                    $homeworkQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                }
+
+                $homeworkForDate = collect();
+                if (!empty($date)) {
+                    $homeworkForDate = (clone $homeworkQuery)
+                        ->whereDate('date', $date)
+                        ->orderBy('created_at', 'desc')
+                        ->get();
+                }
+
+                $previousHomework = (clone $homeworkQuery)
+                    ->when(!empty($date), function ($query) use ($date) {
+                        $query->whereDate('date', '<', $date);
+                    })
+                    ->orderBy('date', 'desc')
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+
+                $mapHomework = static function ($entry) {
+                    return [
+                        'id' => $entry->id,
+                        'homeworkContent' => $entry->homework_content,
+                        'date' => $entry->date ? $entry->date->format('Y-m-d') : null,
+                        'dateFormatted' => $entry->date ? $entry->date->format('d M Y') : null,
+                        'createdAt' => $entry->created_at ? $entry->created_at->format('Y-m-d H:i:s') : null,
+                        'createdAtFormatted' => $entry->created_at ? $entry->created_at->format('d M Y, h:i A') : null,
+                    ];
+                };
+
+                return [
+                    'id' => $subject->id,
+                    'subjectName' => $subject->subject_name,
+                    'campus' => $subject->campus,
+                    'subjectClass' => $subject->class,
+                    'section' => $subject->section,
+                    'teacher' => $subject->teacher,
+                    'homework' => $homeworkForDate->map($mapHomework)->values(),
+                    'homeworkCount' => $homeworkForDate->count(),
+                    'previousHomework' => $previousHomework->map($mapHomework)->values(),
+                    'previousHomeworkCount' => $previousHomework->count(),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Assigned subjects retrieved successfully',
+                'data' => [
+                    'class' => $class,
+                    'section' => $section !== '' ? $section : null,
+                    'campus' => $campus !== '' ? $campus : null,
+                    'date' => $date ?: null,
+                    'subjects' => $subjectsData,
+                    'total_subjects' => $subjectsData->count(),
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving assigned subjects: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get Subjects with Homework for Class and Section
      * Lists all subjects assigned to a specific class and section with their homework entries
      * Sirf us class aur section ke assigned subjects return karta hai, unke homework ke saath
@@ -1203,35 +1447,61 @@ class TeacherHomeworkDiaryController extends Controller
                 'class' => ['required', 'string'],
                 'section' => ['required', 'string'],
                 'date' => ['nullable', 'date'], // Optional: if provided, filter homework by date
+                'campus' => ['nullable', 'string'], // Optional: match web filter
             ]);
 
             $class = trim($request->get('class'));
             $section = trim($request->get('section'));
             $date = $request->get('date');
+            $campus = trim((string) $request->get('campus', ''));
 
-            // Get all subjects for this specific class and section only
-            // Sirf us class aur section ke subjects jo assign kiye gaye hain
-            $subjects = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+            // Always lock to a single campus context to avoid cross-campus mixing.
+            // If campus is not provided, fallback to logged-in teacher campus.
+            if ($campus === '') {
+                $campus = trim((string) ($teacher->campus ?? ''));
+            }
+
+            if ($campus === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Campus is required to fetch subjects.',
+                ], 422);
+            }
+
+            // Campus-locked class/section subjects (no cross-campus mixing).
+            // Also lock to logged-in teacher so only assigned subjects are returned.
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
                 ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)])
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)])
+                ->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
                 ->whereNotNull('subject_name')
                 ->whereNotNull('class')
-                ->whereNotNull('section')
-                ->orderBy('subject_name', 'asc')
-                ->get();
+                ->whereNotNull('section');
 
-            // Verify that all subjects belong to the requested class and section (double check)
-            $subjects = $subjects->filter(function($subject) use ($class, $section) {
+            $subjects = $subjectsQuery
+                ->orderBy('subject_name', 'asc')
+                ->get()
+                // Remove any accidental duplicates for the same subject within class/section
+                ->unique(function ($subject) {
+                    return strtolower(trim(($subject->subject_name ?? '') . '|' . ($subject->class ?? '') . '|' . ($subject->section ?? '') . '|' . ($subject->campus ?? '')));
+                })
+                ->values();
+
+            // Verify that all subjects belong to the requested class/section and teacher (double check)
+            $subjects = $subjects->filter(function($subject) use ($class, $section, $teacher) {
                 return strtolower(trim($subject->class ?? '')) === strtolower($class) 
-                    && strtolower(trim($subject->section ?? '')) === strtolower($section);
+                    && strtolower(trim($subject->section ?? '')) === strtolower($section)
+                    && strtolower(trim($subject->teacher ?? '')) === strtolower(trim($teacher->name ?? ''));
             });
 
             if ($subjects->isEmpty()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'No subjects found for class: ' . $class . ', section: ' . $section,
+                    'message' => 'No assigned subjects found for class: ' . $class . ', section: ' . $section,
                     'data' => [
                         'class' => $class,
                         'section' => $section,
+                        'campus' => $campus ?: null,
                         'subjects' => [],
                         'total_subjects' => 0,
                     ],
@@ -1244,7 +1514,8 @@ class TeacherHomeworkDiaryController extends Controller
             // Get homework entries for these subjects
             $homeworkQuery = HomeworkDiary::whereIn('subject_id', $subjectIds)
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)])
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
 
             // Filter by date if provided
             if ($date) {
@@ -1295,6 +1566,9 @@ class TeacherHomeworkDiaryController extends Controller
             if ($date) {
                 $message .= ', date: ' . $date;
             }
+            if (!empty($campus)) {
+                $message .= ', campus: ' . $campus;
+            }
 
             return response()->json([
                 'success' => true,
@@ -1303,6 +1577,7 @@ class TeacherHomeworkDiaryController extends Controller
                     'class' => $class,
                     'section' => $section,
                     'date_filter' => $date ? $date : null,
+                    'campus' => $campus ? $campus : null,
                     'subjects' => $subjectsData->values(),
                     'total_subjects' => $subjectsData->count(),
                 ],

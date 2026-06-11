@@ -2,219 +2,189 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CustomPayment;
+use App\Models\BalanceSheetSettlement;
 use App\Models\GeneralSetting;
-use App\Models\ManagementExpense;
-use App\Models\StudentPayment;
-use Illuminate\Http\RedirectResponse;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
-use Illuminate\View\View;
+use Illuminate\Support\Facades\Storage;
 
 class AccountsSettlementController extends Controller
 {
-    public function index(Request $request): View
+    private function resolveSchoolLogoUrl(?string $logoPath): ?string
     {
-        $items = collect();
-
-        $studentPayments = StudentPayment::with('student')->get();
-        foreach ($studentPayments as $payment) {
-            $studentName = $payment->student->student_name ?? 'N/A';
-            $userLabel = $payment->student_code
-                ? "{$studentName} ({$payment->student_code})"
-                : $studentName;
-            $amount = (float) $payment->payment_amount;
-            $items->push([
-                'source_type' => 'student_payment',
-                'source_id' => $payment->id,
-                'user' => $userLabel,
-                'type' => 'Income',
-                'date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
-                'income' => $amount,
-                'expense' => 0,
-                'total' => $amount,
-                'method' => $payment->method ?? 'N/A',
-                'trx' => $payment->id,
-                'remarks' => $payment->payment_title ?? 'N/A',
-            ]);
+        $logoPath = trim((string) $logoPath);
+        if ($logoPath === '') {
+            return null;
         }
 
-        $customPayments = CustomPayment::all();
-        foreach ($customPayments as $payment) {
-            $amount = (float) $payment->payment_amount;
-            $items->push([
-                'source_type' => 'custom_payment',
-                'source_id' => $payment->id,
-                'user' => $payment->accountant ?? 'N/A',
-                'type' => 'Income',
-                'date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
-                'income' => $amount,
-                'expense' => 0,
-                'total' => $amount,
-                'method' => $payment->method ?? 'N/A',
-                'trx' => $payment->id,
-                'remarks' => $payment->payment_title ?? 'N/A',
-            ]);
+        if (str_starts_with($logoPath, 'http://') || str_starts_with($logoPath, 'https://')) {
+            return $logoPath;
         }
 
-        $expenses = ManagementExpense::all();
-        foreach ($expenses as $expense) {
-            $amount = (float) $expense->amount;
-            $items->push([
-                'source_type' => 'management_expense',
-                'source_id' => $expense->id,
-                'user' => $expense->title ?? $expense->category ?? 'N/A',
-                'type' => 'Expense',
-                'date' => $expense->date ? $expense->date->format('Y-m-d') : null,
-                'income' => 0,
-                'expense' => $amount,
-                'total' => 0 - $amount,
-                'method' => $expense->method ?? 'N/A',
-                'trx' => $expense->id,
-                'remarks' => $expense->description ?? 'N/A',
-            ]);
+        if (str_starts_with($logoPath, 'storage/')) {
+            return asset($logoPath);
         }
 
-        $items = $items->sortBy('date')->values();
-
-        $balance = 0;
-        $items = $items->map(function ($item) use (&$balance) {
-            $balance += (float) $item['income'] - (float) $item['expense'];
-            $item['balance'] = $balance;
-            return $item;
-        });
-
-        if ($request->filled('search')) {
-            $search = strtolower(trim($request->search));
-            $items = $items->filter(function ($item) use ($search) {
-                return str_contains(strtolower((string) $item['user']), $search)
-                    || str_contains(strtolower((string) $item['type']), $search)
-                    || str_contains(strtolower((string) $item['remarks']), $search)
-                    || str_contains(strtolower((string) $item['method']), $search)
-                    || str_contains(strtolower((string) $item['trx']), $search);
-            })->values();
-        }
-
-        $perPage = $request->get('per_page', 10);
-        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
-        $page = LengthAwarePaginator::resolveCurrentPage();
-        $paginatedItems = new LengthAwarePaginator(
-            $items->forPage($page, $perPage),
-            $items->count(),
-            $perPage,
-            $page,
-            ['path' => $request->url(), 'query' => $request->query()]
-        );
-
-        return view('accounting.parent-wallet.accounts-settlement', [
-            'items' => $paginatedItems,
-        ]);
+        return asset('storage/' . ltrim($logoPath, '/'));
     }
 
-    public function print(Request $request): View
+    private function filteredSettlementsQuery(Request $request)
     {
-        $items = collect();
+        $query = BalanceSheetSettlement::query();
 
-        $studentPayments = StudentPayment::with('student')->get();
-        foreach ($studentPayments as $payment) {
-            $studentName = $payment->student->student_name ?? 'N/A';
-            $userLabel = $payment->student_code
-                ? "{$studentName} ({$payment->student_code})"
-                : $studentName;
-            $amount = (float) $payment->payment_amount;
-            $items->push([
-                'user' => $userLabel,
-                'type' => 'Income',
-                'date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
-                'income' => $amount,
-                'expense' => 0,
-                'total' => $amount,
-                'method' => $payment->method ?? 'N/A',
-                'trx' => $payment->id,
-                'remarks' => $payment->payment_title ?? 'N/A',
-            ]);
+        if ($request->filled('date')) {
+            $query->whereDate('settlement_date', $request->get('date'));
         }
 
-        $customPayments = CustomPayment::all();
-        foreach ($customPayments as $payment) {
-            $amount = (float) $payment->payment_amount;
-            $items->push([
-                'user' => $payment->accountant ?? 'N/A',
-                'type' => 'Income',
-                'date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
-                'income' => $amount,
-                'expense' => 0,
-                'total' => $amount,
-                'method' => $payment->method ?? 'N/A',
-                'trx' => $payment->id,
-                'remarks' => $payment->payment_title ?? 'N/A',
-            ]);
+        if ($request->filled('method')) {
+            $query->where('method', $request->get('method'));
         }
 
-        $expenses = ManagementExpense::all();
-        foreach ($expenses as $expense) {
-            $amount = (float) $expense->amount;
-            $items->push([
-                'user' => $expense->title ?? $expense->category ?? 'N/A',
-                'type' => 'Expense',
-                'date' => $expense->date ? $expense->date->format('Y-m-d') : null,
-                'income' => 0,
-                'expense' => $amount,
-                'total' => 0 - $amount,
-                'method' => $expense->method ?? 'N/A',
-                'trx' => $expense->id,
-                'remarks' => $expense->description ?? 'N/A',
-            ]);
+        return $query;
+    }
+
+    public function index(Request $request)
+    {
+        $settlements = $this->filteredSettlementsQuery($request)
+            ->latest('id')
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('accounting.parent-wallet.accounts-settlement', compact('settlements'));
+    }
+
+    public function print(Request $request)
+    {
+        $settlements = $this->filteredSettlementsQuery($request)->latest('id')->get();
+
+        $settings = GeneralSetting::getSettings();
+        $schoolName = trim((string) ($settings->school_name ?? $settings->system_name ?? config('app.name', 'School Management System')));
+        $schoolEmail = trim((string) ($settings->school_email ?? ''));
+        $schoolAddress = trim((string) ($settings->address ?? ''));
+        $schoolPhone = trim((string) ($settings->school_phone ?? ''));
+        $printNote = trim((string) ($settings->accounts_settlement_print_note ?? $settings->fee_voucher_notice ?? ''));
+        $schoolLogoUrl = $this->resolveSchoolLogoUrl($settings->logo ?? null);
+
+        return view('accounting.parent-wallet.accounts-settlement-print', compact(
+            'settlements',
+            'schoolName',
+            'schoolEmail',
+            'schoolAddress',
+            'schoolPhone',
+            'printNote',
+            'schoolLogoUrl'
+        ));
+    }
+
+    public function export(Request $request, string $format)
+    {
+        $format = strtolower(trim($format));
+        if (!in_array($format, ['csv', 'excel', 'pdf'], true)) {
+            abort(404);
         }
 
-        $items = $items->sortBy('date')->values();
+        $settlements = $this->filteredSettlementsQuery($request)->latest('id')->get();
+        $filenameDate = now()->format('Y-m-d_H-i');
 
-        $balance = 0;
-        $items = $items->map(function ($item) use (&$balance) {
-            $balance += (float) $item['income'] - (float) $item['expense'];
-            $item['balance'] = $balance;
-            return $item;
+        if ($format === 'csv') {
+            $headers = [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="accounts-settlement-' . $filenameDate . '.csv"',
+            ];
+
+            $callback = function () use ($settlements) {
+                $stream = fopen('php://output', 'w');
+                fprintf($stream, chr(0xEF) . chr(0xBB) . chr(0xBF));
+                fputcsv($stream, ['#', 'Date', 'Campus', 'User', 'Method', 'Transaction ID', 'Total Payment', 'Remarks']);
+
+                foreach ($settlements as $index => $settlement) {
+                    $user = $settlement->created_by_name ?: ($settlement->user_name === 'all' ? 'All' : $settlement->user_name);
+                    if ($settlement->created_by_type) {
+                        $user .= ' (' . $settlement->created_by_type . ')';
+                    }
+
+                    fputcsv($stream, [
+                        $index + 1,
+                        $settlement->settlement_date ? Carbon::parse($settlement->settlement_date)->format('d-m-Y') : '',
+                        $settlement->campus === 'all' ? 'All' : ucfirst((string) $settlement->campus),
+                        $user,
+                        ucwords(str_replace('_', ' ', (string) $settlement->method)),
+                        $settlement->transaction_id ?: '-',
+                        number_format((float) $settlement->total_payment, 2, '.', ''),
+                        $settlement->remarks ?: '-',
+                    ]);
+                }
+
+                fclose($stream);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        }
+
+        $rows = $settlements->map(function ($settlement, $index) {
+            $user = $settlement->created_by_name ?: ($settlement->user_name === 'all' ? 'All' : $settlement->user_name);
+            if ($settlement->created_by_type) {
+                $user .= ' (' . $settlement->created_by_type . ')';
+            }
+
+            return [
+                '#' => $index + 1,
+                'Date' => $settlement->settlement_date ? Carbon::parse($settlement->settlement_date)->format('d-m-Y') : '',
+                'Campus' => $settlement->campus === 'all' ? 'All' : ucfirst((string) $settlement->campus),
+                'User' => $user,
+                'Method' => ucwords(str_replace('_', ' ', (string) $settlement->method)),
+                'Transaction ID' => $settlement->transaction_id ?: '-',
+                'Total Payment' => number_format((float) $settlement->total_payment, 2),
+                'Remarks' => $settlement->remarks ?: '-',
+            ];
         });
 
-        if ($request->filled('search')) {
-            $search = strtolower(trim((string) $request->get('search')));
-            $items = $items->filter(function ($item) use ($search) {
-                return str_contains(strtolower((string) $item['user']), $search)
-                    || str_contains(strtolower((string) $item['type']), $search)
-                    || str_contains(strtolower((string) $item['remarks']), $search)
-                    || str_contains(strtolower((string) $item['method']), $search)
-                    || str_contains(strtolower((string) $item['trx']), $search);
-            })->values();
+        $html = view('accounting.parent-wallet.accounts-settlement-export-excel', ['rows' => $rows])->render();
+
+        if ($format === 'excel') {
+            return response($html, 200, [
+                'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="accounts-settlement-' . $filenameDate . '.xls"',
+            ]);
         }
 
         $settings = GeneralSetting::getSettings();
+        $schoolName = trim((string) ($settings->school_name ?? $settings->system_name ?? config('app.name', 'School Management System')));
+        $schoolEmail = trim((string) ($settings->school_email ?? ''));
+        $schoolAddress = trim((string) ($settings->address ?? ''));
+        $schoolPhone = trim((string) ($settings->school_phone ?? ''));
+        $printNote = trim((string) ($settings->accounts_settlement_print_note ?? $settings->fee_voucher_notice ?? ''));
+        $schoolLogoUrl = $this->resolveSchoolLogoUrl($settings->logo ?? null);
 
-        return view('accounting.parent-wallet.accounts-settlement-print', [
-            'items' => $items,
-            'settings' => $settings,
-            'printedAt' => now()->format('d M Y, h:i A'),
-        ]);
+        $pdf = Pdf::loadView('accounting.parent-wallet.accounts-settlement-pdf', [
+            'settlements' => $settlements,
+            'schoolName' => $schoolName,
+            'schoolEmail' => $schoolEmail,
+            'schoolAddress' => $schoolAddress,
+            'schoolPhone' => $schoolPhone,
+            'printNote' => $printNote,
+            'schoolLogoUrl' => $schoolLogoUrl,
+            'printedAt' => now()->format('d-m-Y H:i'),
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('accounts-settlement-' . $filenameDate . '.pdf');
     }
 
-    public function destroy(Request $request, string $type, int $id): RedirectResponse
+    public function destroy(string $type, int $id)
     {
-        try {
-            if ($type === 'student_payment') {
-                StudentPayment::where('id', $id)->delete();
-            } elseif ($type === 'custom_payment') {
-                CustomPayment::where('id', $id)->delete();
-            } elseif ($type === 'management_expense') {
-                ManagementExpense::where('id', $id)->delete();
-            }
-
-            return redirect()
-                ->route('accounting.parent-wallet.accounts-settlement')
-                ->with('success', 'Record deleted successfully.');
-        } catch (\Exception $e) {
-            return redirect()
-                ->route('accounting.parent-wallet.accounts-settlement')
-                ->with('error', 'Failed to delete record: ' . $e->getMessage());
+        if ($type !== 'balance-sheet') {
+            return back()->with('error', 'Invalid settlement type selected.');
         }
+
+        $settlement = BalanceSheetSettlement::findOrFail($id);
+
+        if (!empty($settlement->receipt_path) && Storage::disk('public')->exists($settlement->receipt_path)) {
+            Storage::disk('public')->delete($settlement->receipt_path);
+        }
+
+        $settlement->delete();
+
+        return back()->with('success', 'Settlement deleted successfully.');
     }
 }

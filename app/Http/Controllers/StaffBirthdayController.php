@@ -20,9 +20,10 @@ class StaffBirthdayController extends Controller
      */
     public function index(): View
     {
-        $staff = $this->getStaffData();
+        $todayDate = Carbon::today();
+        $staff = $this->getStaffData($todayDate);
 
-        return view('staff.birthday', compact('staff'));
+        return view('staff.birthday', compact('staff', 'todayDate'));
     }
 
     /**
@@ -188,34 +189,19 @@ class StaffBirthdayController extends Controller
     }
 
     /**
-     * Get staff data - only show staff with birthdays today
+     * Get staff whose birthday is today only (month + day match, year ignored).
      */
-    private function getStaffData()
+    private function getStaffData(?Carbon $today = null)
     {
-        $today = Carbon::today();
-        $todayMonth = $today->month;
-        $todayDay = $today->day;
+        $today = $today ?? Carbon::today();
 
-        // Get all staff with birthdays and filter to only today's birthdays
         $staffMembers = Staff::whereNotNull('birthday')
-            ->get()
-            ->filter(function (Staff $member) use ($today, $todayMonth, $todayDay) {
-                if (!$member->birthday) {
-                    return false;
-                }
-                
-                $birthday = Carbon::parse($member->birthday);
-                // Check if month and day match today (ignoring year)
-                return $birthday->month == $todayMonth && $birthday->day == $todayDay;
-            })
-            ->values();
+            ->whereMonth('birthday', $today->month)
+            ->whereDay('birthday', $today->day)
+            ->orderBy('name')
+            ->get();
 
-        return $staffMembers->map(function (Staff $member) use ($today) {
-            $birthday = $member->birthday ? Carbon::parse($member->birthday) : null;
-            $status = 'Today'; // All shown are today's birthdays
-            $wish = 'Sent';
-            $birthdayCard = 'Sent';
-
+        return $staffMembers->map(function (Staff $member) {
             return [
                 'id' => $member->id,
                 'emp_code' => $member->emp_id ?? 'N/A',
@@ -224,9 +210,9 @@ class StaffBirthdayController extends Controller
                 'campus' => $member->campus ?? 'N/A',
                 'designation' => $member->designation ?? 'N/A',
                 'birthday' => $member->birthday ? $member->birthday->format('Y-m-d') : null,
-                'status' => $status,
-                'birthday_card' => $birthdayCard,
-                'wish' => $wish,
+                'status' => 'Today',
+                'birthday_card' => 'Sent',
+                'wish' => 'Sent',
                 'picture' => $member->photo ? Storage::url($member->photo) : null,
                 'phone' => $member->whatsapp ?? $member->phone,
             ];

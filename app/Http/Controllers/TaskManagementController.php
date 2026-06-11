@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Task;
 use App\Models\AdminRole;
 use App\Models\Accountant;
+use App\Models\Message;
 use App\Models\Staff;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,6 +15,39 @@ use Illuminate\Support\Facades\Auth;
 
 class TaskManagementController extends Controller
 {
+    private function notifyAdminsAboutAccountantTaskStatus(Task $task, string $status): void
+    {
+        $accountant = Auth::guard('accountant')->user();
+        if (!$accountant) {
+            return;
+        }
+
+        $text = sprintf(
+            '%s updated task "%s" status to %s. Assigned to: %s.',
+            $accountant->name ?? 'Accountant',
+            $task->task_title ?? 'Task',
+            $status,
+            $task->assign_to ?? 'N/A'
+        );
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($accountant, $text) {
+                Message::create([
+                    'from_type' => 'accountant',
+                    'from_id' => $accountant->id,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
+    }
+
     /**
      * Display a listing of tasks.
      */
@@ -225,6 +259,7 @@ class TaskManagementController extends Controller
             
             // Refresh the task to get updated status
             $task->refresh();
+            $this->notifyAdminsAboutAccountantTaskStatus($task, $status);
 
             return response()->json([
                 'success' => true,

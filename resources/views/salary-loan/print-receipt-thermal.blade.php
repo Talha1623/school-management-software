@@ -193,7 +193,11 @@
             $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
             $isPerHour = $salaryType === 'per hour';
             $isPerLecture = $salaryType === 'lecture';
-            $isFullTime = !$isPerHour && !$isPerLecture;
+            $generatedDisplay = (float) ($salary->salary_generated ?? 0);
+            $netPayable = max(0, $generatedDisplay - (float) ($salary->loan_repayment ?? 0));
+            $amountPaidDisplay = ((string) ($salary->status ?? '') === 'Paid' && (float) ($salary->amount_paid ?? 0) <= 0)
+                ? $netPayable
+                : (float) ($salary->amount_paid ?? 0);
         @endphp
 
         @if($isPerHour && isset($attendanceSummary['total_minutes']))
@@ -239,33 +243,33 @@
 
         <div class="flex-row">
             <span>Basic Salary:</span>
-            <span>₹{{ number_format($salary->basic ?? 0, 2) }}</span>
+            <span>{{ number_format($salary->basic ?? 0, 2) }}</span>
         </div>
 
         @if(($salary->bonus_amount ?? 0) > 0)
         <div class="flex-row">
             <span>Bonus:</span>
-            <span>+ ₹{{ number_format($salary->bonus_amount ?? 0, 2) }}</span>
+            <span>+ {{ number_format($salary->bonus_amount ?? 0, 2) }}</span>
         </div>
         @endif
 
         @if(($salary->deduction_amount ?? 0) > 0)
         <div class="flex-row">
             <span>Deduction:</span>
-            <span>- ₹{{ number_format($salary->deduction_amount ?? 0, 2) }}</span>
+            <span>- {{ number_format($salary->deduction_amount ?? 0, 2) }}</span>
         </div>
         @endif
 
         @if($salary->loan_repayment > 0)
         <div class="flex-row">
             <span>Loan Repayment:</span>
-            <span>- ₹{{ number_format($salary->loan_repayment ?? 0, 2) }}</span>
+            <span>- {{ number_format($salary->loan_repayment ?? 0, 2) }}</span>
         </div>
         @endif
 
         <div class="flex-row" style="border-top: 1px dashed #000; margin-top: 4px; padding-top: 4px; font-weight: bold;">
             <span>Salary Generated:</span>
-            <span>₹{{ number_format($salary->salary_generated ?? 0, 2) }}</span>
+            <span>{{ number_format($generatedDisplay, 2) }}</span>
         </div>
 
         <div class="divider"></div>
@@ -279,7 +283,7 @@
 
         <div class="total-box">
             <span>Amount Paid:</span>
-            <span>₹{{ number_format($salary->amount_paid ?? 0, 2) }}</span>
+            <span>{{ number_format($amountPaidDisplay, 2) }}</span>
         </div>
     </div>
 

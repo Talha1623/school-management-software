@@ -431,30 +431,28 @@ class AdmissionInquiryController extends Controller
             // Handle parent account
             $parentAccountId = null;
             $createParentAccount = $request->input('create_parent_account', '0') == '1';
-            
-            if ($createParentAccount) {
-                // Check for existing parent account by ID card (if provided)
-                $existingParent = null;
-                if (!empty($validated['father_id_card'])) {
-                    // Normalize ID card
-                    $idCard = trim($validated['father_id_card']);
-                    $normalizedIdCard = str_replace(['-', ' ', '_', '.', '/'], '', strtolower($idCard));
-                    
-                    // Find existing parent account
-                    $existingParent = ParentAccount::where(function($query) use ($idCard, $normalizedIdCard) {
-                        $query->whereRaw('LOWER(TRIM(id_card_number)) = ?', [strtolower($idCard)])
-                            ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) = ?', [$normalizedIdCard]);
-                    })->first();
-                }
-                
-                // Also check by email if provided
-                if (!$existingParent && !empty($validated['father_email'])) {
-                    $existingParent = ParentAccount::where('email', $validated['father_email'])->first();
-                }
-                
-                if ($existingParent) {
-                    $parentAccountId = $existingParent->id;
-                } else {
+
+            // Always check existing parent account first (even when create_parent_account = No),
+            // so newly admitted students get linked with the correct existing parent.
+            $existingParent = null;
+            if (!empty($validated['father_id_card'])) {
+                $idCard = trim($validated['father_id_card']);
+                $normalizedIdCard = str_replace(['-', ' ', '_', '.', '/'], '', strtolower($idCard));
+
+                $existingParent = ParentAccount::where(function($query) use ($idCard, $normalizedIdCard) {
+                    $query->whereRaw('LOWER(TRIM(id_card_number)) = ?', [strtolower($idCard)])
+                        ->orWhereRaw('LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) = ?', [$normalizedIdCard]);
+                })->first();
+            }
+
+            // Fallback lookup by email when ID card is missing or no match found.
+            if (!$existingParent && !empty($validated['father_email'])) {
+                $existingParent = ParentAccount::where('email', $validated['father_email'])->first();
+            }
+
+            if ($existingParent) {
+                $parentAccountId = $existingParent->id;
+            } elseif ($createParentAccount) {
                     // Create new parent account
                     // Generate unique email if not provided or if provided email already exists
                     $parentEmail = $validated['father_email'] ?? null;
@@ -494,7 +492,6 @@ class AdmissionInquiryController extends Controller
                         ]);
                         // Continue without parent account ID
                     }
-                }
             }
             
             // Prepare student data (same structure as main Admit Student page)
@@ -591,15 +588,15 @@ class AdmissionInquiryController extends Controller
                 $accountantName = auth()->guard('admin')->user()->name ?? 'System';
             }
             
-            // Parse admission date for fee generation
-            $admissionDate = !empty($validated['admission_date'])
-                ? Carbon::parse($validated['admission_date'])
-                : Carbon::now();
-            $defaultDueDate = $admissionDate->copy()->addDays(15)->format('Y-m-d');
-            
+            // Billing date on generated stubs: align with actual admission record time, not inquiry's
+            // admission_date (+15 days), which produced prior-month dues (e.g. April 30) while converting in May.
+            $generatedFeeBillingDate = $student->created_at
+                ? Carbon::parse($student->created_at)->toDateString()
+                : Carbon::now()->toDateString();
+
             // Generate admission fees if requested (same as main Admit Student page)
             if (!empty($student->student_code)) {
-                $this->createGeneratedAdmissionFees($student, $validated, $defaultDueDate, $accountantName);
+                $this->createGeneratedAdmissionFees($student, $validated, $generatedFeeBillingDate, $accountantName);
             }
             
             // Remove any auto-generated monthly fees again after all fee generation
@@ -728,6 +725,20 @@ class AdmissionInquiryController extends Controller
                 $student,
                 $title,
                 $otherAmount,
+                $dueDate,
+                $accountantName
+            );
+        }
+
+        $transportRoute = trim((string) ($student->transport_route ?? ''));
+        $transportFare = (float) ($student->transport_fare ?? 0);
+        if ($transportRoute !== '' && $transportFare > 0.00001) {
+            $billing = Carbon::parse($dueDate);
+            $transportTitle = 'Transport Fee - ' . $billing->format('F') . ' ' . $billing->format('Y');
+            $this->createGeneratedFeeRecord(
+                $student,
+                $transportTitle,
+                $transportFare,
                 $dueDate,
                 $accountantName
             );

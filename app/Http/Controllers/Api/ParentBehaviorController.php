@@ -116,65 +116,68 @@ class ParentBehaviorController extends Controller
     public function records(Request $request): JsonResponse
     {
         $user = $request->user();
-        
-        // Ensure the authenticated user is a ParentAccount
-        if (!$user instanceof ParentAccount) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized. This endpoint is only for parent accounts.',
-                'token' => null,
-            ], 403);
-        }
-        
-        $parent = $user;
+        $requestedStudentId = $request->filled('student_id') ? (int) $request->student_id : null;
 
-        // Optional filter: specific student_id (must belong to this parent)
-        if ($request->filled('student_id')) {
-            $studentId = (int) $request->student_id;
-            
-            // Verify the student belongs to this parent
-            $student = Student::where('id', $studentId)
-                ->where('parent_account_id', $parent->id)
-                ->first();
-            
-            if (!$student) {
+        if ($user instanceof ParentAccount) {
+            $parent = $user;
+            $studentIds = $parent->students()->pluck('id');
+
+            if ($studentIds->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No students connected to this parent.',
+                    'data' => [
+                        'student' => null,
+                        'records' => [],
+                        'pagination' => [
+                            'current_page' => 1,
+                            'last_page' => 1,
+                            'per_page' => 10,
+                            'total' => 0,
+                            'from' => null,
+                            'to' => null,
+                        ],
+                    ],
+                    'token' => $request->user()?->currentAccessToken()?->token ?? null,
+                ], 200);
+            }
+
+            if ($requestedStudentId && !$studentIds->contains($requestedStudentId)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'You are not allowed to view this student\'s behavior.',
                     'token' => null,
                 ], 403);
             }
-        }
 
-        // All student IDs for this parent
-        $studentIds = $parent->students()->pluck('id');
+            $targetStudent = $requestedStudentId
+                ? Student::where('id', $requestedStudentId)->first()
+                : Student::whereIn('id', $studentIds->toArray())->orderBy('id', 'asc')->first();
 
-        if ($studentIds->isEmpty()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'No students connected to this parent.',
-                'data' => [
-                    'records' => [],
-                    'pagination' => [
-                        'current_page' => 1,
-                        'last_page' => 1,
-                        'per_page' => 10,
-                        'total' => 0,
-                        'from' => null,
-                        'to' => null,
-                    ],
-                ],
-            ], 200);
-        }
+            $query = BehaviorRecord::query()->whereIn('student_id', $studentIds->toArray());
+            if ($requestedStudentId) {
+                $query->where('student_id', $requestedStudentId);
+            }
+        } else {
+            // Web-like fallback: allow direct lookup by student_id without parent token.
+            if (!$requestedStudentId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthenticated. Please provide token or student_id.',
+                    'token' => null,
+                ], 401);
+            }
 
-        $query = BehaviorRecord::query();
+            $targetStudent = Student::find($requestedStudentId);
+            if (!$targetStudent) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student not found.',
+                    'token' => null,
+                ], 404);
+            }
 
-        // Restrict to only this parent's students
-        $query->whereIn('student_id', $studentIds->toArray());
-
-        // Apply student_id filter if provided
-        if ($request->filled('student_id')) {
-            $query->where('student_id', (int) $request->student_id);
+            $query = BehaviorRecord::query()->where('student_id', $requestedStudentId);
         }
 
         // Optional filter: type
@@ -220,11 +223,14 @@ class ParentBehaviorController extends Controller
                 'student_id' => $record->student_id,
                 'student_name' => $record->student_name,
                 'type' => $record->type,
+                'category' => $record->category ?? '',
                 'points' => $record->points, // -2, -1, 0, +1, +2 (teacher ne jo save kiya)
+                'points_display' => ((int) $record->points > 0 ? '+' : '') . (string) ((int) $record->points),
                 'class' => $record->class,
                 'section' => $record->section,
                 'campus' => $record->campus,
                 'date' => $record->date ? $record->date->format('Y-m-d') : null,
+                'date_formatted' => $record->date ? $record->date->format('d-m-Y') : null,
                 'description' => $record->description, // e.g. "+2 Points" / "-1 Points"
                 'recorded_by' => $record->recorded_by,
                 'created_at' => $record->created_at ? $record->created_at->format('Y-m-d H:i:s') : null,
@@ -234,8 +240,26 @@ class ParentBehaviorController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Behavior records loaded successfully.',
-            'data' => $recordsData,
-            'token' => $request->user()->currentAccessToken()->token ?? null,
+            'data' => [
+                'student' => $targetStudent ? [
+                    'id' => $targetStudent->id,
+                    'name' => $targetStudent->student_name,
+                    'student_code' => $targetStudent->student_code,
+                    'class' => $targetStudent->class,
+                    'section' => $targetStudent->section,
+                    'campus' => $targetStudent->campus,
+                ] : null,
+                'records' => $recordsData->values()->all(),
+                'pagination' => [
+                    'current_page' => $records->currentPage(),
+                    'last_page' => $records->lastPage(),
+                    'per_page' => $records->perPage(),
+                    'total' => $records->total(),
+                    'from' => $records->firstItem(),
+                    'to' => $records->lastItem(),
+                ],
+            ],
+            'token' => $request->user()?->currentAccessToken()?->token ?? null,
         ], 200);
     }
 }

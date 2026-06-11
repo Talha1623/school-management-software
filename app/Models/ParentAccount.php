@@ -18,6 +18,7 @@ class ParentAccount extends Authenticatable
         'name',
         'email',
         'password',
+        'plain_password',
         'phone',
         'whatsapp',
         'id_card_number',
@@ -56,6 +57,26 @@ class ParentAccount extends Authenticatable
     public function students()
     {
         return $this->hasMany(Student::class, 'parent_account_id');
+    }
+
+    public function displayPassword(): string
+    {
+        $plain = $this->plain_password ?? null;
+
+        return $plain !== null && $plain !== '' ? (string) $plain : 'parent';
+    }
+
+    public function hasPlaceholderEmail(): bool
+    {
+        $email = strtolower(trim((string) ($this->email ?? '')));
+
+        if ($email === '') {
+            return true;
+        }
+
+        return str_contains($email, '@placeholder.')
+            || str_ends_with($email, '@parent.local')
+            || str_ends_with($email, '@noemail.local');
     }
 }
 

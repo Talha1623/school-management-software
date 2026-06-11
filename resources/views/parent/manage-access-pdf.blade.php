@@ -58,6 +58,7 @@
                 <th>ID</th>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Password</th>
                 <th>Phone</th>
                 <th>WhatsApp</th>
                 <th>ID Card Number</th>
@@ -72,6 +73,7 @@
                     <td>{{ $parent->id }}</td>
                     <td>{{ $parent->name }}</td>
                     <td>{{ $parent->email }}</td>
+                    <td>{{ $parent->displayPassword() }}</td>
                     <td>{{ $parent->phone ?? 'N/A' }}</td>
                     <td>{{ $parent->whatsapp ?? 'N/A' }}</td>
                     <td>{{ $parent->id_card_number ?? 'N/A' }}</td>
@@ -81,7 +83,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" style="text-align: center; padding: 20px;">No parent accounts found.</td>
+                    <td colspan="10" style="text-align: center; padding: 20px;">No parent accounts found.</td>
                 </tr>
             @endforelse
         </tbody>

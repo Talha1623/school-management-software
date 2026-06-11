@@ -9,6 +9,7 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
 use App\Models\GeneralSetting;
+use App\Models\Staff;
 use App\Models\StudentMark;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -157,8 +158,8 @@ class TeacherRemarksController extends Controller
             $subjects = collect();
         }
 
-        // Get tests (filtered by other criteria if provided) - Only show tests where result_status = 1 (declared)
-        $testsQuery = Test::where('result_status', 1);
+        // Get tests (show before/after declaration — same as super admin / marks entry).
+        $testsQuery = Test::query();
         
         // If teacher, filter tests by their assigned subjects
         if ($isTeacher && $teacherName && $filterSubject) {
@@ -203,10 +204,20 @@ class TeacherRemarksController extends Controller
             $testsQuery->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($filterClass))]);
         }
         if ($filterSection) {
-            $testsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            $sectionLower = strtolower(trim($filterSection));
+            $testsQuery->where(function ($q) use ($sectionLower) {
+                $q->whereNull('section')
+                    ->orWhereRaw('TRIM(section) = ?', [''])
+                    ->orWhereRaw('LOWER(TRIM(section)) = ?', [$sectionLower]);
+            });
         }
         if ($filterSubject) {
-            $testsQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($filterSubject))]);
+            $subjectLower = strtolower(trim($filterSubject));
+            $testsQuery->where(function ($q) use ($subjectLower) {
+                $q->whereNull('subject')
+                    ->orWhereRaw('TRIM(subject) = ?', [''])
+                    ->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectLower]);
+            });
         }
         $tests = $testsQuery->whereNotNull('test_name')->distinct()->pluck('test_name')->sort()->values();
 
@@ -458,8 +469,7 @@ class TeacherRemarksController extends Controller
                 $campusName = is_object($filterCampus) ? ($filterCampus->campus_name ?? '') : $filterCampus;
                 
                 // Get all tests in the session for this campus/class/section
-                $testsQuery = Test::where('session', $filterSession)
-                    ->where('result_status', 1); // Only declared results
+                $testsQuery = Test::where('session', $filterSession);
                 
                 if ($campusName) {
                     $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
@@ -507,6 +517,20 @@ class TeacherRemarksController extends Controller
             }
         }
 
+        $staff = Auth::guard('staff')->user();
+        $isStaffCombinedUser = Auth::guard('staff')->check();
+        $canEditCombinedRemarks = !$isStaffCombinedUser;
+        if ($isStaffCombinedUser && $staff && $filterClass) {
+            $campusForPermission = is_object($filterCampus)
+                ? ($filterCampus->campus_name ?? '')
+                : (string) ($filterCampus ?? '');
+            $canEditCombinedRemarks = $staff->canEditCombinedResultRemarks(
+                $campusForPermission,
+                $filterClass,
+                $filterSection
+            );
+        }
+
         return view('test.teacher-remarks.combined', compact(
             'campuses',
             'sessions',
@@ -514,7 +538,9 @@ class TeacherRemarksController extends Controller
             'students',
             'filterCampus',
             'filterSession',
-            'filterClassSection'
+            'filterClassSection',
+            'canEditCombinedRemarks',
+            'isStaffCombinedUser'
         ));
     }
 
@@ -606,7 +632,7 @@ class TeacherRemarksController extends Controller
     }
 
     /**
-     * Get tests for teacher remarks (AJAX) - Only declared results.
+     * Get tests for teacher remarks (AJAX).
      */
     public function getTests(Request $request): JsonResponse
     {
@@ -625,8 +651,8 @@ class TeacherRemarksController extends Controller
         $isTeacher = $staff && $staff->isTeacher();
         $teacherName = $isTeacher ? trim($staff->name ?? '') : null;
         
-        $testsQuery = Test::where('result_status', 1); // Only declared results
-        
+        $testsQuery = Test::query();
+
         // If teacher, filter tests by their assigned subjects
         if ($isTeacher && $teacherName && $subject) {
             // Verify that the subject is assigned to this teacher
@@ -669,12 +695,22 @@ class TeacherRemarksController extends Controller
             $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
         }
         if ($section) {
-            $testsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            $sectionLower = strtolower(trim($section));
+            $testsQuery->where(function ($q) use ($sectionLower) {
+                $q->whereNull('section')
+                    ->orWhereRaw('TRIM(section) = ?', [''])
+                    ->orWhereRaw('LOWER(TRIM(section)) = ?', [$sectionLower]);
+            });
         }
         if ($subject) {
-            $testsQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))]);
+            $subjectLower = strtolower(trim($subject));
+            $testsQuery->where(function ($q) use ($subjectLower) {
+                $q->whereNull('subject')
+                    ->orWhereRaw('TRIM(subject) = ?', [''])
+                    ->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectLower]);
+            });
         }
-        
+
         $tests = $testsQuery->whereNotNull('test_name')
             ->distinct()
             ->pluck('test_name')
@@ -841,6 +877,19 @@ class TeacherRemarksController extends Controller
         $parts = explode(' - ', $validated['class_section']);
         $class = $parts[0] ?? null;
         $section = $parts[1] ?? null;
+
+        $staff = Auth::guard('staff')->user();
+        if (Auth::guard('staff')->check() && $staff && method_exists($staff, 'canEditCombinedResultRemarks')) {
+            if (!$staff->canEditCombinedResultRemarks($validated['campus'], $class, $section)) {
+                return redirect()
+                    ->route('test.teacher-remarks.combined', [
+                        'filter_campus' => $validated['campus'],
+                        'filter_session' => $validated['session'],
+                        'filter_class_section' => $validated['class_section'],
+                    ])
+                    ->with('error', 'Only the class teacher can save combined result remarks.');
+            }
+        }
 
         // Save or update remarks for each student
         foreach ($validated['remarks'] as $studentId => $remark) {

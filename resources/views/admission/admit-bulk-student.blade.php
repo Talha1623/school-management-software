@@ -545,6 +545,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         <input type="text" class="form-control form-control-sm" name="students[${i-1}][father_id_card]" placeholder="CNIC" style="height: 32px;">
                     </div>
                     <div class="col-md-2 mb-3">
+                        <label class="form-label mb-1 fs-13 fw-medium">Father Email</label>
+                        <input type="email" class="form-control form-control-sm" name="students[${i-1}][father_email]" placeholder="parent@email.com" style="height: 32px;">
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label mb-1 fs-13 fw-medium">Parent Password</label>
+                        <input type="text" class="form-control form-control-sm" name="students[${i-1}][parent_password]" placeholder="Default: parent" style="height: 32px;">
+                    </div>
+                    <div class="col-md-2 mb-3">
                         <label class="form-label mb-1 fs-13 fw-medium">Father Phone</label>
                         <input type="text" class="form-control form-control-sm" name="students[${i-1}][father_phone]" placeholder="Phone" style="height: 32px;">
                     </div>

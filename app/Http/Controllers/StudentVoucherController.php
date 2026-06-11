@@ -16,6 +16,21 @@ use Carbon\Carbon;
 
 class StudentVoucherController extends Controller
 {
+    private function availableWalletCreditForStudent(Student $student): float
+    {
+        $advanceFee = null;
+
+        if (!empty($student->parent_account_id)) {
+            $advanceFee = \App\Models\AdvanceFee::where('parent_id', (string) $student->parent_account_id)->first();
+        }
+
+        if (!$advanceFee && !empty($student->father_id_card)) {
+            $advanceFee = \App\Models\AdvanceFee::where('id_card_number', $student->father_id_card)->first();
+        }
+
+        return $advanceFee ? max(0, round((float) ($advanceFee->available_credit ?? 0), 2)) : 0.0;
+    }
+
     /**
      * Show the student vouchers page with filters.
      */
@@ -64,7 +79,17 @@ class StudentVoucherController extends Controller
         }
         
         $query = Student::query();
-        $currentYear = date('Y');
+        $settings = GeneralSetting::getSettings();
+        $currentYear = (int) date('Y');
+        $runningSession = trim((string) ($settings->running_session ?? ''));
+        if ($runningSession !== '') {
+            preg_match_all('/\d{4}/', $runningSession, $matches);
+            if (!empty($matches[0])) {
+                // Use the latest 4-digit year from running session for voucher calculations.
+                $currentYear = (int) end($matches[0]);
+            }
+        }
+        $displayYear = $runningSession !== '' ? $runningSession : (string) $currentYear;
         $vouchersFor = $request->get('vouchers_for');
         $pendingPaymentsQuery = StudentPayment::where('method', 'Generated')
             ->whereNotNull('student_code')
@@ -171,7 +196,16 @@ class StudentVoucherController extends Controller
             $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->section))]);
         }
         
-        $currentYear = date('Y');
+        $settings = GeneralSetting::getSettings();
+        $currentYear = (int) date('Y');
+        $runningSession = trim((string) ($settings->running_session ?? ''));
+        if ($runningSession !== '') {
+            preg_match_all('/\d{4}/', $runningSession, $matches);
+            if (!empty($matches[0])) {
+                $currentYear = (int) end($matches[0]);
+            }
+        }
+        $displayYear = $runningSession !== '' ? $runningSession : (string) $currentYear;
         $vouchersFor = $request->get('vouchers_for', date('F'));
         $pendingPaymentsQuery = StudentPayment::where('method', 'Generated')
             ->whereNotNull('student_code')
@@ -216,8 +250,8 @@ class StudentVoucherController extends Controller
         $vouchersFor = $request->get('vouchers_for', date('F')); // Month name
 
         $copyMap = [
-            'three_copies' => ['PARENT COPY', 'SCHOOL COPY', 'STUDENT COPY'],
-            'two_copies' => ['PARENT COPY', 'SCHOOL COPY'],
+            'three_copies' => ['Bank Copy', 'Parent Copy', 'School Copy'],
+            'two_copies' => ['Bank Copy', 'Parent Copy'],
             'thermal_copies' => ['THERMAL COPY'],
         ];
         $copyLabels = $copyMap[$type] ?? $copyMap['three_copies'];
@@ -225,17 +259,18 @@ class StudentVoucherController extends Controller
         // Get fee data for each student
         $vouchers = [];
         foreach ($students as $student) {
+            $totalStudentDiscount = StudentDiscount::where('student_code', $student->student_code)
+                ->get()
+                ->sum(function ($discount) {
+                    return (float) ($discount->discount_amount ?? 0);
+                });
+
             // Get all pending fees (unpaid fees) for this student
             // Pending fees are those where method = 'Generated' (not yet paid)
             $pendingPayments = StudentPayment::where('student_code', $student->student_code)
                 ->where('method', 'Generated')
                 ->orderBy('payment_date', 'asc')
                 ->get();
-            
-            // Calculate subtotal from all pending fees
-            $subtotal = $pendingPayments->sum(function($payment) {
-                return (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
-            });
             
             // Get fee history for current year
             $feeHistory = [];
@@ -254,12 +289,11 @@ class StudentVoucherController extends Controller
                 ];
             }
             
-            // Calculate late fee from pending payments (sum of late_fee from all pending payments)
-            $lateFee = $pendingPayments->sum(function($payment) {
-                return (float) ($payment->late_fee ?? 0);
-            });
+            // Line-item amounts below use StudentPayment::remainingDueForTitle() (includes remaining late per fee).
+            // Do not also sum late_fee from raw Generated rows or it double-counts vs those line amounts.
+            $lateFee = 0;
 
-            // Add late fee dynamically for overdue monthly fees if not already applied
+            // Add late fee dynamically for overdue monthly fees if not already applied on the generated row
             $dynamicLateFee = 0;
             foreach ($pendingPayments as $payment) {
                 if ((float) ($payment->late_fee ?? 0) > 0) {
@@ -324,6 +358,21 @@ class StudentVoucherController extends Controller
             $isMonthlyOrTransport = function ($title) {
                 return preg_match('/^(Monthly Fee|Transport Fee) - /i', (string) $title);
             };
+            $formatPeriodicFeeDescription = function ($title) use ($student) {
+                if (preg_match('/Monthly Fee - (\w+) (\d+)/', (string) $title, $matches)) {
+                    return "Monthly Fee Of {$matches[1]} ({$matches[2]})";
+                }
+
+                if (preg_match('/Transport Fee - (\w+) (\d+)/', (string) $title, $matches)) {
+                    $routeLabel = !empty($student->transport_route)
+                        ? "Transport Route ({$student->transport_route})"
+                        : 'Transport Route';
+
+                    return "{$routeLabel} - {$matches[1]} ({$matches[2]})";
+                }
+
+                return (string) $title;
+            };
 
             // Calculate Arrears (Overdue monthly/transport only)
             $today = Carbon::today();
@@ -339,9 +388,26 @@ class StudentVoucherController extends Controller
                 return $dueDate->lt($today);
             });
             
-            $arrearsAmount = $arrearsPayments->sum(function($payment) {
-                return (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
-            });
+            $arrearsAmount = 0;
+            $arrearsFees = collect();
+            $arrearsTitlesSeen = [];
+            foreach ($arrearsPayments as $payment) {
+                $feeTitle = (string) ($payment->payment_title ?? '');
+                $titleKey = strtolower(trim($feeTitle));
+                if ($titleKey === '' || isset($arrearsTitlesSeen[$titleKey])) {
+                    continue;
+                }
+                $arrearsTitlesSeen[$titleKey] = true;
+                $rem = StudentPayment::remainingDueForTitle($student->student_code, $feeTitle, $totalStudentDiscount);
+                if ($rem > 0.0001) {
+                    $arrearsAmount += $rem;
+                    $arrearsFees->push([
+                        'description' => $formatPeriodicFeeDescription($feeTitle),
+                        'amount' => $rem,
+                        'sort_order' => 0,
+                    ]);
+                }
+            }
             
             // Current fees (not overdue yet) + always include custom/admission fees
             $currentFeesPayments = $pendingPayments->filter(function($payment) use ($today, $isMonthlyOrTransport) {
@@ -362,57 +428,64 @@ class StudentVoucherController extends Controller
             $customFees = collect();
             
             foreach ($currentFeesPayments as $payment) {
-                $amount = (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
+                $feeTitle = (string) ($payment->payment_title ?? '');
+                $remaining = StudentPayment::remainingDueForTitle($student->student_code, $feeTitle, $totalStudentDiscount);
+                if ($remaining <= 0.0001) {
+                    continue;
+                }
 
                 // Check if it's a monthly fee
                 if (preg_match('/Monthly Fee - (\w+) (\d+)/', $payment->payment_title, $matches)) {
-                    $month = $matches[1];
-                    $year = $matches[2];
-                    $description = "Monthly Fee Of {$month} ({$year})";
                     $monthlyFees->push([
-                        'description' => $description,
-                        'amount' => $amount,
+                        'description' => $formatPeriodicFeeDescription($feeTitle),
+                        'amount' => $remaining,
                         'sort_order' => 1, // Monthly fees first
                     ]);
                 } elseif (preg_match('/Transport Fee - (\w+) (\d+)/', $payment->payment_title, $matches)) {
-                    $month = $matches[1];
-                    $year = $matches[2];
-                    $routeLabel = !empty($student->transport_route)
-                        ? "Transport Route ({$student->transport_route})"
-                        : 'Transport Route';
-                    $description = "{$routeLabel} - {$month} ({$year})";
                     $monthlyFees->push([
-                        'description' => $description,
-                        'amount' => $amount,
+                        'description' => $formatPeriodicFeeDescription($feeTitle),
+                        'amount' => $remaining,
                         'sort_order' => 1, // Keep transport with monthly fees
                     ]);
                 }
             }
 
-            // Always include custom/admission fees, even if overdue
+            // One-time / custom fees: net remaining per title (e.g. paid Admission Fee no longer appears on next month's voucher)
             $customFeePayments = $pendingPayments->filter(function ($payment) use ($isMonthlyOrTransport) {
                 return !$isMonthlyOrTransport($payment->payment_title ?? '');
             });
+            $customTitlesSeen = [];
             foreach ($customFeePayments as $payment) {
-                $amount = (float) ($payment->payment_amount ?? 0) - (float) ($payment->discount ?? 0);
-                if (strtolower(trim($payment->payment_title)) === 'admission fee') {
+                $feeTitle = (string) ($payment->payment_title ?? '');
+                $titleKey = strtolower(trim($feeTitle));
+                if ($titleKey === '' || isset($customTitlesSeen[$titleKey])) {
+                    continue;
+                }
+                $customTitlesSeen[$titleKey] = true;
+
+                $remaining = StudentPayment::remainingDueForTitle($student->student_code, $feeTitle, $totalStudentDiscount);
+                if ($remaining <= 0.0001) {
+                    continue;
+                }
+
+                if (strtolower(trim($feeTitle)) === 'admission fee') {
                     $customFees->push([
                         'description' => 'Generate Admission Fee',
-                        'amount' => $amount,
+                        'amount' => $remaining,
                         'sort_order' => 2,
                     ]);
                 } else {
                     // Custom fee - show fee type name directly as description
                     $customFees->push([
-                        'description' => $payment->payment_title ?? 'Custom Fee',
-                        'amount' => $amount,
+                        'description' => $feeTitle !== '' ? $feeTitle : 'Custom Fee',
+                        'amount' => $remaining,
                         'sort_order' => 2, // Custom fees after monthly fees
                     ]);
                 }
             }
             
-            // Combine and sort: monthly fees first, then custom fees
-            $pendingFeesList = $monthlyFees->merge($customFees)->sortBy('sort_order')->map(function($fee) {
+            // Combine and sort: arrears/monthly fees first, then custom fees.
+            $pendingFeesList = $arrearsFees->merge($monthlyFees)->merge($customFees)->sortBy('sort_order')->map(function($fee) {
                 return [
                     'description' => $fee['description'],
                     'amount' => $fee['amount'],
@@ -436,9 +509,18 @@ class StudentVoucherController extends Controller
             }
             
             // Calculate totals
-            $currentFeesSubtotal = $pendingFeesList->sum('amount');
+            $currentFeesSubtotal = $pendingFeesList->sum('amount') - $arrearsAmount;
             $subtotal = max(0, $currentFeesSubtotal + $arrearsAmount);
-            $total = $subtotal + $lateFee;
+            $totalBeforeWallet = $subtotal + $lateFee;
+            $walletCredit = $this->availableWalletCreditForStudent($student);
+            $walletApplied = min($walletCredit, $totalBeforeWallet);
+            if ($walletApplied > 0) {
+                $pendingFeesList->push([
+                    'description' => 'Advance Fee / Wallet Credit',
+                    'amount' => -$walletApplied,
+                ]);
+            }
+            $total = max(0, round($totalBeforeWallet - $walletApplied, 2));
             
             $vouchers[] = [
                 'student' => $student,
@@ -447,6 +529,8 @@ class StudentVoucherController extends Controller
                 'arrears_amount' => $arrearsAmount,
                 'subtotal' => $subtotal, // Total of all pending fees (current + arrears)
                 'late_fee' => $lateFee,
+                'wallet_credit' => $walletCredit,
+                'wallet_applied' => $walletApplied,
                 'total' => $total,
                 'after_due_date' => $total,
                 'due_date' => $dueDate,
@@ -455,12 +539,10 @@ class StudentVoucherController extends Controller
                 'fee_history' => $feeHistory,
                 'month' => $vouchersFor,
                 'year' => $currentYear,
+                'year_label' => $displayYear,
             ];
         }
-        
-        // Get General Settings for school information
-        $settings = GeneralSetting::getSettings();
-        
+
         return view('accounting.fee-voucher.print', compact('vouchers', 'type', 'vouchersFor', 'currentYear', 'copyLabels', 'settings'));
     }
 }

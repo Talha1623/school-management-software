@@ -18,13 +18,18 @@
         }
 
         @media print {
-            body {
-                background: white;
-                padding: 0;
+            html, body {
+                background: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
 
             .no-print {
-                display: none;
+                display: none !important;
+            }
+
+            .certificate-container {
+                box-shadow: none !important;
             }
         }
 
@@ -53,8 +58,8 @@
         }
 
         .logo-img {
-            width: 80px;
-            height: 80px;
+            width: 115px;
+            height: 115px;
             object-fit: contain;
         }
 
@@ -162,13 +167,6 @@
         <button class="print-button no-print" onclick="window.print()">Print Certificate</button>
         <div class="certificate-border">
             <div class="certificate-header">
-                <div class="school-logo">
-                    @if(config('app.logo'))
-                        <img src="{{ asset(config('app.logo')) }}" alt="School Logo" class="logo-img">
-                    @else
-                        <div class="logo-img" style="background: #003471; border-radius: 50%; display: inline-block;"></div>
-                    @endif
-                </div>
                 <div class="school-name">{{ $schoolName }}</div>
                 <div class="school-address">{{ $schoolAddress }}</div>
             </div>

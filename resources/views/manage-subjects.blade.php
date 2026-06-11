@@ -231,7 +231,19 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1 align-items-center">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editSubject({{ $subject->id }}, '{{ addslashes($subject->campus) }}', '{{ addslashes($subject->subject_name) }}', '{{ addslashes($subject->class) }}', '{{ addslashes($subject->section) }}', '{{ addslashes($subject->teacher ?? '') }}', '{{ addslashes($subject->session ?? '') }}')">
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-primary px-2 py-1 edit-subject-btn"
+                                                    title="Edit"
+                                                    data-subject-id="{{ $subject->id }}"
+                                                    data-campus="{{ e($subject->campus) }}"
+                                                    data-subject-name="{{ e($subject->subject_name) }}"
+                                                    data-class-name="{{ e($subject->class) }}"
+                                                    data-section="{{ e($subject->section) }}"
+                                                    data-teacher="{{ e($subject->teacher ?? '') }}"
+                                                    data-session="{{ e($subject->session ?? '') }}"
+                                                    onclick="if (window.editSubjectFromButton) { window.editSubjectFromButton(this); }"
+                                                >
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this subject?')) { document.getElementById('delete-form-{{ $subject->id }}').submit(); }">
@@ -774,6 +786,51 @@ function loadClassesByCampus(classSelect, campusValue, selectedClass = '', place
     });
 }
 
+function loadModalTeachers(campusName, selectedTeacher = '') {
+    const teacherSelect = document.getElementById('teacher');
+    if (!teacherSelect) return;
+
+    if (!campusName) {
+        teacherSelect.innerHTML = '<option value="">Select Campus First</option>';
+        teacherSelect.disabled = true;
+        return;
+    }
+
+    teacherSelect.innerHTML = '<option value="">Loading...</option>';
+    teacherSelect.disabled = true;
+
+    fetch(`{{ route('manage-subjects.get-teachers-by-campus') }}?campus=${encodeURIComponent(campusName)}`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        teacherSelect.innerHTML = '<option value="">Select Teacher</option>';
+        if (data.teachers && data.teachers.length > 0) {
+            data.teachers.forEach(teacherName => {
+                const option = document.createElement('option');
+                option.value = teacherName;
+                option.textContent = teacherName;
+                if (selectedTeacher && selectedTeacher === teacherName) {
+                    option.selected = true;
+                }
+                teacherSelect.appendChild(option);
+            });
+            teacherSelect.disabled = false;
+        } else {
+            teacherSelect.innerHTML = '<option value="">No teachers found</option>';
+            teacherSelect.disabled = true;
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching teachers:', error);
+        teacherSelect.innerHTML = '<option value="">Error loading teachers</option>';
+        teacherSelect.disabled = true;
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // For filter form
     const filterCampusSelect = document.getElementById('filter_campus');
@@ -880,51 +937,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function loadModalTeachers(campusName, selectedTeacher = '') {
-        const teacherSelect = document.getElementById('teacher');
-        if (!teacherSelect) return;
-
-        if (!campusName) {
-            teacherSelect.innerHTML = '<option value="">Select Campus First</option>';
-            teacherSelect.disabled = true;
-            return;
-        }
-
-        teacherSelect.innerHTML = '<option value="">Loading...</option>';
-        teacherSelect.disabled = true;
-
-        fetch(`{{ route('manage-subjects.get-teachers-by-campus') }}?campus=${encodeURIComponent(campusName)}`, {
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            teacherSelect.innerHTML = '<option value="">Select Teacher</option>';
-            if (data.teachers && data.teachers.length > 0) {
-                data.teachers.forEach(teacherName => {
-                    const option = document.createElement('option');
-                    option.value = teacherName;
-                    option.textContent = teacherName;
-                    if (selectedTeacher && selectedTeacher === teacherName) {
-                        option.selected = true;
-                    }
-                    teacherSelect.appendChild(option);
-                });
-                teacherSelect.disabled = false;
-            } else {
-                teacherSelect.innerHTML = '<option value="">No teachers found</option>';
-                teacherSelect.disabled = true;
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching teachers:', error);
-            teacherSelect.innerHTML = '<option value="">Error loading teachers</option>';
-            teacherSelect.disabled = true;
-        });
-    }
-    
     // Filter form class change handler
     if (filterClassSelect) {
         // Load sections on page load if class is already selected
@@ -999,13 +1011,47 @@ function resetForm() {
 function editSubject(id, campus, subjectName, className, section, teacher, session) {
     document.getElementById('campus').value = campus;
     document.getElementById('subject_name').value = subjectName;
+
     const modalClassSelect = document.getElementById('class');
+    const modalSectionSelect = document.getElementById('section');
+    const modalTeacherSelect = document.getElementById('teacher');
+
+    // Pre-fill editable selects immediately so form can submit even before async reload completes.
+    modalClassSelect.disabled = false;
+    modalClassSelect.innerHTML = '<option value="">Select Class</option>';
+    if (className) {
+        const classOption = document.createElement('option');
+        classOption.value = className;
+        classOption.textContent = className;
+        classOption.selected = true;
+        modalClassSelect.appendChild(classOption);
+    }
+
+    modalSectionSelect.disabled = false;
+    modalSectionSelect.innerHTML = '<option value="">Select Section</option>';
+    if (section) {
+        const sectionOption = document.createElement('option');
+        sectionOption.value = section;
+        sectionOption.textContent = section;
+        sectionOption.selected = true;
+        modalSectionSelect.appendChild(sectionOption);
+    }
+
+    modalTeacherSelect.disabled = false;
+    modalTeacherSelect.innerHTML = '<option value="">Select Teacher</option>';
+    if (teacher) {
+        const teacherOption = document.createElement('option');
+        teacherOption.value = teacher;
+        teacherOption.textContent = teacher;
+        teacherOption.selected = true;
+        modalTeacherSelect.appendChild(teacherOption);
+    }
+
     loadClassesByCampus(modalClassSelect, campus, className, 'Select Class', true);
     loadModalTeachers(campus, teacher || '');
     document.getElementById('session').value = session || '';
     
     // Load sections for the class
-    const modalSectionSelect = document.getElementById('section');
     if (className) {
         const params = new URLSearchParams();
         params.append('class', className);
@@ -1058,6 +1104,20 @@ function editSubject(id, campus, subjectName, className, section, teacher, sessi
     const modal = new bootstrap.Modal(document.getElementById('subjectModal'));
     modal.show();
 }
+
+window.editSubjectFromButton = function(button) {
+    if (!button) return;
+
+    editSubject(
+        button.dataset.subjectId,
+        button.dataset.campus || '',
+        button.dataset.subjectName || '',
+        button.dataset.className || '',
+        button.dataset.section || '',
+        button.dataset.teacher || '',
+        button.dataset.session || ''
+    );
+};
 
 // Update entries per page
 function updateEntriesPerPage(value) {

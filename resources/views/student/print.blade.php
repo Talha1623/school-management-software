@@ -13,10 +13,32 @@
         .header {
             text-align: center;
             margin-bottom: 16px;
+            border-bottom: 2px solid #003471;
+            padding-bottom: 10px;
+        }
+        .school-logo {
+            margin-bottom: 8px;
+        }
+        .school-logo img {
+            max-height: 70px;
+            max-width: 220px;
+            object-fit: contain;
         }
         .header h2 {
             margin: 0;
             color: #003471;
+        }
+        .school-name {
+            font-size: 22px;
+            font-weight: 700;
+            color: #003471;
+            margin: 0 0 4px 0;
+        }
+        .school-contact {
+            font-size: 12px;
+            color: #495057;
+            margin-bottom: 8px;
+            line-height: 1.4;
         }
         .meta {
             font-size: 12px;
@@ -78,6 +100,31 @@
     </div>
 
     <div class="header">
+        @php
+            $logoUrl = !empty($settings?->logo) ? asset('storage/' . $settings->logo) : null;
+        @endphp
+        @if($logoUrl)
+            <div class="school-logo">
+                <img src="{{ $logoUrl }}" alt="School Logo" onerror="this.style.display='none'">
+            </div>
+        @endif
+        <div class="school-name">{{ $settings->school_name ?? config('app.name', 'School Management System') }}</div>
+        <div class="school-contact">
+            @if(!empty($settings->address))
+                <div>{{ $settings->address }}</div>
+            @endif
+            <div>
+                @if(!empty($settings->school_phone))
+                    <span>{{ $settings->school_phone }}</span>
+                @endif
+                @if(!empty($settings->school_phone) && !empty($settings->school_email))
+                    <span> | </span>
+                @endif
+                @if(!empty($settings->school_email))
+                    <span>{{ $settings->school_email }}</span>
+                @endif
+            </div>
+        </div>
         <h2>Student Details</h2>
         <div class="meta">Printed at: {{ $printedAt }}</div>
     </div>

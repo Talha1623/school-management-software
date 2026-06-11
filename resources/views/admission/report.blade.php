@@ -29,31 +29,31 @@
                     <div class="card-body p-3" style="background: linear-gradient(135deg, #fd7e14 0%, #e86800 100%);">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
-                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Admissions This Month</h6>
+                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Admissions This Month ({{ $reportMonthLabel ?? now()->format('F Y') }})</h6>
                                 <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $admissionsThisMonth ?? 0 }}</h3>
                             </div>
                             <span class="material-symbols-outlined text-white" style="font-size: 32px;">calendar_month</span>
                         </div>
-                        <button class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px;">
+                        <a href="{{ route('admission.report.monthly') }}" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
                             View Report
-                        </button>
+                        </a>
                     </div>
                 </div>
             </div>
             
             <div class="col-md-3 mb-3">
                 <div class="card border-0 shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
-                    <div class="card-body p-3" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);">
+                    <div class="card-body p-3" style="background: linear-gradient(135deg, #198754 0%, #146c43 100%);">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
-                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Active Students</h6>
-                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $activeStudents ?? 0 }}</h3>
+                                <h6 class="text-white-50 mb-1" style="font-size: 12px; font-weight: 500;">Admissions This Year ({{ $reportYear ?? now()->year }})</h6>
+                                <h3 class="text-white mb-0" style="font-size: 24px; font-weight: 700;">{{ $admissionsThisYear ?? 0 }}</h3>
                             </div>
-                            <span class="material-symbols-outlined text-white" style="font-size: 32px;">groups</span>
+                            <span class="material-symbols-outlined text-white" style="font-size: 32px;">calendar_today</span>
                         </div>
-                        <button class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px;">
+                        <a href="{{ route('admission.report.yearly') }}" class="btn btn-sm btn-light text-dark" style="font-size: 11px; padding: 3px 10px; text-decoration: none;">
                             View Report
-                        </button>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -97,34 +97,43 @@
                                     <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Admissions Today</h6>
                                     <p class="mb-0 text-muted" style="font-size: 12px;">List of newly admitted students today so far.</p>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('today')" style="font-size: 12px; padding: 4px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
-                                </button>
+                                <div class="d-flex align-items-center gap-2 ms-3 flex-shrink-0">
+                                    <a href="{{ route('admission.report.today') }}" class="btn btn-sm btn-light text-dark" style="font-size: 12px; padding: 4px 12px; text-decoration: none;">View</a>
+                                    <button type="button" class="btn btn-sm btn-light text-dark" onclick="printReport('today')" style="font-size: 12px; padding: 4px 12px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                        Print
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- Monthly Admissions -->
                             <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
                                 <div class="flex-grow-1">
-                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Monthly Admissions</h6>
-                                    <p class="mb-0 text-muted" style="font-size: 12px;">List of total admitted students this month so far.</p>
+                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Monthly Admissions ({{ $reportMonthLabel ?? now()->format('F Y') }})</h6>
+                                    <p class="mb-0 text-muted" style="font-size: 12px;">List of all students admitted in {{ $reportMonthLabel ?? now()->format('F Y') }}, including bulk admissions.</p>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('monthly')" style="font-size: 12px; padding: 4px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
-                                </button>
+                                <div class="d-flex align-items-center gap-2 ms-3 flex-shrink-0">
+                                    <a href="{{ route('admission.report.monthly') }}" class="btn btn-sm btn-light text-dark" style="font-size: 12px; padding: 4px 12px; text-decoration: none;">View</a>
+                                    <button type="button" class="btn btn-sm btn-light text-dark" onclick="printReport('monthly')" style="font-size: 12px; padding: 4px 12px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                        Print
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- Admissions This Year -->
                             <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
                                 <div class="flex-grow-1">
-                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Admissions This Year</h6>
-                                    <p class="mb-0 text-muted" style="font-size: 12px;">List of admitted students this year so far.</p>
+                                    <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Admissions This Year ({{ $reportYear ?? now()->year }})</h6>
+                                    <p class="mb-0 text-muted" style="font-size: 12px;">List of all students admitted in {{ $reportYear ?? now()->year }}, including bulk admissions.</p>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('yearly')" style="font-size: 12px; padding: 4px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
-                                </button>
+                                <div class="d-flex align-items-center gap-2 ms-3 flex-shrink-0">
+                                    <a href="{{ route('admission.report.yearly') }}" class="btn btn-sm btn-light text-dark" style="font-size: 12px; padding: 4px 12px; text-decoration: none;">View</a>
+                                    <button type="button" class="btn btn-sm btn-light text-dark" onclick="printReport('yearly')" style="font-size: 12px; padding: 4px 12px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                        Print
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- Admission Forms -->
@@ -133,10 +142,13 @@
                                     <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Admission Forms</h6>
                                     <p class="mb-0 text-muted" style="font-size: 12px;">Class wise list of printables & information filled admission forms.</p>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('forms')" style="font-size: 12px; padding: 4px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
-                                </button>
+                                <div class="d-flex align-items-center gap-2 ms-3 flex-shrink-0">
+                                    <a href="{{ route('admission.report.forms') }}" class="btn btn-sm btn-light text-dark" style="font-size: 12px; padding: 4px 12px; text-decoration: none;">View</a>
+                                    <button type="button" class="btn btn-sm btn-light text-dark" onclick="printReport('forms')" style="font-size: 12px; padding: 4px 12px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                        Print
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- Blank Adm. Form -->
@@ -145,10 +157,13 @@
                                     <h6 class="mb-1 fw-semibold" style="color: #333; font-size: 14px;">Blank Adm. Form</h6>
                                     <p class="mb-0 text-muted" style="font-size: 12px;">Print a blank copy of admission form.</p>
                                 </div>
-                                <button class="btn btn-sm btn-light text-dark ms-3" onclick="printReport('blank')" style="font-size: 12px; padding: 4px 12px;">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
-                                    Print
-                                </button>
+                                <div class="d-flex align-items-center gap-2 ms-3 flex-shrink-0">
+                                    <a href="{{ route('admission.report.blank') }}" class="btn btn-sm btn-light text-dark" style="font-size: 12px; padding: 4px 12px; text-decoration: none;">View</a>
+                                    <button type="button" class="btn btn-sm btn-light text-dark" onclick="printReport('blank')" style="font-size: 12px; padding: 4px 12px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">print</span>
+                                        Print
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -203,19 +218,19 @@ function printReport(type) {
     
     switch(type) {
         case 'today':
-            url = '{{ route("admission.report.today", ["print" => 1]) }}';
+            url = '{{ route("admission.report.today.print") }}?auto_print=1';
             break;
         case 'monthly':
-            url = '{{ route("admission.report.monthly", ["print" => 1]) }}';
+            url = '{{ route("admission.report.monthly.print") }}?auto_print=1';
             break;
         case 'yearly':
-            url = '{{ route("admission.report.yearly", ["print" => 1]) }}';
+            url = '{{ route("admission.report.yearly.print") }}?auto_print=1';
             break;
         case 'forms':
-            url = '{{ route("admission.report.forms", ["print" => 1]) }}';
+            url = '{{ route("admission.report.forms.print") }}?auto_print=1';
             break;
         case 'blank':
-            url = '{{ route("admission.report.blank", ["print" => 1]) }}';
+            url = '{{ route("admission.report.blank.print") }}?auto_print=1';
             break;
     }
     

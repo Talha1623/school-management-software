@@ -420,7 +420,7 @@
                                 </a>
                             </li>
                             <li class="menu-item">
-                                <a href="{{ route('accounting.generate-transport-fee') }}" class="menu-link {{ request()->routeIs('accounting.generate-transport-fee') ? 'active' : '' }}">
+                                <a href="{{ route('accounting.generate-transport-fee') }}" class="menu-link {{ request()->routeIs('accounting.generate-transport-fee*') ? 'active' : '' }}">
                                     Generate Transport Fee
                                 </a>
                             </li>

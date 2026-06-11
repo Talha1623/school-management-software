@@ -8,8 +8,10 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\StudentPayment;
+use App\Models\Subject;
 use App\Models\AdvanceFee;
 use App\Models\StudentDiscount;
+use App\Services\SystemNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -84,15 +86,36 @@ class MonthlyFeeController extends Controller
     {
         $campus = $request->get('campus');
 
-        if (!$campus) {
+        if (! $campus || trim((string) $campus) === '') {
             return response()->json(['classes' => []]);
         }
 
+        $campusNorm = strtolower(trim((string) $campus));
+
         $classes = ClassModel::whereNotNull('class_name')
-            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
             ->distinct()
             ->orderBy('class_name', 'asc')
             ->pluck('class_name')
+            ->values();
+
+        if ($classes->isEmpty()) {
+            $fromStudents = Student::query()
+                ->whereNotNull('class')
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                ->distinct()
+                ->pluck('class')
+                ->sort()
+                ->values();
+            $classes = $fromStudents->isEmpty()
+                ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                : $fromStudents;
+        }
+
+        $classes = $classes->map(fn ($c) => trim((string) $c))
+            ->filter(fn ($c) => $c !== '')
+            ->unique()
+            ->sort()
             ->values();
 
         return response()->json(['classes' => $classes]);
@@ -281,6 +304,40 @@ class MonthlyFeeController extends Controller
             $message .= " {$skippedCount} student(s) skipped (no monthly fee set or already exists).";
         }
 
+        if (auth()->guard('accountant')->check()) {
+            $accountant = auth()->guard('accountant')->user();
+            $accountantId = (int) ($accountant->id ?? 0);
+            $accountantName = trim((string) ($accountant->name ?? 'Accountant'));
+
+            if ($accountantId > 0) {
+                $notificationText = sprintf(
+                    '%s generated monthly fee for %s, Class %s, Section %s — %s %s (%d student(s)).',
+                    $accountantName,
+                    $validated['campus'],
+                    $validated['class'],
+                    $validated['section'],
+                    $validated['fee_month'],
+                    $validated['fee_year'],
+                    $generatedCount
+                );
+
+                $notifier = app(SystemNotificationService::class);
+                $notifier->notifySuperAdminsFromAccountant($notificationText, $accountantId);
+                $notifier->notifyAccountant(
+                    $accountantId,
+                    sprintf(
+                        'You generated monthly fee for %s, Class %s, Section %s — %s %s (%d student(s)).',
+                        $validated['campus'],
+                        $validated['class'],
+                        $validated['section'],
+                        $validated['fee_month'],
+                        $validated['fee_year'],
+                        $generatedCount
+                    )
+                );
+            }
+        }
+
         return redirect()
             ->route($redirectRoute)
             ->with('success', $message);
@@ -294,24 +351,50 @@ class MonthlyFeeController extends Controller
         $className = $request->get('class');
         $campus = $request->get('campus');
 
-        if (!$className) {
+        if (! $className || trim((string) $className) === '') {
             return response()->json(['sections' => []]);
         }
 
-        // Get sections for the selected class (optionally filter by campus)
-        $sectionsQuery = Section::where('class', $className);
-        if ($campus) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        $classNorm = strtolower(trim((string) $className));
+        $campusNorm = $campus && trim((string) $campus) !== '' ? strtolower(trim((string) $campus)) : null;
+
+        $sectionsQuery = Section::whereNotNull('name')
+            ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+        if ($campusNorm !== null) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm]);
         }
 
         $sections = $sectionsQuery->orderBy('name', 'asc')
             ->get(['id', 'name'])
-            ->map(function($section) {
-                return [
-                    'id' => $section->id,
-                    'name' => $section->name
-                ];
-            });
+            ->map(fn ($section) => [
+                'id' => $section->id,
+                'name' => $section->name,
+            ])
+            ->values();
+
+        if ($sections->isEmpty()) {
+            $fromStudents = Student::query()
+                ->whereNotNull('section')
+                ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+            if ($campusNorm !== null) {
+                $fromStudents->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm]);
+            }
+            $names = $fromStudents->distinct()->pluck('section')->filter()->unique()->sort()->values();
+            if ($names->isNotEmpty()) {
+                $sections = $names->map(fn ($n) => ['id' => null, 'name' => trim((string) $n)])->values();
+            }
+        }
+
+        if ($sections->isEmpty()) {
+            $fromSubjects = Subject::query()
+                ->whereNotNull('section')
+                ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+            if ($campusNorm !== null) {
+                $fromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm]);
+            }
+            $names = $fromSubjects->distinct()->pluck('section')->filter()->unique()->sort()->values();
+            $sections = $names->map(fn ($n) => ['id' => null, 'name' => trim((string) $n)])->values();
+        }
 
         return response()->json(['sections' => $sections]);
     }

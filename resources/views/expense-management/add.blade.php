@@ -69,7 +69,7 @@
                                     <option value="">All Categories</option>
                                     @if(isset($categories) && $categories->count() > 0)
                                         @foreach($categories as $cat)
-                                            <option value="{{ $cat->category_name }}" {{ request('filter_category') == $cat->category_name ? 'selected' : '' }}>{{ $cat->category_name }}</option>
+                                            <option value="{{ $cat->category_name }}" data-campus="{{ $cat->campus }}" data-campus-normalized="{{ strtolower(trim((string) $cat->campus)) }}" {{ request('filter_category') == $cat->category_name ? 'selected' : '' }}>{{ $cat->category_name }}</option>
                                         @endforeach
                                     @endif
                                 </select>
@@ -240,7 +240,7 @@
                                                 <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editExpense({{ $expense->id }}, '{{ addslashes($expense->campus) }}', '{{ addslashes($expense->category) }}', '{{ addslashes($expense->title) }}', {{ $expense->amount }}, '{{ addslashes($expense->method) }}', '{{ $expense->invoice_receipt ? Storage::url($expense->invoice_receipt) : '' }}', '{{ $expense->date->format('Y-m-d') }}')">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                                 </button>
-                                                <a href="{{ route('expense-management.add.print', $expense->id) }}" target="_blank" class="btn btn-sm btn-dark px-2 py-1" title="Print">
+                                                <a href="{{ route('expense-management.add.print', $expense->id) }}?auto_print=1" target="_blank" class="btn btn-sm btn-dark px-2 py-1" title="Print voucher (opens print dialog)">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">print</span>
                                                 </a>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this expense?')) { document.getElementById('delete-form-{{ $expense->id }}').submit(); }">
@@ -333,7 +333,7 @@
                                     <option value="">Select Category</option>
                                     @if(isset($categories) && $categories->count() > 0)
                                         @foreach($categories as $cat)
-                                            <option value="{{ $cat->category_name }}" data-campus="{{ $cat->campus }}">{{ $cat->category_name }} ({{ $cat->campus }})</option>
+                                            <option value="{{ $cat->category_name }}" data-campus="{{ $cat->campus }}" data-campus-normalized="{{ strtolower(trim((string) $cat->campus)) }}">{{ $cat->category_name }} ({{ $cat->campus }})</option>
                                         @endforeach
                                     @endif
                                 </select>
@@ -820,6 +820,9 @@ function resetForm() {
     document.getElementById('imagePreview').style.display = 'none';
     document.getElementById('existingImage').style.display = 'none';
     document.getElementById('invoice_receipt').value = '';
+    if (typeof syncExpenseCategories === 'function') {
+        syncExpenseCategories();
+    }
 }
 
 // Preview image function
@@ -890,6 +893,9 @@ window.addEventListener('pageshow', restoreExpensePageState);
 // Edit expense function
 function editExpense(id, campus, category, title, amount, method, invoiceReceiptUrl, date) {
     document.getElementById('campus').value = campus;
+    if (typeof syncExpenseCategories === 'function') {
+        syncExpenseCategories();
+    }
     document.getElementById('category').value = category;
     document.getElementById('title').value = title;
     document.getElementById('amount').value = amount;
@@ -1006,35 +1012,48 @@ document.addEventListener('DOMContentLoaded', function() {
         dateInput.value = today;
     }
     
-    // Filter categories based on selected campus
-    const campusSelect = document.getElementById('campus');
-    const categorySelect = document.getElementById('category');
-    
-    if (campusSelect && categorySelect) {
-        campusSelect.addEventListener('change', function() {
-            const selectedCampus = this.value;
+    const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
+
+    const bindCampusCategoryFilter = (campusSelectId, categorySelectId) => {
+        const campusSelect = document.getElementById(campusSelectId);
+        const categorySelect = document.getElementById(categorySelectId);
+
+        if (!campusSelect || !categorySelect) {
+            return null;
+        }
+
+        const syncCategories = () => {
+            const selectedCampusNormalized = normalizeText(campusSelect.value);
             const categoryOptions = categorySelect.querySelectorAll('option');
-            
-            // Show/hide categories based on campus
+
             categoryOptions.forEach(option => {
                 if (option.value === '') {
-                    option.style.display = 'block';
-                } else {
-                    const categoryCampus = option.getAttribute('data-campus');
-                    if (selectedCampus && categoryCampus && categoryCampus !== selectedCampus) {
-                        option.style.display = 'none';
-                    } else {
-                        option.style.display = 'block';
-                    }
+                    option.hidden = false;
+                    option.disabled = false;
+                    return;
                 }
+
+                const categoryCampusNormalized = normalizeText(
+                    option.getAttribute('data-campus-normalized') || option.getAttribute('data-campus')
+                );
+                const shouldShow = !selectedCampusNormalized || categoryCampusNormalized === selectedCampusNormalized;
+                option.hidden = !shouldShow;
+                option.disabled = !shouldShow;
             });
-            
-            // Reset category selection if current selection is hidden
-            if (categorySelect.value && categorySelect.options[categorySelect.selectedIndex].style.display === 'none') {
+
+            const selectedOption = categorySelect.options[categorySelect.selectedIndex];
+            if (selectedOption && (selectedOption.hidden || selectedOption.disabled)) {
                 categorySelect.value = '';
             }
-        });
-    }
+        };
+
+        campusSelect.addEventListener('change', syncCategories);
+        syncCategories();
+        return syncCategories;
+    };
+
+    window.syncExpenseCategories = bindCampusCategoryFilter('campus', 'category');
+    bindCampusCategoryFilter('filter_campus', 'filter_category');
 });
 </script>
 @endsection

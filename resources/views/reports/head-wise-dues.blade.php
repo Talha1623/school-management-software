@@ -6,6 +6,42 @@
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
+                <div>
+                    <h4 class="mb-0 fs-16 fw-semibold" style="color: #003471;">Head Wise Dues Summary</h4>
+                    <small class="text-muted">Columns only from Fee Type / Fee Head for each campus; paid from all fee titles, due from outstanding only (same ledger as Fee Payment)</small>
+                </div>
+                @if($hasFilters)
+                <div class="d-flex gap-2 flex-wrap export-buttons">
+                    <a href="{{ route('reports.head-wise-dues.export', array_merge(request()->query(), ['format' => 'excel'])) }}"
+                       class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
+                        <span>Excel</span>
+                    </a>
+                    <a href="{{ route('reports.head-wise-dues.export', array_merge(request()->query(), ['format' => 'csv'])) }}"
+                       class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">file_present</span>
+                        <span>CSV</span>
+                    </a>
+                    <a href="{{ route('reports.head-wise-dues.export', array_merge(request()->query(), ['format' => 'pdf'])) }}"
+                       class="btn btn-sm px-2 py-1 export-btn pdf-btn">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                        <span>PDF</span>
+                    </a>
+                    <a href="{{ route('reports.head-wise-dues.print', array_merge(request()->query(), ['auto_print' => 1])) }}"
+                       target="_blank"
+                       class="btn btn-sm px-2 py-1 export-btn print-btn">
+                        <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                        <span>Print</span>
+                    </a>
+                </div>
+                @endif
+            </div>
+
+            @if(session('error'))
+                <div class="alert alert-danger py-2 px-3 fs-12 mb-2">{{ session('error') }}</div>
+            @endif
+
             <!-- Filters -->
             <form action="{{ route('reports.head-wise-dues') }}" method="GET" id="filterForm" class="mb-3">
                 <div class="row g-2 align-items-end">
@@ -31,6 +67,15 @@
                         </select>
                     </div>
                     <div class="col-xl-3 col-lg-3 col-md-4 col-sm-6">
+                        <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
+                        <select class="form-select form-select-sm" id="filter_section" name="filter_section" data-selected-section="{{ $filterSection ?? '' }}" style="height: 32px;">
+                            <option value="">All Sections</option>
+                            @foreach($sectionOptions as $sectionName)
+                                <option value="{{ $sectionName }}" {{ ($filterSection ?? '') == $sectionName ? 'selected' : '' }}>{{ $sectionName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-xl-3 col-lg-3 col-md-4 col-sm-6">
                         <button type="submit" class="btn btn-sm w-100 filter-btn" style="height: 32px;">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">filter_alt</span>
                             <span style="font-size: 12px;">Filter</span>
@@ -40,57 +85,79 @@
             </form>
 
             <!-- Report Display -->
-            @if($allCampusData->count() > 0)
+            @if(!$hasFilters)
+            <div class="text-center py-5 mt-3">
+                <span class="material-symbols-outlined" style="font-size: 64px; color: #dee2e6; opacity: 0.5;">filter_list</span>
+                <h5 class="mt-3 text-muted">Apply Filters to View Report</h5>
+                <p class="text-muted mb-0">Please select campus or class, then click Filter.</p>
+            </div>
+            @elseif($feeHeads->isEmpty())
+            <div class="text-center py-5 mt-3">
+                <span class="material-symbols-outlined" style="font-size: 64px; color: #dee2e6; opacity: 0.5;">category</span>
+                <h5 class="mt-3 text-muted">No Fee Heads</h5>
+                <p class="text-muted mb-0">Add fee heads in <strong>Fee Type / Fee Head</strong> for this campus, then filter again.</p>
+            </div>
+            @elseif($allCampusData->count() > 0)
             <div id="reportContent">
                 @foreach($allCampusData as $campusData)
+                @php
+                    $campusFeeHeads = $campusData['fee_heads'] ?? $feeHeads;
+                @endphp
                 <div class="mb-3">
                     <!-- Report Header -->
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <div>
-                            <h2 class="mb-1 fw-bold" style="color: #003471; font-size: 20px;">ICMS</h2>
-                            <h4 class="mb-0 fw-semibold" style="color: #495057; font-size: 14px;">Head Wise Dues Summary</h4>
-                        </div>
-                        <div class="text-end">
-                            <button type="button" class="btn btn-sm btn-primary" onclick="window.print()" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%); border: none; color: white;">
-                                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: white;">print</span>
-                                <span style="color: white; font-size: 12px;">Print</span>
-                            </button>
-                            <div class="mt-1" style="font-size: 11px; color: #6c757d;">
-                                <div><strong>Campus:</strong> {{ $campusData['campus'] }}</div>
-                                <div><strong>Print Date:</strong> {{ date('d-m-Y H:i') }}</div>
-                            </div>
+                    <div class="mb-3">
+                        <h2 class="mb-1 fw-bold" style="color: #003471; font-size: 20px;">{{ $campusData['campus'] }}</h2>
+                        <div style="font-size: 11px; color: #6c757d;">
+                            <strong>Report Date:</strong> {{ date('d-m-Y H:i') }}
                         </div>
                     </div>
 
                     <!-- Report Table -->
                     <div class="table-responsive">
                         <table class="table table-bordered" style="font-size: 12px;">
-                            <thead style="background-color: #f8f9fa;">
+                            <thead style="background-color: #D3D3D3;">
                                 <tr>
                                     <th style="padding: 6px 8px; text-align: left; border: 1px solid #dee2e6; font-weight: 600;">Class</th>
-                                    <th style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Monthly Fee</th>
-                                    <th style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Muhammad Talha</th>
-                                    <th style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Card Fees</th>
-                                    <th style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Total</th>
+                                    @foreach($campusFeeHeads as $head)
+                                        <th style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">{{ $head }}</th>
+                                    @endforeach
+                                    <th style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Total Paid</th>
+                                    <th style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Total Due</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($campusData['data'] as $data)
+                                @foreach($campusData['rows'] as $data)
                                     <tr>
-                                        <td style="padding: 6px 8px; border: 1px solid #dee2e6;">{{ $data['class'] }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6;">{{ number_format($data['monthly_fee'], 2) }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6;">{{ number_format($data['muhammad_talha'], 2) }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6;">{{ number_format($data['card_fees'], 2) }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">{{ number_format($data['total'], 2) }}</td>
+                                        <td style="padding: 6px 8px; border: 1px solid #dee2e6; background-color: #D3D3D3;">{{ $data['class'] }}</td>
+                                        @foreach($campusFeeHeads as $head)
+                                            @php
+                                                $headData = $data['heads'][$head] ?? ['paid' => 0, 'due' => 0];
+                                            @endphp
+                                            <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; background-color: #D3D3D3; line-height: 1.35;">
+                                                <span class="text-success">{{ number_format($headData['paid'] ?? 0, 2) }}</span>
+                                                <br><span class="text-danger">{{ number_format($headData['due'] ?? 0, 2) }}</span>
+                                                <br><small class="text-muted">Paid / Due</small>
+                                            </td>
+                                        @endforeach
+                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; background-color: #D3D3D3; color: #198754;">{{ number_format($data['total_paid'] ?? 0, 2) }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; background-color: #D3D3D3; color: #dc3545;">{{ number_format($data['total'], 2) }}</td>
                                     </tr>
                                 @endforeach
-                                <!-- Summary Row -->
-                                <tr style="background-color: #f8f9fa;">
-                                    <td style="padding: 6px 8px; border: 1px solid #dee2e6; font-weight: 600;">Total Unpaid</td>
-                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">{{ number_format($campusData['total']['monthly_fee'], 2) }}</td>
-                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">{{ number_format($campusData['total']['muhammad_talha'], 2) }}</td>
-                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">{{ number_format($campusData['total']['card_fees'], 2) }}</td>
-                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">{{ number_format($campusData['total']['total'], 2) }}</td>
+                                <tr style="background-color: #e8f5e9;">
+                                    <td style="padding: 6px 8px; border: 1px solid #dee2e6; font-weight: 600;">Total Paid</td>
+                                    @foreach($campusFeeHeads as $head)
+                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; color: #198754;">{{ number_format($campusData['head_paid_totals'][$head] ?? 0, 2) }}</td>
+                                    @endforeach
+                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; color: #198754;">{{ number_format($campusData['total_paid'] ?? 0, 2) }}</td>
+                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6;"></td>
+                                </tr>
+                                <tr style="background-color: #ffebee;">
+                                    <td style="padding: 6px 8px; border: 1px solid #dee2e6; font-weight: 600;">Total Due</td>
+                                    @foreach($campusFeeHeads as $head)
+                                        <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; color: #dc3545;">{{ number_format($campusData['head_totals'][$head] ?? 0, 2) }}</td>
+                                    @endforeach
+                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6;"></td>
+                                    <td style="padding: 6px 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; color: #dc3545;">{{ number_format($campusData['total'], 2) }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -102,7 +169,7 @@
             <div class="text-center py-5 mt-3">
                 <span class="material-symbols-outlined" style="font-size: 64px; color: #dee2e6; opacity: 0.5;">inbox</span>
                 <h5 class="mt-3 text-muted">No Data Found</h5>
-                <p class="text-muted mb-0">No dues data available.</p>
+                <p class="text-muted mb-0">No outstanding fees for selected filters (same as Fee Payment with no Search Results).</p>
             </div>
             @endif
         </div>
@@ -154,6 +221,30 @@
     box-shadow: 0 0 0 3px rgba(0, 52, 113, 0.15);
     outline: none;
 }
+
+.export-btn {
+    border: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    font-size: 13px;
+}
+
+.excel-btn { background-color: #28a745; color: white; }
+.excel-btn:hover { background-color: #218838; color: white; transform: translateY(-1px); }
+
+.csv-btn { background-color: #ff9800; color: white; }
+.csv-btn:hover { background-color: #f57c00; color: white; transform: translateY(-1px); }
+
+.pdf-btn { background-color: #dc3545; color: white; }
+.pdf-btn:hover { background-color: #c82333; color: white; transform: translateY(-1px); }
+
+.print-btn { background-color: #2196f3; color: white; }
+.print-btn:hover { background-color: #0b7dda; color: white; transform: translateY(-1px); }
 
 /* Print Styles */
 @media print {
@@ -272,6 +363,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
+    const sectionSelect = document.getElementById('filter_section');
 
     function populateClasses(classes, selectedClass = '') {
         classSelect.innerHTML = '<option value="">All Classes</option>';
@@ -290,6 +382,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadClassesByCampus(campus, selectedClass = '') {
         classSelect.innerHTML = '<option value="">Loading...</option>';
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
         const params = new URLSearchParams();
         if (campus) {
             params.append('campus', campus);
@@ -305,12 +398,60 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    function populateSections(sections, selectedSection = '') {
+        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+        if (sections && sections.length > 0) {
+            sections.forEach(sectionName => {
+                const option = document.createElement('option');
+                option.value = sectionName;
+                option.textContent = sectionName;
+                if (selectedSection && selectedSection === sectionName) {
+                    option.selected = true;
+                }
+                sectionSelect.appendChild(option);
+            });
+        }
+    }
+
+    function loadSectionsByClass(campus, className, selectedSection = '') {
+        if (!className) {
+            populateSections([], selectedSection);
+            return;
+        }
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+        const params = new URLSearchParams();
+        params.append('class', className);
+        if (campus) {
+            params.append('campus', campus);
+        }
+        fetch(`{{ route('reports.head-wise-dues.get-sections-by-class') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                populateSections(data.sections || [], selectedSection);
+            })
+            .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            });
+    }
+
     campusSelect.addEventListener('change', function() {
         loadClassesByCampus(this.value);
+        loadSectionsByClass(this.value, '');
+    });
+
+    classSelect.addEventListener('change', function() {
+        loadSectionsByClass(campusSelect.value, this.value);
     });
 
     const selectedClass = classSelect.dataset.selectedClass || '';
+    const selectedSection = sectionSelect.dataset.selectedSection || '';
     loadClassesByCampus(campusSelect.value, selectedClass);
+    if (selectedClass) {
+        loadSectionsByClass(campusSelect.value, selectedClass, selectedSection);
+    } else {
+        populateSections([], selectedSection);
+    }
 });
 </script>
 @endsection

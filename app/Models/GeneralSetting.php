@@ -22,6 +22,12 @@ class GeneralSetting extends Model
         'running_session',
         'logo',
         'system_name',
+        'fee_voucher_notice',
+        'accounts_settlement_print_note',
+        'fee_voucher_bank_name',
+        'fee_voucher_account_title',
+        'fee_voucher_account_number',
+        'fee_voucher_iban',
         'bio_token',
         'campus_id',
     ];

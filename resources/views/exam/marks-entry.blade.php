@@ -3,6 +3,11 @@
 @section('title', 'Marks Entry')
 
 @section('content')
+@php
+    $isStaffMarksUser = $isStaffMarksUser ?? false;
+    $uploadableSubjects = collect($uploadableSubjects ?? []);
+    $canUploadMarks = $canUploadMarks ?? true;
+@endphp
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
@@ -86,8 +91,15 @@
                         <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;" {{ !$filterClass || !$filterSection ? 'disabled' : '' }}>
                             <option value="">Select Subject</option>
                             @if($filterClass && $filterSection && $subjects->isNotEmpty())
+                                @php
+                                    $uploadableSubjectKeys = collect($uploadableSubjects ?? [])->map(fn ($s) => strtolower(trim((string) $s)));
+                                @endphp
                                 @foreach($subjects as $subjectName)
-                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
+                                    @php
+                                        $subjectCanEdit = empty($isStaffMarksUser) || $uploadableSubjectKeys->contains(strtolower(trim((string) $subjectName)));
+                                        $subjectLabel = $subjectName . (!empty($isStaffMarksUser) ? ($subjectCanEdit ? ' (Edit)' : ' (View only)') : '');
+                                    @endphp
+                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectLabel }}</option>
                                 @endforeach
                             @endif
                         </select>
@@ -106,6 +118,28 @@
             <!-- Results Table -->
             @if($filterClass && $filterSection)
             <div class="mt-3">
+                @if(!empty($isStaffMarksUser))
+                    @if($filterSubject)
+                        @if(!empty($canUploadMarks))
+                            <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">edit</span>
+                                You can enter marks for <strong>{{ $filterSubject }}</strong> (assigned to you in Manage Subjects).
+                            </div>
+                        @else
+                            <div class="alert alert-warning py-2 mb-3" style="font-size: 13px;">
+                                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">visibility</span>
+                                View only: <strong>{{ $filterSubject }}</strong> is not assigned to you. Marks cannot be changed.
+                            </div>
+                        @endif
+                    @else
+                        <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                            Select a subject. You can save marks only for subjects marked <strong>(Edit)</strong> in the dropdown.
+                        </div>
+                    @endif
+                @endif
+
+                @php $marksReadonly = isset($canUploadMarks) && !$canUploadMarks; @endphp
+
                 <!-- Context Card -->
                 <div class="card mb-3" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                     <div class="card-body p-3">
@@ -192,13 +226,13 @@
                                         </td>
                                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->marks_obtained !== null ? $student->mark->marks_obtained : '' }}" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->marks_obtained !== null ? $student->mark->marks_obtained : '' }}" style="width: 100px;" @if($marksReadonly) readonly disabled @endif>
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->total_marks !== null ? $student->mark->total_marks : '' }}" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->total_marks !== null ? $student->mark->total_marks : '' }}" style="width: 100px;" @if($marksReadonly) readonly disabled @endif>
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->passing_marks !== null ? $student->mark->passing_marks : '' }}" style="width: 100px;">
+                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="1" value="{{ $student->mark && $student->mark->passing_marks !== null ? $student->mark->passing_marks : '' }}" style="width: 100px;" @if($marksReadonly) readonly disabled @endif>
                                         </td>
                                     </tr>
                                     @empty
@@ -214,7 +248,7 @@
                                 </tbody>
                             </table>
                             
-                            @if($students->count() > 0)
+                            @if($students->count() > 0 && empty($marksReadonly))
                             <div class="text-center mt-3">
                                 <button type="submit" class="btn btn-success px-4 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none; font-weight: 500;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">thumb_up</span>
@@ -314,6 +348,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const isStaffMarksUser = {{ !empty($isStaffMarksUser) ? 'true' : 'false' }};
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
@@ -517,10 +552,17 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 subjectSelect.innerHTML = '<option value="">Select Subject</option>';
                 if (data.subjects && data.subjects.length > 0) {
+                    const uploadableKeys = (data.uploadable_subjects || data.subjects || [])
+                        .map(s => String(s).toLowerCase().trim());
                     data.subjects.forEach(subject => {
                         const option = document.createElement('option');
                         option.value = subject;
-                        option.textContent = subject;
+                        if (isStaffMarksUser) {
+                            const canEdit = uploadableKeys.includes(String(subject).toLowerCase().trim());
+                            option.textContent = subject + (canEdit ? ' (Edit)' : ' (View only)');
+                        } else {
+                            option.textContent = subject;
+                        }
                         // Preserve selected subject - check both server-side value and current selected value
                         if (subject === '{{ $filterSubject }}' || subject === currentSelectedSubject) {
                             option.selected = true;

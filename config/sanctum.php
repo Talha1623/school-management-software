@@ -31,7 +31,8 @@ return [
     |
     */
 
-    'guard' => ['web'],
+    /* Try parent portal session before web User so /api/parent/* works when parent is logged in on web. */
+    'guard' => ['parent', 'web'],
 
     /*
     |--------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use App\Models\ParentAccount;
 use App\Models\Student;
 use Illuminate\Http\Request;
@@ -89,11 +90,27 @@ class PrintGatePassesController extends Controller
         });
     }
 
+    private function getDesignSettings(Request $request): array
+    {
+        return [
+            'accent_color' => $request->get('accent_color', '#003471'),
+            'secondary_color' => $request->get('secondary_color', '#004a9e'),
+            'gradient_color1' => $request->get('gradient_color1', '#FFFFFF'),
+            'gradient_color2' => $request->get('gradient_color2', '#F8F9FA'),
+            'parent_name_color' => $request->get('parent_name_color', '#1f2a44'),
+            'details_text_color' => $request->get('details_text_color', '#333333'),
+            'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
+        ];
+    }
+
     /**
      * Display print view with filtered parents.
      */
     public function print(Request $request): View
     {
+        $settings = GeneralSetting::getSettings();
+        $designSettings = $this->getDesignSettings($request);
+
         if ($request->filled('parent_id')) {
             $parent = ParentAccount::find($request->parent_id);
             $parents = collect();
@@ -112,21 +129,7 @@ class PrintGatePassesController extends Controller
                 ]]);
             }
 
-            $designSettings = [
-                'accent_color' => $request->get('accent_color', '#003471'),
-                'secondary_color' => $request->get('secondary_color', '#F08080'),
-                'gradient_color1' => $request->get('gradient_color1', '#FFFFFF'),
-                'gradient_color2' => $request->get('gradient_color2', '#F8F9FA'),
-                'parent_name_color' => $request->get('parent_name_color', '#000000'),
-                'details_text_color' => $request->get('details_text_color', '#000000'),
-                'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
-                'orientation' => $request->get('orientation', 'landscape'),
-                'show_monogram' => $request->get('show_monogram', 'yes'),
-                'card_style' => $request->get('card_style', 'modern'),
-                'border_style' => $request->get('border_style', 'rounded'),
-            ];
-
-            return view('parent.print-gate-passes-print', compact('parents', 'designSettings'));
+            return view('parent.print-gate-passes-print', compact('parents', 'designSettings', 'settings'));
         }
 
         // Get filtered parents
@@ -152,22 +155,7 @@ class PrintGatePassesController extends Controller
             });
         }
         
-        // Get design settings from request
-        $designSettings = [
-            'accent_color' => $request->get('accent_color', '#003471'),
-            'secondary_color' => $request->get('secondary_color', '#F08080'),
-            'gradient_color1' => $request->get('gradient_color1', '#FFFFFF'),
-            'gradient_color2' => $request->get('gradient_color2', '#F8F9FA'),
-            'parent_name_color' => $request->get('parent_name_color', '#000000'),
-            'details_text_color' => $request->get('details_text_color', '#000000'),
-            'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
-            'orientation' => $request->get('orientation', 'landscape'),
-            'show_monogram' => $request->get('show_monogram', 'yes'),
-            'card_style' => $request->get('card_style', 'modern'),
-            'border_style' => $request->get('border_style', 'rounded'),
-        ];
-        
-        return view('parent.print-gate-passes-print', compact('parents', 'designSettings'));
+        return view('parent.print-gate-passes-print', compact('parents', 'designSettings', 'settings'));
     }
 }
 

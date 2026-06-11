@@ -23,29 +23,18 @@
         }
 
         @media print {
-            body {
-                background: white;
-                padding: 0;
+            html, body {
+                background: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
-            
+
             .no-print {
                 display: none !important;
             }
-            
+
             .certificate-container {
-                box-shadow: none;
-                margin: 0;
-                padding: 0;
-                border: none;
-            }
-            
-            .certificate-border {
-                border: none;
-            }
-            
-            @page {
-                size: A4 landscape;
-                margin: 0;
+                box-shadow: none !important;
             }
         }
 
@@ -129,8 +118,8 @@
         }
 
         .logo-img {
-            width: 90px;
-            height: 90px;
+            width: 115px;
+            height: 115px;
             object-fit: contain;
             filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
         }
@@ -350,16 +339,6 @@
             font-weight: 600;
         }
 
-        .certificate-number {
-            background: #003471;
-            color: white;
-            padding: 8px 15px;
-            border-radius: 5px;
-            font-size: 14px;
-            margin-top: 15px;
-            display: inline-block;
-        }
-
         /* Official Seal Area */
         .seal-area {
             position: absolute;
@@ -450,7 +429,7 @@
         }
 
         /* Responsive */
-        @media (max-width: 900px) {
+        @media screen and (max-width: 900px) {
             .certificate-border {
                 padding: 30px 25px;
             }
@@ -474,7 +453,7 @@
             }
         }
 
-        @media (max-width: 768px) {
+        @media screen and (max-width: 768px) {
             .certificate-footer {
                 flex-direction: column;
                 gap: 40px;
@@ -499,7 +478,7 @@
             }
         }
 
-        @media (max-width: 480px) {
+        @media screen and (max-width: 480px) {
             body {
                 padding: 15px 10px;
             }
@@ -562,13 +541,6 @@
 
             <!-- Header -->
             <div class="certificate-header">
-                <div class="school-logo">
-                    @if($schoolLogo)
-                        <img src="{{ $schoolLogo }}" alt="School Logo" class="logo-img" onerror="this.onerror=null; this.src='{{ asset('assets/images/logo-icon.png') }}';">
-                    @else
-                        <img src="{{ asset('assets/images/logo-icon.png') }}" alt="School Logo" class="logo-img">
-                    @endif
-                </div>
                 <h1 class="school-name">{{ $schoolName }}</h1>
                 @if($schoolAddress)
                 <p class="school-address">
@@ -599,7 +571,7 @@
 
             <!-- Body -->
             <div class="certificate-body">
-                <p style="margin-bottom: 25px; text-align: center;">
+                <p class="cert-intro" style="margin-bottom: 25px; text-align: center;">
                     <i>This certificate confirms the good character and conduct of the following student during their period of study at this institution</i>
                 </p>
 
@@ -691,11 +663,11 @@
                     </div>
                 </div>
 
-                <p style="margin-top: 30px; margin-bottom: 20px; text-align: center;">
+                <p class="cert-conduct" style="margin-top: 30px; margin-bottom: 20px; text-align: center;">
                     During the period of study at this institution, the student named above has shown <strong>good conduct and character</strong>. He/She has been <strong>regular in attendance</strong> and has shown <strong>satisfactory progress</strong> in studies.
                 </p>
 
-                <p style="margin-top: 20px; text-align: center; font-style: italic;">
+                <p class="cert-closing" style="margin-top: 20px; text-align: center; font-style: italic;">
                     This certificate is issued on request and we wish the student success in all future endeavors.
                 </p>
             </div>
@@ -711,9 +683,6 @@
                 </div>
                 <div class="date-section">
                     <p><strong>Date of Issue:</strong> {{ $currentDate }}</p>
-                    <div class="certificate-number">
-                        Certificate No: {{ strtoupper(substr(md5($student->id . $student->student_code . $currentDate), 0, 10)) }}
-                    </div>
                 </div>
             </div>
         </div>

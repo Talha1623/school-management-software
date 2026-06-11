@@ -135,6 +135,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    async function readJsonFromResponse(response) {
+        const raw = await response.text();
+        const t = raw.replace(/^\uFEFF/, '').trim();
+        if (!t) {
+            return {};
+        }
+        try {
+            return JSON.parse(t);
+        } catch (e) {
+            const plain = t.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            const hint = plain.slice(0, 140);
+            throw new Error(hint ? ('Not JSON (login or error page): ' + hint) : 'Invalid JSON from server');
+        }
+    }
+
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
@@ -161,7 +176,8 @@ document.addEventListener('DOMContentLoaded', function() {
         feeTypeSelect.innerHTML = '<option value="">All</option>';
         feeTypeSelect.disabled = false;
 
-        fetch(`{{ route('accountant.custom-fee.get-fee-types-by-campus') }}?campus=${encodeURIComponent(campus)}`, {
+        fetch(`{{ route('accountant.custom-fee.get-fee-types-by-campus', [], false) }}?campus=${encodeURIComponent(campus)}`, {
+            credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -201,24 +217,23 @@ document.addEventListener('DOMContentLoaded', function() {
         classSelect.innerHTML = '<option value="">Loading classes...</option>';
         classSelect.disabled = true;
 
-        const url = `{{ route('accountant.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`;
-        console.log('Loading classes for campus:', campus, 'URL:', url);
+        const url = `{{ route('accountant.bulk-fee-payment.ajax.classes', [], false) }}?campus=${encodeURIComponent(campus)}`;
 
         fetch(url, {
+            credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => {
-            console.log('Response status:', response.status);
+        .then(async response => {
+            const data = await readJsonFromResponse(response);
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(data.error || data.message || `HTTP ${response.status}`);
             }
-            return response.json();
+            return data;
         })
         .then(data => {
-            console.log('Classes data received:', data);
             classSelect.innerHTML = '<option value="">All Classes</option>';
             if (data.classes && data.classes.length > 0) {
                 data.classes.forEach(className => {
@@ -234,8 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            console.error('Error loading classes:', error);
-            classSelect.innerHTML = '<option value="">Error loading classes. Please try again.</option>';
+            classSelect.innerHTML = '<option value="">' + (error.message ? ('Error: ' + error.message) : 'Error loading classes') + '</option>';
             classSelect.disabled = false;
         });
     }
@@ -260,24 +274,23 @@ document.addEventListener('DOMContentLoaded', function() {
             class: selectedClass,
             campus: selectedCampus || ''
         });
-        const sectionsUrl = `{{ route('accountant.get-sections-by-class') }}?${params.toString()}`;
-        console.log('Loading sections for class:', selectedClass, 'Campus:', selectedCampus, 'URL:', sectionsUrl);
-        
+        const sectionsUrl = `{{ route('accountant.bulk-fee-payment.ajax.sections', [], false) }}?${params.toString()}`;
+
         fetch(sectionsUrl, {
+            credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => {
-            console.log('Sections response status:', response.status);
+        .then(async response => {
+            const data = await readJsonFromResponse(response);
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(data.error || data.message || `HTTP ${response.status}`);
             }
-            return response.json();
+            return data;
         })
         .then(data => {
-            console.log('Sections data received:', data);
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
             if (data.sections && data.sections.length > 0) {
                 // Handle both array of strings and array of objects
@@ -295,8 +308,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            console.error('Error loading sections:', error);
-            sectionSelect.innerHTML = '<option value="">Error loading sections. Please try again.</option>';
+            sectionSelect.innerHTML = '<option value="">' + (error.message ? ('Error: ' + error.message) : 'Error loading sections') + '</option>';
             sectionSelect.disabled = false;
         });
     });
@@ -313,7 +325,8 @@ function loadBulkFees() {
     const tbody = document.getElementById('bulkFeeBody');
     tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">Loading...</td></tr>';
 
-    fetch(`{{ route('accountant.bulk-fee-payment.data') }}?${params.toString()}`, {
+    fetch(`{{ route('accountant.bulk-fee-payment.data', [], false) }}?${params.toString()}`, {
+        credentials: 'same-origin',
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
@@ -458,7 +471,7 @@ function saveBulkPayments() {
         return;
     }
 
-    fetch(`{{ route('accountant.bulk-fee-payment.store') }}`, {
+    fetch(`{{ route('accountant.bulk-fee-payment.store', [], false) }}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

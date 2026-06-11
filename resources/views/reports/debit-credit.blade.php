@@ -76,114 +76,104 @@
                         <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
                         <span>Debit & Credit Statement</span>
                     </h5>
+                    <small class="text-white opacity-75 d-block mt-1">Credit: cash received + discount (separate) · Debit: paid expenses by category (including staff salary)</small>
+                </div>
+
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('reports.debit-credit.export', ['format' => 'csv']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">table_view</span>
+                            <span>CSV</span>
+                        </a>
+                        <a href="{{ route('reports.debit-credit.export', ['format' => 'pdf']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <a href="{{ route('reports.debit-credit.print') }}?{{ http_build_query(array_merge(request()->except(['page']), ['auto_print' => 1])) }}" class="btn btn-sm px-2 py-1 export-btn print-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                            <span>Print</span>
+                        </a>
+                    </div>
                 </div>
 
                 <div class="default-table-area" style="margin-top: 0;">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Date</th>
-                                    <th>Student Code</th>
-                                    <th>Student Name</th>
-                                    <th>Class</th>
-                                    <th>Section</th>
-                                    <th>Campus</th>
-                                    <th>Description</th>
-                                    <th>Type</th>
-                                    <th>Amount</th>
-                                    <th>Discount</th>
-                                    <th>Method</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($statements as $index => $statement)
-                                <tr>
-                                    <td>{{ $index + 1 }}</td>
-                                    <td>{{ date('d M Y', strtotime($statement['date'])) }}</td>
-                                    <td>{{ $statement['student_code'] }}</td>
-                                    <td>{{ $statement['student_name'] }}</td>
-                                    <td>{{ $statement['class'] }}</td>
-                                    <td>{{ $statement['section'] }}</td>
-                                    <td>{{ $statement['campus'] }}</td>
-                                    <td>{{ $statement['description'] }}</td>
-                                    <td>
-                                        @if($statement['type'] == 'Credit')
-                                            <span class="badge bg-success">Credit</span>
-                                        @else
-                                            <span class="badge bg-danger">Debit</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if($statement['type'] == 'Credit')
-                                            <span class="text-success fw-semibold">+{{ number_format($statement['amount'], 2) }}</span>
-                                        @else
-                                            <span class="text-danger fw-semibold">-{{ number_format($statement['amount'], 2) }}</span>
-                                        @endif
-                                    </td>
-                                    <td>{{ number_format($statement['discount'], 2) }}</td>
-                                    <td>{{ $statement['method'] }}</td>
-                                </tr>
-                                @empty
-                                <tr>
-                                    <td colspan="12" class="text-center py-4">
-                                        <div class="d-flex flex-column align-items-center">
-                                            <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
-                                            <p class="text-muted mt-2 mb-0">No records found</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                                @endforelse
-                            </tbody>
-                            @if($statements->count() > 0)
-                            <tfoot>
-                                <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="8" class="text-end">Total Credit:</td>
-                                    <td>
-                                        <span class="badge bg-success">Credit</span>
-                                    </td>
-                                    <td class="text-success">
-                                        {{ number_format($statements->where('type', 'Credit')->sum('amount'), 2) }}
-                                    </td>
-                                    <td colspan="2"></td>
-                                </tr>
-                                <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="8" class="text-end">Total Debit:</td>
-                                    <td>
-                                        <span class="badge bg-danger">Debit</span>
-                                    </td>
-                                    <td class="text-danger">
-                                        {{ number_format($statements->where('type', 'Debit')->sum('amount'), 2) }}
-                                    </td>
-                                    <td colspan="2"></td>
-                                </tr>
-                                <tr class="fw-bold" style="background-color: #e3f2fd;">
-                                    <td colspan="8" class="text-end">Net Balance:</td>
-                                    <td>
-                                        @php
-                                            $totalCredit = $statements->where('type', 'Credit')->sum('amount');
-                                            $totalDebit = $statements->where('type', 'Debit')->sum('amount');
-                                            $netBalance = $totalCredit - $totalDebit;
-                                        @endphp
-                                        @if($netBalance >= 0)
-                                            <span class="badge bg-success">Credit</span>
-                                        @else
-                                            <span class="badge bg-danger">Debit</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if($netBalance >= 0)
-                                            <span class="text-success">+{{ number_format($netBalance, 2) }}</span>
-                                        @else
-                                            <span class="text-danger">{{ number_format($netBalance, 2) }}</span>
-                                        @endif
-                                    </td>
-                                    <td colspan="2"></td>
-                                </tr>
-                            </tfoot>
-                            @endif
-                        </table>
+                    <div class="row g-2">
+                        <div class="col-lg-6">
+                            <div class="table-responsive mb-0">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Fee Head</th>
+                                            <th class="text-center">Paid Txns</th>
+                                            <th class="text-end">Cash</th>
+                                            <th class="text-end">Discount</th>
+                                            <th class="text-end">Paid Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($feeHeadSummary as $row)
+                                        <tr>
+                                            <td>{{ $row['head'] }}</td>
+                                            <td class="text-center">{{ $row['transactions'] }}</td>
+                                            <td class="text-end">{{ number_format($row['cash'] ?? 0, 2) }}</td>
+                                            <td class="text-end text-warning">{{ number_format($row['discount'] ?? 0, 2) }}</td>
+                                            <td class="text-end amount-credit fw-semibold">{{ number_format($row['amount'], 2) }}</td>
+                                        </tr>
+                                        @empty
+                                        <tr>
+                                            <td colspan="5" class="text-center py-3 text-muted">No paid fee collections found for selected filters</td>
+                                        </tr>
+                                        @endforelse
+                                    </tbody>
+                                    @if($feeHeadSummary->count() > 0)
+                                    <tfoot>
+                                        <tr class="fw-bold" style="background-color: #e3f2fd;">
+                                            <td class="text-end">Total</td>
+                                            <td class="text-center">{{ $feeTotals['transactions'] ?? 0 }}</td>
+                                            <td class="text-end">{{ number_format($feeTotals['cash'] ?? 0, 2) }}</td>
+                                            <td class="text-end text-warning">{{ number_format($feeTotals['discount'] ?? 0, 2) }}</td>
+                                            <td class="text-end amount-credit">{{ number_format($feeTotals['amount'] ?? 0, 2) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                    @endif
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="table-responsive mb-0">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Expense Category</th>
+                                            <th class="text-center">Paid Txns</th>
+                                            <th class="text-end">Paid Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($expenseHeadSummary as $row)
+                                        <tr>
+                                            <td>{{ $row['head'] }}</td>
+                                            <td class="text-center">{{ $row['transactions'] }}</td>
+                                            <td class="text-end amount-debit">{{ number_format($row['amount'], 2) }}</td>
+                                        </tr>
+                                        @empty
+                                        <tr>
+                                            <td colspan="3" class="text-center py-3 text-muted">No paid expenses or staff salaries found for selected filters</td>
+                                        </tr>
+                                        @endforelse
+                                    </tbody>
+                                    @if($expenseHeadSummary->count() > 0)
+                                    <tfoot>
+                                        <tr class="fw-bold" style="background-color: #fde8e8;">
+                                            <td class="text-end">Total</td>
+                                            <td class="text-center">{{ $expenseTotals['transactions'] ?? 0 }}</td>
+                                            <td class="text-end amount-debit">{{ number_format($expenseTotals['amount'] ?? 0, 2) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                    @endif
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -247,6 +237,36 @@
     font-size: 11px;
     padding: 4px 8px;
 }
+
+.amount-credit {
+    background-color: #8dd194 !important;
+    color: #000;
+    font-weight: 600;
+}
+
+.amount-debit {
+    background-color: #e8b5b5 !important;
+    color: #000;
+    font-weight: 600;
+}
+
+.export-btn {
+    border: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    font-size: 12px;
+}
+.csv-btn { background-color: #17a2b8; color: white; }
+.csv-btn:hover { background-color: #138496; color: white; }
+.pdf-btn { background-color: #dc3545; color: white; }
+.pdf-btn:hover { background-color: #c82333; color: white; }
+.print-btn { background-color: #6c757d; color: white; }
+.print-btn:hover { background-color: #5a6268; color: white; }
 </style>
 
 <script>

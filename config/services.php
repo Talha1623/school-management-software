@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'cpanel' => [
+        'base_url' => env('CPANEL_API_BASE_URL'),
+        'username' => env('CPANEL_USERNAME'),
+        'token' => env('CPANEL_API_TOKEN'),
+        'subdomain_document_root' => env('CPANEL_SUBDOMAIN_DOCUMENT_ROOT', 'public_html'),
+    ],
+
 ];

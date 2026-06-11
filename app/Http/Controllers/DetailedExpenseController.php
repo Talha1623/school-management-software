@@ -2,87 +2,154 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ManagementExpense;
-use App\Models\ExpenseCategory;
 use App\Models\Campus;
-use App\Models\ClassModel;
-use App\Models\Section;
-use App\Models\StudentPayment;
-use App\Models\CustomPayment;
-use App\Models\Student;
+use App\Models\ExpenseCategory;
+use App\Models\GeneralSetting;
+use App\Models\ManagementExpense;
+use App\Models\Salary;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DetailedExpenseController extends Controller
 {
-    /**
-     * Display the detailed expense reports with filters.
-     */
     public function index(Request $request): View
     {
-        // Get filter values
+        return view('reports.detailed-expense', $this->buildReportData($request));
+    }
+
+    public function export(Request $request, string $format)
+    {
+        $data = $this->buildReportData($request);
+        $records = $data['expenseRecords'];
+
+        if (!in_array($format, ['excel', 'csv', 'pdf'], true)) {
+            return redirect()->route($this->detailedExpenseRouteName())->with('error', 'Invalid export format.');
+        }
+
+        if ($format === 'pdf') {
+            $pdfData = array_merge($data, [
+                'settings' => GeneralSetting::getSettings(),
+                'printedAt' => now()->format('d M Y, h:i A'),
+            ]);
+
+            if (class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
+                $pdf = Pdf::loadView('reports.detailed-expense-pdf', $pdfData);
+
+                return $pdf->stream('detailed_expense_' . now()->format('Ymd_His') . '.pdf');
+            }
+
+            return response()->view('reports.detailed-expense-pdf', $pdfData);
+        }
+
+        return $this->exportSpreadsheet($records, $data, $format);
+    }
+
+    public function print(Request $request): View
+    {
+        return view('reports.detailed-expense-print', array_merge($this->buildReportData($request), [
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]));
+    }
+
+    public function getMethodsByCampus(Request $request): JsonResponse
+    {
+        if (Auth::guard('accountant')->check()) {
+            $accountantCampus = Auth::guard('accountant')->user()->campus ?? null;
+            if ($accountantCampus) {
+                $request->merge(['filter_campus' => $accountantCampus]);
+            }
+        }
+
+        return response()->json([
+            'methods' => $this->resolveAvailableMethods($request->get('filter_campus')),
+        ]);
+    }
+
+    private function detailedExpenseRouteName(): string
+    {
+        return Auth::guard('accountant')->check()
+            ? 'accountant.detailed-expense'
+            : 'reports.detailed-expense';
+    }
+
+    private function exportSpreadsheet($records, array $data, string $format): StreamedResponse
+    {
+        $isExcel = $format === 'excel';
+        $filename = 'detailed_expense_' . now()->format('Ymd_His') . ($isExcel ? '.xls' : '.csv');
+        $headers = [
+            'Content-Type' => $isExcel ? 'application/vnd.ms-excel' : 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        $callback = function () use ($records, $data, $isExcel): void {
+            $file = fopen('php://output', 'w');
+            if ($isExcel) {
+                fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            }
+
+            fputcsv($file, ['#', 'Title', 'Categories', 'Accountant', 'Amount', 'Date & Time', 'Description', 'Method']);
+
+            foreach ($records as $index => $record) {
+                $formattedDate = !empty($record['date'])
+                    ? \Carbon\Carbon::parse($record['date'])->format('d-m-Y h:i A')
+                    : 'N/A';
+
+                fputcsv($file, [
+                    $index + 1,
+                    $record['title'] ?? 'N/A',
+                    $record['category'] ?? 'N/A',
+                    $record['accountant'] ?? 'N/A',
+                    (float) ($record['amount'] ?? 0),
+                    $formattedDate,
+                    $record['description'] ?? 'N/A',
+                    $record['method'] ?? 'N/A',
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function buildReportData(Request $request): array
+    {
         $filterCampus = $request->get('filter_campus');
-        $filterClass = $request->get('filter_class');
-        $filterSection = $request->get('filter_section');
         $filterMonth = $request->get('filter_month');
         $filterDate = $request->get('filter_date');
         $filterYear = $request->get('filter_year');
         $filterMethod = $request->get('filter_method');
 
-        // Get campuses from Campus model first, then fallback
+        if (Auth::guard('accountant')->check()) {
+            $accountantCampus = Auth::guard('accountant')->user()->campus ?? null;
+            if ($accountantCampus) {
+                $filterCampus = $accountantCampus;
+                $request->merge(['filter_campus' => $accountantCampus]);
+            }
+        }
+
         $campuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name');
+        if (Auth::guard('accountant')->check()) {
+            $accountantCampus = Auth::guard('accountant')->user()->campus ?? null;
+            if ($accountantCampus) {
+                $campuses = $campuses->filter(fn ($campus) => $campus === $accountantCampus)->values();
+            }
+        }
         if ($campuses->isEmpty()) {
             $campuses = ManagementExpense::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
         }
 
-        // Get classes
-        $classesQuery = ClassModel::whereNotNull('class_name');
-        if ($filterCampus) {
-            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-        }
-        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
-        if ($classes->isEmpty()) {
-            $classesFromStudents = Student::whereNotNull('class');
-            if ($filterCampus) {
-                $classesFromStudents->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-            }
-            $classesFromStudents = $classesFromStudents->distinct()->pluck('class')->sort()->values();
-            $classes = $classesFromStudents->isEmpty()
-                ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
-                : $classesFromStudents;
-        }
-
-        // Get sections
-        $sectionsQuery = Section::whereNotNull('name');
-        if ($filterCampus) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-        }
-        if ($filterClass) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-        }
-        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
-        if ($sections->isEmpty()) {
-            $sectionsFromSubjects = \App\Models\Subject::whereNotNull('section');
-            if ($filterCampus) {
-                $sectionsFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-            }
-            if ($filterClass) {
-                $sectionsFromSubjects->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-            }
-            $sectionsFromSubjects = $sectionsFromSubjects->distinct()->pluck('section')->sort()->values();
-            $sections = $sectionsFromSubjects->isEmpty()
-                ? collect(['A', 'B', 'C', 'D', 'E'])
-                : $sectionsFromSubjects;
-        }
-
-        // Get expense categories
         $categories = ExpenseCategory::whereNotNull('category_name')->distinct()->pluck('category_name')->sort()->values();
         if ($categories->isEmpty()) {
             $categories = collect(['Office Supplies', 'Utilities', 'Maintenance', 'Transportation', 'Other']);
         }
 
-        // Month options
         $months = collect([
             '01' => 'January',
             '02' => 'February',
@@ -98,25 +165,18 @@ class DetailedExpenseController extends Controller
             '12' => 'December',
         ]);
 
-        // Year options (current year and previous 5 years)
-        $currentYear = date('Y');
+        $currentYear = (int) date('Y');
         $years = collect();
         for ($i = 0; $i < 6; $i++) {
             $years->push($currentYear - $i);
         }
 
-        // Get payment methods from expenses
-        $methods = ManagementExpense::whereNotNull('method')->distinct()->pluck('method')->sort()->values();
-        
-        if ($methods->isEmpty()) {
-            $methods = collect(['Cash', 'Bank Transfer', 'Cheque', 'Online Payment', 'Card']);
-        }
+        $methodGroups = $this->expenseMethodGroups();
+        $methods = $this->resolveAvailableMethods($filterCampus);
 
-        // Query expenses
         $expensesQuery = ManagementExpense::query();
-        
         if ($filterCampus) {
-            $expensesQuery->where('campus', $filterCampus);
+            $expensesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $filterCampus))]);
         }
         if ($filterMonth) {
             $expensesQuery->whereMonth('date', $filterMonth);
@@ -128,14 +188,12 @@ class DetailedExpenseController extends Controller
             $expensesQuery->whereYear('date', $filterYear);
         }
         if ($filterMethod) {
-            $expensesQuery->where('method', $filterMethod);
+            $this->applyExpenseMethodFilter($expensesQuery, (string) $filterMethod, $methodGroups, 'method');
         }
-        
+
         $expenses = $expensesQuery->orderBy('date', 'desc')->get();
 
-        // Prepare expense records
         $expenseRecords = collect();
-
         foreach ($expenses as $expense) {
             $expenseRecords->push([
                 'id' => $expense->id,
@@ -144,7 +202,7 @@ class DetailedExpenseController extends Controller
                 'title' => $expense->title,
                 'description' => $expense->description,
                 'amount' => $expense->amount,
-                'method' => $expense->method,
+                'method' => $this->canonicalizeExpenseMethod($expense->method, $methodGroups),
                 'date' => $expense->date,
                 'invoice_receipt' => $expense->invoice_receipt,
                 'notify_admin' => $expense->notify_admin,
@@ -152,164 +210,186 @@ class DetailedExpenseController extends Controller
             ]);
         }
 
-        // Month label for summary
-        $monthLabel = null;
-        if ($filterMonth && $months->has($filterMonth)) {
-            $monthLabel = $months->get($filterMonth);
-        } elseif ($filterDate) {
-            $monthLabel = \Carbon\Carbon::parse($filterDate)->format('F');
-        } else {
-            $monthLabel = 'All';
-        }
+        // Also include Paid Salaries as expenses (salary module).
+        $salaryQuery = Salary::query()
+            ->with('staff')
+            ->where('status', 'Paid')
+            ->where('amount_paid', '>', 0);
 
-        // Total Expense (based on filters)
-        $totalExpense = $expenses->sum('amount');
-
-        // Total Income for summary (filtered by campus/class/section/month/date/year/method)
-        $studentPaymentsQuery = StudentPayment::query();
+        $salaryConnection = (new Salary())->getConnectionName() ?: config('database.default');
+        $salaryDateColumn = Schema::connection($salaryConnection)->hasColumn('salaries', 'payment_date')
+            ? 'payment_date'
+            : 'updated_at';
+        $hasSalaryPaymentMethod = Schema::connection($salaryConnection)->hasColumn('salaries', 'payment_method');
         if ($filterCampus) {
-            $studentPaymentsQuery->where('campus', $filterCampus);
+            $campusKey = strtolower(trim((string) $filterCampus));
+            $salaryQuery->whereHas('staff', function ($q) use ($campusKey) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusKey]);
+            });
         }
         if ($filterMonth) {
-            $studentPaymentsQuery->whereMonth('payment_date', $filterMonth);
+            $salaryQuery->whereMonth($salaryDateColumn, $filterMonth);
         }
         if ($filterDate) {
-            $studentPaymentsQuery->whereDate('payment_date', $filterDate);
+            $salaryQuery->whereDate($salaryDateColumn, $filterDate);
         }
         if ($filterYear) {
-            $studentPaymentsQuery->whereYear('payment_date', $filterYear);
+            $salaryQuery->whereYear($salaryDateColumn, $filterYear);
         }
+        $includeSalaries = true;
         if ($filterMethod) {
-            $studentPaymentsQuery->where('method', $filterMethod);
-        }
-        $studentPayments = $studentPaymentsQuery->get();
-
-        if ($filterClass || $filterSection) {
-            $studentCodes = Student::when($filterCampus, function($q) use ($filterCampus) {
-                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-                })
-                ->when($filterClass, function($q) use ($filterClass) {
-                    $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-                })
-                ->when($filterSection, function($q) use ($filterSection) {
-                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
-                })
-                ->pluck('student_code')
-                ->filter()
-                ->values();
-            $studentPayments = $studentPayments->whereIn('student_code', $studentCodes);
+            if ($hasSalaryPaymentMethod) {
+                $this->applyExpenseMethodFilter($salaryQuery, (string) $filterMethod, $methodGroups, 'payment_method');
+            } else {
+                $includeSalaries = false;
+            }
         }
 
-        $studentIncome = $studentPayments->sum(function($payment) {
-            return ($payment->payment_amount ?? 0) - ($payment->discount ?? 0);
-        });
+        if ($includeSalaries) {
+            foreach ($salaryQuery->get() as $salary) {
+            $staff = $salary->staff;
+            $staffName = $staff?->name ?: 'Staff';
+            $period = trim((string) ($salary->salary_month ?? '') . ' ' . (string) ($salary->year ?? ''));
+            $title = 'Salary - ' . $staffName . ($period !== '' ? " ({$period})" : '');
+            $expenseRecords->push([
+                'id' => 'SAL-' . $salary->id,
+                'campus' => $staff?->campus ?? ($filterCampus ?: 'N/A'),
+                'category' => 'Salary',
+                'title' => $title,
+                'description' => 'Paid salary',
+                'amount' => (float) ($salary->amount_paid ?? 0),
+                'method' => $this->canonicalizeExpenseMethod(
+                    $hasSalaryPaymentMethod ? ($salary->payment_method ?? '') : '',
+                    $methodGroups
+                ),
+                'date' => $salary->{$salaryDateColumn} ?? $salary->updated_at ?? $salary->created_at,
+                'invoice_receipt' => null,
+                'notify_admin' => null,
+                'accountant' => 'N/A',
+            ]);
+            }
+        }
 
-        $customPaymentsQuery = CustomPayment::query();
-        if ($filterCampus) {
-            $customPaymentsQuery->where('campus', $filterCampus);
-        }
-        if ($filterMonth) {
-            $customPaymentsQuery->whereMonth('payment_date', $filterMonth);
-        }
-        if ($filterDate) {
-            $customPaymentsQuery->whereDate('payment_date', $filterDate);
-        }
-        if ($filterYear) {
-            $customPaymentsQuery->whereYear('payment_date', $filterYear);
-        }
-        if ($filterMethod) {
-            $customPaymentsQuery->where('method', $filterMethod);
-        }
-        $customIncome = $customPaymentsQuery->sum('payment_amount');
+        $expenseRecords = $expenseRecords->sortByDesc('date')->values();
 
-        $totalIncome = $studentIncome + $customIncome;
-        $profitLoss = $totalIncome - $totalExpense;
-
-        return view('reports.detailed-expense', compact(
+        return compact(
             'campuses',
-            'classes',
-            'sections',
             'categories',
             'months',
             'years',
             'methods',
             'expenseRecords',
-            'monthLabel',
-            'totalExpense',
-            'totalIncome',
-            'profitLoss',
             'filterCampus',
-            'filterClass',
-            'filterSection',
             'filterMonth',
             'filterDate',
             'filterYear',
             'filterMethod'
-        ));
+        );
     }
 
     /**
-     * Get classes by campus (AJAX endpoint)
+     * @return array<string, list<string>>
      */
-    public function getClassesByCampus(Request $request): JsonResponse
+    private function expenseMethodGroups(): array
     {
-        $campus = $request->get('campus');
-
-        $classesQuery = ClassModel::whereNotNull('class_name');
-        if ($campus) {
-            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-        }
-        $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
-
-        if ($classes->isEmpty()) {
-            $classesFromStudents = Student::whereNotNull('class');
-            if ($campus) {
-                $classesFromStudents->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-            }
-            $classesFromStudents = $classesFromStudents->distinct()->pluck('class')->sort()->values();
-            $classes = $classesFromStudents->isEmpty()
-                ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
-                : $classesFromStudents;
-        }
-
-        $classes = $classes->map(function($class) {
-            return trim((string) $class);
-        })->filter(function($class) {
-            return $class !== '';
-        })->unique()->sort()->values();
-
-        return response()->json(['classes' => $classes]);
+        return [
+            'Cash By Hand' => ['cash', 'cash payment', 'cash by hand', 'cash_by_hand'],
+            'Bank Transfer' => ['bank', 'bank transfer', 'bank transfer payment', 'banks transfer'],
+            'Wallet' => ['wallet', 'wallet payment'],
+            'Online Transfer' => ['transfer', 'online transfer', 'online payment', 'online', 'online_transfer'],
+            'Card Payment' => ['card', 'card payment', 'card pyment'],
+            'Cheque' => ['check', 'cheque', 'cheque payment', 'Cheque', 'Check'],
+            'All Deposit' => ['deposit', 'all deposit'],
+        ];
     }
 
-    /**
-     * Get sections by class (AJAX endpoint)
-     */
-    public function getSectionsByClass(Request $request): JsonResponse
+    private function canonicalizeExpenseMethod(?string $method, array $methodGroups): string
     {
-        $class = $request->get('class');
-        $campus = $request->get('campus');
-
-        if (!$class) {
-            return response()->json(['sections' => []]);
+        $key = strtolower(trim((string) $method));
+        if ($key === '') {
+            return 'N/A';
         }
 
-        $sectionsQuery = Section::whereNotNull('name')
-            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-        if ($campus) {
-            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-        }
-        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
-
-        if ($sections->isEmpty()) {
-            $sectionsFromSubjects = \App\Models\Subject::whereNotNull('section')
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-            if ($campus) {
-                $sectionsFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        foreach ($methodGroups as $canonical => $variants) {
+            if (in_array($key, $variants, true) || $key === strtolower(trim($canonical))) {
+                return $canonical;
             }
-            $sections = $sectionsFromSubjects->distinct()->pluck('section')->sort()->values();
         }
 
-        return response()->json(['sections' => $sections]);
+        return trim((string) $method) ?: 'N/A';
+    }
+
+    private function resolveAvailableMethods(?string $filterCampus)
+    {
+        $methodGroups = $this->expenseMethodGroups();
+        $preferredMethodOrder = array_keys($methodGroups);
+
+        $expenseMethodsQuery = ManagementExpense::query()
+            ->whereNotNull('method')
+            ->whereRaw("TRIM(method) != ''");
+        if ($filterCampus) {
+            $expenseMethodsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $filterCampus))]);
+        }
+
+        $methods = $expenseMethodsQuery
+            ->distinct()
+            ->pluck('method');
+
+        $salaryConnection = (new Salary())->getConnectionName() ?: config('database.default');
+        if (Schema::connection($salaryConnection)->hasColumn('salaries', 'payment_method')) {
+            $salaryMethodsQuery = Salary::query()
+                ->whereNotNull('payment_method')
+                ->whereRaw("TRIM(payment_method) != ''")
+                ->where('amount_paid', '>', 0);
+
+            if ($filterCampus) {
+                $campusKey = strtolower(trim((string) $filterCampus));
+                $salaryMethodsQuery->whereHas('staff', function ($q) use ($campusKey) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusKey]);
+                });
+            }
+
+            $methods = $methods->merge($salaryMethodsQuery->distinct()->pluck('payment_method'));
+        }
+
+        $extraMethods = $methods
+            ->map(fn ($method) => $this->canonicalizeExpenseMethod($method, $methodGroups))
+            ->filter(fn ($method) => $method !== 'N/A')
+            ->reject(fn ($method) => in_array($method, $preferredMethodOrder, true))
+            ->unique(fn ($method) => strtolower(trim((string) $method)))
+            ->values();
+
+        return collect($preferredMethodOrder)
+            ->merge($extraMethods)
+            ->unique(fn ($method) => strtolower(trim((string) $method)))
+            ->values();
+    }
+
+    private function applyExpenseMethodFilter($query, string $filterMethod, array $methodGroups, string $column = 'method'): void
+    {
+        $filterKey = strtolower(trim($filterMethod));
+        if ($filterKey === '') {
+            return;
+        }
+
+        $variants = null;
+        foreach ($methodGroups as $canonical => $groupVariants) {
+            if (strtolower(trim($canonical)) === $filterKey) {
+                $variants = $groupVariants;
+                break;
+            }
+        }
+
+        if ($variants) {
+            $query->where(function ($scopeQuery) use ($variants, $column) {
+                foreach ($variants as $variant) {
+                    $scopeQuery->orWhereRaw('LOWER(TRIM(' . $column . ')) = ?', [strtolower(trim($variant))]);
+                }
+            });
+
+            return;
+        }
+
+        $query->whereRaw('LOWER(TRIM(' . $column . ')) = ?', [$filterKey]);
     }
 }
-

@@ -62,6 +62,13 @@
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
                             <span>Print</span>
                         </button>
+                        <form action="{{ route('parent.manage-access.repair-placeholders') }}" method="POST" class="d-inline" onsubmit="return confirm('Fix placeholder emails from student Father Email and set missing passwords to \"parent\"?');">
+                            @csrf
+                            <button type="submit" class="btn btn-sm px-2 py-1 export-btn" style="background-color: #0d6efd; color: #fff; border-color: #0d6efd;">
+                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">build</span>
+                                <span>Fix Emails &amp; Passwords</span>
+                            </button>
+                        </form>
                         <form action="{{ route('parent.manage-access.delete-all') }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete ALL parent accounts? This action cannot be undone!');">
                             @csrf
                             @method('DELETE')
@@ -122,6 +129,7 @@
                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">#</th>
                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Name</th>
                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Email</th>
+                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Password</th>
                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Phone</th>
                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">WhatsApp</th>
                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">ID Card Number</th>
@@ -141,6 +149,11 @@
                                         <span class="text-muted">
                                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span>
                                             {{ $parent->email }}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 8px 12px; font-size: 13px;">
+                                        <span class="badge bg-light text-dark border" style="font-size: 11px; font-family: monospace;">
+                                            {{ $parent->displayPassword() }}
                                         </span>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
@@ -211,7 +224,7 @@
                                                         </a>
                                                     </li>
                                                     <li>
-                                                        <a class="dropdown-item" href="{{ route('parent.dues-report.print', ['parent_account' => $parent->id, 'auto_print' => 1]) }}" target="_blank">
+                                                        <a class="dropdown-item" href="{{ route('parent.dues-report.print', $parent->id) }}" target="_blank">
                                                             Dues Report
                                                         </a>
                                                     </li>
@@ -227,7 +240,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted py-5">
+                                    <td colspan="10" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No parent accounts found.</p>
                                     </td>
@@ -1180,7 +1193,8 @@ function buildParentRow(parent) {
     const deleteUrl = '{{ route('parent.manage-access.destroy', ':id') }}'.replace(':id', parent.id);
     const editUrl = '{{ route('parent.manage-access.update', ':id') }}'.replace(':id', parent.id);
     const voucherUrl = "{{ route('accounting.fee-voucher.print', ['parent_id' => ':id', 'auto_print' => 1]) }}".replace(':id', parent.id);
-    const duesUrl = "{{ route('parent.dues-report.print', ['parent_account' => ':id', 'auto_print' => 1]) }}".replace(':id', parent.id);
+    const duesUrl = "{{ route('parent.dues-report.print', ':id') }}".replace(':id', parent.id);
+    const displayPassword = parent.plain_password || 'parent';
     const gatePassUrl = "{{ route('parent.print-gate-passes.print', ['parent_id' => ':id', 'auto_print' => 1]) }}".replace(':id', parent.id);
 
     return `
@@ -1193,6 +1207,11 @@ function buildParentRow(parent) {
                 <span class="text-muted">
                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">email</span>
                     ${escapeHtml(parent.email)}
+                </span>
+            </td>
+            <td style="padding: 8px 12px; font-size: 13px;">
+                <span class="badge bg-light text-dark border" style="font-size: 11px; font-family: monospace;">
+                    ${escapeHtml(displayPassword)}
                 </span>
             </td>
             <td style="padding: 8px 12px; font-size: 13px;">
@@ -1345,7 +1364,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (tbody.querySelectorAll('tr').length === 0) {
             tbody.insertAdjacentHTML('beforeend', `
                 <tr>
-                    <td colspan="9" class="text-center text-muted py-5">
+                    <td colspan="10" class="text-center text-muted py-5">
                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                         <p class="mt-2 mb-0">No parent accounts found.</p>
                     </td>

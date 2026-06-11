@@ -80,7 +80,7 @@
     
     <!-- Dynamic Logo and System Name Script -->
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    function applySavedBranding() {
         // Load saved logo and system name from localStorage
         const savedLogo = localStorage.getItem('schoolLogo');
         const savedName = localStorage.getItem('systemName');
@@ -121,13 +121,18 @@
                 document.title = currentTitle.replace('ICMS', savedName);
             }
         }
-    });
+    }
+
+    document.addEventListener('DOMContentLoaded', applySavedBranding);
+    window.addEventListener('pagechange', applySavedBranding);
     </script>
     
     <!-- AJAX Navigation - Prevent Page Reload and Preloader -->
     <script>
     (function() {
         'use strict';
+        const ENABLE_AJAX_NAVIGATION = false;
+        const ENABLE_AUTO_SCROLL_TOP = false;
 
         // Top navigation progress bar (for AJAX navigation)
         const TOP_BAR_ID = 'ajaxTopProgressBar';
@@ -286,6 +291,9 @@
         
         // Function to handle AJAX navigation
         function handleAjaxNavigation(href, e) {
+            if (!ENABLE_AJAX_NAVIGATION) {
+                return false;
+            }
             // Skip if no href or external link
             if (!href || (href.startsWith('http') && !href.includes(window.location.hostname))) {
                 return false;
@@ -359,11 +367,13 @@
                     // Update active menu items based on current URL
                     updateActiveMenuItems(href);
 
-                    // Always scroll to top on navigation (so user lands at top of new page)
-                    try {
-                        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-                    } catch (e) {
-                        window.scrollTo(0, 0);
+                    // Optional auto scroll behavior after AJAX navigation.
+                    if (ENABLE_AUTO_SCROLL_TOP) {
+                        try {
+                            window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+                        } catch (e) {
+                            window.scrollTo(0, 0);
+                        }
                     }
 
                     // Complete the top progress line
@@ -435,13 +445,18 @@
         
         // Handle browser back/forward buttons
         window.addEventListener('popstate', function(e) {
+            if (!ENABLE_AJAX_NAVIGATION) {
+                return;
+            }
             if (e.state && e.state.path) {
                 startTopProgress();
                 handleAjaxNavigation(e.state.path, null);
-                try {
-                    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-                } catch (e2) {
-                    window.scrollTo(0, 0);
+                if (ENABLE_AUTO_SCROLL_TOP) {
+                    try {
+                        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+                    } catch (e2) {
+                        window.scrollTo(0, 0);
+                    }
                 }
             } else {
                 // Update active menu items on browser back/forward
@@ -487,66 +502,6 @@
             }, 100);
         });
         
-        // Prevent sidebar from closing - disable hamburger menu toggle
-        document.addEventListener('DOMContentLoaded', function() {
-            // Disable hamburger menu button functionality
-            const hamburgerMenu = document.getElementById('sidebar-burger-menu');
-            const hamburgerMenuClose = document.getElementById('sidebar-burger-menu-close');
-            
-            if (hamburgerMenu) {
-                hamburgerMenu.style.display = 'none';
-                hamburgerMenu.removeEventListener('click', function() {});
-                hamburgerMenu.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    // Force sidebar to stay open
-                    const body = document.body;
-                    body.setAttribute('sidebar-data-theme', 'sidebar-show');
-                    const sidebarArea = document.getElementById('sidebar-area');
-                    if (sidebarArea) {
-                        sidebarArea.classList.remove('sidebar-hide');
-                        sidebarArea.classList.add('sidebar-show');
-                    }
-                    return false;
-                });
-            }
-            
-            if (hamburgerMenuClose) {
-                hamburgerMenuClose.style.display = 'none';
-                hamburgerMenuClose.removeEventListener('click', function() {});
-                hamburgerMenuClose.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    // Force sidebar to stay open
-                    const body = document.body;
-                    body.setAttribute('sidebar-data-theme', 'sidebar-show');
-                    const sidebarArea = document.getElementById('sidebar-area');
-                    if (sidebarArea) {
-                        sidebarArea.classList.remove('sidebar-hide');
-                        sidebarArea.classList.add('sidebar-show');
-                    }
-                    return false;
-                });
-            }
-            
-            // Continuously ensure sidebar stays open
-            setInterval(function() {
-                const body = document.body;
-                const sidebarArea = document.getElementById('sidebar-area');
-                
-                if (body.getAttribute('sidebar-data-theme') === 'sidebar-hide') {
-                    body.setAttribute('sidebar-data-theme', 'sidebar-show');
-                }
-                
-                if (sidebarArea) {
-                    if (sidebarArea.classList.contains('sidebar-hide')) {
-                        sidebarArea.classList.remove('sidebar-hide');
-                        sidebarArea.classList.add('sidebar-show');
-                    }
-                }
-            }, 500); // Check every 500ms
-        });
-        
         // Ensure preloader is hidden after initial page load
         window.addEventListener('load', function() {
             const preloader = document.getElementById('preloader');
@@ -589,6 +544,130 @@
                 preloader.style.display = 'none';
             }
         });
+    })();
+    </script>
+
+    <script>
+    (function() {
+        'use strict';
+
+        function bindAdmissionForm(campusId, classId, sectionId, studentCodeId) {
+            const campusSelect = document.getElementById(campusId);
+            const classSelect = document.getElementById(classId);
+            const sectionSelect = document.getElementById(sectionId);
+            const studentCodeInput = document.getElementById(studentCodeId);
+
+            if (!campusSelect || !classSelect || !sectionSelect) {
+                return;
+            }
+
+            // Main Admit Student page has its own dedicated JS handlers.
+            // Skip global binding there to prevent duplicate class/section options.
+            if (campusId === 'campus' && classId === 'class' && sectionId === 'section') {
+                return;
+            }
+
+            // If page already uses inline onchange handlers, avoid double-binding.
+            const hasInlineCampusChange = (campusSelect.getAttribute('onchange') || '').trim() !== '';
+            const hasInlineClassChange = (classSelect.getAttribute('onchange') || '').trim() !== '';
+            if (hasInlineCampusChange || hasInlineClassChange) {
+                return;
+            }
+
+            const classesUrl = '/admission/get-classes';
+            const sectionsUrl = '/admission/get-sections';
+            const studentCodeUrl = '/admission/get-next-student-code';
+
+            function resetClassSection() {
+                classSelect.innerHTML = '<option value="">Select Class</option>';
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            }
+
+            function loadClasses(campusValue) {
+                resetClassSection();
+
+                if (!campusValue) {
+                    if (studentCodeInput) studentCodeInput.value = '';
+                    return;
+                }
+
+                fetch(classesUrl + '?campus=' + encodeURIComponent(campusValue))
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) {
+                        if (Array.isArray(data.classes)) {
+                            data.classes.forEach(function(className) {
+                                const option = document.createElement('option');
+                                option.value = className;
+                                option.textContent = className;
+                                classSelect.appendChild(option);
+                            });
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('Error loading classes:', error);
+                    });
+
+                if (studentCodeInput) {
+                    studentCodeInput.value = 'Loading...';
+                    fetch(studentCodeUrl + '?campus=' + encodeURIComponent(campusValue))
+                        .then(function(response) { return response.json(); })
+                        .then(function(data) {
+                            studentCodeInput.value = data && data.code ? data.code : '';
+                        })
+                        .catch(function(error) {
+                            console.error('Error loading student code:', error);
+                            studentCodeInput.value = '';
+                        });
+                }
+            }
+
+            function loadSections(classValue, campusValue) {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+
+                if (!classValue) {
+                    return;
+                }
+
+                const query = 'class=' + encodeURIComponent(classValue) + '&campus=' + encodeURIComponent(campusValue || '');
+                fetch(sectionsUrl + '?' + query)
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) {
+                        if (Array.isArray(data.sections)) {
+                            data.sections.forEach(function(sectionName) {
+                                const option = document.createElement('option');
+                                option.value = sectionName;
+                                option.textContent = sectionName;
+                                sectionSelect.appendChild(option);
+                            });
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('Error loading sections:', error);
+                    });
+            }
+
+            if (!campusSelect.dataset.globalAdmissionBound) {
+                campusSelect.addEventListener('change', function() {
+                    loadClasses((this.value || '').trim());
+                });
+                campusSelect.dataset.globalAdmissionBound = '1';
+            }
+
+            if (!classSelect.dataset.globalAdmissionBound) {
+                classSelect.addEventListener('change', function() {
+                    loadSections((this.value || '').trim(), (campusSelect.value || '').trim());
+                });
+                classSelect.dataset.globalAdmissionBound = '1';
+            }
+        }
+
+        function initAdmissionBindings() {
+            bindAdmissionForm('campus', 'class', 'section', 'student_code');
+            bindAdmissionForm('admit_campus', 'admit_class', 'admit_section', 'admit_student_code');
+        }
+
+        document.addEventListener('DOMContentLoaded', initAdmissionBindings);
+        window.addEventListener('pagechange', initAdmissionBindings);
     })();
     </script>
 </body>

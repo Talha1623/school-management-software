@@ -7,6 +7,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Campus;
 use App\Models\GeneralSetting;
+use App\Services\MobilePushNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -14,6 +15,11 @@ use Illuminate\Support\Facades\Storage;
 
 class NoticeboardController extends Controller
 {
+    public function __construct(
+        private readonly MobilePushNotificationService $pushNotifications,
+    ) {
+    }
+
     /**
      * Display a listing of noticeboards.
      */
@@ -76,7 +82,15 @@ class NoticeboardController extends Controller
         // Handle show_on dropdown (Yes/No)
         $validated['show_on'] = $request->input('show_on', 'No');
 
-        Noticeboard::create($validated);
+        $noticeboard = Noticeboard::create($validated);
+
+        if (strcasecmp((string) $validated['show_on'], 'Yes') === 0) {
+            try {
+                $this->pushNotifications->notifyNoticeboardPublished($noticeboard);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         return redirect()
             ->route('school.noticeboard')
@@ -108,9 +122,19 @@ class NoticeboardController extends Controller
         }
 
         // Handle show_on dropdown (Yes/No)
+        $previousShowOn = trim((string) ($noticeboard->show_on ?? ''));
         $validated['show_on'] = $request->input('show_on', 'No');
 
         $noticeboard->update($validated);
+
+        $newShowOn = trim((string) $validated['show_on']);
+        if (strcasecmp($newShowOn, 'Yes') === 0 && strcasecmp($previousShowOn, 'Yes') !== 0) {
+            try {
+                $this->pushNotifications->notifyNoticeboardPublished($noticeboard->fresh());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         return redirect()
             ->route('school.noticeboard')

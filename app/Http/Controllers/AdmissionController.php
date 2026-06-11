@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Student;
+use App\Models\GeneralSetting;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
@@ -389,6 +390,176 @@ class AdmissionController extends Controller
     }
 
     /**
+     * Resolve a valid father/parent email from CSV row or linked student records.
+     */
+    private function resolveFatherEmailForParent(ParentAccount $parent, array $studentData): string
+    {
+        $email = strtolower(trim((string) ($studentData['father_email'] ?? '')));
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $email;
+        }
+
+        $studentQuery = Student::query()
+            ->whereNotNull('father_email')
+            ->where('father_email', '!=', '')
+            ->where(function ($query) use ($parent) {
+                $query->where('parent_account_id', $parent->id);
+                if (!empty($parent->id_card_number)) {
+                    $query->orWhere('father_id_card', $parent->id_card_number);
+                }
+            })
+            ->orderByDesc('id');
+
+        $fromStudent = $studentQuery->value('father_email');
+        if ($fromStudent && filter_var($fromStudent, FILTER_VALIDATE_EMAIL)) {
+            return strtolower(trim((string) $fromStudent));
+        }
+
+        return '';
+    }
+
+    /**
+     * Sync parent account fields from bulk / CSV student row.
+     */
+    private function syncParentAccountFromStudentData(ParentAccount $parent, array $studentData): void
+    {
+        $updateData = [];
+
+        if (!empty($studentData['father_name']) && $parent->name !== $studentData['father_name']) {
+            $updateData['name'] = $studentData['father_name'];
+        }
+
+        $email = $this->resolveFatherEmailForParent($parent, $studentData);
+        if ($email !== '') {
+            $currentEmail = strtolower(trim((string) $parent->email));
+            $shouldUpdateEmail = $parent->hasPlaceholderEmail() || $currentEmail !== $email;
+            if ($shouldUpdateEmail) {
+                $emailTaken = ParentAccount::whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                    ->where('id', '!=', $parent->id)
+                    ->exists();
+                if (!$emailTaken) {
+                    $updateData['email'] = $email;
+                }
+            }
+        }
+
+        if (!empty($studentData['father_phone']) && $parent->phone !== $studentData['father_phone']) {
+            $updateData['phone'] = $studentData['father_phone'];
+        }
+        if (!empty($studentData['whatsapp_number']) && $parent->whatsapp !== $studentData['whatsapp_number']) {
+            $updateData['whatsapp'] = $studentData['whatsapp_number'];
+        }
+        if (!empty($studentData['home_address']) && $parent->address !== $studentData['home_address']) {
+            $updateData['address'] = $studentData['home_address'];
+        }
+
+        $plainPassword = trim((string) ($studentData['parent_password'] ?? ''));
+        if ($plainPassword === '' || strlen($plainPassword) < 6) {
+            $plainPassword = 'parent';
+        }
+        if (empty($parent->plain_password) || $parent->hasPlaceholderEmail()) {
+            $updateData['password'] = $plainPassword;
+            $updateData['plain_password'] = $plainPassword;
+        }
+
+        if (!empty($updateData)) {
+            $parent->update($updateData);
+            $this->ensureAdvanceFeeForParent($parent->fresh());
+        }
+    }
+
+    /**
+     * After student row is saved, refresh linked parent email/password from student data.
+     */
+    private function refreshParentAccountAfterStudentAdmission(?int $parentAccountId, array $studentData): void
+    {
+        if (!$parentAccountId) {
+            return;
+        }
+
+        $parent = ParentAccount::find($parentAccountId);
+        if (!$parent) {
+            return;
+        }
+
+        $this->syncParentAccountFromStudentData($parent, $studentData);
+    }
+
+    /**
+     * Link existing parent by Father CNIC, or create a new parent when requested (bulk manual / CSV).
+     * Existing parents are always linked when CNIC matches — even if "create parent accounts" is off.
+     */
+    private function resolveParentAccountForBulkAdmission(array $studentData, bool $createParentAccounts, int $rowIndex = 0): ?int
+    {
+        $fatherIdCard = trim((string) ($studentData['father_id_card'] ?? ''));
+        if ($fatherIdCard === '') {
+            if ($createParentAccounts) {
+                throw new \Exception('Father CNIC is required when creating parent accounts.');
+            }
+
+            return null;
+        }
+
+        [$cleanedIdCard] = $this->normalizeIdCard($fatherIdCard);
+        if ($cleanedIdCard === '') {
+            if ($createParentAccounts) {
+                throw new \Exception('Father CNIC is invalid.');
+            }
+
+            return null;
+        }
+
+        $studentData['father_id_card'] = $cleanedIdCard;
+
+        $existingParent = $this->findParentAccountByIdCard($cleanedIdCard);
+        if ($existingParent) {
+            $this->syncParentAccountFromStudentData($existingParent, $studentData);
+            $this->ensureAdvanceFeeForParent($existingParent);
+
+            return (int) $existingParent->id;
+        }
+
+        if (!$createParentAccounts) {
+            $this->ensureAdvanceFeeForFatherIdCard(
+                $cleanedIdCard,
+                $studentData['father_name'] ?? null,
+                $studentData['father_phone'] ?? null
+            );
+
+            return null;
+        }
+
+        $email = strtolower(trim((string) ($studentData['father_email'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \Exception('Father Email is required to create a parent account. Add a "Father Email" column in your file.');
+        }
+
+        if (ParentAccount::whereRaw('LOWER(TRIM(email)) = ?', [$email])->exists()) {
+            throw new \Exception('Parent email "' . $email . '" is already registered.');
+        }
+
+        $plainPassword = trim((string) ($studentData['parent_password'] ?? ''));
+        if ($plainPassword === '' || strlen($plainPassword) < 6) {
+            $plainPassword = 'parent';
+        }
+
+        $parentAccount = ParentAccount::create([
+            'name' => $studentData['father_name'] ?? 'Parent',
+            'email' => $email,
+            'password' => $plainPassword,
+            'plain_password' => $plainPassword,
+            'phone' => $studentData['father_phone'] ?? null,
+            'whatsapp' => $studentData['whatsapp_number'] ?? null,
+            'id_card_number' => $cleanedIdCard,
+            'address' => $studentData['home_address'] ?? null,
+        ]);
+
+        $this->ensureAdvanceFeeForParent($parentAccount);
+
+        return (int) $parentAccount->id;
+    }
+
+    /**
      * Get sections for a specific class (AJAX endpoint).
      */
     public function getSections(Request $request)
@@ -665,7 +836,8 @@ class AdmissionController extends Controller
             $parentAccount = ParentAccount::create([
                 'name' => $validated['father_name'],
                 'email' => $validated['father_email'],
-                'password' => $parentPassword, // Model will hash it automatically
+                'password' => $parentPassword,
+                'plain_password' => $parentPassword,
                 'phone' => $validated['father_phone'] ?? null,
                 'whatsapp' => $validated['whatsapp_number'] ?? null,
                 'id_card_number' => $validated['father_id_card'] ?? null,
@@ -676,8 +848,9 @@ class AdmissionController extends Controller
             
             $parentAccountId = $parentAccount->id;
         } else {
-            // Even if not creating parent account, ensure AdvanceFee exists for father_id_card
-            if (!empty($validated['father_id_card'])) {
+            // Wallet keyed by CNIC without parent account — only when no parent row was linked above.
+            // If we already linked an existing parent, do not create a second N/A-parent AdvanceFee row.
+            if (!empty($validated['father_id_card']) && !$existingParentAccount) {
                 $this->ensureAdvanceFeeForFatherIdCard(
                     $validated['father_id_card'],
                     $validated['father_name'] ?? null,
@@ -686,11 +859,14 @@ class AdmissionController extends Controller
             }
         }
 
+        // Select always sends discounted_student; has() is wrong (No/"0"/empty still "present").
+        $isDiscountedStudent = filter_var($request->input('discounted_student'), FILTER_VALIDATE_BOOLEAN);
+
         // Prepare student data
         $studentData = [
             ...$validated,
             'photo' => $photoPath,
-            'discounted_student' => $request->has('discounted_student'),
+            'discounted_student' => $isDiscountedStudent,
             'create_parent_account' => $createParentAccount,
             'parent_account_id' => $parentAccountId,
         ];
@@ -732,7 +908,7 @@ class AdmissionController extends Controller
         // Remove any auto-generated monthly fees immediately after student creation
         $this->removeAutoGeneratedMonthlyFees($student);
 
-        $discountAmount = ($validated['discounted_student'] ?? false)
+        $discountAmount = $isDiscountedStudent
             ? (float) ($validated['discount_amount'] ?? 0)
             : 0.0;
         if ($discountAmount > 0 && !empty($student->student_code)) {
@@ -768,19 +944,13 @@ class AdmissionController extends Controller
             $accountantName = auth()->guard('admin')->user()->name ?? 'System';
         }
 
-        $admissionDate = !empty($validated['admission_date'])
-            ? Carbon::parse($validated['admission_date'])
-            : Carbon::now();
-        $admissionMonth = $admissionDate->format('F');
-        $admissionYear = $admissionDate->format('Y');
-        $defaultDueDate = $admissionDate->copy()->addDays(15)->format('Y-m-d');
-
         if (!empty($student->student_code)) {
-            // Fees are generated later from Fee Payment; do not auto-generate on admission.
-        }
-
-        if (!empty($student->student_code)) {
-            $this->createGeneratedAdmissionFees($student, $validated, $admissionDate->format('Y-m-d'), $accountantName);
+            // Use record creation date for generated stubs so payment_date matches when the student
+            // actually entered the system — avoids April-dated dues when inquiry admission_date was backdated.
+            $generatedFeeBillingDate = $student->created_at
+                ? Carbon::parse($student->created_at)->toDateString()
+                : Carbon::now()->toDateString();
+            $this->createGeneratedAdmissionFees($student, $validated, $generatedFeeBillingDate, $accountantName);
         }
         
         // Remove any auto-generated monthly fees again after all fee generation (in case any were created)
@@ -878,19 +1048,75 @@ class AdmissionController extends Controller
 
     private function ensureAdvanceFeeForParent(ParentAccount $parentAccount): void
     {
-        AdvanceFee::firstOrCreate(
-            ['parent_id' => (string) $parentAccount->id],
-            [
-                'name' => $parentAccount->name,
-                'email' => $parentAccount->email,
-                'phone' => $parentAccount->phone,
-                'id_card_number' => $parentAccount->id_card_number,
-                'available_credit' => 0,
-                'increase' => 0,
-                'decrease' => 0,
-                'childs' => 0,
-            ]
+        $parentIdStr = (string) $parentAccount->id;
+
+        $defaults = [
+            'name' => $parentAccount->name,
+            'email' => $parentAccount->email,
+            'phone' => $parentAccount->phone,
+            'id_card_number' => $parentAccount->id_card_number,
+            'available_credit' => 0,
+            'increase' => 0,
+            'decrease' => 0,
+            'childs' => 0,
+        ];
+
+        $primary = AdvanceFee::firstOrCreate(
+            ['parent_id' => $parentIdStr],
+            $defaults
         );
+
+        $primary->fill([
+            'name' => $parentAccount->name,
+            'email' => $parentAccount->email,
+            'phone' => $parentAccount->phone,
+            'id_card_number' => $parentAccount->id_card_number,
+        ]);
+        $primary->save();
+
+        $this->mergeOrphanAdvanceFeesIntoPrimary($primary, $parentAccount);
+    }
+
+    /**
+     * Merge AdvanceFee rows (parent_id empty) that match this parent's CNIC into the canonical parent wallet row.
+     */
+    private function mergeOrphanAdvanceFeesIntoPrimary(AdvanceFee $primary, ParentAccount $parentAccount): void
+    {
+        $cardRaw = $parentAccount->id_card_number;
+        if ($cardRaw === null || trim((string) $cardRaw) === '') {
+            return;
+        }
+
+        [, $lower, $normalized] = $this->normalizeIdCard($cardRaw);
+
+        $orphans = AdvanceFee::query()
+            ->where('id', '!=', $primary->id)
+            ->where(function ($q) use ($lower, $normalized) {
+                $q->whereRaw('LOWER(TRIM(id_card_number)) = ?', [$lower])
+                    ->orWhereRaw(
+                        'LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) = ?',
+                        [$normalized]
+                    );
+            })
+            ->where(function ($q) {
+                $q->whereNull('parent_id')->orWhere('parent_id', '');
+            })
+            ->get();
+
+        foreach ($orphans as $orphan) {
+            $primary->available_credit = round(
+                (float) ($primary->available_credit ?? 0) + (float) ($orphan->available_credit ?? 0),
+                2
+            );
+            $primary->increase = round((float) ($primary->increase ?? 0) + (float) ($orphan->increase ?? 0), 2);
+            $primary->decrease = round((float) ($primary->decrease ?? 0) + (float) ($orphan->decrease ?? 0), 2);
+            $primary->childs = (int) ($primary->childs ?? 0) + (int) ($orphan->childs ?? 0);
+            $orphan->delete();
+        }
+
+        if ($orphans->isNotEmpty()) {
+            $primary->save();
+        }
     }
 
     /**
@@ -903,17 +1129,38 @@ class AdmissionController extends Controller
             return;
         }
 
-        // Check if AdvanceFee already exists by id_card_number
-        $existingAdvanceFee = AdvanceFee::where('id_card_number', $fatherIdCard)->first();
-        
+        $parentByCard = $this->findParentAccountByIdCard($fatherIdCard);
+        if ($parentByCard) {
+            $this->ensureAdvanceFeeForParent($parentByCard);
+
+            return;
+        }
+
+        [$cleaned] = $this->normalizeIdCard($fatherIdCard);
+        if ($cleaned === '') {
+            return;
+        }
+
+        // Match wallet row the same way we match parents (formatting differences)
+        [, $lower, $normalized] = $this->normalizeIdCard($fatherIdCard);
+        $existingAdvanceFee = AdvanceFee::query()
+            ->where(function ($q) use ($lower, $normalized, $cleaned) {
+                $q->whereRaw('LOWER(TRIM(id_card_number)) = ?', [$lower])
+                    ->orWhereRaw(
+                        'LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(id_card_number), "-", ""), " ", ""), "_", ""), ".", ""), "/", "")) = ?',
+                        [$normalized]
+                    )
+                    ->orWhere('id_card_number', $cleaned);
+            })
+            ->first();
+
         if (!$existingAdvanceFee) {
-            // Create AdvanceFee record based on father_id_card
             AdvanceFee::create([
-                'parent_id' => null, // No parent account linked
+                'parent_id' => null,
                 'name' => $fatherName ?? 'Unknown',
                 'email' => null,
                 'phone' => $fatherPhone,
-                'id_card_number' => $fatherIdCard,
+                'id_card_number' => $cleaned,
                 'available_credit' => 0,
                 'increase' => 0,
                 'decrease' => 0,
@@ -953,6 +1200,74 @@ class AdmissionController extends Controller
                 $accountantName
             );
         }
+
+        $this->createGeneratedTransportFeeIfApplicable($student, $dueDate, $accountantName);
+    }
+
+    private function resolveRecordingAccountantName(): string
+    {
+        if (auth()->guard('accountant')->check()) {
+            return auth()->guard('accountant')->user()->name ?? 'System';
+        }
+        if (auth()->guard('admin')->check()) {
+            return auth()->guard('admin')->user()->name ?? 'System';
+        }
+
+        return auth()->user()->name ?? 'System';
+    }
+
+    /**
+     * Fill transport_fare from campus route table when CSV/manual has route only.
+     */
+    private function applyTransportFareFromRoute(array &$studentData, string $campus): void
+    {
+        $route = trim((string) ($studentData['transport_route'] ?? ''));
+        if ($route === '') {
+            return;
+        }
+
+        $fare = isset($studentData['transport_fare']) && is_numeric($studentData['transport_fare'])
+            ? (float) $studentData['transport_fare']
+            : 0.0;
+        if ($fare > 0.00001) {
+            return;
+        }
+
+        $transportQuery = Transport::where('route_name', $route);
+        if ($campus !== '') {
+            $transportQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $transport = $transportQuery->first();
+        if ($transport) {
+            $studentData['transport_fare'] = $transport->route_fare;
+        }
+    }
+
+    /**
+     * Generated transport stub — required for List of Unpaid Invoices / Fee Payment (same as single admit).
+     */
+    private function createGeneratedTransportFeeIfApplicable(Student $student, ?string $dueDate, string $accountantName): void
+    {
+        $transportRoute = trim((string) ($student->transport_route ?? ''));
+        $transportFare = (float) ($student->transport_fare ?? 0);
+        if ($transportRoute === '' || $transportFare <= 0.00001) {
+            return;
+        }
+
+        $billingDate = $dueDate
+            ?? ($student->admission_date ? (string) $student->admission_date : null)
+            ?? ($student->created_at ? Carbon::parse($student->created_at)->toDateString() : null)
+            ?? now()->format('Y-m-d');
+
+        $billing = Carbon::parse($billingDate);
+        $transportTitle = 'Transport Fee - ' . $billing->format('F') . ' ' . $billing->format('Y');
+        $this->createGeneratedFeeRecord(
+            $student,
+            $transportTitle,
+            $transportFare,
+            $billingDate,
+            $accountantName
+        );
     }
 
     private function createGeneratedFeeRecord(Student $student, string $title, float $amount, string $dueDate, string $accountantName): void
@@ -1090,6 +1405,13 @@ class AdmissionController extends Controller
                     'Father Email' => 'father_email',
                     'father email' => 'father_email',
                     'FatherEmail' => 'father_email',
+                    'Email' => 'father_email',
+                    'email' => 'father_email',
+                    'Parent Email' => 'father_email',
+                    'parent email' => 'father_email',
+                    'E-mail' => 'father_email',
+                    'e-mail' => 'father_email',
+                    'Father E-mail' => 'father_email',
                     'Father Phone' => 'father_phone',
                     'father phone' => 'father_phone',
                     'FatherPhone' => 'father_phone',
@@ -1152,6 +1474,9 @@ class AdmissionController extends Controller
                     'TransportFare' => 'transport_fare',
                     'Arrears' => 'arrears',
                     'arrears' => 'arrears',
+                    'Parent Password' => 'parent_password',
+                    'parent password' => 'parent_password',
+                    'ParentPassword' => 'parent_password',
                 ];
 
                 $rows = [];
@@ -1447,6 +1772,11 @@ class AdmissionController extends Controller
                     if (isset($studentData['transport_fare']) && !empty($studentData['transport_fare'])) {
                         $studentData['transport_fare'] = is_numeric($studentData['transport_fare']) ? $studentData['transport_fare'] : null;
                     }
+
+                    $this->applyTransportFareFromRoute(
+                        $studentData,
+                        (string) ($studentData['campus'] ?? $defaultCampus ?? '')
+                    );
                     
                     if (isset($studentData['arrears']) && !empty($studentData['arrears'])) {
                         $studentData['arrears'] = is_numeric($studentData['arrears']) ? $studentData['arrears'] : null;
@@ -1508,32 +1838,15 @@ class AdmissionController extends Controller
                         if (empty($class)) {
                             throw new \Exception('Class is required. Please provide Class in CSV or select it in the form.');
                         }
-                        
-                        // Check if parent account exists or create new
-                        $parentAccountId = null;
-                        if ($createParentAccounts && !empty($studentData['father_id_card'])) {
-                            $existingParent = ParentAccount::where('id_card_number', $studentData['father_id_card'])->first();
-                            
-                            if ($existingParent) {
-                                $parentAccountId = $existingParent->id;
-                                $this->ensureAdvanceFeeForParent($existingParent);
-                            } else {
-                                // Create new parent account
-                                $parentEmail = 'parent_' . time() . '_' . $index . '_' . ($studentData['father_id_card'] ?? uniqid()) . '@school.com';
-                                
-                                $parentAccount = ParentAccount::create([
-                                    'name' => $studentData['father_name'],
-                                    'email' => $parentEmail,
-                                    'password' => $studentData['father_id_card'] ?? 'parent',
-                                    'phone' => $studentData['father_phone'] ?? null,
-                                    'id_card_number' => $studentData['father_id_card'] ?? null,
-                                    'address' => $studentData['home_address'] ?? null,
-                                ]);
-                                $this->ensureAdvanceFeeForParent($parentAccount);
-                                
-                                $parentAccountId = $parentAccount->id;
+
+                        if (!empty($studentData['father_id_card'])) {
+                            [$cleanedFatherIdCard] = $this->normalizeIdCard($studentData['father_id_card']);
+                            if ($cleanedFatherIdCard !== '') {
+                                $studentData['father_id_card'] = $cleanedFatherIdCard;
                             }
                         }
+                        
+                        $parentAccountId = $this->resolveParentAccountForBulkAdmission($studentData, $createParentAccounts, $index);
                         
                         // Generate student code if not provided
                         $studentCode = !empty($studentData['student_code'])
@@ -1614,7 +1927,17 @@ class AdmissionController extends Controller
                             ]);
                         }
                         $this->removeAutoGeneratedMonthlyFees($student);
-                        
+                        $this->refreshParentAccountAfterStudentAdmission($parentAccountId, $studentData);
+
+                        $billingDate = $student->admission_date
+                            ? (string) $student->admission_date
+                            : now()->format('Y-m-d');
+                        $this->createGeneratedTransportFeeIfApplicable(
+                            $student->fresh(),
+                            $billingDate,
+                            $this->resolveRecordingAccountantName()
+                        );
+
                         $successCount++;
                     } catch (\Exception $e) {
                         $errorCount++;
@@ -1647,6 +1970,8 @@ class AdmissionController extends Controller
                 'students.*.gender' => ['required', 'in:male,female,other'],
                 'students.*.father_name' => ['required', 'string', 'max:255'],
                 'students.*.father_id_card' => ['nullable', 'string', 'max:255'],
+                'students.*.father_email' => ['nullable', 'email', 'max:255'],
+                'students.*.parent_password' => ['nullable', 'string', 'min:6', 'max:255'],
                 'students.*.father_phone' => ['nullable', 'string', 'max:20'],
                 'students.*.mother_phone' => ['nullable', 'string', 'max:20'],
                 'students.*.date_of_birth' => ['required', 'date'],
@@ -1669,41 +1994,19 @@ class AdmissionController extends Controller
             foreach ($students as $index => $studentData) {
                 try {
                     $studentNumber = $index + 1;
-                    
-                    // Check if parent account exists or create new
-                    $parentAccountId = null;
-                    if ($createParentAccounts && !empty($studentData['father_id_card'])) {
-                        $existingParent = ParentAccount::where('id_card_number', $studentData['father_id_card'])->first();
-                        
-                        if ($existingParent) {
-                            $parentAccountId = $existingParent->id;
-                            $this->ensureAdvanceFeeForParent($existingParent);
-                        } else {
-                            // Create new parent account
-                            $parentEmail = 'parent_' . time() . '_' . $index . '_' . ($studentData['father_id_card'] ?? uniqid()) . '@school.com';
-                            
-                            $parentAccount = ParentAccount::create([
-                                'name' => $studentData['father_name'],
-                                'email' => $parentEmail,
-                                'password' => $studentData['father_id_card'] ?? 'parent', // Model will hash it automatically
-                                'phone' => $studentData['father_phone'] ?? null,
-                                'id_card_number' => $studentData['father_id_card'] ?? null,
-                                'address' => $studentData['home_address'] ?? null,
-                            ]);
-                            $this->ensureAdvanceFeeForParent($parentAccount);
-                            
-                            $parentAccountId = $parentAccount->id;
-                        }
-                    } else {
-                        // Even if not creating parent account, ensure AdvanceFee exists for father_id_card
-                        if (!empty($studentData['father_id_card'])) {
-                            $this->ensureAdvanceFeeForFatherIdCard(
-                                $studentData['father_id_card'],
-                                $studentData['father_name'] ?? null,
-                                $studentData['father_phone'] ?? null
-                            );
+
+                    if (!empty($studentData['father_id_card'])) {
+                        [$cleanedFatherIdCard] = $this->normalizeIdCard($studentData['father_id_card']);
+                        if ($cleanedFatherIdCard !== '') {
+                            $studentData['father_id_card'] = $cleanedFatherIdCard;
                         }
                     }
+                    
+                    $parentAccountId = $this->resolveParentAccountForBulkAdmission(
+                        $studentData,
+                        $createParentAccounts,
+                        $index
+                    );
 
                     // Generate student code if not provided
                     $studentCode = !empty($studentData['student_code'])
@@ -1745,6 +2048,7 @@ class AdmissionController extends Controller
                         'home_address' => $studentData['home_address'] ?? null,
                         'father_name' => $studentData['father_name'],
                         'father_id_card' => $studentData['father_id_card'] ?? null,
+                        'father_email' => $studentData['father_email'] ?? null,
                         'father_phone' => $studentData['father_phone'] ?? null,
                         'mother_phone' => $studentData['mother_phone'] ?? null,
                         'monthly_fee' => $studentData['monthly_fee'] ?? null,
@@ -1753,9 +2057,16 @@ class AdmissionController extends Controller
                         'class' => $class,
                         'section' => $section,
                         'parent_account_id' => $parentAccountId,
-                        'password' => $studentData['father_id_card'] ?? $studentCode, // Will be hashed automatically
+                        'password' => $studentData['father_id_card'] ?? $studentCode,
                     ]);
                     $this->removeAutoGeneratedMonthlyFees($student);
+                    $this->refreshParentAccountAfterStudentAdmission($parentAccountId, $studentData);
+
+                    $this->createGeneratedTransportFeeIfApplicable(
+                        $student->fresh(),
+                        $student->admission_date ?? now()->format('Y-m-d'),
+                        $this->resolveRecordingAccountantName()
+                    );
 
                     $successCount++;
                 } catch (\Exception $e) {
@@ -1797,6 +2108,7 @@ class AdmissionController extends Controller
             'Father Name',
             'Father CNIC',
             'Father Email',
+            'Parent Password',
             'Father Phone',
             'Mother Phone',
             'WhatsApp Number',
@@ -1842,26 +2154,30 @@ class AdmissionController extends Controller
      */
     public function report(): View
     {
+        $reportYear = $this->currentAdmissionReportYear();
+        $reportMonthLabel = now()->format('F Y');
+
         // Calculate admissions today
         $admissionsToday = Student::whereDate('admission_date', today())->count();
         
-        // Calculate admissions this month
-        $admissionsThisMonth = Student::whereYear('admission_date', now()->year)
-            ->whereMonth('admission_date', now()->month)
-            ->count();
-        
-        // Calculate active students (students with admission_date)
-        $activeStudents = Student::whereNotNull('admission_date')->count();
+        // Calculate admissions this month (includes bulk admits without admission_date)
+        $admissionsThisMonth = $this->admissionsMonthQuery()->count();
+
+        // Admissions this calendar year (includes bulk admits without admission_date)
+        $admissionsThisYear = $this->admissionsYearQuery($reportYear)->count();
         
         // Calculate deactivated students (students without admission_date or with deactivation flag)
         // Note: Adjust this based on your deactivation logic
-        $deactivatedStudents = Student::whereNull('admission_date')->count();
+        Student::ensureStatusColumn();
+        $deactivatedStudents = Student::inactive()->count();
         
         return view('admission.report', compact(
             'admissionsToday',
             'admissionsThisMonth',
-            'activeStudents',
-            'deactivatedStudents'
+            'admissionsThisYear',
+            'deactivatedStudents',
+            'reportYear',
+            'reportMonthLabel'
         ));
     }
 
@@ -1870,16 +2186,37 @@ class AdmissionController extends Controller
      */
     public function reportToday(Request $request): View
     {
-        // Check for print parameter - accept both boolean and string '1'
-        $isPrint = $request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1);
-        
-        // Get students admitted today
+        if ($this->wantsLegacyAdmissionPrint($request)) {
+            return $this->printReportToday();
+        }
+
         $students = Student::whereDate('admission_date', today())
             ->orderBy('admission_date', 'desc')
             ->orderBy('student_name', 'asc')
             ->get();
-        
-        return view('admission.report-today', compact('students', 'isPrint'));
+
+        return view('admission.report-today', compact('students'));
+    }
+
+    /**
+     * Standalone print layout (no app sidebar).
+     */
+    public function printReportToday(): View
+    {
+        $students = Student::whereDate('admission_date', today())
+            ->orderBy('admission_date', 'desc')
+            ->orderBy('student_name', 'asc')
+            ->get();
+
+        return view('admission.prints.student-list-document', [
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+            'reportTitle' => 'Admissions Today',
+            'reportSubtitle' => 'As of ' . today()->format('d M Y'),
+            'students' => $students,
+            'totalLabel' => 'Total Admissions Today:',
+            'emptyMessage' => 'No admissions found for today.',
+        ]);
     }
 
     /**
@@ -1887,16 +2224,36 @@ class AdmissionController extends Controller
      */
     public function reportMonthly(Request $request): View
     {
-        $isPrint = $request->boolean('print');
-        
-        // Get students admitted this month
-        $students = Student::whereYear('admission_date', now()->year)
-            ->whereMonth('admission_date', now()->month)
-            ->orderBy('admission_date', 'desc')
+        if ($this->wantsLegacyAdmissionPrint($request)) {
+            return $this->printReportMonthly();
+        }
+
+        $reportMonthLabel = now()->format('F Y');
+        $students = $this->admissionsMonthQuery()
+            ->orderByRaw('COALESCE(admission_date, DATE(created_at)) DESC')
             ->orderBy('student_name', 'asc')
             ->get();
-        
-        return view('admission.report-monthly', compact('students', 'isPrint'));
+
+        return view('admission.report-monthly', compact('students', 'reportMonthLabel'));
+    }
+
+    public function printReportMonthly(): View
+    {
+        $reportMonthLabel = now()->format('F Y');
+        $students = $this->admissionsMonthQuery()
+            ->orderByRaw('COALESCE(admission_date, DATE(created_at)) DESC')
+            ->orderBy('student_name', 'asc')
+            ->get();
+
+        return view('admission.prints.student-list-document', [
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+            'reportTitle' => 'Monthly Admissions',
+            'reportSubtitle' => $reportMonthLabel,
+            'students' => $students,
+            'totalLabel' => 'Total Admissions This Month:',
+            'emptyMessage' => 'No admissions found for ' . $reportMonthLabel . '.',
+        ]);
     }
 
     /**
@@ -1904,16 +2261,36 @@ class AdmissionController extends Controller
      */
     public function reportYearly(Request $request): View
     {
-        // Check for print parameter - accept both boolean and string '1'
-        $isPrint = $request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1);
-        
-        // Get students admitted this year
-        $students = Student::whereYear('admission_date', now()->year)
-            ->orderBy('admission_date', 'desc')
+        if ($this->wantsLegacyAdmissionPrint($request)) {
+            return $this->printReportYearly();
+        }
+
+        $reportYear = $this->currentAdmissionReportYear();
+        $students = $this->admissionsYearQuery($reportYear)
+            ->orderByRaw('COALESCE(admission_date, DATE(created_at)) DESC')
             ->orderBy('student_name', 'asc')
             ->get();
-        
-        return view('admission.report-yearly', compact('students', 'isPrint'));
+
+        return view('admission.report-yearly', compact('students', 'reportYear'));
+    }
+
+    public function printReportYearly(): View
+    {
+        $reportYear = $this->currentAdmissionReportYear();
+        $students = $this->admissionsYearQuery($reportYear)
+            ->orderByRaw('COALESCE(admission_date, DATE(created_at)) DESC')
+            ->orderBy('student_name', 'asc')
+            ->get();
+
+        return view('admission.prints.student-list-document', [
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+            'reportTitle' => 'Admissions This Year',
+            'reportSubtitle' => 'Year: ' . $reportYear,
+            'students' => $students,
+            'totalLabel' => 'Total Admissions This Year:',
+            'emptyMessage' => 'No admissions found for ' . $reportYear . '.',
+        ]);
     }
 
     /**
@@ -1921,38 +2298,59 @@ class AdmissionController extends Controller
      */
     public function reportForms(Request $request): View
     {
-        // Check for print parameter - accept both boolean and string '1'
-        $isPrint = $request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1);
-        
-        // Get filter values
+        if ($this->wantsLegacyAdmissionPrint($request)) {
+            return $this->printReportForms($request);
+        }
+
         $filterCampus = $request->get('filter_campus');
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
-        
-        // Get all students with admission forms
-        $query = Student::whereNotNull('admission_date');
-        
-        // Apply filters
-        if ($filterCampus) {
-            $query->where('campus', $filterCampus);
-        }
-        if ($filterClass) {
-            $query->where('class', $filterClass);
-        }
-        if ($filterSection) {
-            $query->where('section', $filterSection);
-        }
-        
-        $students = $query->orderBy('admission_date', 'desc')
-            ->orderBy('student_name', 'asc')
-            ->get();
-        
-        // Get campuses, classes, sections for filters
+
+        $students = $this->admissionFormsFilteredStudents($request);
+
         $campuses = Student::whereNotNull('campus')->distinct()->pluck('campus')->sort()->values();
         $classes = Student::whereNotNull('class')->distinct()->pluck('class')->sort()->values();
         $sections = Student::whereNotNull('section')->distinct()->pluck('section')->sort()->values();
-        
-        return view('admission.report-forms', compact('students', 'isPrint', 'campuses', 'classes', 'sections', 'filterCampus', 'filterClass', 'filterSection'));
+
+        return view('admission.report-forms', compact(
+            'students',
+            'campuses',
+            'classes',
+            'sections',
+            'filterCampus',
+            'filterClass',
+            'filterSection'
+        ));
+    }
+
+    public function printReportForms(Request $request): View
+    {
+        $students = $this->admissionFormsFilteredStudents($request);
+        $filterCampus = $request->get('filter_campus');
+        $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+
+        $parts = [];
+        if ($filterCampus) {
+            $parts[] = 'Campus: ' . $filterCampus;
+        }
+        if ($filterClass) {
+            $parts[] = 'Class: ' . $filterClass;
+        }
+        if ($filterSection) {
+            $parts[] = 'Section: ' . $filterSection;
+        }
+        $subtitle = count($parts) ? implode(' | ', $parts) : 'All campuses / classes / sections';
+
+        return view('admission.prints.student-list-document', [
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+            'reportTitle' => 'Admission Forms Report',
+            'reportSubtitle' => $subtitle,
+            'students' => $students,
+            'totalLabel' => 'Total Admission Forms:',
+            'emptyMessage' => 'No admission forms found.',
+        ]);
     }
 
     /**
@@ -1960,10 +2358,99 @@ class AdmissionController extends Controller
      */
     public function reportBlank(Request $request): View
     {
-        // Check for print parameter - accept both boolean and string '1', default to true for blank form
-        $isPrint = !$request->has('print') || ($request->has('print') && ($request->boolean('print') || $request->get('print') == '1' || $request->get('print') === 1));
-        
-        return view('admission.report-blank', compact('isPrint'));
+        if ($this->wantsLegacyAdmissionPrint($request)) {
+            return $this->printReportBlank();
+        }
+
+        return view('admission.report-blank');
+    }
+
+    public function printReportBlank(): View
+    {
+        return view('admission.prints.admission-blank-form-document', [
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
+    }
+
+    private function wantsLegacyAdmissionPrint(Request $request): bool
+    {
+        if (!$request->has('print')) {
+            return false;
+        }
+        $v = $request->get('print');
+
+        return $request->boolean('print')
+            || $v === '1'
+            || $v === 1
+            || $v === true
+            || $v === 'true';
+    }
+
+    private function admissionFormsFilteredStudents(Request $request)
+    {
+        $filterCampus = $request->get('filter_campus');
+        $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+
+        $query = Student::whereNotNull('admission_date');
+
+        if ($filterCampus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $filterCampus))]);
+        }
+        if ($filterClass) {
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $filterClass))]);
+        }
+        if ($filterSection) {
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $filterSection))]);
+        }
+
+        return $query->orderBy('admission_date', 'desc')
+            ->orderBy('student_name', 'asc')
+            ->get();
+    }
+
+    private function currentAdmissionReportYear(): int
+    {
+        return (int) now()->year;
+    }
+
+    /**
+     * Students admitted in a calendar month.
+     * Uses admission_date when set; otherwise created_at (covers bulk admits missing admission_date).
+     */
+    private function admissionsMonthQuery(?int $year = null, ?int $month = null)
+    {
+        $year = $year ?? (int) now()->year;
+        $month = $month ?? (int) now()->month;
+        $monthStart = Carbon::create($year, $month, 1)->startOfDay();
+        $monthEnd = $monthStart->copy()->endOfMonth()->endOfDay();
+
+        return Student::query()->where(function ($query) use ($monthStart, $monthEnd) {
+            $query->whereBetween('admission_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->orWhere(function ($nested) use ($monthStart, $monthEnd) {
+                    $nested->whereNull('admission_date')
+                        ->whereBetween('created_at', [$monthStart, $monthEnd]);
+                });
+        });
+    }
+
+    /**
+     * Students admitted in a calendar year.
+     * Uses admission_date when set; otherwise created_at (covers bulk admits missing admission_date).
+     */
+    private function admissionsYearQuery(int $year)
+    {
+        $yearStart = Carbon::create($year, 1, 1)->startOfDay();
+        $yearEnd = Carbon::create($year, 12, 31)->endOfDay();
+
+        return Student::query()->where(function ($query) use ($yearStart, $yearEnd) {
+            $query->whereBetween('admission_date', [$yearStart->toDateString(), $yearEnd->toDateString()])
+                ->orWhere(function ($nested) use ($yearStart, $yearEnd) {
+                    $nested->whereNull('admission_date')
+                        ->whereBetween('created_at', [$yearStart, $yearEnd]);
+                });
+        });
     }
 }
 

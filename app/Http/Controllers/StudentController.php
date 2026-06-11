@@ -14,6 +14,7 @@ use App\Models\StudentMark;
 use App\Models\StudentPayment;
 use App\Models\Exam;
 use App\Models\Test;
+use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,6 +30,8 @@ class StudentController extends Controller
      */
     public function index(Request $request): View
     {
+        Student::ensureStatusColumn();
+
         // Get active campuses first
         $activeCampuses = Campus::orderBy('campus_name', 'asc')->pluck('campus_name')->toArray();
         
@@ -73,19 +76,17 @@ class StudentController extends Controller
             $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
             
             if ($filterStatus === 'active') {
-                // Active: has admission_date and class is not passout
-                $query->whereNotNull('admission_date')
+                $query->active()
+                      ->whereNotNull('admission_date')
                       ->where(function($q) use ($passoutClasses) {
                           $q->whereNull('class')
                             ->orWhere('class', '')
                             ->orWhere(function($subQ) use ($passoutClasses) {
-                                // Class should not match any passout value
                                 $subQ->whereRaw("LOWER(TRIM(COALESCE(class, ''))) NOT IN ('" . implode("', '", array_map('strtolower', $passoutClasses)) . "')");
                             });
                       });
             } elseif ($filterStatus === 'inactive') {
-                // Inactive: no admission_date
-                $query->whereNull('admission_date');
+                $query->inactive();
             } elseif ($filterStatus === 'passout') {
                 // Passout: class field contains passout-related values
                 $query->where(function($q) use ($passoutClasses) {
@@ -513,9 +514,12 @@ class StudentController extends Controller
      */
     public function print(Student $student): View
     {
+        $settings = GeneralSetting::getSettings();
+
         return view('student.print', [
             'student' => $student,
             'printedAt' => now()->format('d-m-Y H:i'),
+            'settings' => $settings,
         ]);
     }
 
@@ -823,12 +827,9 @@ class StudentController extends Controller
         if ($request->filled('filter_type')) {
             $filterType = $request->filter_type;
             if ($filterType === 'active') {
-                // Active students: those with admission_date (all students should have this, but filter for safety)
-                $query->whereNotNull('admission_date');
+                $query->active()->whereNotNull('admission_date');
             } elseif ($filterType === 'deactive') {
-                // Deactive students: those without admission_date
-                // Note: Since admission_date is required, this might return empty, but kept for future use
-                $query->whereNull('admission_date');
+                $query->inactive();
             }
         }
         
@@ -1113,6 +1114,77 @@ class StudentController extends Controller
     }
 
     /**
+     * Mark student as active (sets admission date if missing).
+     */
+    public function activate(Request $request, Student $student): JsonResponse
+    {
+        Student::ensureStatusColumn();
+
+        if ($this->isPassoutStudent($student)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Passout students cannot be activated here. Use Reactivate instead.',
+            ], 400);
+        }
+
+        if ($student->isActiveStudent()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Student is already active.',
+            ], 400);
+        }
+
+        $student->status = 'active';
+        if (!$student->admission_date) {
+            $student->admission_date = now()->format('Y-m-d');
+        }
+        $student->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Student '{$student->student_name}' has been activated.",
+        ]);
+    }
+
+    /**
+     * Mark student as inactive (sets status to inactive).
+     */
+    public function deactivate(Request $request, Student $student): JsonResponse
+    {
+        Student::ensureStatusColumn();
+
+        if ($this->isPassoutStudent($student)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Passout students cannot be deactivated from here.',
+            ], 400);
+        }
+
+        if ($student->isInactiveStudent()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Student is already inactive.',
+            ], 400);
+        }
+
+        $student->status = 'inactive';
+        $student->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Student '{$student->student_name}' has been deactivated.",
+        ]);
+    }
+
+    private function isPassoutStudent(Student $student): bool
+    {
+        $passoutClasses = ['passout', 'pass out', 'passed out', 'passedout', 'graduated', 'graduate', 'alumni'];
+
+        return $student->class
+            && in_array(strtolower(trim((string) $student->class)), $passoutClasses, true);
+    }
+
+    /**
      * Reactivate a passout student (move back to original class).
      */
     public function reactivate(Request $request, Student $student): JsonResponse
@@ -1163,6 +1235,7 @@ class StudentController extends Controller
         $student->section = $originalSection;
         $student->previous_class = null;
         $student->previous_section = null;
+        $student->status = 'active';
         $student->save();
 
         return response()->json([

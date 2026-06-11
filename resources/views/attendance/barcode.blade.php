@@ -664,6 +664,24 @@ function processBarcode(barcode) {
             return;
         }
 
+        if (data.data && data.data.person_type === 'staff') {
+            const staff = data.data.staff;
+            const attendance = data.data.attendance;
+            updateStaffInfo(staff, attendance);
+            const action = data.data.action || '';
+            const timeLabel = attendance.check_out || attendance.check_in || '-';
+            addToLatestEntries({
+                name: staff.name,
+                roll: staff.emp_id || staff.id,
+                classSection: (staff.designation || 'Staff') + ' • ' + (staff.salary_type || ''),
+                time: timeLabel,
+                statusLabel: action === 'check_out' ? 'Check-out' : (action === 'check_in' ? 'Check-in' : 'Done'),
+                statusClass: 'badge-present'
+            });
+            setScanMessage(data.message || 'Staff attendance updated.', 'success');
+            return;
+        }
+
         const student = data.data.student;
         const attendance = data.data.attendance;
 
@@ -698,12 +716,37 @@ function processBarcode(barcode) {
 }
 
 function updateStudentInfo(student) {
+    resetInfoLabelsForStudent();
     document.getElementById('studentName').textContent = student.name || '-';
     document.getElementById('studentRoll').textContent = student.roll || '-';
     document.getElementById('studentParent').textContent = student.parent || '-';
     document.getElementById('studentClassSection').textContent = student.class_section || '-';
     document.getElementById('studentCampus').textContent = student.campus || '-';
     document.getElementById('studentDues').textContent = formatCurrency(student.dues);
+    const duesRow = document.querySelector('.dues-row');
+    if (duesRow) duesRow.style.display = '';
+}
+
+function resetInfoLabelsForStudent() {
+    const labels = document.querySelectorAll('.student-info-card .info-label');
+    const defaults = ['Student :', 'Roll :', 'Parent :', 'Class/Section :', 'Campus :', 'Dues :'];
+    labels.forEach((el, i) => { if (defaults[i]) el.textContent = defaults[i]; });
+}
+
+function updateStaffInfo(staff, attendance) {
+    const labels = document.querySelectorAll('.student-info-card .info-label');
+    const staffLabels = ['Staff :', 'Emp ID :', 'Type :', 'Check-in/out :', 'Campus :', 'Late / Early :'];
+    labels.forEach((el, i) => { if (staffLabels[i]) el.textContent = staffLabels[i]; });
+    document.getElementById('studentName').textContent = staff.name || '-';
+    document.getElementById('studentRoll').textContent = staff.emp_id || '-';
+    document.getElementById('studentParent').textContent = staff.salary_type || '-';
+    const inOut = [attendance.check_in, attendance.check_out].filter(Boolean).join(' → ') || '-';
+    document.getElementById('studentClassSection').textContent = inOut;
+    document.getElementById('studentCampus').textContent = staff.campus || '-';
+    const lateEarly = [attendance.late_arrival ? ('Late ' + attendance.late_arrival) : null, attendance.early_exit ? ('Early ' + attendance.early_exit) : null].filter(Boolean).join(' | ') || '-';
+    document.getElementById('studentDues').textContent = lateEarly;
+    const duesRow = document.querySelector('.dues-row');
+    if (duesRow) duesRow.style.display = '';
 }
 
 function setScanMessage(text, type) {

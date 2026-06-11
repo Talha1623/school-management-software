@@ -11,14 +11,25 @@
                 <h2 class="mb-0 fs-20 fw-semibold text-dark me-2">Teacher Dashboard</h2>
                 <span class="material-symbols-outlined text-secondary" style="font-size: 20px;">arrow_forward</span>
             </div>
-            @if(isset($assignedClasses) && $assignedClasses->isNotEmpty())
-            <div class="d-flex align-items-center gap-2">
+            @php
+                $dashboardCampus = trim((string) ($staff->campus ?? ''));
+                $hasDashboardCampus = $dashboardCampus !== '';
+                $hasAssignedClasses = isset($assignedClasses) && $assignedClasses->isNotEmpty();
+            @endphp
+            @if($hasDashboardCampus || $hasAssignedClasses)
+            <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                @if($hasDashboardCampus)
+                <span class="text-muted" style="font-size: 13px;">Campus:</span>
+                <span class="badge bg-secondary" style="font-size: 12px;">{{ $dashboardCampus }}</span>
+                @endif
+                @if($hasAssignedClasses)
                 <span class="text-muted" style="font-size: 13px;">Assigned Classes:</span>
                 <div class="d-flex gap-1 flex-wrap">
                     @foreach($assignedClasses as $class)
                     <span class="badge bg-primary" style="font-size: 12px;">{{ $class }}</span>
                     @endforeach
                 </div>
+                @endif
             </div>
             @endif
         </div>
@@ -37,8 +48,8 @@
                             </div>
                             <span class="material-symbols-outlined text-white-50" style="font-size: 48px; opacity: 0.3;">groups</span>
                         </div>
-                        <a href="{{ route('student-list') }}" class="text-white text-decoration-none d-flex align-items-center" style="font-size: 13px; font-weight: 500;">
-                            More info
+                        <a href="{{ route('attendance.student') }}" class="text-white text-decoration-none d-flex align-items-center" style="font-size: 13px; font-weight: 500;">
+                            Manage attendance
                             <span class="material-symbols-outlined ms-1" style="font-size: 16px;">arrow_forward</span>
                         </a>
                     </div>
@@ -56,8 +67,8 @@
                             </div>
                             <span class="material-symbols-outlined text-white-50" style="font-size: 48px; opacity: 0.3;">person</span>
                         </div>
-                        <a href="{{ route('student-list') }}?gender=Male" class="text-white text-decoration-none d-flex align-items-center" style="font-size: 13px; font-weight: 500;">
-                            More info
+                        <a href="{{ route('attendance.student') }}" class="text-white text-decoration-none d-flex align-items-center" style="font-size: 13px; font-weight: 500;">
+                            Manage attendance
                             <span class="material-symbols-outlined ms-1" style="font-size: 16px;">arrow_forward</span>
                         </a>
                     </div>
@@ -75,8 +86,8 @@
                             </div>
                             <span class="material-symbols-outlined text-white-50" style="font-size: 48px; opacity: 0.3;">person</span>
                         </div>
-                        <a href="{{ route('student-list') }}?gender=Female" class="text-white text-decoration-none d-flex align-items-center" style="font-size: 13px; font-weight: 500;">
-                            More info
+                        <a href="{{ route('attendance.student') }}" class="text-white text-decoration-none d-flex align-items-center" style="font-size: 13px; font-weight: 500;">
+                            Manage attendance
                             <span class="material-symbols-outlined ms-1" style="font-size: 16px;">arrow_forward</span>
                         </a>
                     </div>

@@ -164,21 +164,12 @@ class BehaviorRecordingController extends Controller
             }
         }
 
-        // Get students based on filters - only those connected to parents
+        // Get students based on selected filters.
         $students = collect();
         $campusName = null;
         
         if ($filterClass) {
             $studentsQuery = Student::query();
-            
-            // Only get students who have parent connection (parent_account_id or father_name)
-            $studentsQuery->where(function($query) {
-                $query->whereNotNull('parent_account_id')
-                      ->orWhere(function($q) {
-                          $q->whereNotNull('father_name')
-                            ->where('father_name', '!=', '');
-                      });
-            });
             
             $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
             

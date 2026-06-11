@@ -39,34 +39,52 @@ class PointOfSaleController extends Controller
     }
 
     /**
-     * Search product by barcode or product code
+     * Search product by barcode or product code.
+     * Supports multiple DB rows sharing the same product_code (e.g. each unit stock = 1):
+     * picks the next in-stock row, optionally skipping basket lines already at max qty.
      */
     public function searchProduct(Request $request)
     {
-        $barcode = $request->input('barcode');
+        $barcode = trim((string) $request->input('barcode', ''));
         $campus = $request->input('campus');
-        
-        if (empty($barcode)) {
+        $excludeIds = array_values(array_filter(array_map('intval', (array) $request->input('exclude_ids', []))));
+
+        if ($barcode === '') {
             return response()->json([
                 'success' => false,
-                'message' => 'Please enter barcode or product code'
+                'message' => 'Please enter barcode or product code',
             ]);
         }
 
-        // Search by product code with campus filter
-        $query = Product::where(function($q) use ($barcode) {
-            $q->where('product_code', $barcode)
-              ->orWhere('product_name', 'like', '%' . $barcode . '%');
-        });
-        
-        // Filter by campus if provided
-        if ($campus) {
-            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        $codeLower = strtolower($barcode);
+
+        $product = $this->findPosProductByCode($codeLower, $campus, $excludeIds, true);
+
+        if (!$product) {
+            $product = $this->findPosProductByCode($codeLower, $campus, $excludeIds, false);
         }
-        
-        $product = $query->first();
+
+        if (!$product) {
+            $nameQuery = $this->posProductBaseQuery($campus);
+            if (!empty($excludeIds)) {
+                $nameQuery->whereNotIn('id', $excludeIds);
+            }
+            $product = $nameQuery
+                ->whereRaw('LOWER(product_name) LIKE ?', ['%' . $codeLower . '%'])
+                ->orderByDesc('total_stock')
+                ->orderBy('id')
+                ->first();
+        }
 
         if ($product) {
+            $stock = (int) ($product->total_stock ?? 0);
+            if ($stock <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Out of stock for product code: ' . ($product->product_code ?: $barcode),
+                ]);
+            }
+
             return response()->json([
                 'success' => true,
                 'product' => [
@@ -74,16 +92,64 @@ class PointOfSaleController extends Controller
                     'name' => $product->product_name,
                     'product_code' => $product->product_code,
                     'price' => $product->sale_price ?? 0,
-                    'stock' => $product->total_stock ?? 0,
+                    'stock' => $stock,
                     'campus' => $product->campus ?? 'N/A',
-                ]
+                ],
+            ]);
+        }
+
+        $hasCodeRows = $this->posProductBaseQuery($campus)
+            ->whereRaw('LOWER(TRIM(product_code)) = ?', [$codeLower])
+            ->exists();
+
+        if ($hasCodeRows) {
+            return response()->json([
+                'success' => false,
+                'message' => 'All units with this product code are out of stock or already in the basket.',
             ]);
         }
 
         return response()->json([
             'success' => false,
-            'message' => 'Product not found' . ($campus ? ' in selected campus' : '')
+            'message' => 'Product not found' . ($campus ? ' in selected campus' : ''),
         ]);
+    }
+
+    /**
+     * @param  array<int>  $excludeIds
+     */
+    private function findPosProductByCode(string $codeLower, ?string $campus, array $excludeIds, bool $inStockOnly): ?Product
+    {
+        $query = $this->posProductBaseQuery($campus)
+            ->whereRaw('LOWER(TRIM(product_code)) = ?', [$codeLower]);
+
+        if (!empty($excludeIds)) {
+            $query->whereNotIn('id', $excludeIds);
+        }
+
+        if ($inStockOnly) {
+            $query->where('total_stock', '>', 0);
+        }
+
+        return $query->orderByDesc('total_stock')->orderBy('id')->first();
+    }
+
+    private function posProductBaseQuery(?string $campus)
+    {
+        $query = Product::query();
+
+        if ($campus) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $campus))]);
+        }
+
+        if (Auth::guard('accountant')->check()) {
+            $accountantCampus = Auth::guard('accountant')->user()->campus ?? null;
+            if ($accountantCampus) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($accountantCampus))]);
+            }
+        }
+
+        return $query;
     }
 
     /**
@@ -94,6 +160,7 @@ class PointOfSaleController extends Controller
         $validated = $request->validate([
             'buyer_name' => 'required|string|max:255',
             'payment_method' => 'required|string|max:255',
+            'campus' => 'nullable|string|max:255',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.product_name' => 'required|string',
@@ -129,6 +196,19 @@ class PointOfSaleController extends Controller
                 }
             }
 
+            if (Auth::guard('accountant')->check()) {
+                $accountantCampus = Auth::guard('accountant')->user()->campus ?? null;
+                if ($accountantCampus) {
+                    $campus = $accountantCampus;
+                }
+            }
+
+            $qtyByProductId = [];
+            foreach ($validated['items'] as $item) {
+                $pid = (int) $item['product_id'];
+                $qtyByProductId[$pid] = ($qtyByProductId[$pid] ?? 0) + (int) $item['quantity'];
+            }
+
             $savedRecords = [];
             foreach ($validated['items'] as $item) {
                 $product = Product::where('id', $item['product_id'])->lockForUpdate()->first();
@@ -141,7 +221,8 @@ class PointOfSaleController extends Controller
                 }
 
                 $availableStock = (int) ($product->total_stock ?? 0);
-                if ($availableStock < (int) $item['quantity']) {
+                $requestedQty = (int) ($qtyByProductId[(int) $item['product_id']] ?? $item['quantity']);
+                if ($availableStock < $requestedQty) {
                     DB::rollBack();
                     return response()->json([
                         'success' => false,

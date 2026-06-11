@@ -16,7 +16,14 @@ class AdminMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!Auth::guard('admin')->check()) {
+        if (! Auth::guard('admin')->check()) {
+            if ($request->expectsJson()
+                || $request->ajax()
+                || $request->header('X-Requested-With') === 'XMLHttpRequest'
+                || str_contains((string) $request->header('Accept', ''), 'application/json')) {
+                return response()->json(['message' => 'Please login as admin.', 'classes' => [], 'sections' => []], 401);
+            }
+
             return redirect()->route('admin.login')->with('error', 'Please login to access this page.');
         }
 

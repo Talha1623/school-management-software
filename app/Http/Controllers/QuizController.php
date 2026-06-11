@@ -4,19 +4,45 @@ namespace App\Http\Controllers;
 
 use App\Models\Quiz;
 use App\Models\QuizQuestion;
+use App\Models\QuizSubmission;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\Campus;
 use App\Models\GeneralSetting;
+use App\Models\Student;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Schema;
+use Carbon\Carbon;
 
 class QuizController extends Controller
 {
+    /**
+     * Questions may be created/edited only before the quiz's scheduled start time.
+     */
+    private function quizQuestionsAreEditable(Quiz $quiz): bool
+    {
+        return $quiz->questionsAreEditable();
+    }
+
+    /**
+     * Normalize datetime-local input to stored wall-clock time (school timezone).
+     */
+    private function normalizeStartDateTime(string $value): string
+    {
+        $tz = Quiz::schoolTimezone();
+        $value = trim($value);
+
+        if (str_contains($value, 'T')) {
+            return Carbon::createFromFormat('Y-m-d\TH:i', $value, $tz)->format('Y-m-d H:i:s');
+        }
+
+        return Carbon::parse($value, $tz)->format('Y-m-d H:i:s');
+    }
+
     /**
      * Display a listing of quizzes.
      */
@@ -60,7 +86,9 @@ class QuizController extends Controller
         // Sections will be loaded dynamically via AJAX based on class selection
         $sections = collect();
         
-        return view('quiz.manage', compact('quizzes', 'campuses', 'classes', 'sections'));
+        $quizTimezone = Quiz::schoolTimezone();
+
+        return view('quiz.manage', compact('quizzes', 'campuses', 'classes', 'sections', 'quizTimezone'));
     }
 
     /**
@@ -78,6 +106,8 @@ class QuizController extends Controller
             'start_date_time' => ['required', 'date'],
             'duration_minutes' => ['required', 'integer', 'min:1'],
         ]);
+
+        $validated['start_date_time'] = $this->normalizeStartDateTime($validated['start_date_time']);
 
         Quiz::create($validated);
 
@@ -101,6 +131,15 @@ class QuizController extends Controller
             'start_date_time' => ['required', 'date'],
             'duration_minutes' => ['required', 'integer', 'min:1'],
         ]);
+
+        $validated['start_date_time'] = $this->normalizeStartDateTime($validated['start_date_time']);
+
+        if (!$this->quizQuestionsAreEditable($quiz)) {
+            // Quiz already started — do not allow moving start time to unlock question edits.
+            $validated['start_date_time'] = $quiz->start_date_time instanceof Carbon
+                ? $quiz->start_date_time->format('Y-m-d H:i:s')
+                : (string) $quiz->start_date_time;
+        }
 
         $quiz->update($validated);
 
@@ -313,13 +352,23 @@ class QuizController extends Controller
     {
         try {
             if (!Schema::hasTable('quiz_questions')) {
-                return response()->json(['questions' => []]);
+                return response()->json([
+                    'can_edit' => $quiz->questionsAreEditable(),
+                    'start_at' => $quiz->startAtLocal()?->timestamp,
+                    'timezone' => Quiz::schoolTimezone(),
+                    'questions' => [],
+                ]);
             }
-            
+
             $questions = $quiz->questions()->orderBy('question_number')->get();
-            
+
+            $startAt = $quiz->startAtLocal();
+
             return response()->json([
-                'questions' => $questions->map(function($q) {
+                'can_edit' => $quiz->questionsAreEditable(),
+                'start_at' => $startAt?->timestamp,
+                'timezone' => Quiz::schoolTimezone(),
+                'questions' => $questions->map(function ($q) {
                     return [
                         'question_number' => $q->question_number,
                         'question' => $q->question,
@@ -330,10 +379,15 @@ class QuizController extends Controller
                         'answer3' => $q->answer3,
                         'marks3' => $q->marks3,
                     ];
-                })
+                }),
             ]);
         } catch (\Exception $e) {
-            return response()->json(['questions' => []]);
+            return response()->json([
+                'can_edit' => $quiz->questionsAreEditable(),
+                'start_at' => $quiz->startAtLocal()?->timestamp,
+                'timezone' => Quiz::schoolTimezone(),
+                'questions' => [],
+            ]);
         }
     }
 
@@ -352,6 +406,14 @@ class QuizController extends Controller
             'questions.*.answer3' => ['nullable', 'string'],
             'questions.*.marks3' => ['nullable', 'integer', 'min:0'],
         ]);
+
+        if (!$quiz->questionsAreEditable()) {
+            $startLabel = $quiz->startAtLocal()?->format('d M Y h:i A') ?? 'scheduled time';
+
+            return redirect()
+                ->route('quiz.manage')
+                ->with('error', "This quiz started at {$startLabel}. Questions can no longer be updated.");
+        }
 
         // Ensure table exists, create if it doesn't
         if (!Schema::hasTable('quiz_questions')) {
@@ -412,12 +474,87 @@ class QuizController extends Controller
     {
         try {
             if (!Schema::hasTable('quiz_questions')) {
-                return response()->json(['questions' => []]);
+                return response()->json(['questions' => [], 'students' => []]);
             }
             
             $questions = $quiz->questions()->orderBy('question_number')->get();
+            $hasSubmissionsTable = Schema::hasTable('quiz_submissions');
+            $hasSubmissionStudentId = $hasSubmissionsTable && Schema::hasColumn('quiz_submissions', 'student_id');
+            $hasSubmissionStudentCode = $hasSubmissionsTable && Schema::hasColumn('quiz_submissions', 'student_code');
+
+            $students = Student::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $quiz->for_class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $quiz->section))])
+                ->when(!empty($quiz->campus), function ($query) use ($quiz) {
+                    $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $quiz->campus))]);
+                })
+                ->orderBy('student_name')
+                ->get();
+
+            $submissionsByStudentId = collect();
+            $submissionsByStudentCode = collect();
+            if ($hasSubmissionsTable) {
+                $submissions = QuizSubmission::query()
+                    ->where('quiz_id', $quiz->id)
+                    ->latest('id')
+                    ->get();
+
+                if ($hasSubmissionStudentId) {
+                    $submissionsByStudentId = $submissions
+                        ->filter(fn ($submission) => !empty($submission->student_id))
+                        ->unique('student_id')
+                        ->keyBy('student_id');
+                }
+
+                if ($hasSubmissionStudentCode) {
+                    $submissionsByStudentCode = $submissions
+                        ->filter(fn ($submission) => !empty($submission->student_code))
+                        ->unique('student_code')
+                        ->keyBy('student_code');
+                }
+            }
+
+            $totalPossibleMarks = $questions->sum(function ($q) {
+                return (float) ($q->marks1 ?? 0) + (float) ($q->marks2 ?? 0) + (float) ($q->marks3 ?? 0);
+            });
+            $submittedCount = 0;
+            $studentResults = $students->map(function (Student $student) use ($submissionsByStudentId, $submissionsByStudentCode, $totalPossibleMarks, &$submittedCount) {
+                $submission = $submissionsByStudentId->get($student->id);
+                if (!$submission && !empty($student->student_code)) {
+                    $submission = $submissionsByStudentCode->get($student->student_code);
+                }
+
+                if ($submission) {
+                    $submittedCount++;
+                }
+
+                return [
+                    'student_id' => $student->id,
+                    'student_code' => $student->student_code,
+                    'student_name' => $student->student_name,
+                    'father_name' => $student->father_name,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                    'submitted' => $submission !== null,
+                    'obtained_marks' => $submission ? (float) ($submission->obtained_marks ?? 0) : 0,
+                    'total_marks' => $submission ? (float) ($submission->total_marks ?? $totalPossibleMarks) : (float) $totalPossibleMarks,
+                    'submitted_at' => ($submission && $submission->submitted_at) ? $submission->submitted_at->format('Y-m-d H:i:s') : null,
+                ];
+            })->values();
             
             return response()->json([
+                'quiz' => [
+                    'id' => $quiz->id,
+                    'quiz_name' => $quiz->quiz_name,
+                    'campus' => $quiz->campus,
+                    'for_class' => $quiz->for_class,
+                    'section' => $quiz->section,
+                    'total_students' => $studentResults->count(),
+                    'submitted_count' => $submittedCount,
+                    'pending_count' => max(0, $studentResults->count() - $submittedCount),
+                    'total_marks' => (float) $totalPossibleMarks,
+                ],
                 'questions' => $questions->map(function($q) {
                     return [
                         'question_number' => $q->question_number,
@@ -429,10 +566,11 @@ class QuizController extends Controller
                         'answer3' => $q->answer3,
                         'marks3' => $q->marks3,
                     ];
-                })
+                }),
+                'students' => $studentResults,
             ]);
         } catch (\Exception $e) {
-            return response()->json(['questions' => []]);
+            return response()->json(['questions' => [], 'students' => []]);
         }
     }
 

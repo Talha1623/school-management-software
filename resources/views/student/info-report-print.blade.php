@@ -92,6 +92,9 @@
     </style>
 </head>
 <body>
+    @php
+        $isPassoutReport = in_array($type ?? '', ['all-passout', 'monthly-passout', 'daily-passout'], true);
+    @endphp
     <div class="header">
         <div>
             <h1 class="title">{{ $title }}</h1>
@@ -137,8 +140,8 @@
                             <td>{{ $student->father_name ?? 'N/A' }}</td>
                             <td>{{ $student->father_phone ?? $student->whatsapp_number ?? 'N/A' }}</td>
                             <td>{{ $student->campus ?? 'N/A' }}</td>
-                            <td>{{ $student->class ?? 'N/A' }}</td>
-                            <td>{{ $student->section ?? 'N/A' }}</td>
+                            <td>{{ $isPassoutReport ? ($student->previous_class ?? 'N/A') : ($student->class ?? 'N/A') }}</td>
+                            <td>{{ $isPassoutReport ? ($student->previous_section ?? 'N/A') : ($student->section ?? 'N/A') }}</td>
                             <td>{{ ucfirst($student->gender ?? 'N/A') }}</td>
                             <td>{{ $student->admission_date ? $student->admission_date->format('d M Y') : 'N/A' }}</td>
                         </tr>
@@ -173,8 +176,8 @@
                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                         <td>{{ $student->father_phone ?? $student->whatsapp_number ?? 'N/A' }}</td>
                         <td>{{ $student->campus ?? 'N/A' }}</td>
-                        <td>{{ $student->class ?? 'N/A' }}</td>
-                        <td>{{ $student->section ?? 'N/A' }}</td>
+                        <td>{{ $isPassoutReport ? ($student->previous_class ?? 'N/A') : ($student->class ?? 'N/A') }}</td>
+                        <td>{{ $isPassoutReport ? ($student->previous_section ?? 'N/A') : ($student->section ?? 'N/A') }}</td>
                         <td>{{ ucfirst($student->gender ?? 'N/A') }}</td>
                         <td>{{ $student->admission_date ? $student->admission_date->format('d M Y') : 'N/A' }}</td>
                     </tr>

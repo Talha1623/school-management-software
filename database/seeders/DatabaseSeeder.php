@@ -25,6 +25,8 @@ class DatabaseSeeder extends Seeder
         // Seed Super Admin
         $this->call([
             AdminRoleSeeder::class,
+            PlatformSuperAdminSeeder::class,
+            PlatformSchoolSeeder::class,
         ]);
     }
 }

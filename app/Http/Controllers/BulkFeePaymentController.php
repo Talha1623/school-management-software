@@ -5,11 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Student;
+use App\Models\StudentDiscount;
 use App\Models\StudentPayment;
+use App\Models\Subject;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class BulkFeePaymentController extends Controller
@@ -92,7 +93,9 @@ class BulkFeePaymentController extends Controller
             }
         }
 
-        $query = StudentPayment::with('student')
+        $query = StudentPayment::query()
+            ->ledgerActive()
+            ->with('student')
             ->where('method', 'Generated');
 
         // Always filter by campus if provided, and ensure student exists and is not deleted
@@ -127,58 +130,65 @@ class BulkFeePaymentController extends Controller
             $query->whereRaw('LOWER(TRIM(payment_title)) = ?', [strtolower(trim($feeType))]);
         }
 
-        $payments = $query->orderBy('payment_date', 'desc')->get();
+        $payments = $query->orderByDesc('id')->get();
 
-        $items = $payments->map(function ($payment) use ($campus) {
+        $studentDiscountCache = [];
+        $seenTitleKeys = [];
+        $items = collect();
+
+        foreach ($payments as $payment) {
             $student = $payment->student;
-            
-            // Skip if student is deleted or doesn't exist
-            if (!$student) {
-                return null;
+
+            if (! $student) {
+                continue;
             }
-            
-            // Double-check campus filter (in case payment campus doesn't match student campus)
+
             if ($campus && $student->campus) {
                 if (strtolower(trim($student->campus)) !== strtolower(trim($campus))) {
-                    return null;
+                    continue;
                 }
             }
-            
-            $amount = (float) $payment->payment_amount;
-            $lateFee = (float) ($payment->late_fee ?? 0);
 
-            $paidBase = StudentPayment::where('student_code', $payment->student_code)
-                ->where('payment_title', $payment->payment_title)
-                ->where('method', '!=', 'Generated')
-                ->sum(DB::raw('COALESCE(payment_amount,0) + COALESCE(discount,0)'));
-            $paidLate = StudentPayment::where('student_code', $payment->student_code)
-                ->where('payment_title', $payment->payment_title)
-                ->where('method', '!=', 'Generated')
-                ->sum(DB::raw('COALESCE(late_fee,0)'));
+            $titleKey = strtolower(trim($payment->student_code)) . '|' . strtolower(trim((string) $payment->payment_title));
+            if (isset($seenTitleKeys[$titleKey])) {
+                continue;
+            }
+            $seenTitleKeys[$titleKey] = true;
 
-            $remainingAmount = max($amount - (float) $paidBase, 0);
-            $remainingLate = max($lateFee - (float) $paidLate, 0);
-            $totalDue = $remainingAmount + $remainingLate;
-
-            if ($totalDue <= 0) {
-                return null;
+            $studentCode = $payment->student_code;
+            if (! array_key_exists($studentCode, $studentDiscountCache)) {
+                $studentDiscountCache[$studentCode] = (float) StudentDiscount::where('student_code', $studentCode)
+                    ->get()
+                    ->sum(fn ($discount) => (float) ($discount->discount_amount ?? 0));
             }
 
-            return [
+            $dueParts = StudentPayment::remainingDuePartsForTitle(
+                $studentCode,
+                (string) $payment->payment_title,
+                $studentDiscountCache[$studentCode]
+            );
+
+            if ($dueParts['total'] <= 0.02) {
+                continue;
+            }
+
+            $items->push([
                 'generated_id' => $payment->id,
-                'student_code' => $payment->student_code,
+                'student_code' => $studentCode,
                 'student_name' => $student->student_name ?? 'N/A',
                 'parent_name' => $student->father_name ?? 'N/A',
                 'payment_title' => $payment->payment_title ?? 'N/A',
-                'amount' => $remainingAmount,
-                'late_fee' => $remainingLate,
-                'total_due' => $totalDue,
+                'amount' => $dueParts['amount'],
+                'late_fee' => $dueParts['late_fee'],
+                'total_due' => $dueParts['total'],
                 'payment' => 0,
                 'discount' => 0,
                 'payment_date' => now()->format('Y-m-d'),
                 'fully_paid' => 'No',
-            ];
-        })->filter()->values();
+            ]);
+        }
+
+        $items = $items->values();
 
         return response()->json(['items' => $items]);
     }
@@ -255,5 +265,127 @@ class BulkFeePaymentController extends Controller
             'success' => true,
             'saved' => $saved,
         ]);
+    }
+
+    /**
+     * Classes for selected campus (AJAX — same logic as head-wise dues; isolated URL for Bulk Fee Payment).
+     */
+    public function ajaxClassesByCampus(Request $request): JsonResponse
+    {
+        try {
+            $campus = $request->get('campus');
+            if (! $campus || trim((string) $campus) === '') {
+                return response()->json(['classes' => []]);
+            }
+
+            $campusNorm = strtolower(trim((string) $campus));
+
+            $classes = ClassModel::query()
+                ->whereNotNull('class_name')
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                ->distinct()
+                ->pluck('class_name')
+                ->sort()
+                ->values();
+
+            if ($classes->isEmpty()) {
+                $fromStudents = Student::query()
+                    ->whereNotNull('class')
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                    ->distinct()
+                    ->pluck('class')
+                    ->sort()
+                    ->values();
+                $classes = $fromStudents->isEmpty()
+                    ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
+                    : $fromStudents;
+            }
+
+            $classes = $classes->map(fn ($c) => trim((string) $c))
+                ->filter(fn ($c) => $c !== '')
+                ->unique()
+                ->sort()
+                ->values();
+
+            return response()->json(['classes' => $classes]);
+        } catch (\Throwable $e) {
+            \Log::error('bulk_fee.ajaxClassesByCampus', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'classes' => [],
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Sections for selected class/campus (AJAX — case-insensitive + student/subject fallbacks).
+     */
+    public function ajaxSectionsByClass(Request $request): JsonResponse
+    {
+        try {
+            $class = $request->get('class');
+            $campus = $request->get('campus');
+
+            if (! $class || trim((string) $class) === '') {
+                return response()->json(['sections' => []]);
+            }
+
+            $classNorm = strtolower(trim((string) $class));
+            $campusNorm = $campus && trim((string) $campus) !== '' ? strtolower(trim((string) $campus)) : null;
+
+            $sectionsQuery = Section::query()
+                ->whereNotNull('name')
+                ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+            if ($campusNorm !== null) {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm]);
+            }
+            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+
+            if ($sections->isEmpty()) {
+                $fromStudents = Student::query()
+                    ->whereNotNull('section')
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+                if ($campusNorm !== null) {
+                    $fromStudents->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm]);
+                }
+                $sections = $fromStudents->distinct()->pluck('section')->sort()->values();
+            }
+
+            if ($sections->isEmpty()) {
+                $fromSubjects = Subject::query()
+                    ->whereNotNull('section')
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+                if ($campusNorm !== null) {
+                    $fromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm]);
+                }
+                $sections = $fromSubjects->distinct()->pluck('section')->sort()->values();
+            }
+
+            $sections = $sections->map(fn ($s) => trim((string) $s))
+                ->filter(fn ($s) => $s !== '')
+                ->unique()
+                ->sort()
+                ->values();
+
+            $payload = $sections->map(fn ($name) => ['id' => null, 'name' => $name])->values();
+
+            return response()->json(['sections' => $payload]);
+        } catch (\Throwable $e) {
+            \Log::error('bulk_fee.ajaxSectionsByClass', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'sections' => [],
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
+            ], 500);
+        }
     }
 }

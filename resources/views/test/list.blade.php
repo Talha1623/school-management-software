@@ -34,6 +34,12 @@
                 </div>
             @endif
 
+            @if(!empty($isStaffTestUser))
+                <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                    <strong>Declare Result</strong> button works only for tests whose <strong>Subject</strong> matches your assignment in Manage Subjects (e.g. Urdu). Other subjects show status only — you cannot declare them.
+                </div>
+            @endif
+
             <!-- Table Toolbar -->
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                 <!-- Left Side -->
@@ -151,15 +157,33 @@
                                         <td>{{ date('d M Y', strtotime($test->date)) }}</td>
                                         <td>{{ $test->session }}</td>
                                         <td>
-                                            @if($test->result_status ?? false)
-                                                <button type="button" class="btn btn-sm btn-success px-3 py-1 result-status-btn" id="result-btn-{{ $test->id }}" data-test-id="{{ $test->id }}" onclick="toggleResultStatus({{ $test->id }})" style="font-size: 11px;">
+                                            @php
+                                                $canDeclareResult = !($isStaffTestUser ?? false);
+                                                if (($isStaffTestUser ?? false) && !empty($staff)) {
+                                                    $canDeclareResult = $staff->canDeclareResultForTest(
+                                                        $test->campus,
+                                                        $test->for_class,
+                                                        $test->section,
+                                                        $test->subject
+                                                    );
+                                                }
+                                            @endphp
+                                            @if($canDeclareResult && ($test->result_status ?? false))
+                                                <button type="button" class="btn btn-sm btn-success px-3 py-1 result-status-btn" id="result-btn-{{ $test->id }}" data-test-id="{{ $test->id }}" data-can-declare="1" onclick="toggleResultStatus({{ $test->id }})" style="font-size: 11px;">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
                                                     <span style="color: white;">Result Declared</span>
                                                 </button>
-                                            @else
-                                                <button type="button" class="btn btn-sm btn-warning px-3 py-1 result-status-btn" id="result-btn-{{ $test->id }}" data-test-id="{{ $test->id }}" onclick="toggleResultStatus({{ $test->id }})" style="font-size: 11px;">
+                                            @elseif($canDeclareResult)
+                                                <button type="button" class="btn btn-sm btn-warning px-3 py-1 result-status-btn" id="result-btn-{{ $test->id }}" data-test-id="{{ $test->id }}" data-can-declare="1" onclick="toggleResultStatus({{ $test->id }})" style="font-size: 11px;">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">pending</span>
                                                     <span style="color: white;">Declare Result</span>
+                                                </button>
+                                            @elseif($test->result_status ?? false)
+                                                <span class="badge bg-success" title="Declared by another subject teacher">Result Declared</span>
+                                            @else
+                                                <button type="button" class="btn btn-sm btn-secondary px-3 py-1" disabled title="You can only declare results for your own subject (Manage Subjects)">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">block</span>
+                                                    <span>Not Your Subject</span>
                                                 </button>
                                             @endif
                                         </td>
@@ -935,7 +959,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (selectedClass) {
                 sectionSelect.innerHTML = '<option value="">Loading...</option>';
                 
-                fetch(`{{ route('test.list.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+                const campusForSection = campusSelect ? campusSelect.value : '';
+                const sectionParams = new URLSearchParams({ class: selectedClass });
+                if (campusForSection) sectionParams.append('campus', campusForSection);
+                fetch(`{{ route('test.list.get-sections') }}?${sectionParams.toString()}`)
                     .then(response => response.json())
                     .then(data => {
                         sectionSelect.innerHTML = '<option value="">Select Section</option>';
@@ -1022,9 +1049,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Toggle result status
+// Toggle result status (only for staff's own assigned subject)
 function toggleResultStatus(testId) {
     const button = document.getElementById('result-btn-' + testId);
+    if (!button || button.dataset.canDeclare === '0') {
+        alert('You can only declare results for tests of your own assigned subject.');
+        return;
+    }
     const originalHTML = button.innerHTML;
     
     // Disable button and show loading
@@ -1039,7 +1070,13 @@ function toggleResultStatus(testId) {
             'Accept': 'application/json'
         }
     })
-    .then(response => response.json())
+    .then(async response => {
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || 'Failed to update result status.');
+        }
+        return data;
+    })
     .then(data => {
         if (data.success) {
             // Update button based on new status
@@ -1065,13 +1102,13 @@ function toggleResultStatus(testId) {
             }
         } else {
             button.innerHTML = originalHTML;
-            alert('Failed to update result status. Please try again.');
+            alert(data.message || 'Failed to update result status. Please try again.');
         }
     })
     .catch(error => {
         console.error('Error:', error);
         button.innerHTML = originalHTML;
-        alert('An error occurred. Please try again.');
+        alert(error.message || 'An error occurred. Please try again.');
     })
     .finally(() => {
         button.disabled = false;

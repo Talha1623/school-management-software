@@ -22,9 +22,6 @@
                 @if(!empty($filterStaffId))
                     <input type="hidden" name="staff_id" value="{{ $filterStaffId }}">
                 @endif
-                @if(!empty($reportType))
-                    <input type="hidden" name="report_type" value="{{ $reportType }}">
-                @endif
                 <div class="row g-2 mb-3 align-items-end">
                     <!-- Campus -->
                     <div class="col-md-3">
@@ -115,9 +112,7 @@
                 <!-- Report Header -->
                 <div class="text-center mb-4" style="padding-bottom: 20px;">
                     <h2 class="mb-2 fw-bold" style="color: #003471; font-size: 28px;">ICMS</h2>
-                    <h4 class="mb-3 fw-semibold" style="color: #495057; font-size: 18px;">
-                        {{ ($reportType ?? '') === 'performance' ? 'Teacher Performance Report' : 'Staff Attendance Sheet' }}
-                    </h4>
+                    <h4 class="mb-3 fw-semibold" style="color: #495057; font-size: 18px;">Staff Attendance Sheet</h4>
                     <div class="d-flex justify-content-center gap-4 flex-wrap" style="font-size: 14px; color: #6c757d;">
                         <span><strong>Campus:</strong> {{ request('filter_campus') ?? $filterCampus }}</span>
                         <span><strong>Designation:</strong> {{ $filterDesignation }}</span>
@@ -138,34 +133,12 @@
                                 @for($day = 1; $day <= $daysInMonth; $day++)
                                     <th style="padding: 4px; text-align: center; min-width: 25px; width: 25px; border: 1px solid #dee2e6; font-size: 11px;">{{ $day }}</th>
                                 @endfor
-                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #e7f3ff;">Presents</th>
-                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #ffe7e7;">Absents</th>
-                                <th style="padding: 8px; text-align: center; min-width: 80px; border: 1px solid #dee2e6; background-color: #f1f1f1;">Leaves</th>
-                                <th style="padding: 8px; text-align: center; min-width: 90px; border: 1px solid #dee2e6; background-color: #e9ecef;">Half Days</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($staffList as $index => $staff)
                                 @php
-                                    $presentDays = 0;
-                                    $absentDays = 0;
                                     $staffAttendance = $attendanceData[$staff->id] ?? [];
-                                    $leaveDays = 0;
-                                    $halfDays = 0;
-                                    
-                                    // Count present and absent days dynamically
-                                    foreach ($staffAttendance as $day => $status) {
-                                        $statusUpper = strtoupper($status);
-                                        if ($statusUpper === 'P') {
-                                            $presentDays++;
-                                        } elseif ($statusUpper === 'A') {
-                                            $absentDays++;
-                                        } elseif ($statusUpper === 'L') {
-                                            $leaveDays++;
-                                        } elseif ($statusUpper === 'HD') {
-                                            $halfDays++;
-                                        }
-                                    }
                                 @endphp
                                 <tr>
                                     <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6;">
@@ -202,18 +175,6 @@
                                             {{ $attendanceStatus ? $statusUpper : '' }}
                                         </td>
                                     @endfor
-                                    <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #e7f3ff; font-weight: bold;">
-                                        {{ $presentDays }}
-                                    </td>
-                                    <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #ffe7e7; font-weight: bold;">
-                                        {{ $absentDays }}
-                                    </td>
-                                    <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #f1f1f1; font-weight: bold;">
-                                        {{ $leaveDays }}
-                                    </td>
-                                    <td style="padding: 8px; text-align: center; border: 1px solid #dee2e6; background-color: #e9ecef; font-weight: bold;">
-                                        {{ $halfDays }}
-                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -382,14 +343,8 @@
     }
     
     /* Day columns should be compact */
-    .attendance-report-table thead th:nth-child(n+5):not(:last-child):not(:nth-last-child(2)):not(:nth-last-child(3)):not(:nth-last-child(4)) {
-        min-width: 25px !important;
-        width: 25px !important;
-        padding: 2px !important;
-        font-size: 10px !important;
-    }
-    
-    .attendance-report-table tbody td:nth-child(n+5):not(:last-child):not(:nth-last-child(2)):not(:nth-last-child(3)):not(:nth-last-child(4)) {
+    .attendance-report-table thead th:nth-child(n+5),
+    .attendance-report-table tbody td:nth-child(n+5) {
         min-width: 25px !important;
         width: 25px !important;
         padding: 2px !important;

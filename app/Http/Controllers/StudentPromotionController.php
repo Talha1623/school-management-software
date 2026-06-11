@@ -207,16 +207,34 @@ class StudentPromotionController extends Controller
         // Only promote selected students
         $query->whereIn('id', $validated['student_ids']);
 
-        // Update students
-        $updateData = ['class' => $validated['to_class']];
-        
-        // Only add section if column exists
-        if (Schema::hasColumn('students', 'section')) {
-            $updateData['section'] = $validated['to_section'] ?? null;
-        }
-        
         try {
-            $updated = $query->update($updateData);
+            $studentsToPromote = $query->get();
+            $updated = 0;
+
+            foreach ($studentsToPromote as $student) {
+                $student->class = $validated['to_class'];
+
+                // Keep promotion history if these columns exist
+                if (Schema::hasColumn('students', 'previous_class')) {
+                    $student->previous_class = $student->getOriginal('class');
+                }
+                if (Schema::hasColumn('students', 'previous_section')) {
+                    $student->previous_section = $student->getOriginal('section');
+                }
+
+                // If no target section is selected, keep student's current section.
+                // This prevents section from being wiped to null.
+                if (Schema::hasColumn('students', 'section')) {
+                    if (!empty($validated['to_section'])) {
+                        $student->section = $validated['to_section'];
+                    }
+                }
+
+                if ($student->isDirty()) {
+                    $student->save();
+                    $updated++;
+                }
+            }
         } catch (\Exception $e) {
             return redirect()
                 ->route('student.promotion')

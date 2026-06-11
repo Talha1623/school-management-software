@@ -18,13 +18,18 @@
         }
 
         @media print {
-            body {
-                background: white;
-                padding: 0;
+            html, body {
+                background: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
-            
+
             .no-print {
-                display: none;
+                display: none !important;
+            }
+
+            .certificate-container {
+                box-shadow: none !important;
             }
         }
 
@@ -53,8 +58,8 @@
         }
 
         .logo-img {
-            width: 80px;
-            height: 80px;
+            width: 115px;
+            height: 115px;
             object-fit: contain;
         }
 
@@ -197,9 +202,6 @@
         <div class="certificate-border">
             <!-- Header -->
             <div class="certificate-header">
-                <div class="school-logo">
-                    <img src="{{ asset('assets/images/logo-icon.png') }}" alt="School Logo" class="logo-img" onerror="this.style.display='none'">
-                </div>
                 <h1 class="school-name">{{ $schoolName }}</h1>
                 @if($schoolAddress)
                 <p class="school-address">{{ $schoolAddress }}</p>
@@ -256,12 +258,12 @@
                     <div class="birth-date">{{ $student->date_of_birth->format('d F Y') }}</div>
                     <div class="birth-date-text">({{ $student->date_of_birth->format('d/m/Y') }})</div>
                     @if($student->place_of_birth)
-                    <p style="margin-top: 20px; font-size: 16px;"><strong>Place of Birth:</strong> {{ $student->place_of_birth }}</p>
+                    <p class="birth-place" style="margin-top: 20px; font-size: 16px;"><strong>Place of Birth:</strong> {{ $student->place_of_birth }}</p>
                     @endif
                 </div>
                 @endif
 
-                <p style="margin-top: 30px;">This certificate is issued on the basis of school records and is authentic. This certificate is issued on the request of the student/parent for official purposes.</p>
+                <p class="cert-note" style="margin-top: 30px;">This certificate is issued on the basis of school records and is authentic. This certificate is issued on the request of the student/parent for official purposes.</p>
             </div>
 
             <!-- Footer -->

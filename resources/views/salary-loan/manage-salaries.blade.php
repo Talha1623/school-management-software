@@ -217,7 +217,13 @@
                                             <strong class="text-success">{{ number_format($salary->salary_generated, 2) }}</strong>
                                         </td>
                                         <td>
-                                            <strong class="text-info">{{ number_format($salary->amount_paid, 2) }}</strong>
+                                            @php
+                                                $displayAmountPaid = (float) ($salary->amount_paid ?? 0);
+                                                if ($displayAmountPaid <= 0 && $salary->status === 'Paid') {
+                                                    $displayAmountPaid = max(0, (float) ($salary->salary_generated ?? 0) + (float) ($salary->bonus_amount ?? 0) - (float) ($salary->deduction_amount ?? 0) - (float) ($salary->loan_repayment ?? 0));
+                                                }
+                                            @endphp
+                                            <strong class="text-info">{{ number_format($displayAmountPaid, 2) }}</strong>
                                         </td>
                                         <td>
                                             <strong class="text-warning">{{ number_format($salary->loan_repayment, 2) }}</strong>
@@ -383,7 +389,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="paymentForm" method="POST">
+            <form id="paymentForm" method="POST" onsubmit="syncPaymentAmountPaid(); return true;">
                 @csrf
                 @method('PUT')
                 <div class="modal-body p-4" style="background-color: #f8f9fa;">
@@ -432,14 +438,14 @@
                             </div>
                         </div>
 
-                        <!-- Generated Salary -->
+                        <!-- Generated Salary (editable; loan/bonus/deduction do not change this value automatically) -->
                         <div class="col-md-6">
                             <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Generated Salary</label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
                                 </span>
-                                <input type="text" class="form-control" id="payment_generated_salary" name="generated_salary" readonly style="background-color: #f8f9fa; cursor: not-allowed; height: 38px;">
+                                <input type="number" class="form-control" id="payment_generated_salary" name="generated_salary" step="0.01" min="0" required style="height: 38px;" oninput="syncPaymentAmountPaid()">
                             </div>
                         </div>
 
@@ -462,7 +468,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">account_balance</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_loan_repayment" name="loan_repayment" step="0.01" min="0" value="0" style="height: 38px;">
+                                <input type="number" class="form-control" id="payment_loan_repayment" name="loan_repayment" step="0.01" min="0" value="0" style="height: 38px;" oninput="syncPaymentAmountPaid()">
                             </div>
                         </div>
 
@@ -484,7 +490,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_bonus_amount" name="bonus_amount" step="0.01" min="0" value="0" style="height: 38px;" oninput="calculateGeneratedSalary()">
+                                <input type="number" class="form-control" id="payment_bonus_amount" name="bonus_amount" step="0.01" min="0" value="0" style="height: 38px;" oninput="syncPaymentAmountPaid()">
                             </div>
                         </div>
 
@@ -506,7 +512,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_deduction_amount" name="deduction_amount" step="0.01" min="0" value="0" style="height: 38px;" oninput="calculateGeneratedSalary()">
+                                <input type="number" class="form-control" id="payment_deduction_amount" name="deduction_amount" step="0.01" min="0" value="0" style="height: 38px;" oninput="syncPaymentAmountPaid()">
                             </div>
                         </div>
 
@@ -556,7 +562,7 @@
                                     <option value="Wallet">Wallet</option>
                                     <option value="Transfer">Transfer</option>
                                     <option value="Card">Card</option>
-                                    <option value="Check">Check</option>
+                                    <option value="Cheque">Check</option>
                                     <option value="Deposit">Deposit</option>
                                     <option value="Cash">Cash</option>
                                 </select>
@@ -570,7 +576,7 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
                                 </span>
-                                <select class="form-control" id="payment_fully_paid" name="fully_paid" style="height: 38px;">
+                                <select class="form-control" id="payment_fully_paid" name="fully_paid" style="height: 38px;" onchange="if(this.value==='1'){syncPaymentAmountPaid();}">
                                     <option value="0">No</option>
                                     <option value="1">Yes</option>
                                 </select>
@@ -945,17 +951,20 @@ function printTable() {
     window.location.reload();
 }
 
-// Calculate Generated Salary dynamically
-function calculateGeneratedSalary() {
-    const generatedSalaryInput = document.getElementById('payment_generated_salary');
-    // Get the base generated salary (already includes fees deductions)
-    const baseGeneratedSalary = parseFloat(generatedSalaryInput.getAttribute('data-generated') || 0);
+// Keep Generated Salary fixed when loan/bonus/deduction change; sync Amount Paid with generated + bonus - deduction.
+// When the user edits Generated Salary, Amount Paid updates to match (same formula).
+function syncPaymentAmountPaid() {
+    const amountPaidInput = document.getElementById('payment_amount_paid');
+    if (!amountPaidInput || amountPaidInput.hasAttribute('readonly')) {
+        return;
+    }
+    const generated = parseFloat(document.getElementById('payment_generated_salary').value || 0);
+    const loanRepayment = parseFloat(document.getElementById('payment_loan_repayment').value || 0);
     const bonusAmount = parseFloat(document.getElementById('payment_bonus_amount').value || 0);
     const deductionAmount = parseFloat(document.getElementById('payment_deduction_amount').value || 0);
-    
-    // New generated salary = base + bonus - additional deduction
-    const newGeneratedSalary = baseGeneratedSalary + bonusAmount - deductionAmount;
-    generatedSalaryInput.value = `₹${Math.max(0, newGeneratedSalary).toFixed(2)}`;
+    const grossAdjusted = Math.max(0, generated + bonusAmount - deductionAmount);
+    const netPayable = Math.max(0, grossAdjusted - loanRepayment);
+    amountPaidInput.value = netPayable.toFixed(2);
 }
 
 // Open Payment Modal
@@ -983,16 +992,17 @@ function openPaymentModal(salaryId) {
         basicInput.setAttribute('data-basic', basic);
         basicInput.value = `₹${basic.toFixed(2)}`;
         
-        // Set generated salary from data and store as base
-        const generatedSalary = parseFloat(data.salary_generated || 0);
+        const grossGenerated = parseFloat(data.gross_salary_generated ?? data.salary_generated ?? 0);
+        const suggestedAmountPaid = parseFloat(data.suggested_amount_paid ?? 0);
         const generatedSalaryInput = document.getElementById('payment_generated_salary');
-        generatedSalaryInput.setAttribute('data-generated', generatedSalary);
-        generatedSalaryInput.value = `₹${generatedSalary.toFixed(2)}`;
+        generatedSalaryInput.value = Number.isFinite(grossGenerated) ? grossGenerated.toFixed(2) : '0';
         
         const amountPaid = parseFloat(data.amount_paid || 0);
         const amountPaidInput = document.getElementById('payment_amount_paid');
         const amountPaidNote = document.getElementById('amount_paid_note');
         
+        document.getElementById('payment_loan_repayment').value = data.loan_repayment || 0;
+
         // If amount_paid > 0, make it readonly/disabled
         if (amountPaid > 0) {
             amountPaidInput.value = amountPaid;
@@ -1001,14 +1011,11 @@ function openPaymentModal(salaryId) {
             amountPaidInput.style.cursor = 'not-allowed';
             amountPaidNote.style.display = 'block';
         } else {
-            amountPaidInput.value = 0;
             amountPaidInput.removeAttribute('readonly');
             amountPaidInput.style.backgroundColor = '';
             amountPaidInput.style.cursor = '';
             amountPaidNote.style.display = 'none';
         }
-        
-        document.getElementById('payment_loan_repayment').value = data.loan_repayment || 0;
         document.getElementById('payment_bonus_title').value = '';
         document.getElementById('payment_bonus_amount').value = 0;
         document.getElementById('payment_deduction_title').value = '';
@@ -1033,8 +1040,9 @@ function openPaymentModal(salaryId) {
             document.getElementById('payment_early_exit_fees').value = '₹0.00';
         }
         
-        // Calculate initial generated salary (Basic + Bonus - Deduction)
-        calculateGeneratedSalary();
+        if (amountPaid <= 0) {
+            syncPaymentAmountPaid();
+        }
         
         // Show modal
         const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));

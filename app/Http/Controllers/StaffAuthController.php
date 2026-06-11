@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\Student;
 use App\Models\StudentAttendance;
-use App\Models\Subject;
-use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -91,31 +89,9 @@ class StaffAuthController extends Controller
     {
         $staff = Auth::guard('staff')->user();
         
-        // Step 1: Get teacher's assigned subjects (if teacher)
-        $assignedSubjects = collect();
-        $assignedClasses = collect();
-        
-        if ($staff->isTeacher()) {
-            // Get teacher's assigned subjects
-            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
-            
-            // Get teacher's assigned sections
-            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
-            
-            // Get unique classes from both assigned subjects and sections
-            $assignedClasses = $assignedSubjects->pluck('class')
-                ->merge($assignedSections->pluck('class'))
-                ->map(function($class) {
-                    return trim($class);
-                })
-                ->filter(function($class) {
-                    return !empty($class);
-                })
-                ->unique()
-                ->values();
-        }
+        $assignedClasses = $staff->isTeacher()
+            ? $staff->assignedTeachingClassNames()
+            : collect();
         
         // Step 2: Get students based on assigned classes (if teacher) or campus (if other staff)
         $studentsQuery = Student::query();
@@ -228,30 +204,9 @@ class StaffAuthController extends Controller
     {
         $staff = Auth::guard('staff')->user();
         
-        // Step 1: Get teacher's assigned classes (if teacher)
-        $assignedClasses = collect();
-        
-        if ($staff->isTeacher()) {
-            // Get teacher's assigned subjects
-            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
-            
-            // Get teacher's assigned sections
-            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->get();
-            
-            // Get unique classes from both assigned subjects and sections
-            $assignedClasses = $assignedSubjects->pluck('class')
-                ->merge($assignedSections->pluck('class'))
-                ->map(function($class) {
-                    return trim($class);
-                })
-                ->filter(function($class) {
-                    return !empty($class);
-                })
-                ->unique()
-                ->values();
-        }
+        $assignedClasses = $staff->isTeacher()
+            ? $staff->assignedTeachingClassNames()
+            : collect();
         
         // Step 2: Get students based on assigned classes (if teacher) or campus (if other staff)
         $studentsQuery = Student::query();

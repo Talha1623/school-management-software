@@ -150,6 +150,11 @@ class ManageSalariesController extends Controller
                 'absent_fees' => $absentFeesTotal,
                 'early_exit_fees' => $earlyExitFeesTotal,
             ];
+
+            $grossGenerated = (float) ($salary->salary_generated ?? 0);
+            $loanRepayment = (float) ($salary->loan_repayment ?? 0);
+            $salaryData['gross_salary_generated'] = $grossGenerated;
+            $salaryData['suggested_amount_paid'] = max(0, $grossGenerated - $loanRepayment);
             
             return response()->json($salaryData);
         }
@@ -184,55 +189,60 @@ class ManageSalariesController extends Controller
         }
 
         $validated = $request->validate([
+            'generated_salary' => ['required', 'numeric', 'min:0'],
             'amount_paid' => ['required', 'numeric', 'min:0'],
             'loan_repayment' => ['nullable', 'numeric', 'min:0'],
             'bonus_title' => ['nullable', 'string', 'max:255'],
             'bonus_amount' => ['nullable', 'numeric', 'min:0'],
             'deduction_title' => ['nullable', 'string', 'max:255'],
             'deduction_amount' => ['nullable', 'numeric', 'min:0'],
-            'payment_method' => ['required', 'string', 'in:Bank,Wallet,Transfer,Card,Check,Deposit,Cash'],
+            'payment_method' => ['required', 'string', 'in:Bank,Wallet,Transfer,Card,Check,Cheque,Deposit,Cash'],
             'fully_paid' => ['nullable', 'string', 'in:0,1'],
             'payment_date' => ['required', 'date'],
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
         ]);
 
-        // Use existing loan repayment from salary (already deducted at generation time)
-        // Do NOT recalculate or deduct loan repayment again
-        $loanRepayment = $validated['loan_repayment'] ?? $salary->loan_repayment ?? 0;
+        $loanRepayment = (float) ($validated['loan_repayment'] ?? $salary->loan_repayment ?? 0);
 
-        // Calculate new salary generated from existing salary_generated (which already has loan deducted)
-        // Only add bonus and subtract deduction - loan is already deducted
-        $bonusAmount = $validated['bonus_amount'] ?? 0;
-        $deductionAmount = $validated['deduction_amount'] ?? 0;
-        
-        // Use existing salary_generated (which already has loan repayment deducted at generation)
-        // Add bonus and subtract deduction only
-        $newSalaryGenerated = max(0, $salary->salary_generated + $bonusAmount - $deductionAmount);
+        $bonusAmount = (float) ($validated['bonus_amount'] ?? 0);
+        $deductionAmount = (float) ($validated['deduction_amount'] ?? 0);
 
-        // amount_paid entered by user - do NOT deduct loan again (loan already deducted from salary_generated)
+        $grossFromForm = max(0, (float) $validated['generated_salary']);
+        $generatedSalary = max(0, $grossFromForm + $bonusAmount - $deductionAmount);
+        $totalDue = max(0, $generatedSalary - $loanRepayment);
+
         $enteredAmountPaid = (float) ($validated['amount_paid'] ?? 0);
-        $finalAmountPaid = $enteredAmountPaid;
-
-        // Determine status based on fully_paid or amount_paid
-        // Note: newSalaryGenerated already has loan repayment deducted
         $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
+        $finalAmountPaid = $fullyPaid ? $totalDue : $enteredAmountPaid;
         $status = 'Pending';
-        if ($fullyPaid || $finalAmountPaid >= $newSalaryGenerated) {
+        if ($fullyPaid || $finalAmountPaid >= $totalDue) {
             $status = 'Paid';
         } elseif ($finalAmountPaid > 0) {
             $status = 'Issued';
         }
 
-        // Update salary
-        $salary->update([
+        Salary::ensurePaymentColumns();
+        Salary::ensurePaidByColumns();
+
+        $updates = [
             'amount_paid' => $finalAmountPaid,
             'loan_repayment' => $loanRepayment,
-            'salary_generated' => $newSalaryGenerated,
+            'salary_generated' => $generatedSalary,
             'discount' => 0,
             'bonus_amount' => $bonusAmount,
             'deduction_amount' => $deductionAmount,
+            'payment_method' => Salary::normalizePaymentMethod($validated['payment_method'] ?? null),
+            'payment_date' => $validated['payment_date'] ?? null,
             'status' => $status,
-        ]);
+        ];
+
+        if ($finalAmountPaid > 0 || $status === 'Paid') {
+            $updates = array_merge($updates, Salary::metadataForPaidAction($salary));
+            $updates['payment_method'] = Salary::normalizePaymentMethod($validated['payment_method'] ?? null);
+            $updates['payment_date'] = $validated['payment_date'] ?? ($updates['payment_date'] ?? null);
+        }
+
+        $salary->update($updates);
 
         // TODO: Store bonus and deduction details if needed (may require additional table)
         // TODO: Send notification to employee if notify_employee is true
@@ -259,7 +269,18 @@ class ManageSalariesController extends Controller
             'status' => ['required', 'in:Pending,Paid,Issued'],
         ]);
 
-        $salary->update($validated);
+        $updates = ['status' => $validated['status']];
+        if ($validated['status'] === 'Paid') {
+            if ((float) ($salary->amount_paid ?? 0) <= 0) {
+                $updates['amount_paid'] = $this->netPayableAmount($salary);
+            }
+
+            $finalAmount = (float) ($updates['amount_paid'] ?? $salary->amount_paid ?? 0);
+            if ($finalAmount > 0) {
+                $updates = array_merge($updates, Salary::metadataForPaidAction($salary));
+            }
+        }
+        $salary->update($updates);
 
         // Don't auto-print when status is changed manually - only print when actual payment is made
         return redirect()
@@ -494,6 +515,19 @@ class ManageSalariesController extends Controller
         $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
         
         return view('salary-loan.print-receipt-thermal', compact('salary', 'attendanceSummary'));
+    }
+
+    /**
+     * Net amount payable after loan (and bonus/deduction already in salary_generated when set).
+     */
+    private function netPayableAmount(Salary $salary): float
+    {
+        return max(0,
+            (float) ($salary->salary_generated ?? 0)
+            + (float) ($salary->bonus_amount ?? 0)
+            - (float) ($salary->deduction_amount ?? 0)
+            - (float) ($salary->loan_repayment ?? 0)
+        );
     }
 }
 

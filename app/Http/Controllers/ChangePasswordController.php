@@ -6,7 +6,6 @@ use App\Models\AdminRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class ChangePasswordController extends Controller
@@ -45,16 +44,10 @@ class ChangePasswordController extends Controller
             ])->withInput();
         }
 
-        // Update password
-        // Use DB::table to bypass model's setPasswordAttribute (which hashes again)
-        DB::table('admin_roles')
-            ->where('id', $admin->id)
-            ->update([
-                'password' => Hash::make($request->new_password),
-                'updated_at' => now(),
-            ]);
+        $admin->password = $request->new_password;
+        $admin->save();
 
-        return back()->with('success', 'Password changed successfully!');
+        return back()->with('success', 'Password changed successfully! Please use the new password on your next login.');
     }
 }
 

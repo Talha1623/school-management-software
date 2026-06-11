@@ -16,6 +16,90 @@ use Carbon\Carbon;
 class TeacherTestManagementController extends Controller
 {
     /**
+     * Get Subjects by Test Name for Marks/Remarks entry
+     *
+     * Params:
+     * - class (required)
+     * - section (required)
+     * - test_name (required) [alias: test]
+     *
+     * Campus is auto-filtered from teacher token (if available).
+     */
+    public function getSubjectsByTestName(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access marks entry.',
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'class' => ['required', 'string'],
+                'section' => ['required', 'string'],
+                'test_name' => ['nullable', 'string'],
+                'test' => ['nullable', 'string'],
+            ]);
+
+            $class = $validated['class'];
+            $section = $validated['section'];
+            $testName = $validated['test_name'] ?? ($validated['test'] ?? null);
+            if (empty($testName)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'test_name (or test) is required.',
+                ], 422);
+            }
+
+            $campus = $teacher->campus ?? null;
+
+            $subjectsQuery = Test::query()
+                ->whereNotNull('subject')
+                ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
+                ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+
+            if (!empty($campus)) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+
+            $subjects = $subjectsQuery
+                ->distinct()
+                ->pluck('subject')
+                ->map(fn ($s) => trim((string) $s))
+                ->filter(fn ($s) => $s !== '')
+                ->unique()
+                ->sort()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Subjects retrieved successfully',
+                'data' => [
+                    'test_name' => $testName,
+                    'class' => $class,
+                    'section' => $section,
+                    'campus' => $campus,
+                    'subjects' => $subjects,
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving subjects: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+    /**
      * Get Filter Options for Marks Entry
      * 
      * @param Request $request
@@ -223,8 +307,11 @@ class TeacherTestManagementController extends Controller
             $campus = $teacher->campus ?? null;
             $class = $request->get('class');
             $section = $request->get('section');
-            
-            $subjectsQuery = Subject::query();
+            $testName = $request->get('test_name') ?: $request->get('test');
+            if (empty($testName)) {
+                // Backward compatibility: some clients send exam_name for this endpoint.
+                $testName = $request->get('exam_name');
+            }
             
             // Class is required - if not provided, return empty
             if (!$class) {
@@ -236,31 +323,86 @@ class TeacherTestManagementController extends Controller
                     ],
                 ], 200);
             }
-            
-            // Always filter by class
-            $subjectsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-            
-            // Always prefer teacher campus from token
-            if (!empty($campus)) {
-                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-            }
-            
-            // If section is provided, MUST filter by section (strict filtering)
+
+            $subjectsQuery = Subject::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+
             if ($section) {
                 $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
             }
-            
+            if (!empty($campus)) {
+                $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+
             $subjects = $subjectsQuery->whereNotNull('subject_name')
                 ->distinct()
                 ->pluck('subject_name')
+                ->map(fn ($s) => trim((string) $s))
+                ->filter(fn ($s) => $s !== '')
                 ->sort()
                 ->values();
+
+            $allTestSubjectsQuery = Test::query()
+                ->whereNotNull('subject')
+                ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim((string) $class))]);
+
+            if ($section) {
+                $allTestSubjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $section))]);
+            }
+            if (!empty($campus)) {
+                $allTestSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $campus))]);
+            }
+
+            $allTestSubjects = $allTestSubjectsQuery
+                ->distinct()
+                ->pluck('subject')
+                ->map(fn ($s) => trim((string) $s))
+                ->filter(fn ($s) => $s !== '')
+                ->unique()
+                ->values();
+
+            // If test is selected, return all subjects that are part of that test,
+            // not only the logged-in teacher's assigned subject.
+            $selectedTestSubjects = collect();
+            if (!empty($testName)) {
+                $testSubjectsQuery = Test::query()
+                    ->whereNotNull('subject')
+                    ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim((string) $testName))])
+                    ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim((string) $class))]);
+
+                if ($section) {
+                    $testSubjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $section))]);
+                }
+                if (!empty($campus)) {
+                    $testSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $campus))]);
+                }
+
+                $selectedTestSubjects = $testSubjectsQuery
+                    ->distinct()
+                    ->pluck('subject')
+                    ->map(fn ($s) => trim((string) $s))
+                    ->filter(fn ($s) => $s !== '')
+                    ->unique()
+                    ->values();
+            }
+
+            $subjects = !empty($testName) && $selectedTestSubjects->isNotEmpty()
+                ? $selectedTestSubjects->sort()->values()
+                : $subjects->merge($allTestSubjects)->unique()->sort()->values();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Subjects retrieved successfully',
                 'data' => [
+                    'test_name' => $testName,
                     'subjects' => $subjects,
+                    'selected_test_subjects' => $selectedTestSubjects,
+                    'all_test_subjects' => $allTestSubjects,
+                    'subject_options' => $subjects->map(fn ($subject) => [
+                        'subject' => $subject,
+                        'subject_name' => $subject,
+                        'name' => $subject,
+                    ])->values(),
                 ],
             ], 200);
 
@@ -291,16 +433,22 @@ class TeacherTestManagementController extends Controller
             }
 
             $request->validate([
+                'session' => ['nullable', 'string'],
                 'class' => ['required', 'string'],
                 'section' => ['required', 'string'],
-                'subject' => ['required', 'string'],
+                'subject' => ['nullable', 'string'],
                 'test' => ['nullable', 'string'],
                 'test_name' => ['nullable', 'string'],
                 'exam_name' => ['nullable', 'string'],
+                'campus' => ['nullable', 'string'],
             ]);
 
-            // Campus is intentionally not enforced here; class/section/subject/test are authoritative filters
-            $campus = $teacher->campus ?? null;
+            // Default campus to teacher's campus to avoid cross-campus old/deleted data mixing
+            $campus = $request->get('campus');
+            if (empty($campus) && !empty($teacher->campus)) {
+                $campus = $teacher->campus;
+            }
+            $session = $request->get('session');
             $class = $request->get('class');
             $section = $request->get('section');
             $subject = $request->get('subject');
@@ -309,19 +457,125 @@ class TeacherTestManagementController extends Controller
                 $testName = $request->get('exam_name');
             }
 
-            if (empty($testName)) {
+            // New flexible mode:
+            // If subject/test are not provided, allow class+section(+session) student list
+            // and return aggregated obtained/total marks from available test rows.
+            if (empty($subject) || empty($testName)) {
+                $studentsQuery = Student::query()
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+
+                if (!empty($campus)) {
+                    $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                }
+
+                $students = $studentsQuery->orderBy('student_name')->get();
+
+                $marksQuery = StudentMark::query()
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+
+                if (!empty($campus)) {
+                    $marksQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                }
+
+                if (!empty($session)) {
+                    $sessionTestNames = Test::query()
+                        ->whereRaw('LOWER(TRIM(session)) = ?', [strtolower(trim($session))])
+                        ->whereNotNull('test_name')
+                        ->pluck('test_name')
+                        ->map(fn($name) => strtolower(trim((string) $name)))
+                        ->filter(fn($name) => !empty($name))
+                        ->unique()
+                        ->values()
+                        ->toArray();
+
+                    if (!empty($sessionTestNames)) {
+                        $marksQuery->whereIn(\DB::raw('LOWER(TRIM(test_name))'), $sessionTestNames);
+                    }
+                }
+
+                $marksByStudent = $marksQuery->get()->groupBy('student_id');
+
+                $studentsData = $students->map(function ($student) use ($marksByStudent) {
+                    $studentMarks = $marksByStudent->get($student->id, collect());
+                    $roll = $student->student_code ?? ($student->gr_number ?? null);
+                    return [
+                        'student_id' => $student->id,
+                        'student_code' => $student->student_code ?? null,
+                        'roll' => $roll,
+                        'roll_number' => $roll,
+                        'name' => $student->student_name,
+                        'parent' => $student->father_name ?? null,
+                        'final_remark' => null,
+                        'total' => (float) ($studentMarks->sum('total_marks') ?? 0),
+                        'obtained' => (float) ($studentMarks->sum('marks_obtained') ?? 0),
+                    ];
+                });
+
                 return response()->json([
-                    'success' => false,
-                    'message' => 'test or test_name is required.',
-                ], 422);
+                    'success' => true,
+                    'message' => 'Students retrieved successfully',
+                    'data' => [
+                        'filters' => [
+                            'campus' => $campus ?: null,
+                            'session' => $session ?: null,
+                            'class' => $class,
+                            'section' => $section,
+                        ],
+                        'total_students' => $studentsData->count(),
+                        'students' => $studentsData->values(),
+                    ],
+                ], 200);
             }
 
-            // Get test details
-            $test = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
+            // Verify subject currently exists for this class/section/campus (prevents showing deleted subjects)
+            $subjectFound = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($subject))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+                ->when(!empty($campus), function ($q) use ($campus) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                })
+                ->first();
+
+            if (!$subjectFound) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Subject not found for the given filters (possibly deleted).',
+                    'data' => [
+                        'test' => [
+                            'mode' => 'subject_test',
+                            'test_name' => $testName,
+                            'subject' => $subject,
+                            'class' => $class,
+                            'section' => $section,
+                            'campus' => $campus ?: null,
+                        ],
+                        'students' => [],
+                    ],
+                ], 200);
+            }
+
+            // Prefer campus-scoped test, but fallback to non-campus rows (legacy data).
+            $baseTestQuery = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
                 ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($class))])
                 ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
-                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))])
+                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))]);
+
+            $test = (clone $baseTestQuery)
+                ->when(!empty($campus), function ($q) use ($campus) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                })
+                ->orderByDesc('date')
+                ->orderByDesc('id')
                 ->first();
+
+            if (!$test && !empty($campus)) {
+                $test = (clone $baseTestQuery)
+                    ->orderByDesc('date')
+                    ->orderByDesc('id')
+                    ->first();
+            }
 
             if (!$test) {
                 return response()->json([
@@ -335,16 +589,30 @@ class TeacherTestManagementController extends Controller
             
             $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
             $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            if (!empty($campus)) {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
             
             $students = $studentsQuery->orderBy('student_name')->get();
 
             // Get existing marks for these students
-            $existingMarks = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
+            $existingMarksQuery = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
                 ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
                 ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))])
-                ->get()
-                ->keyBy('student_id');
+                ->when(!empty($campus), function ($q) use ($campus) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                });
+
+            $existingMarks = (clone $existingMarksQuery)->get()->keyBy('student_id');
+            if ($existingMarks->isEmpty() && !empty($campus)) {
+                $existingMarks = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+                    ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))])
+                    ->get()
+                    ->keyBy('student_id');
+            }
 
             $studentsData = $students->map(function($student) use ($existingMarks) {
                 $mark = $existingMarks->get($student->id);
@@ -358,6 +626,8 @@ class TeacherTestManagementController extends Controller
                         'obtained' => $mark->marks_obtained,
                         'total' => $mark->total_marks,
                         'passing' => $mark->passing_marks,
+                        'remark' => $mark->teacher_remarks,
+                        'teacher_remarks' => $mark->teacher_remarks,
                     ] : null,
                 ];
             });
@@ -372,6 +642,7 @@ class TeacherTestManagementController extends Controller
                         'for_class' => $test->for_class,
                         'section' => $test->section,
                         'subject' => $test->subject,
+                        'campus' => $test->campus,
                     ],
                     'students' => $studentsData->values(),
                 ],
@@ -387,6 +658,229 @@ class TeacherTestManagementController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving students: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get uploaded marks with full student detail for a test.
+     *
+     * Required query params:
+     * - class
+     * - section
+     * - test_name (alias: test)
+     *
+     * Optional:
+     * - subject
+     * - campus (defaults to teacher campus)
+     */
+    public function getUploadedTestMarksDetail(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access marks entry.',
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'class' => ['required', 'string'],
+                'section' => ['required', 'string'],
+                'test_name' => ['nullable', 'string'],
+                'test' => ['nullable', 'string'],
+                'subject' => ['nullable', 'string'],
+                'campus' => ['nullable', 'string'],
+            ]);
+
+            $class = trim((string) $validated['class']);
+            $section = trim((string) $validated['section']);
+            $testName = trim((string) ($validated['test_name'] ?? ($validated['test'] ?? '')));
+            $subject = trim((string) ($validated['subject'] ?? ''));
+            $campus = trim((string) ($validated['campus'] ?? ''));
+
+            if ($testName === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'test_name (or test) is required.',
+                ], 422);
+            }
+
+            if ($campus === '' && !empty($teacher->campus)) {
+                $campus = trim((string) $teacher->campus);
+            }
+
+            $testStatusQuery = Test::query()
+                ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower($testName)])
+                ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower($class)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+
+            if ($subject !== '') {
+                $testStatusQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower($subject)]);
+            }
+            if ($campus !== '') {
+                $testStatusQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            }
+
+            $matchingTests = $testStatusQuery->get();
+            $isDeclared = $matchingTests->contains(fn ($test) => (int) ($test->result_status ?? 0) === 1);
+
+            // Verify teacher access for requested class/section.
+            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
+            $hasAccess = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)])
+                ->when($subject !== '', function ($q) use ($subject) {
+                    return $q->whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower($subject)]);
+                })
+                ->when($campus !== '', function ($q) use ($campus) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                })
+                ->exists();
+
+            if (!$hasAccess) {
+                $hasAccess = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                    ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($section)])
+                    ->when($campus !== '', function ($q) use ($campus) {
+                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                    })
+                    ->exists();
+            }
+
+            if (!$hasAccess) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. You do not have permission for this class/section.',
+                ], 403);
+            }
+
+            $studentsQuery = Student::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+
+            if ($campus !== '') {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            }
+
+            $students = $studentsQuery
+                ->orderBy('student_code', 'asc')
+                ->orderBy('student_name', 'asc')
+                ->get();
+
+            if ($students->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No students found for given class/section.',
+                    'data' => [
+                        'filters' => [
+                            'campus' => $campus !== '' ? $campus : null,
+                            'class' => $class,
+                            'section' => $section,
+                            'test_name' => $testName,
+                            'subject' => $subject !== '' ? $subject : null,
+                        ],
+                        'students' => [],
+                        'total_students' => 0,
+                        'students_with_uploaded_marks' => 0,
+                    ],
+                ], 200);
+            }
+
+            $studentIds = $students->pluck('id')->values()->all();
+
+            $marksQuery = StudentMark::query()
+                ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower($testName)])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)])
+                ->whereIn('student_id', $studentIds);
+
+            if ($subject !== '') {
+                $marksQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower($subject)]);
+            }
+
+            if ($campus !== '') {
+                $marksQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            }
+
+            $uploadedMarks = $marksQuery
+                ->get()
+                ->groupBy('student_id')
+                ->map(function ($rows) {
+                    return $rows
+                        ->sortByDesc(function ($row) {
+                            return strtotime((string) ($row->updated_at ?? $row->created_at ?? '1970-01-01 00:00:00'));
+                        })
+                        ->first();
+                });
+
+            $studentsData = $students->map(function ($student) use ($uploadedMarks) {
+                $mark = $uploadedMarks->get($student->id);
+                $obtained = $mark->marks_obtained ?? null;
+                $passing = $mark->passing_marks ?? null;
+
+                return [
+                    'student_id' => $student->id,
+                    'student_code' => $student->student_code ?? null,
+                    'gr_number' => $student->gr_number ?? null,
+                    'student_name' => $student->student_name,
+                    'father_name' => $student->father_name ?? null,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'campus' => $student->campus,
+                    'gender' => $student->gender ?? null,
+                    'photo' => $student->photo,
+                    'marks_uploaded' => $mark !== null,
+                    'marks' => $mark ? [
+                        'obtained' => $mark->marks_obtained,
+                        'total' => $mark->total_marks,
+                        'passing' => $mark->passing_marks,
+                        'teacher_remarks' => $mark->teacher_remarks,
+                        'subject' => $mark->subject,
+                        'test_name' => $mark->test_name,
+                        'uploaded_at' => $mark->updated_at ? $mark->updated_at->format('Y-m-d H:i:s') : ($mark->created_at ? $mark->created_at->format('Y-m-d H:i:s') : null),
+                        'is_passed' => ($obtained !== null && $passing !== null && $passing !== '')
+                            ? ((float) $obtained >= (float) $passing)
+                            : null,
+                    ] : null,
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Uploaded test marks retrieved successfully',
+                'data' => [
+                    'filters' => [
+                        'campus' => $campus !== '' ? $campus : null,
+                        'class' => $class,
+                        'section' => $section,
+                        'test_name' => $testName,
+                        'subject' => $subject !== '' ? $subject : null,
+                    ],
+                    'students' => $studentsData,
+                    'total_students' => $studentsData->count(),
+                    'students_with_uploaded_marks' => $studentsData->where('marks_uploaded', true)->count(),
+                    'test_status' => [
+                        'is_declared' => $isDeclared,
+                        'can_upload_marks' => !$isDeclared,
+                        'message' => $isDeclared
+                            ? 'This test result has been declared from web. Marks upload/update is locked.'
+                            : 'Marks can be uploaded or updated.',
+                    ],
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving uploaded test marks: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -419,6 +913,8 @@ class TeacherTestManagementController extends Controller
                 'marks.*.obtained' => ['nullable', 'numeric', 'min:0'],
                 'marks.*.total' => ['nullable', 'numeric', 'min:0'],
                 'marks.*.passing' => ['nullable', 'numeric', 'min:0'],
+                'marks.*.remark' => ['nullable', 'string', 'max:1000'],
+                'marks.*.teacher_remarks' => ['nullable', 'string', 'max:1000'],
             ]);
 
             // Verify teacher has access to this class/section/subject
@@ -458,6 +954,34 @@ class TeacherTestManagementController extends Controller
                     'success' => false,
                     'message' => 'Access denied. You do not have permission to save marks for this class/section/subject. Only your assigned classes/sections/subjects are accessible.',
                 ], 403);
+            }
+
+            $declaredTestExists = Test::query()
+                ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($validated['test_name']))])
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
+                ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($validated['class']))])
+                ->when($validated['section'], function ($query) use ($validated) {
+                    $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))]);
+                })
+                ->when($validated['subject'], function ($query) use ($validated) {
+                    $query->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($validated['subject']))]);
+                })
+                ->where('result_status', 1)
+                ->exists();
+
+            if ($declaredTestExists) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This test result has been declared from web. Marks upload/update is locked.',
+                    'data' => [
+                        'test_name' => $validated['test_name'],
+                        'class' => $validated['class'],
+                        'section' => $validated['section'] ?? null,
+                        'subject' => $validated['subject'] ?? null,
+                        'is_declared' => true,
+                        'can_upload_marks' => false,
+                    ],
+                ], 409);
             }
 
             // Verify all students belong to the specified class/section
@@ -510,14 +1034,10 @@ class TeacherTestManagementController extends Controller
                     'description' => null,
                     'date' => \Carbon\Carbon::now()->toDateString(),
                     'session' => $session,
-                    'result_status' => 1, // Declared by default when marks are entered
+                    // Keep pending by default; web "declare result" should control this.
+                    'result_status' => 0,
                 ]);
                 $testCreated = true;
-            } else {
-                // Update result_status to 1 (declared) if marks are being saved
-                if ($test->result_status != 1) {
-                    $test->update(['result_status' => 1]);
-                }
             }
 
             // Save or update marks for each student
@@ -530,7 +1050,19 @@ class TeacherTestManagementController extends Controller
                     }
                     
                     $campus = $student->campus ?? $validated['campus'];
-                    
+
+                    // Prepare upsert values
+                    $upsertValues = [
+                        'marks_obtained' => $markData['obtained'] ?? null,
+                        'total_marks' => $markData['total'] ?? null,
+                        'passing_marks' => $markData['passing'] ?? null,
+                    ];
+                    if (array_key_exists('remark', $markData) && $markData['remark'] !== null) {
+                        $upsertValues['teacher_remarks'] = $markData['remark'];
+                    } elseif (array_key_exists('teacher_remarks', $markData) && $markData['teacher_remarks'] !== null) {
+                        $upsertValues['teacher_remarks'] = $markData['teacher_remarks'];
+                    }
+
                     StudentMark::updateOrCreate(
                         [
                             'student_id' => $studentId,
@@ -540,11 +1072,7 @@ class TeacherTestManagementController extends Controller
                             'section' => $validated['section'] ?? null,
                             'subject' => $validated['subject'] ?? null,
                         ],
-                        [
-                            'marks_obtained' => $markData['obtained'] ?? null,
-                            'total_marks' => $markData['total'] ?? null,
-                            'passing_marks' => $markData['passing'] ?? null,
-                        ]
+                        $upsertValues
                     );
                     $savedCount++;
                 }
@@ -904,11 +1432,11 @@ class TeacherTestManagementController extends Controller
             }
 
             $validated = $request->validate([
-                'test_name' => ['nullable', 'string'],
-                'test' => ['nullable', 'string'],
-                'class' => ['nullable', 'string'],
-                'section' => ['nullable', 'string'],
-                'subject' => ['required', 'string'],
+            'test_name' => ['nullable', 'string'],
+            'test' => ['nullable', 'string'],
+            'class' => ['nullable', 'string'],
+            'section' => ['nullable', 'string'],
+            'subject' => ['nullable', 'string'],
                 // Accept DB id OR student_code OR gr_number
                 'student_id' => ['nullable'],
                 'remark' => ['nullable', 'string'],
@@ -917,17 +1445,17 @@ class TeacherTestManagementController extends Controller
             ]);
 
             $testName = $validated['test_name'] ?? ($validated['test'] ?? null);
-            if (empty($testName)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'test or test_name is required.',
-                ], 422);
-            }
+            $isCombinedFlow = empty($testName); // When no test provided, treat as combined result remarks
 
             // Resolve class/section from request or test record (fallback)
-            $testRecord = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
-                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($validated['subject']))])
-                ->first();
+            $testRecord = null;
+            if (!$isCombinedFlow) {
+                $testRecord = Test::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($testName))])
+                    ->when(!empty($validated['subject']), function ($q) use ($validated) {
+                        return $q->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($validated['subject']))]);
+                    })
+                    ->first();
+            }
 
             $className = $validated['class'] ?? ($testRecord->for_class ?? null);
             $sectionName = $validated['section'] ?? ($testRecord->section ?? null);
@@ -1004,11 +1532,12 @@ class TeacherTestManagementController extends Controller
                 StudentMark::updateOrCreate(
                     [
                         'student_id' => $student->id,
-                        'test_name' => $testName,
+                        // For combined flow, persist under COMBINED_RESULT (subject = null)
+                        'test_name' => $isCombinedFlow ? 'COMBINED_RESULT' : $testName,
                         'campus' => $campus,
                         'class' => $className,
                         'section' => $sectionName,
-                        'subject' => $validated['subject'],
+                        'subject' => $isCombinedFlow ? null : ($validated['subject'] ?? null),
                     ],
                     [
                         'teacher_remarks' => $remark,
@@ -1022,10 +1551,10 @@ class TeacherTestManagementController extends Controller
                 'message' => 'Remarks saved successfully',
                 'data' => [
                     'saved_count' => $savedCount,
-                    'test_name' => $testName,
+                    'test_name' => $isCombinedFlow ? 'COMBINED_RESULT' : $testName,
                     'class' => $className,
                     'section' => $sectionName,
-                    'subject' => $validated['subject'],
+                    'subject' => $isCombinedFlow ? null : ($validated['subject'] ?? null),
                     'errors' => !empty($errors) ? $errors : null,
                 ],
             ], 200);
@@ -1064,10 +1593,25 @@ class TeacherTestManagementController extends Controller
                 ], 403);
             }
 
-            // Get teacher's assigned subjects
-            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
+            $requestedClass = trim((string) $request->get('class', ''));
+            $requestedSection = trim((string) $request->get('section', ''));
+            $requestedCampus = trim((string) $request->get('campus', ''));
+            $effectiveCampus = $requestedCampus !== '' ? $requestedCampus : (string) ($teacher->campus ?? '');
+
+            // Get teacher's assigned subjects (strictly scoped to requested filters)
+            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
                 ->whereNotNull('subject_name')
                 ->whereNotNull('class')
+                ->when($requestedClass !== '', function($q) use ($requestedClass) {
+                    $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($requestedClass))]);
+                })
+                ->when($requestedSection !== '', function($q) use ($requestedSection) {
+                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($requestedSection))]);
+                })
+                ->when($effectiveCampus !== '', function($q) use ($effectiveCampus) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($effectiveCampus))]);
+                })
                 ->get();
 
             if ($teacherSubjects->isEmpty()) {
@@ -1093,8 +1637,19 @@ class TeacherTestManagementController extends Controller
             // Get all test names from StudentMark where subject matches teacher's subjects
             $teacherTestNames = [];
             if (!empty($teacherSubjectNames)) {
-                $teacherTestNames = StudentMark::query()
+                $marksQuery = StudentMark::query()
                     ->whereIn('subject', $teacherSubjectNames)
+                    ->when($requestedClass !== '', function($q) use ($requestedClass) {
+                        $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($requestedClass))]);
+                    })
+                    ->when($requestedSection !== '', function($q) use ($requestedSection) {
+                        $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($requestedSection))]);
+                    })
+                    ->when($effectiveCampus !== '', function($q) use ($effectiveCampus) {
+                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($effectiveCampus))]);
+                    });
+
+                $teacherTestNames = $marksQuery
                     ->distinct()
                     ->pluck('test_name')
                     ->filter()
@@ -1104,42 +1659,32 @@ class TeacherTestManagementController extends Controller
 
             // Build query to get tests
             $testsQuery = Test::query();
-            
-            // Method 1: Get tests from StudentMark (where teacher entered marks) - Most reliable
-            // Method 2: Match by subject and class from Subject table (section optional)
-            $testsQuery->where(function($query) use ($teacherTestNames, $teacherSubjects, $teacherSubjectNames) {
-                // Primary: Tests from StudentMark (where teacher entered marks)
-                if (!empty($teacherTestNames)) {
-                    $query->whereIn('test_name', $teacherTestNames);
-                }
-                
-                // Fallback: Match by subject and class (section is completely optional)
-                // Match any test where subject matches teacher's assigned subjects
-                if (!empty($teacherSubjectNames)) {
-                    $query->orWhereIn('subject', array_map(function($name) {
-                        return strtolower(trim($name));
-                    }, $teacherSubjectNames));
-                }
-                
-                // Also match by subject + class combination
-                if (!empty($teacherSubjects)) {
-                    $query->orWhere(function($q) use ($teacherSubjects) {
-                        foreach ($teacherSubjects as $subject) {
-                            $q->orWhere(function($subQ) use ($subject) {
-                                $subQ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject->subject_name ?? ''))])
-                                     ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($subject->class ?? ''))]);
-                            });
-                        }
-                    });
-                }
-            });
+
+            // STRICT teacher scope:
+            // only tests that match the teacher's assigned subject+class+section(+campus) combinations.
+            if ($teacherSubjects->isNotEmpty()) {
+                $testsQuery->where(function ($q) use ($teacherSubjects) {
+                    foreach ($teacherSubjects as $subject) {
+                        $q->orWhere(function ($subQ) use ($subject) {
+                            $subQ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject->subject_name ?? ''))])
+                                ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($subject->class ?? ''))])
+                                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($subject->section ?? ''))]);
+
+                            if (!empty($subject->campus)) {
+                                $subQ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($subject->campus ?? ''))]);
+                            }
+                        });
+                    }
+                });
+            }
             
             // Remove duplicates
             $testsQuery->distinct();
 
             // Optional filters
-            if ($request->has('campus') && $request->get('campus')) {
-                $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->get('campus')))]);
+            // Campus must always be scoped to teacher campus (or requested campus if provided)
+            if (!empty($effectiveCampus)) {
+                $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($effectiveCampus))]);
             }
 
             if ($request->has('class') && $request->get('class')) {
@@ -1172,11 +1717,76 @@ class TeacherTestManagementController extends Controller
             
             $tests = $testsQuery->paginate($perPage);
 
+            // Fallback: if no Test rows match but teacher has uploaded marks,
+            // build list from StudentMark so uploaded tests still appear.
+            $marksFallbackRows = collect();
+            if ($tests->total() == 0 && !empty($teacherSubjectNames)) {
+                // Only include marks for tests that still exist in Test table.
+                // This prevents deleted tests from reappearing via StudentMark fallback.
+                $activeTestNameKeys = Test::query()
+                    ->when($requestedClass !== '', function($q) use ($requestedClass) {
+                        $q->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($requestedClass))]);
+                    })
+                    ->when($requestedSection !== '', function($q) use ($requestedSection) {
+                        $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($requestedSection))]);
+                    })
+                    ->when($effectiveCampus !== '', function($q) use ($effectiveCampus) {
+                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($effectiveCampus))]);
+                    })
+                    ->whereNotNull('test_name')
+                    ->pluck('test_name')
+                    ->map(fn($name) => strtolower(trim((string) $name)))
+                    ->filter(fn($name) => $name !== '')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+                if (empty($activeTestNameKeys)) {
+                    $marksFallbackRows = collect();
+                } else {
+                $marksFallbackQuery = StudentMark::query()
+                    ->whereNotNull('test_name')
+                    ->whereIn(\DB::raw('LOWER(TRIM(test_name))'), $activeTestNameKeys)
+                    ->when(!empty($teacherSubjectNames), function ($q) use ($teacherSubjectNames) {
+                        $q->where(function ($sq) use ($teacherSubjectNames) {
+                            foreach ($teacherSubjectNames as $subjectName) {
+                                $sq->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim((string) $subjectName))]);
+                            }
+                        });
+                    })
+                    ->when($requestedClass !== '', function($q) use ($requestedClass) {
+                        $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($requestedClass))]);
+                    })
+                    ->when($requestedSection !== '', function($q) use ($requestedSection) {
+                        $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($requestedSection))]);
+                    })
+                    ->when($effectiveCampus !== '', function($q) use ($effectiveCampus) {
+                        $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($effectiveCampus))]);
+                    });
+
+                $marksFallbackRows = $marksFallbackQuery
+                    ->select([
+                        \DB::raw('MAX(id) as id'),
+                        \DB::raw('MAX(campus) as campus'),
+                        \DB::raw('MAX(test_name) as test_name'),
+                        \DB::raw('MAX(class) as for_class'),
+                        \DB::raw('MAX(section) as section'),
+                        \DB::raw('MAX(subject) as subject'),
+                        \DB::raw('MAX(created_at) as created_at'),
+                        \DB::raw('MAX(updated_at) as updated_at'),
+                    ])
+                    ->groupBy(\DB::raw('LOWER(TRIM(test_name))'), \DB::raw('LOWER(TRIM(class))'), \DB::raw('LOWER(TRIM(section))'), \DB::raw('LOWER(TRIM(subject))'))
+                    ->orderByDesc('created_at')
+                    ->get();
+                }
+            }
+
             // Format tests data
             $testsData = $tests->map(function($test) use ($teacher) {
                 // Get teacher name from Subject table for this test
                 $testTeacher = Subject::whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($test->subject ?? ''))])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($test->for_class ?? ''))])
+                    ->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
                     ->when($test->section, function($query) use ($test) {
                         $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($test->section ?? ''))]);
                     })
@@ -1201,6 +1811,28 @@ class TeacherTestManagementController extends Controller
                 ];
             });
 
+            if ($tests->total() == 0 && $marksFallbackRows->isNotEmpty()) {
+                $testsData = $marksFallbackRows->map(function ($test) use ($teacher) {
+                    return [
+                        'id' => (int) ($test->id ?? 0),
+                        'campus' => $test->campus,
+                        'test_name' => $test->test_name,
+                        'for_class' => $test->for_class,
+                        'section' => $test->section,
+                        'subject' => $test->subject,
+                        'test_type' => null,
+                        'description' => null,
+                        'date' => null,
+                        'date_formatted' => null,
+                        'session' => null,
+                        'result_status' => false,
+                        'teacher_name' => $teacher->name,
+                        'created_at' => $test->created_at ? \Carbon\Carbon::parse($test->created_at)->format('Y-m-d H:i:s') : null,
+                        'updated_at' => $test->updated_at ? \Carbon\Carbon::parse($test->updated_at)->format('Y-m-d H:i:s') : null,
+                    ];
+                })->values();
+            }
+
             // Debug info (only if no tests found)
             $debugInfo = null;
             if ($tests->total() == 0) {
@@ -1222,13 +1854,20 @@ class TeacherTestManagementController extends Controller
                         'email' => $teacher->email,
                     ],
                     'tests' => $testsData,
-                    'pagination' => [
+                    'pagination' => $tests->total() > 0 ? [
                         'current_page' => $tests->currentPage(),
                         'last_page' => $tests->lastPage(),
                         'per_page' => $tests->perPage(),
                         'total' => $tests->total(),
                         'from' => $tests->firstItem(),
                         'to' => $tests->lastItem(),
+                    ] : [
+                        'current_page' => 1,
+                        'last_page' => 1,
+                        'per_page' => $perPage,
+                        'total' => $testsData->count(),
+                        'from' => $testsData->isNotEmpty() ? 1 : null,
+                        'to' => $testsData->isNotEmpty() ? $testsData->count() : null,
                     ],
                     'debug' => $debugInfo,
                 ],
@@ -1238,6 +1877,170 @@ class TeacherTestManagementController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving test list: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all tests for a class teacher's assigned class/sections.
+     *
+     * Query params:
+     * - class (required)
+     * - section (optional): if omitted, all sections where this teacher is class teacher are included
+     * - campus, test_type, session, per_page (optional)
+     */
+    public function getClassTeacherTestList(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access class teacher test list.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'class' => ['required', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
+                'campus' => ['nullable', 'string', 'max:255'],
+                'test_type' => ['nullable', 'string', 'max:255'],
+                'session' => ['nullable', 'string', 'max:255'],
+                'per_page' => ['nullable', 'integer'],
+            ]);
+
+            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
+            $className = trim((string) $validated['class']);
+            $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : '';
+            $requestedCampus = isset($validated['campus']) ? trim((string) $validated['campus']) : '';
+            $effectiveCampus = $requestedCampus !== '' ? $requestedCampus : trim((string) ($teacher->campus ?? ''));
+
+            $classTeacherSectionsQuery = Section::query()
+                ->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)]);
+
+            if ($sectionName !== '') {
+                $classTeacherSectionsQuery->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($sectionName)]);
+            }
+            if ($effectiveCampus !== '') {
+                $classTeacherSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($effectiveCampus)]);
+            }
+
+            $classTeacherSections = $classTeacherSectionsQuery
+                ->pluck('name')
+                ->map(fn ($section) => trim((string) $section))
+                ->filter(fn ($section) => $section !== '')
+                ->unique()
+                ->values();
+
+            if ($classTeacherSections->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No tests found. This teacher is not class teacher for selected class/section.',
+                    'data' => [
+                        'teacher' => [
+                            'id' => $teacher->id,
+                            'name' => $teacher->name,
+                            'email' => $teacher->email,
+                        ],
+                        'class' => $className,
+                        'section' => $sectionName !== '' ? $sectionName : null,
+                        'class_section' => $sectionName !== '' ? "{$className} / {$sectionName}" : null,
+                        'class_sections' => [],
+                        'sections' => [],
+                        'tests' => [],
+                        'total' => 0,
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
+            }
+
+            $testsQuery = Test::query()
+                ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower($className)])
+                ->where(function ($q) use ($classTeacherSections) {
+                    foreach ($classTeacherSections as $section) {
+                        $q->orWhereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+                    }
+                });
+
+            if ($effectiveCampus !== '') {
+                $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($effectiveCampus)]);
+            }
+            if (!empty($validated['test_type'])) {
+                $testsQuery->whereRaw('LOWER(TRIM(test_type)) = ?', [strtolower(trim((string) $validated['test_type']))]);
+            }
+            if (!empty($validated['session'])) {
+                $testsQuery->where('session', $validated['session']);
+            }
+
+            $testsQuery->orderBy('date', 'desc')
+                ->orderBy('created_at', 'desc');
+
+            $perPage = (int) ($validated['per_page'] ?? 30);
+            $perPage = in_array($perPage, [10, 25, 30, 50, 100], true) ? $perPage : 30;
+            $tests = $testsQuery->paginate($perPage);
+
+            $testsData = $tests->map(function ($test) use ($teacher) {
+                return [
+                    'id' => $test->id,
+                    'campus' => $test->campus,
+                    'test_name' => $test->test_name,
+                    'for_class' => $test->for_class,
+                    'section' => $test->section,
+                    'class_section' => trim((string) $test->for_class) . ($test->section ? ' / ' . trim((string) $test->section) : ''),
+                    'subject' => $test->subject,
+                    'test_type' => $test->test_type,
+                    'description' => $test->description,
+                    'date' => $test->date ? $test->date->format('Y-m-d') : null,
+                    'date_formatted' => $test->date ? $test->date->format('d M Y') : null,
+                    'session' => $test->session,
+                    'result_status' => (bool) $test->result_status,
+                    'teacher_name' => $teacher->name,
+                    'created_at' => $test->created_at ? $test->created_at->format('Y-m-d H:i:s') : null,
+                    'updated_at' => $test->updated_at ? $test->updated_at->format('Y-m-d H:i:s') : null,
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Class teacher test list retrieved successfully',
+                'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'email' => $teacher->email,
+                    ],
+                    'class' => $className,
+                    'section' => $sectionName !== '' ? $sectionName : null,
+                    'class_section' => $sectionName !== '' ? "{$className} / {$sectionName}" : null,
+                    'class_sections' => $classTeacherSections->map(fn ($section) => "{$className} / {$section}")->values(),
+                    'sections' => $classTeacherSections,
+                    'tests' => $testsData,
+                    'pagination' => [
+                        'current_page' => $tests->currentPage(),
+                        'last_page' => $tests->lastPage(),
+                        'per_page' => $tests->perPage(),
+                        'total' => $tests->total(),
+                        'from' => $tests->firstItem(),
+                        'to' => $tests->lastItem(),
+                    ],
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving class teacher test list: ' . $e->getMessage(),
                 'token' => null,
             ], 500);
         }

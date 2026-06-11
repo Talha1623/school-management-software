@@ -35,8 +35,9 @@
             
             <form action="{{ route('accountant.direct-payment.custom.store') }}" method="POST" id="customPaymentForm" class="compact-form">
                 @csrf
+                <input type="hidden" name="generated_id" id="generated_id" value="{{ old('generated_id') }}">
                 
-                <!-- First Row: Campus, Payment Title -->
+                <!-- First Row: Campus, Student Code -->
                 <div class="row mb-2 g-2">
                     <div class="col-md-6">
                         <div class="card bg-light border-0 rounded-10 p-2 mb-2">
@@ -58,17 +59,37 @@
                     
                     <div class="col-md-6">
                         <div class="card bg-light border-0 rounded-10 p-2 mb-2">
+                            <h5 class="mb-1 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -8px -8px 8px -8px; background-color: #003471;">Student Code</h5>
+                            
+                            <div class="mb-1">
+                                <label for="student_code" class="form-label mb-0 fs-13 fw-medium">Student Code <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control form-control-sm py-1" id="student_code" name="student_code" value="{{ old('student_code') }}" required style="height: 30px;" placeholder="Student Roll/Code">
+                                <small id="studentName" class="d-block mt-1"></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Second Row: Payment Title -->
+                <div class="row mb-2 g-2">
+                    <div class="col-md-6">
+                        <div class="card bg-light border-0 rounded-10 p-2 mb-2">
                             <h5 class="mb-1 py-2 px-3 text-white rounded-3 fw-semibold fs-15" style="margin: -8px -8px 8px -8px; background-color: #003471;">Payment Title</h5>
                             
                             <div class="mb-1">
                                 <label for="payment_title" class="form-label mb-0 fs-13 fw-medium">Payment Title <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control form-control-sm py-1" id="payment_title" name="payment_title" required style="height: 30px;" placeholder="e.g., Office Supplies, Maintenance">
                             </div>
+                            <div class="mb-1 mt-1">
+                                <select class="form-select form-select-sm py-1" id="generated_fee_select" style="height: 30px;" disabled>
+                                    <option value="">Generated fees will appear here</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Second Row: Payment Amount, Accountant -->
+                <!-- Third Row: Payment Amount, Accountant -->
                 <div class="row mb-2 g-2">
                     <div class="col-md-6">
                         <div class="card bg-light border-0 rounded-10 p-2 mb-2">
@@ -93,7 +114,7 @@
                     </div>
                 </div>
                 
-                <!-- Third Row: Method -->
+                <!-- Fourth Row: Method -->
                 <div class="row mb-2 g-2">
                     <div class="col-md-6">
                         <div class="card bg-light border-0 rounded-10 p-2 mb-2">
@@ -163,6 +184,139 @@
 <script>
 function resetForm() {
     document.getElementById('customPaymentForm').reset();
+    const studentName = document.getElementById('studentName');
+    if (studentName) studentName.textContent = '';
+    const generatedFeeSelect = document.getElementById('generated_fee_select');
+    if (generatedFeeSelect) {
+        generatedFeeSelect.innerHTML = '<option value="">Generated fees will appear here</option>';
+        generatedFeeSelect.disabled = true;
+    }
+    const generatedIdInput = document.getElementById('generated_id');
+    if (generatedIdInput) generatedIdInput.value = '';
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('campus');
+    const studentCodeInput = document.getElementById('student_code');
+    const studentName = document.getElementById('studentName');
+    const generatedFeeSelect = document.getElementById('generated_fee_select');
+    const paymentTitleInput = document.getElementById('payment_title');
+    const paymentAmountInput = document.getElementById('payment_amount');
+    const generatedIdInput = document.getElementById('generated_id');
+    let searchTimer = null;
+    let selectedFeeDue = 0;
+
+    function resetGeneratedFees() {
+        if (!generatedFeeSelect) return;
+        generatedFeeSelect.innerHTML = '<option value="">Generated fees will appear here</option>';
+        generatedFeeSelect.disabled = true;
+        selectedFeeDue = 0;
+        if (generatedIdInput) generatedIdInput.value = '';
+    }
+
+    function applyGeneratedFees(fees) {
+        resetGeneratedFees();
+        if (!generatedFeeSelect || !fees || fees.length === 0) {
+            return;
+        }
+
+        generatedFeeSelect.innerHTML = '<option value="">Select generated fee</option>';
+        fees.forEach(fee => {
+            const option = document.createElement('option');
+            const amount = Number(fee.payment_amount || 0).toFixed(2);
+            option.value = fee.id;
+            option.textContent = `${fee.payment_title} - ${amount}`;
+            option.dataset.title = fee.payment_title || '';
+            option.dataset.amount = fee.payment_amount || 0;
+            generatedFeeSelect.appendChild(option);
+        });
+        generatedFeeSelect.disabled = false;
+    }
+
+    function fetchStudentDetails(code) {
+        if (!studentName) return;
+        if (!code) {
+            studentName.textContent = '';
+            resetGeneratedFees();
+            return;
+        }
+
+        studentName.textContent = 'Searching...';
+        studentName.className = 'text-info d-block mt-1';
+
+        const selectedCampus = campusSelect ? campusSelect.value : '';
+        const campusParam = selectedCampus ? `&campus=${encodeURIComponent(selectedCampus)}` : '';
+
+        fetch(`{{ route('accountant.get-student-by-code') }}?student_code=${encodeURIComponent(code)}${campusParam}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                studentName.textContent = `Student: ${data.student.student_name} (${data.student.class} - ${data.student.section})`;
+                studentName.className = 'text-success d-block mt-1';
+                if (data.student.campus && campusSelect && !campusSelect.value) {
+                    campusSelect.value = data.student.campus;
+                }
+
+                applyGeneratedFees(data.generated_fees);
+            } else {
+                studentName.textContent = data.message || 'Student not found';
+                studentName.className = 'text-danger d-block mt-1';
+                resetGeneratedFees();
+            }
+        })
+        .catch(() => {
+            studentName.textContent = 'Error searching for student';
+            studentName.className = 'text-danger d-block mt-1';
+            resetGeneratedFees();
+        });
+    }
+
+    if (campusSelect && studentCodeInput) {
+        campusSelect.addEventListener('change', function() {
+            const code = studentCodeInput.value.trim();
+            if (code) {
+                fetchStudentDetails(code);
+            }
+        });
+    }
+
+    if (generatedFeeSelect) {
+        generatedFeeSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (!selectedOption || !selectedOption.dataset.title) {
+                if (generatedIdInput) generatedIdInput.value = '';
+                selectedFeeDue = 0;
+                return;
+            }
+            if (paymentTitleInput) paymentTitleInput.value = selectedOption.dataset.title;
+            selectedFeeDue = parseFloat(selectedOption.dataset.amount || 0) || 0;
+            if (paymentAmountInput) {
+                paymentAmountInput.value = selectedFeeDue > 0 ? selectedFeeDue.toFixed(2) : '';
+            }
+            if (generatedIdInput) {
+                generatedIdInput.value = selectedOption.value || '';
+            }
+        });
+    }
+
+    if (studentCodeInput) {
+        studentCodeInput.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            const code = this.value.trim();
+            searchTimer = setTimeout(() => fetchStudentDetails(code), 400);
+        });
+        studentCodeInput.addEventListener('blur', function() {
+            fetchStudentDetails(this.value.trim());
+        });
+        if (studentCodeInput.value.trim()) {
+            fetchStudentDetails(studentCodeInput.value.trim());
+        }
+    }
+});
 </script>
 @endsection

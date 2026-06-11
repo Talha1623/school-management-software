@@ -17,14 +17,12 @@ class AdminAuthController extends Controller
      */
     public function showLoginForm(): View|RedirectResponse
     {
-        // If already logged in, redirect to dashboard
         if (Auth::guard('admin')->check()) {
-            return redirect()->route('dashboard');
+            return redirect()->intended(route('dashboard'));
         }
-        
-        // Ensure $errors variable is available in view
+
         $errors = session('errors') ?: new ViewErrorBag();
-        
+
         return view('admin.login', ['errors' => $errors]);
     }
 
@@ -38,8 +36,10 @@ class AdminAuthController extends Controller
             'password' => ['required'],
         ]);
 
-        // Find admin by email
-        $admin = AdminRole::where('email', $credentials['email'])->first();
+        $email = strtolower(trim($credentials['email']));
+        $admin = AdminRole::query()
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+            ->first();
 
         if (!$admin) {
             return back()->withErrors([
@@ -47,14 +47,12 @@ class AdminAuthController extends Controller
             ])->onlyInput('email');
         }
 
-        // Check password
         if (!Hash::check($credentials['password'], $admin->password)) {
             return back()->withErrors([
                 'email' => 'The provided credentials do not match our records.',
             ])->onlyInput('email');
         }
 
-        // Login the admin (both Super Admin and normal Admin can login)
         Auth::guard('admin')->login($admin, $request->filled('remember'));
 
         $request->session()->regenerate();
@@ -81,7 +79,7 @@ class AdminAuthController extends Controller
     public function dashboard(): View
     {
         $admin = Auth::guard('admin')->user();
-        
+
         return view('admin.dashboard', compact('admin'));
     }
 }

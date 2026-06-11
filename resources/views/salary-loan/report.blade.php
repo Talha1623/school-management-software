@@ -18,7 +18,7 @@
                             </div>
                             <span class="material-symbols-outlined opacity-75">credit_card</span>
                         </div>
-                        <a href="{{ route('salary-loan.report.unpaid') }}" target="_blank" class="report-link text-white">View Report</a>
+                        <a href="{{ route('salary-loan.report.unpaid') }}?auto_print=1" target="_blank" class="report-link text-white">View Report</a>
                     </div>
                 </div>
 
@@ -31,7 +31,7 @@
                             </div>
                             <span class="material-symbols-outlined opacity-75">bar_chart</span>
                         </div>
-                        <a href="{{ route('salary-loan.report.unpaid') }}" target="_blank" class="report-link text-white">View Report</a>
+                        <a href="{{ route('salary-loan.report.unpaid') }}?auto_print=1" target="_blank" class="report-link text-white">View Report</a>
                     </div>
                 </div>
 
@@ -44,7 +44,7 @@
                             </div>
                             <span class="material-symbols-outlined opacity-75">thumb_up</span>
                         </div>
-                        <a href="{{ route('salary-loan.report.paid') }}" target="_blank" class="report-link text-white">Current Month</a>
+                        <a href="{{ route('salary-loan.report.paid') }}?auto_print=1" target="_blank" class="report-link text-white">Current Month</a>
                     </div>
                 </div>
 
@@ -57,7 +57,7 @@
                             </div>
                             <span class="material-symbols-outlined opacity-75">download</span>
                         </div>
-                        <a href="{{ route('salary-loan.report.loan-applications') }}" target="_blank" class="report-link text-white">View Report</a>
+                        <a href="{{ route('salary-loan.report.loan-applications') }}?auto_print=1" target="_blank" class="report-link text-white">View Report</a>
                     </div>
                 </div>
             </div>
@@ -75,7 +75,7 @@
                                         <div class="fw-semibold">Unpaid Salaries Report</div>
                                         <small class="text-muted">List of all unpaid salaries.</small>
                                     </div>
-                                    <a href="{{ route('salary-loan.report.unpaid') }}" target="_blank" class="btn btn-outline-primary btn-sm px-3">Print</a>
+                                    <a href="{{ route('salary-loan.report.unpaid') }}?auto_print=1" target="_blank" class="btn btn-outline-primary btn-sm px-3" style="border-color: #003471; color: #003471;">Print</a>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -84,7 +84,7 @@
                                         <div class="fw-semibold">Paid Salaries Report</div>
                                         <small class="text-muted">List of all paid salaries for current month.</small>
                                     </div>
-                                    <a href="{{ route('salary-loan.report.paid') }}" target="_blank" class="btn btn-outline-primary btn-sm px-3">Print</a>
+                                    <a href="{{ route('salary-loan.report.paid') }}?auto_print=1" target="_blank" class="btn btn-outline-primary btn-sm px-3" style="border-color: #003471; color: #003471;">Print</a>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -93,7 +93,7 @@
                                         <div class="fw-semibold">Loan Applications Report</div>
                                         <small class="text-muted">List of all active loan applications.</small>
                                     </div>
-                                    <a href="{{ route('salary-loan.report.loan-applications') }}" target="_blank" class="btn btn-outline-primary btn-sm px-3">Print</a>
+                                    <a href="{{ route('salary-loan.report.loan-applications') }}?auto_print=1" target="_blank" class="btn btn-outline-primary btn-sm px-3" style="border-color: #003471; color: #003471;">Print</a>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -102,7 +102,7 @@
                                         <div class="fw-semibold">Loan Defaulter Teachers</div>
                                         <small class="text-muted">List of teachers having loan due amount.</small>
                                     </div>
-                                    <a href="{{ route('salary-loan.report.loan-defaulters') }}" target="_blank" class="btn btn-outline-primary btn-sm px-3">Print</a>
+                                    <a href="{{ route('salary-loan.report.loan-defaulters') }}?auto_print=1" target="_blank" class="btn btn-outline-primary btn-sm px-3" style="border-color: #003471; color: #003471;">Print</a>
                                 </div>
                             </div>
                         </div>

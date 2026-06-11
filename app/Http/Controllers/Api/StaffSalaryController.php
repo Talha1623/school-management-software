@@ -78,12 +78,14 @@ class StaffSalaryController extends Controller
                 '12' => 'December',
             ];
 
-            // Get all salary records for this staff for the selected year
-            // Handle both string and integer year formats
+            // Get all salary records for this staff for the selected year.
+            // Handle int/string/session-like formats (e.g., 2026, "2026", "2026-2027", "2026/2027").
             $salaries = Salary::where('staff_id', $targetStaffId)
                 ->where(function($query) use ($year) {
                     $query->where('year', $year)
-                          ->orWhere('year', (string) $year);
+                          ->orWhere('year', (string) $year)
+                          ->orWhere('year', 'like', $year . '%')
+                          ->orWhere('year', 'like', '%'.$year.'%');
                 })
                 ->get()
                 ->keyBy('salary_month'); // Key by month name (e.g., "March", "April")
@@ -101,6 +103,10 @@ class StaffSalaryController extends Controller
                 'salary_generated' => 0,
                 'amount_paid' => 0,
                 'loan_repayment' => 0,
+                'discount' => 0,
+                'bonus_amount' => 0,
+                'deduction_amount' => 0,
+                'balance' => 0,
             ];
 
             foreach ($monthNames as $monthNum => $monthName) {
@@ -130,13 +136,16 @@ class StaffSalaryController extends Controller
                 $salary = Salary::where('staff_id', $targetStaffId)
                     ->where(function($query) use ($year) {
                         $query->where('year', $year)
-                              ->orWhere('year', (string) $year);
+                              ->orWhere('year', (string) $year)
+                              ->orWhere('year', 'like', $year . '%')
+                              ->orWhere('year', 'like', '%'.$year.'%');
                     })
                     ->where(function($query) use ($monthName, $monthNum) {
                         $query->where('salary_month', $monthName)
                               ->orWhere('salary_month', $monthNum)
                               ->orWhere('salary_month', str_pad($monthNum, 2, '0', STR_PAD_LEFT))
-                              ->orWhere('salary_month', (string)(int)$monthNum);
+                              ->orWhere('salary_month', (string)(int)$monthNum)
+                              ->orWhereRaw('LOWER(TRIM(salary_month)) = ?', [strtolower(trim($monthName))]);
                     })
                     ->first();
                 
@@ -147,6 +156,10 @@ class StaffSalaryController extends Controller
                 if ($salary) {
                     $salaryGenerated = (float) $salary->salary_generated;
                     $amountPaid = (float) $salary->amount_paid;
+                    if ($amountPaid <= 0 && strtolower(trim((string) ($salary->status ?? ''))) === 'paid' && $salaryGenerated > 0) {
+                        // Fallback for legacy rows where status is Paid but amount_paid was not persisted correctly.
+                        $amountPaid = $salaryGenerated;
+                    }
                     
                     // Always calculate status based on payment, even if status field exists
                     // This ensures status is always accurate based on current payment state
@@ -170,6 +183,23 @@ class StaffSalaryController extends Controller
                     }
                 }
                 
+                // Compute bonus/deductions/net similar to web
+                $bonusAmount = $salary ? (float) ($salary->bonus_amount ?? 0) : 0;
+                $deductionAmount = $salary ? (float) ($salary->deduction_amount ?? 0) : 0;
+                $discount = $salary ? (float) ($salary->discount ?? 0) : 0;
+                $salaryGeneratedVal = $salary ? (float) $salary->salary_generated : 0;
+                $amountPaidVal = 0;
+                if ($salary) {
+                    $amountPaidVal = (float) $salary->amount_paid;
+                    if ($amountPaidVal <= 0 && strtolower(trim((string) ($salary->status ?? ''))) === 'paid' && $salaryGeneratedVal > 0) {
+                        $amountPaidVal = $salaryGeneratedVal;
+                    }
+                }
+                $loanRepaymentVal = $salary ? (float) $salary->loan_repayment : 0;
+                $totalDeductions = $loanRepaymentVal + $deductionAmount + $discount;
+                $netPayable = max(0, $salaryGeneratedVal + $bonusAmount - $totalDeductions);
+                $balance = round($netPayable - $amountPaidVal, 2);
+
                 $monthData = [
                     'month' => $monthName,
                     'month_num' => $monthNum,
@@ -180,9 +210,14 @@ class StaffSalaryController extends Controller
                     'holidays' => $salary ? (int) $salary->holidays : 0,
                     'sundays' => $salary ? (int) $salary->sundays : 0,
                     'basic_salary' => $salary ? (float) $salary->basic : (float) ($targetStaff->salary ?? 0),
-                    'salary_generated' => $salary ? (float) $salary->salary_generated : 0,
-                    'amount_paid' => $salary ? (float) $salary->amount_paid : 0,
-                    'loan_repayment' => $salary ? (float) $salary->loan_repayment : 0,
+                    'salary_generated' => $salaryGeneratedVal,
+                    'bonus_amount' => $bonusAmount,
+                    'loan_repayment' => $loanRepaymentVal,
+                    'deduction_amount' => $deductionAmount,
+                    'discount' => $discount,
+                    'total_deductions' => round($totalDeductions, 2),
+                    'amount_paid' => $amountPaidVal,
+                    'balance' => $balance,
                     'status' => $status,
                 ];
 
@@ -196,6 +231,10 @@ class StaffSalaryController extends Controller
                 $yearlyTotals['salary_generated'] += $monthData['salary_generated'];
                 $yearlyTotals['amount_paid'] += $monthData['amount_paid'];
                 $yearlyTotals['loan_repayment'] += $monthData['loan_repayment'];
+                $yearlyTotals['discount'] += $monthData['discount'];
+                $yearlyTotals['bonus_amount'] += $monthData['bonus_amount'];
+                $yearlyTotals['deduction_amount'] += $monthData['deduction_amount'];
+                $yearlyTotals['balance'] += $monthData['balance'];
                 // Basic salary is same for all months, so use the last non-zero value
                 if ($monthData['basic_salary'] > 0) {
                     $yearlyTotals['basic_salary'] = $monthData['basic_salary'];
@@ -307,8 +346,12 @@ class StaffSalaryController extends Controller
                         'total_sundays' => $yearlyTotals['sundays'],
                         'basic_salary' => $yearlyTotals['basic_salary'],
                         'total_salary_generated' => $yearlyTotals['salary_generated'],
+                        'total_bonus_amount' => round($yearlyTotals['bonus_amount'], 2),
                         'total_amount_paid' => $yearlyTotals['amount_paid'],
                         'total_loan_repayment' => $yearlyTotals['loan_repayment'],
+                        'total_discount' => round($yearlyTotals['discount'], 2),
+                        'total_deduction_amount' => round($yearlyTotals['deduction_amount'], 2),
+                        'total_balance' => round($yearlyTotals['balance'], 2),
                     ],
                 ],
                 'token' => $request->user()->currentAccessToken()->token ?? null,

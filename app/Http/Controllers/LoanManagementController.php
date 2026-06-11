@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Loan;
 use App\Models\Staff;
+use App\Models\GeneralSetting;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -37,6 +39,38 @@ class LoanManagementController extends Controller
         $staff = Staff::orderBy('name')->get();
         
         return view('salary-loan.loan-management', compact('loans', 'staff'));
+    }
+
+    /**
+     * Printable loans list (letterhead, same filters as list/export).
+     */
+    public function print(Request $request): View
+    {
+        $query = Loan::with('staff');
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->search);
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $query->whereHas('staff', function ($q) use ($searchLower) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"]);
+                })->orWhere('status', 'like', "%{$search}%");
+            }
+        }
+
+        $loans = $query->orderBy('created_at', 'desc')->get();
+
+        $totalRequested = (float) $loans->sum('requested_amount');
+        $totalApproved = (float) $loans->whereNotNull('approved_amount')->sum('approved_amount');
+
+        return view('salary-loan.loan-management-print', [
+            'loans' => $loans,
+            'filterSearch' => $request->get('search'),
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => Carbon::now()->format('d M Y, h:i A'),
+            'totalRequested' => $totalRequested,
+            'totalApproved' => $totalApproved,
+        ]);
     }
 
     /**
@@ -203,8 +237,17 @@ class LoanManagementController extends Controller
      */
     private function exportPDF($loans)
     {
-        $html = view('salary-loan.loan-management-pdf', compact('loans'))->render();
-        
+        $totalRequested = (float) $loans->sum('requested_amount');
+        $totalApproved = (float) $loans->whereNotNull('approved_amount')->sum('approved_amount');
+
+        $html = view('salary-loan.loan-management-pdf', [
+            'loans' => $loans,
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => Carbon::now()->format('d M Y, h:i A'),
+            'totalRequested' => $totalRequested,
+            'totalApproved' => $totalApproved,
+        ])->render();
+
         return response($html)
             ->header('Content-Type', 'text/html');
     }

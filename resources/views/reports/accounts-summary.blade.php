@@ -7,7 +7,10 @@
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="mb-0 fs-16 fw-semibold">Accounts Summary Reports</h4>
+                <div>
+                    <h4 class="mb-0 fs-16 fw-semibold">Accounts Summary Reports</h4>
+                    <small class="text-muted">Income: cash received + discount (partial payments included)</small>
+                </div>
             </div>
 
             <!-- Filter Form -->
@@ -75,6 +78,23 @@
                     </h5>
                 </div>
 
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('reports.accounts-summary.export', ['format' => 'csv']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">table_view</span>
+                            <span>CSV</span>
+                        </a>
+                        <a href="{{ route('reports.accounts-summary.export', ['format' => 'pdf']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <a href="{{ route('reports.accounts-summary.print') }}?{{ http_build_query(array_merge(request()->except(['page']), ['auto_print' => 1])) }}" class="btn btn-sm px-2 py-1 export-btn print-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                            <span>Print</span>
+                        </a>
+                    </div>
+                </div>
+
                 <div class="default-table-area" style="margin-top: 0;">
                     <div class="table-responsive">
                         <table class="table">
@@ -86,7 +106,8 @@
                                     @if(($filterType ?? 'day_by_day') == 'day_by_day')
                                     <th>Date</th>
                                     @endif
-                                    <th>Total Income</th>
+                                    <th>Cash Income</th>
+                                    <th>Discount</th>
                                     <th>Total Expense</th>
                                     <th>Profit/Lose</th>
                                     <th>Year</th>
@@ -101,7 +122,8 @@
                                     @if(($filterType ?? 'day_by_day') == 'day_by_day')
                                     <td>{{ $record['date'] ?? 'N/A' }}</td>
                                     @endif
-                                    <td>{{ number_format($record['total_income'], 2) }}</td>
+                                    <td class="text-success">{{ number_format($record['total_income'], 2) }}</td>
+                                    <td class="text-warning">{{ number_format($record['total_discount'] ?? 0, 2) }}</td>
                                     <td>{{ number_format($record['total_expense'], 2) }}</td>
                                     <td class="fw-semibold">
                                         @if($record['profit_loss'] >= 0)
@@ -114,7 +136,7 @@
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '8' : '7' }}" class="text-center py-4">
+                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '9' : '8' }}" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center">
                                             <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
                                             <p class="text-muted mt-2 mb-0">No records found</p>
@@ -125,28 +147,25 @@
                             </tbody>
                             @if($summaryRecords->count() > 0)
                             <tfoot>
+                                @php
+                                    $colSpanLabel = ($filterType ?? 'day_by_day') == 'day_by_day' ? 4 : 3;
+                                    $totals = $summaryTotals ?? [
+                                        'income' => $summaryRecords->sum('total_income'),
+                                        'discount' => $summaryRecords->sum('total_discount'),
+                                        'expense' => $summaryRecords->sum('total_expense'),
+                                        'profit' => $summaryRecords->sum('profit_loss'),
+                                    ];
+                                @endphp
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '4' : '3' }}" class="text-end">Total Income:</td>
-                                    <td>{{ number_format($summaryRecords->sum('total_income'), 2) }}</td>
-                                    <td colspan="2"></td>
-                                </tr>
-                                <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '4' : '3' }}" class="text-end">Total Expense:</td>
-                                    <td>{{ number_format($summaryRecords->sum('total_expense'), 2) }}</td>
-                                    <td colspan="2"></td>
-                                </tr>
-                                <tr class="fw-bold" style="background-color: #e3f2fd;">
-                                    <td colspan="{{ ($filterType ?? 'day_by_day') == 'day_by_day' ? '4' : '3' }}" class="text-end">Profit/Lose:</td>
-                                    @php
-                                        $totalIncome = $summaryRecords->sum('total_income');
-                                        $totalExpense = $summaryRecords->sum('total_expense');
-                                        $netBalance = $totalIncome - $totalExpense;
-                                    @endphp
-                                    <td colspan="2">
-                                        @if($netBalance >= 0)
-                                            <span class="text-success">+{{ number_format($netBalance, 2) }}</span>
+                                    <td colspan="{{ $colSpanLabel }}" class="text-end">Total</td>
+                                    <td class="text-success">{{ number_format($totals['income'] ?? 0, 2) }}</td>
+                                    <td class="text-warning">{{ number_format($totals['discount'] ?? 0, 2) }}</td>
+                                    <td>{{ number_format($totals['expense'] ?? 0, 2) }}</td>
+                                    <td>
+                                        @if(($totals['profit'] ?? 0) >= 0)
+                                            <span class="text-success">+{{ number_format($totals['profit'] ?? 0, 2) }}</span>
                                         @else
-                                            <span class="text-danger">{{ number_format($netBalance, 2) }}</span>
+                                            <span class="text-danger">{{ number_format($totals['profit'] ?? 0, 2) }}</span>
                                         @endif
                                     </td>
                                     <td></td>
@@ -217,5 +236,23 @@
     font-size: 11px;
     padding: 4px 8px;
 }
+
+.export-btn {
+    border: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    font-size: 12px;
+}
+.csv-btn { background-color: #17a2b8; color: white; }
+.csv-btn:hover { background-color: #138496; color: white; }
+.pdf-btn { background-color: #dc3545; color: white; }
+.pdf-btn:hover { background-color: #c82333; color: white; }
+.print-btn { background-color: #6c757d; color: white; }
+.print-btn:hover { background-color: #5a6268; color: white; }
 </style>
 @endsection

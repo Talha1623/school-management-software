@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BehaviorRecord;
+use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Staff;
@@ -174,18 +175,29 @@ class TeacherBehaviorController extends Controller
             $request->validate([
                 'class' => ['required', 'string'],
                 'section' => ['nullable', 'string'],
+                'campus' => ['nullable', 'string'],
                 'date' => ['required', 'date'],
                 'type' => ['nullable', 'string'],
             ]);
 
             $filterClass = $request->class;
             $filterSection = $request->section;
+            $filterCampus = trim((string) ($request->campus ?? ''));
+            if ($filterCampus === '') {
+                $filterCampus = trim((string) ($teacher->campus ?? ''));
+            }
+            if ($filterCampus === '') {
+                $filterCampus = null;
+            }
             $filterDate = $request->date;
             $filterType = $request->type ?? 'daily behavior';
 
             // Validate that class is in teacher's assigned classes
-            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
-                ->get();
+            $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))]);
+            if ($filterCampus) {
+                $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+            }
+            $assignedSubjects = $assignedSubjectsQuery->get();
             
             $assignedClasses = $assignedSubjects->pluck('class')
                 ->unique()
@@ -221,22 +233,26 @@ class TeacherBehaviorController extends Controller
                 ], 403);
             }
 
-            // Get students based on filters - only those connected to parents
+            // Get students based on class/section filters.
             $studentsQuery = Student::query();
-            
-            // Only get students who have parent connection (parent_account_id or father_name)
-            $studentsQuery->where(function($query) {
-                $query->whereNotNull('parent_account_id')
-                      ->orWhere(function($q) {
-                          $q->whereNotNull('father_name')
-                            ->where('father_name', '!=', '');
-                      });
-            });
             
             $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
             
             if ($filterSection) {
                 $studentsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
+            }
+
+            if ($filterCampus) {
+                $normalizedFilterCampus = trim($filterCampus);
+                $campusRecord = Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($normalizedFilterCampus)])->first();
+                if ($campusRecord) {
+                    $normalizedFilterCampus = (string) $campusRecord->campus_name;
+                }
+
+                $studentsQuery->where(function ($q) use ($normalizedFilterCampus, $filterCampus) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($normalizedFilterCampus))])
+                        ->orWhereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+                });
             }
             
             $students = $studentsQuery->orderBy('student_code', 'asc')
@@ -245,7 +261,9 @@ class TeacherBehaviorController extends Controller
             
             // Get campus from first student or use default
             $campusName = 'Main Campus';
-            if ($students->count() > 0) {
+            if ($filterCampus) {
+                $campusName = $filterCampus;
+            } elseif ($students->count() > 0) {
                 $campusName = $students->first()->campus ?? 'Main Campus';
             }
 

@@ -24,25 +24,48 @@
                 </div>
             @endif
 
+            @if(empty($isStaffAttendanceUser))
+                <div class="alert alert-info mb-3 py-2" role="alert" style="font-size: 13px;">
+                    <strong>Admin view:</strong> All classes in this campus are shown. To test a teacher account, logout and login at <strong>/staff/login</strong> with that teacher’s email.
+                </div>
+            @elseif(($classes->isEmpty() ?? true))
+                <div class="alert alert-warning mb-3 py-2" role="alert" style="font-size: 13px;">
+                    <strong>No class assigned to {{ $staff->name ?? 'this teacher' }}.</strong>
+                    Open <strong>Classes → Manage Section</strong>, choose class <strong>Three</strong> (or your class name), set <strong>Teacher</strong> = <strong>{{ $staff->name ?? '' }}</strong> (exact name from Staff Management).
+                </div>
+            @else
+                <div class="alert alert-success mb-3 py-2" role="alert" style="font-size: 13px;">
+                    <strong>Teacher:</strong> {{ $staff->name ?? '' }} — allowed class(es): {{ $classes->implode(', ') }}
+                </div>
+            @endif
+
             <!-- Attendance Form -->
             <form method="GET" action="{{ route('attendance.student') }}" id="attendanceForm">
                 <div class="row g-2 align-items-end">
-                    <!-- Campus Field -->
-                    <div class="col-md-2">
+                    <!-- Campus Field (wider when locked so long campus names fit) -->
+                    <div class="{{ !empty($staffCampusLocked) ? 'col-md-3' : 'col-md-2' }}">
                         <label for="filter_campus" class="form-label mb-0 fs-13 fw-medium">Campus</label>
-                        <div class="position-relative">
-                            <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px; padding-right: {{ request('filter_campus') ? '30px' : '12px' }};">
-                                <option value="">Select Campus</option>
-                                @foreach($campuses as $campus)
-                                    <option value="{{ $campus->campus_name ?? $campus }}" {{ request('filter_campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>{{ $campus->campus_name ?? $campus }}</option>
-                                @endforeach
-                            </select>
-                            @if(request('filter_campus'))
-                                <button type="button" class="btn btn-sm position-absolute" onclick="clearFilter('filter_campus')" style="right: 25px; top: 50%; transform: translateY(-50%); padding: 0; width: 20px; height: 20px; background: transparent; border: none; color: #dc3545; z-index: 10;" title="Clear Campus">
-                                    <span class="material-symbols-outlined" style="font-size: 16px;">close</span>
-                                </button>
-                            @endif
-                        </div>
+                        @if(!empty($staffCampusLocked))
+                            <div class="attendance-campus-locked" title="{{ $filterCampus }}">
+                                <span class="material-symbols-outlined attendance-campus-locked__icon" aria-hidden="true">apartment</span>
+                                <span class="attendance-campus-locked__text">{{ $filterCampus }}</span>
+                            </div>
+                            <input type="hidden" name="filter_campus" id="filter_campus" value="{{ $filterCampus }}">
+                        @else
+                            <div class="position-relative">
+                                <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px; padding-right: {{ request('filter_campus') ? '30px' : '12px' }};">
+                                    <option value="">Select Campus</option>
+                                    @foreach($campuses as $campus)
+                                        <option value="{{ $campus->campus_name ?? $campus }}" {{ ($filterCampus ?? request('filter_campus')) == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>{{ $campus->campus_name ?? $campus }}</option>
+                                    @endforeach
+                                </select>
+                                @if(request('filter_campus'))
+                                    <button type="button" class="btn btn-sm position-absolute" onclick="clearFilter('filter_campus')" style="right: 25px; top: 50%; transform: translateY(-50%); padding: 0; width: 20px; height: 20px; background: transparent; border: none; color: #dc3545; z-index: 10;" title="Clear Campus">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">close</span>
+                                    </button>
+                                @endif
+                            </div>
+                        @endif
                     </div>
 
                     <!-- Type Field -->
@@ -67,10 +90,10 @@
                     <div class="col-md-2">
                         <label for="filter_class" class="form-label mb-0 fs-13 fw-medium">Class</label>
                         <div class="position-relative">
-                            <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px; padding-right: {{ request('filter_class') ? '30px' : '12px' }};" {{ request('filter_campus') ? '' : 'disabled' }}>
-                                <option value="">{{ request('filter_campus') ? 'Select Class' : 'Select Campus First' }}</option>
+                            <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 32px; padding-right: {{ request('filter_class') ? '30px' : '12px' }};" {{ ($filterCampus ?? request('filter_campus')) ? '' : 'disabled' }}>
+                                <option value="">{{ ($filterCampus ?? request('filter_campus')) ? 'Select Class' : 'Select Campus First' }}</option>
                                 @foreach($classes as $class)
-                                    <option value="{{ $class }}" {{ request('filter_class') == $class ? 'selected' : '' }}>{{ $class }}</option>
+                                    <option value="{{ $class }}" @selected(strcasecmp(trim((string) (request('filter_class') ?? '')), trim((string) $class)) === 0)>{{ $class }}</option>
                                 @endforeach
                             </select>
                             @if(request('filter_class'))
@@ -89,7 +112,7 @@
                                 <option value="">Select Section</option>
                                 @if(request('filter_class'))
                                     @foreach($sections as $section)
-                                        <option value="{{ $section }}" {{ request('filter_section') == $section ? 'selected' : '' }}>{{ $section }}</option>
+                                        <option value="{{ $section }}" @selected(strcasecmp(trim((string) (request('filter_section') ?? '')), trim((string) $section)) === 0)>{{ $section }}</option>
                                     @endforeach
                                 @endif
                             </select>
@@ -102,7 +125,7 @@
                     </div>
 
                     <!-- Date Field -->
-                    <div class="col-md-3">
+                    <div class="{{ !empty($staffCampusLocked) ? 'col-md-2' : 'col-md-3' }}">
                         <label for="filter_date" class="form-label mb-0 fs-13 fw-medium">Date</label>
                         <div class="position-relative">
                             <input type="date" class="form-control form-control-sm" id="filter_date" name="filter_date" value="{{ request('filter_date', date('Y-m-d')) }}" style="height: 32px; padding-right: {{ request('filter_date') ? '30px' : '12px' }};">
@@ -160,6 +183,10 @@
                             <option value="No">No</option>
                             <option value="Yes">Yes</option>
                         </select>
+                        <button type="button" class="btn btn-sm notify-save-btn" id="saveNotifyPreferenceBtn" onclick="saveNotifyPreference()">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">save</span>
+                            Save
+                        </button>
                     </div>
                 </div>
                 
@@ -229,6 +256,7 @@
                                         <td style="padding: 8px 12px; font-size: 13px;">
                                             @php
                                                 $attendanceStatus = $attendanceData[$student->id] ?? 'N/A';
+                                                $studentWhatsappNumber = trim((string) ($student->admit_whatsapp_number ?? $student->whatsapp_number ?? ''));
                                                 $statusClass = match($attendanceStatus) {
                                                     'Present' => 'bg-success',
                                                     'Absent' => 'bg-danger',
@@ -243,24 +271,42 @@
                                                     {{ $attendanceStatus }}
                                                 </span>
                                                 <div class="d-flex flex-wrap gap-1 justify-content-center" style="max-width: 200px;">
-                                                    <button type="button" class="btn btn-sm status-btn status-present {{ $attendanceStatus == 'Present' ? 'active' : '' }}" onclick="updateAttendance({{ $student->id }}, 'Present', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Present">
+                                                    <button type="button" class="btn btn-sm status-btn status-present {{ $attendanceStatus == 'Present' ? 'active' : '' }}" onclick="updateAttendance(this, {{ $student->id }}, 'Present', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Present">
                                                         P
                                                     </button>
-                                                    <button type="button" class="btn btn-sm status-btn status-absent {{ $attendanceStatus == 'Absent' ? 'active' : '' }}" onclick="updateAttendance({{ $student->id }}, 'Absent', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Absent">
+                                                    <button type="button" class="btn btn-sm status-btn status-absent {{ $attendanceStatus == 'Absent' ? 'active' : '' }}" onclick="updateAttendance(this, {{ $student->id }}, 'Absent', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Absent">
                                                         A
                                                     </button>
-                                                    <button type="button" class="btn btn-sm status-btn status-holiday {{ $attendanceStatus == 'Holiday' ? 'active' : '' }}" onclick="updateAttendance({{ $student->id }}, 'Holiday', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Holiday">
+                                                    <button type="button" class="btn btn-sm status-btn status-holiday {{ $attendanceStatus == 'Holiday' ? 'active' : '' }}" onclick="updateAttendance(this, {{ $student->id }}, 'Holiday', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Holiday">
                                                         H
                                                     </button>
-                                                    <button type="button" class="btn btn-sm status-btn status-sunday {{ $attendanceStatus == 'Sunday' ? 'active' : '' }}" onclick="updateAttendance({{ $student->id }}, 'Sunday', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Sunday">
+                                                    <button type="button" class="btn btn-sm status-btn status-sunday {{ $attendanceStatus == 'Sunday' ? 'active' : '' }}" onclick="updateAttendance(this, {{ $student->id }}, 'Sunday', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Sunday">
                                                         S
                                                     </button>
-                                                    <button type="button" class="btn btn-sm status-btn status-leave {{ $attendanceStatus == 'Leave' ? 'active' : '' }}" onclick="updateAttendance({{ $student->id }}, 'Leave', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Leave">
+                                                    <button type="button" class="btn btn-sm status-btn status-leave {{ $attendanceStatus == 'Leave' ? 'active' : '' }}" onclick="updateAttendance(this, {{ $student->id }}, 'Leave', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as Leave">
                                                         L
                                                     </button>
-                                                    <button type="button" class="btn btn-sm status-btn status-na {{ $attendanceStatus == 'N/A' ? 'active' : '' }}" onclick="updateAttendance({{ $student->id }}, 'N/A', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as N/A">
+                                                    <button type="button" class="btn btn-sm status-btn status-na {{ $attendanceStatus == 'N/A' ? 'active' : '' }}" onclick="updateAttendance(this, {{ $student->id }}, 'N/A', '{{ request('filter_date', date('Y-m-d')) }}')" title="Mark as N/A">
                                                         N/A
                                                     </button>
+                                                </div>
+                                                <div class="mt-1">
+                                                    @if($studentWhatsappNumber !== '')
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm whatsapp-btn"
+                                                            onclick='sendAttendanceWhatsApp(@json($studentWhatsappNumber), @json($student->student_name), @json($attendanceStatus), @json(request("filter_date", date("Y-m-d"))), @json($student->class ?? "N/A"), @json($student->section ?? "N/A"))'
+                                                            title="Send attendance on WhatsApp (Admit Student number)"
+                                                        >
+                                                            <span class="material-symbols-outlined" style="font-size: 14px;">chat</span>
+                                                            WhatsApp
+                                                        </button>
+                                                    @else
+                                                        <button type="button" class="btn btn-sm whatsapp-btn disabled" disabled title="Admit Student > WhatsApp Number not found">
+                                                            <span class="material-symbols-outlined" style="font-size: 14px;">chat</span>
+                                                            No WhatsApp
+                                                        </button>
+                                                    @endif
                                                 </div>
                                             </div>
                                         </td>
@@ -334,6 +380,35 @@
     
     .rounded-8 {
         border-radius: 8px;
+    }
+
+    /* Teacher dashboard: campus fixed to staff profile — read-only, multi-line safe */
+    .attendance-campus-locked {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        padding: 8px 10px;
+        min-height: 38px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #0f172a;
+        line-height: 1.45;
+        white-space: normal;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    .attendance-campus-locked__icon {
+        font-size: 20px;
+        color: #64748b;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+    .attendance-campus-locked__text {
+        flex: 1;
+        min-width: 0;
     }
 
     /* Table Styling */
@@ -473,6 +548,42 @@
         color: white;
         border-color: #adb5bd;
     }
+
+    .whatsapp-btn {
+        background: #25d366;
+        border: 1px solid #25d366;
+        color: #fff;
+        font-size: 11px;
+        padding: 3px 8px;
+        line-height: 1.1;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .whatsapp-btn:hover {
+        background: #1ebe5b;
+        border-color: #1ebe5b;
+        color: #fff;
+    }
+
+    .notify-save-btn {
+        background: #003471;
+        border: 1px solid #003471;
+        color: #fff;
+        font-size: 12px;
+        padding: 4px 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .notify-save-btn:hover {
+        background: #004a9f;
+        border-color: #004a9f;
+        color: #fff;
+    }
 </style>
 
 <script>
@@ -481,21 +592,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
     
+    const attendanceForm = document.getElementById('attendanceForm');
+
     function loadClasses(campusName, selectedClass = '') {
-        if (!classSelect) return;
+        if (!classSelect) {
+            return Promise.resolve();
+        }
 
         if (!campusName) {
             classSelect.innerHTML = '<option value="">Select Campus First</option>';
             classSelect.disabled = true;
             sectionSelect.innerHTML = '<option value="">Select Section</option>';
             sectionSelect.disabled = true;
-            return;
+            return Promise.resolve();
         }
 
         classSelect.innerHTML = '<option value="">Loading classes...</option>';
         classSelect.disabled = true;
 
-        fetch(`{{ route('attendance.student.get-classes-by-campus') }}?campus=${encodeURIComponent(campusName)}`, {
+        return fetch(`{{ route('attendance.student.get-classes-by-campus') }}?campus=${encodeURIComponent(campusName)}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -509,7 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const option = document.createElement('option');
                     option.value = className;
                     option.textContent = className;
-                    if (selectedClass && selectedClass === className) {
+                    if (selectedClass && String(selectedClass).trim().toLowerCase() === String(className).trim().toLowerCase()) {
                         option.selected = true;
                     }
                     classSelect.appendChild(option);
@@ -528,22 +643,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Function to load sections for selected class
-    function loadSections(className) {
+    function loadSections(className, selectedSection = '') {
+        if (!sectionSelect) {
+            return Promise.resolve();
+        }
+
         if (!className) {
             sectionSelect.innerHTML = '<option value="">Select Section</option>';
             sectionSelect.disabled = true;
-            return;
+            return Promise.resolve();
         }
-        
+
         sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
         sectionSelect.disabled = true;
-        
+
         const params = new URLSearchParams();
         params.append('class', className);
         if (campusSelect && campusSelect.value) {
             params.append('campus', campusSelect.value);
         }
-        fetch(`{{ route('attendance.student.get-sections-by-class') }}?${params.toString()}`, {
+        const saved = selectedSection == null ? '' : String(selectedSection);
+
+        return fetch(`{{ route('attendance.student.get-sections-by-class') }}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -552,18 +673,15 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             sectionSelect.innerHTML = '<option value="">Select Section</option>';
-            
+
             if (data.sections && data.sections.length > 0) {
                 data.sections.forEach(section => {
                     const option = document.createElement('option');
                     option.value = section;
                     option.textContent = section;
-                    // Preserve selected value if exists
-                    @if(request('filter_section'))
-                        if (option.value === '{{ request('filter_section') }}') {
-                            option.selected = true;
-                        }
-                    @endif
+                    if (saved.trim() !== '' && option.value.trim().toLowerCase() === saved.trim().toLowerCase()) {
+                        option.selected = true;
+                    }
                     sectionSelect.appendChild(option);
                 });
                 sectionSelect.disabled = false;
@@ -578,29 +696,125 @@ document.addEventListener('DOMContentLoaded', function() {
             sectionSelect.disabled = false;
         });
     }
-    
-    // Load sections on page load if class is already selected
-    loadClasses('{{ request('filter_campus') }}', '{{ request('filter_class') }}');
-    @if(request('filter_class'))
-        loadSections('{{ request('filter_class') }}');
-    @endif
-    
+
+    // After classes load, load sections so class options exist before section fetch (avoids race / empty GET params)
+    const initialClass = @json(request('filter_class') ?? '');
+    const initialSection = @json(request('filter_section') ?? '');
+    const isStaffAttendanceUser = @json(!empty($isStaffAttendanceUser));
+    const staffAllowedClasses = @json(($isStaffAttendanceUser ?? false) ? $classes->values() : null);
+
+    function applyStaffClassOptions(selectedClass = '') {
+        if (!isStaffAttendanceUser || !Array.isArray(staffAllowedClasses)) {
+            return false;
+        }
+        classSelect.innerHTML = '<option value="">Select Class</option>';
+        if (staffAllowedClasses.length === 0) {
+            classSelect.innerHTML = '<option value="">No class assigned — contact admin</option>';
+            classSelect.disabled = true;
+            return true;
+        }
+        staffAllowedClasses.forEach(function (className) {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            if (selectedClass && String(selectedClass).trim().toLowerCase() === String(className).trim().toLowerCase()) {
+                option.selected = true;
+            }
+            classSelect.appendChild(option);
+        });
+        classSelect.disabled = false;
+        return true;
+    }
+
+    if (applyStaffClassOptions(initialClass)) {
+        if (initialClass) {
+            loadSections(initialClass, initialSection);
+        }
+    } else {
+    loadClasses(@json($filterCampus ?? ''), initialClass).then(function () {
+        if (initialClass) {
+            return loadSections(initialClass, initialSection);
+        }
+        return Promise.resolve();
+    });
+    }
+
     // Class change handler
     if (classSelect) {
         classSelect.addEventListener('change', function() {
-            loadSections(this.value);
-            // Clear section when class changes
-            sectionSelect.value = '';
+            if (isStaffAttendanceUser && Array.isArray(staffAllowedClasses) && this.value) {
+                const selected = String(this.value).trim().toLowerCase();
+                const allowed = staffAllowedClasses.map(function (c) {
+                    return String(c).trim().toLowerCase();
+                });
+                if (!allowed.includes(selected)) {
+                    alert('You can only view attendance for your assigned class.');
+                    this.value = '';
+                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                    sectionSelect.disabled = true;
+                    return;
+                }
+            }
+            loadSections(this.value, '');
         });
     }
 
+    @if(empty($staffCampusLocked))
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
-            loadClasses(this.value);
-            sectionSelect.value = '';
+            if (applyStaffClassOptions('')) {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                sectionSelect.disabled = true;
+                return;
+            }
+            loadClasses(this.value, '').then(function () {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                sectionSelect.disabled = true;
+            });
         });
     }
+    @endif
+
+    // Disabled <select> fields are omitted from GET — re-enable before submit so filter_campus/class/section are sent
+    if (attendanceForm) {
+        attendanceForm.addEventListener('submit', function () {
+            if (classSelect) {
+                classSelect.disabled = false;
+            }
+            if (sectionSelect) {
+                sectionSelect.disabled = false;
+            }
+        });
+    }
+
+    // Restore saved notification preference for this browser.
+    const notifySelect = document.getElementById('notifyLateAbsent');
+    const savedNotifyPreference = localStorage.getItem('notify_late_absent_preference');
+    if (notifySelect && savedNotifyPreference && ['Yes', 'No'].includes(savedNotifyPreference)) {
+        notifySelect.value = savedNotifyPreference;
+    }
 });
+
+function getSavedNotifyPreference() {
+    const saved = localStorage.getItem('notify_late_absent_preference');
+    return (saved === 'Yes' || saved === 'No') ? saved : 'No';
+}
+
+function getCurrentNotifyPreference() {
+    const notifySelect = document.getElementById('notifyLateAbsent');
+    const current = notifySelect ? notifySelect.value : null;
+    if (current === 'Yes' || current === 'No') {
+        return current;
+    }
+    return getSavedNotifyPreference();
+}
+
+function saveNotifyPreference() {
+    const notifySelect = document.getElementById('notifyLateAbsent');
+    const value = notifySelect ? notifySelect.value : 'No';
+    localStorage.setItem('notify_late_absent_preference', value);
+    alert(`Notify Late & Absent preference saved: ${value}`);
+}
 
 function clearFilter(filterName) {
     const url = new URL(window.location.href);
@@ -642,8 +856,7 @@ function clearFilter(filterName) {
 }
 
 // Update attendance function
-function updateAttendance(studentId, status, attendanceDate) {
-    const button = event.target;
+function updateAttendance(button, studentId, status, attendanceDate) {
     const originalText = button.innerHTML;
     const originalClass = button.className;
     
@@ -667,7 +880,8 @@ function updateAttendance(studentId, status, attendanceDate) {
         body: JSON.stringify({
             student_id: studentId,
             attendance_date: attendanceDate,
-            status: status
+            status: status,
+            notify_late_absent: getCurrentNotifyPreference()
         })
     })
     .then(response => response.json())
@@ -728,7 +942,7 @@ function markAllAttendance(status) {
             // Extract student ID from the onclick attribute
             const onclickAttr = buttons[0].getAttribute('onclick');
             if (onclickAttr) {
-                const match = onclickAttr.match(/updateAttendance\((\d+),/);
+                const match = onclickAttr.match(/updateAttendance\([^,]+,\s*(\d+),/);
                 if (match && match[1]) {
                     studentIds.push(parseInt(match[1]));
                 }
@@ -764,7 +978,8 @@ function markAllAttendance(status) {
         body: JSON.stringify({
             student_ids: studentIds,
             attendance_date: attendanceDate,
-            status: status
+            status: status,
+            notify_late_absent: getCurrentNotifyPreference()
         })
     })
     .then(response => response.json())
@@ -785,6 +1000,30 @@ function markAllAttendance(status) {
         alert('Error updating attendance. Please try again.');
         buttons.forEach(btn => btn.disabled = false);
     });
+}
+
+function sendAttendanceWhatsApp(rawPhone, studentName, attendanceStatus, attendanceDate, className, sectionName) {
+    const phone = (rawPhone || '').replace(/\D/g, '');
+    if (!phone) {
+        alert('WhatsApp number not available for this student.');
+        return;
+    }
+
+    const message =
+`Assalam o Alaikum,
+Student Attendance Update
+
+Name: ${studentName}
+Class: ${className}
+Section: ${sectionName}
+Date: ${attendanceDate}
+Status: ${attendanceStatus}
+
+Regards,
+School Administration`;
+
+    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
 }
 </script>
 @endsection

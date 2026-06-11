@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\Campus;
 use App\Models\Section;
+use App\Models\GeneralSetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -116,22 +117,20 @@ class PrintStaffCardController extends Controller
                 ->get();
         }
         
-        // Get design settings from request
+        $settings = GeneralSetting::getSettings();
+
+        // Get design settings from request (aligned with student ID card defaults)
         $designSettings = [
             'accent_color' => $request->get('accent_color', '#003471'),
-            'secondary_color' => $request->get('secondary_color', '#F08080'),
+            'secondary_color' => $request->get('secondary_color', '#004a9e'),
             'gradient_color1' => $request->get('gradient_color1', '#FFFFFF'),
             'gradient_color2' => $request->get('gradient_color2', '#F8F9FA'),
             'staff_name_color' => $request->get('staff_name_color', '#000000'),
-            'details_text_color' => $request->get('details_text_color', '#000000'),
+            'details_text_color' => $request->get('details_text_color', '#333333'),
             'footer_text_color' => $request->get('footer_text_color', '#FFFFFF'),
-            'orientation' => $request->get('orientation', 'portrait'),
-            'show_monogram' => $request->get('show_monogram', 'yes'),
-            'card_style' => $request->get('card_style', 'modern'),
-            'border_style' => $request->get('border_style', 'rounded'),
         ];
         
-        return view('id-card.print-staff-card-print', compact('staff', 'designSettings'));
+        return view('id-card.print-staff-card-print', compact('staff', 'designSettings', 'settings'));
     }
 }
 

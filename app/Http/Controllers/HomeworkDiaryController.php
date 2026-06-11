@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Campus;
+use App\Models\AdminRole;
 use App\Models\ClassModel;
+use App\Models\Message;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\HomeworkDiary;
@@ -15,6 +17,43 @@ use Illuminate\Support\Facades\Auth;
 
 class HomeworkDiaryController extends Controller
 {
+    private function notifyAdminsAboutStaffDiary(array $validated, int $savedCount, int $updatedCount): void
+    {
+        $staff = Auth::guard('staff')->user();
+        $total = $savedCount + $updatedCount;
+        if (!$staff || $total <= 0) {
+            return;
+        }
+
+        $text = sprintf(
+            '%s uploaded homework diary for %s - %s on %s. Campus: %s. New: %d. Updated: %d.',
+            $staff->name ?? 'Staff',
+            $validated['class'],
+            $validated['section'],
+            \Carbon\Carbon::parse($validated['date'])->format('d-m-Y'),
+            $validated['campus'],
+            $savedCount,
+            $updatedCount
+        );
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($staff, $text) {
+                Message::create([
+                    'from_type' => 'staff_notification',
+                    'from_id' => $staff->id,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
+    }
+
     /**
      * Display the add & manage diaries page.
      */
@@ -560,6 +599,8 @@ class HomeworkDiaryController extends Controller
         if ($updatedCount > 0) {
             $message .= " {$updatedCount} " . ($updatedCount == 1 ? 'entry' : 'entries') . " updated.";
         }
+
+        $this->notifyAdminsAboutStaffDiary($validated, $savedCount, $updatedCount);
 
         return redirect()
             ->route('homework-diary.manage', [

@@ -5,11 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\Student;
 use App\Models\ClassModel;
 use App\Models\Campus;
-use App\Models\StudentPayment;
-use App\Models\MonthlyFee;
-use App\Models\CustomFee;
+use App\Models\Section;
+use App\Models\Subject;
+use App\Models\FeeType;
+use App\Services\FeePaymentWebTables;
+use App\Models\GeneralSetting;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class HeadWiseDuesController extends Controller
 {
@@ -20,6 +25,8 @@ class HeadWiseDuesController extends Controller
     {
         $filterCampus = $request->get('filter_campus');
         $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+        $hasFilters = $request->filled('filter_campus') || $request->filled('filter_class') || $request->filled('filter_section');
 
         // Get all campuses
         $campuses = Campus::orderBy('campus_name', 'asc')->get();
@@ -47,131 +54,42 @@ class HeadWiseDuesController extends Controller
                 ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
                 : $classOptionsFromStudents;
         }
-        
-        // Process data for all campuses
-        $allCampusData = collect();
-        $grandTotal = [
-            'monthly_fee' => 0,
-            'muhammad_talha' => 0,
-            'card_fees' => 0,
-            'total' => 0
-        ];
-        
-        $campusesToProcess = $campuses;
+
+        $sectionOptions = Section::whereNotNull('name');
         if ($filterCampus) {
-            $campusesToProcess = $campuses->filter(function($campus) use ($filterCampus) {
-                $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
-                return strtolower(trim($campusName)) === strtolower(trim($filterCampus));
-            })->values();
+            $sectionOptions->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
         }
-
-        foreach ($campusesToProcess as $campus) {
-            $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
-            
-            if (empty($campusName)) {
-                continue;
+        if ($filterClass) {
+            $sectionOptions->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
+        }
+        $sectionOptions = $sectionOptions->distinct()->pluck('name')->sort()->values();
+        if ($sectionOptions->isEmpty()) {
+            $sectionsFromSubjects = Subject::whereNotNull('section');
+            if ($filterCampus) {
+                $sectionsFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
             }
-            
-            // Get all classes for this campus
-            $classes = ClassModel::where('campus', $campusName)
-                ->whereNotNull('class_name')
-                ->distinct()
-                ->pluck('class_name')
-                ->sort()
-                ->values();
-            
-            if ($classes->isEmpty()) {
-                // Fallback: get classes from students
-                $classes = Student::where('campus', $campusName)
-                    ->whereNotNull('class')
-                    ->distinct()
-                    ->pluck('class')
-                    ->sort()
-                    ->values();
-            }
-
             if ($filterClass) {
-                $classes = $classes->filter(function($className) use ($filterClass) {
-                    return strtolower(trim($className)) === strtolower(trim($filterClass));
-                })->values();
+                $sectionsFromSubjects->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
             }
-            
-            $headWiseData = collect();
-            $campusTotal = [
-                'monthly_fee' => 0,
-                'muhammad_talha' => 0,
-                'card_fees' => 0,
-                'total' => 0
-            ];
-            
-            // Calculate head wise dues for each class
-            foreach ($classes as $className) {
-                // Get all students for this class and campus
-                $students = Student::where('campus', $campusName)
-                    ->where('class', $className)
-                    ->get();
-                
-                $classTotals = [
-                    'monthly_fee' => 0,
-                    'muhammad_talha' => 0,
-                    'card_fees' => 0,
-                    'total' => 0
-                ];
-                
-                foreach ($students as $student) {
-                    // Calculate Monthly Fee unpaid
-                    $monthlyFeeUnpaid = $this->calculateMonthlyFeeUnpaid($student);
-                    $classTotals['monthly_fee'] += $monthlyFeeUnpaid;
-                    
-                    // Calculate Muhammad Talha unpaid (custom fee)
-                    $muhammadTalhaUnpaid = $this->calculateCustomFeeUnpaid($student, 'Muhammad Talha');
-                    $classTotals['muhammad_talha'] += $muhammadTalhaUnpaid;
-                    
-                    // Calculate Card Fees unpaid
-                    $cardFeesUnpaid = $this->calculateCardFeesUnpaid($student);
-                    $classTotals['card_fees'] += $cardFeesUnpaid;
-                }
-                
-                $classTotals['total'] = $classTotals['monthly_fee'] + $classTotals['muhammad_talha'] + $classTotals['card_fees'];
-                
-                // Add to campus totals
-                $campusTotal['monthly_fee'] += $classTotals['monthly_fee'];
-                $campusTotal['muhammad_talha'] += $classTotals['muhammad_talha'];
-                $campusTotal['card_fees'] += $classTotals['card_fees'];
-                $campusTotal['total'] += $classTotals['total'];
-                
-                $headWiseData->push([
-                    'class' => $className,
-                    'monthly_fee' => $classTotals['monthly_fee'],
-                    'muhammad_talha' => $classTotals['muhammad_talha'],
-                    'card_fees' => $classTotals['card_fees'],
-                    'total' => $classTotals['total']
-                ]);
-            }
-            
-            // Add to grand totals
-            $grandTotal['monthly_fee'] += $campusTotal['monthly_fee'];
-            $grandTotal['muhammad_talha'] += $campusTotal['muhammad_talha'];
-            $grandTotal['card_fees'] += $campusTotal['card_fees'];
-            $grandTotal['total'] += $campusTotal['total'];
-            
-            // Only add campus data if it has classes
-            if ($headWiseData->count() > 0) {
-                $allCampusData->push([
-                    'campus' => $campusName,
-                    'data' => $headWiseData,
-                    'total' => $campusTotal
-                ]);
-            }
+            $sectionOptions = $sectionsFromSubjects->distinct()->pluck('section')->sort()->values();
         }
         
+        $report = $this->buildReportData($campuses, $filterCampus, $filterClass, $filterSection, $hasFilters);
+        $allCampusData = $report['allCampusData'];
+        $feeHeads = $report['feeHeads'];
+        $grandTotal = $report['grandTotal'];
+
         return view('reports.head-wise-dues', compact(
             'allCampusData',
             'grandTotal',
             'campuses',
             'classOptions',
+            'sectionOptions',
+            'feeHeads',
             'filterCampus',
-            'filterClass'
+            'filterClass',
+            'filterSection',
+            'hasFilters'
         ));
     }
 
@@ -207,114 +125,579 @@ class HeadWiseDuesController extends Controller
 
         return response()->json(['classes' => $classes]);
     }
-    
+
     /**
-     * Calculate unpaid monthly fee for a student.
+     * Get sections by class (AJAX endpoint)
      */
-    private function calculateMonthlyFeeUnpaid($student): float
+    public function getSectionsByClass(Request $request): \Illuminate\Http\JsonResponse
     {
-        // Get monthly fee amount from student record
-        $monthlyFeeAmount = $student->monthly_fee ?? 0;
-        
-        if ($monthlyFeeAmount == 0) {
-            return 0;
+        $class = $request->get('class');
+        $campus = $request->get('campus');
+
+        if (!$class) {
+            return response()->json(['sections' => []]);
         }
-        
-        // Get total paid for monthly fee
-        $totalPaid = StudentPayment::where('student_code', $student->student_code)
-            ->where('campus', $student->campus)
-            ->where(function($query) {
-                $query->where('payment_title', 'Monthly Fee')
-                      ->orWhere('payment_title', 'like', '%Monthly%');
-            })
-            ->sum('payment_amount');
-        
-        $unpaid = max(0, $monthlyFeeAmount - $totalPaid);
-        
-        return $unpaid;
+
+        $sectionsQuery = Section::whereNotNull('name')
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        if ($campus) {
+            $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+        $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
+
+        if ($sections->isEmpty()) {
+            $sectionsFromSubjects = Subject::whereNotNull('section')
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            if ($campus) {
+                $sectionsFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $sections = $sectionsFromSubjects->distinct()->pluck('section')->sort()->values();
+        }
+
+        return response()->json(['sections' => $sections]);
     }
-    
+
     /**
-     * Calculate unpaid custom fee for a student by fee name.
+     * Print head wise dues in dedicated print layout.
      */
-    private function calculateCustomFeeUnpaid($student, $feeName): float
+    public function print(Request $request): View|RedirectResponse
     {
-        // Get custom fee amount from CustomFee table
-        $customFee = CustomFee::where('campus', $student->campus)
-            ->where('class', $student->class)
-            ->where('section', $student->section)
-            ->where('fee_type', $feeName)
-            ->first();
-        
-        $customFeeAmount = $customFee ? ($customFee->amount ?? 0) : 0;
-        
-        // If not found in CustomFee, check if there are any payments with this title to determine if fee exists
-        if ($customFeeAmount == 0) {
-            // Check if student has any payments for this fee type (to see if fee was ever assigned)
-            $hasPayment = StudentPayment::where('student_code', $student->student_code)
-                ->where('campus', $student->campus)
-                ->where('payment_title', $feeName)
-                ->exists();
-            
-            if (!$hasPayment) {
-                return 0;
+        $filterCampus = $request->get('filter_campus');
+        $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+        $hasFilters = $request->filled('filter_campus') || $request->filled('filter_class') || $request->filled('filter_section');
+
+        if (!$hasFilters) {
+            return redirect()
+                ->route('reports.head-wise-dues')
+                ->with('error', 'Please apply at least one filter (Campus, Class, or Section) before printing.');
+        }
+
+        $campuses = $this->getCampusesList();
+        $report = $this->buildReportData($campuses, $filterCampus, $filterClass, $filterSection, $hasFilters);
+
+        return view('reports.head-wise-dues-print', [
+            'allCampusData' => $report['allCampusData'],
+            'feeHeads' => $report['feeHeads'],
+            'grandTotal' => $report['grandTotal'],
+            'filterCampus' => $filterCampus,
+            'filterClass' => $filterClass,
+            'filterSection' => $filterSection,
+            'filterDescription' => $this->buildFilterDescription($filterCampus, $filterClass, $filterSection),
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
+    }
+
+    /**
+     * Export head wise dues (csv, excel, pdf).
+     */
+    public function export(Request $request, string $format): RedirectResponse|StreamedResponse|\Illuminate\Http\Response
+    {
+        $format = strtolower(trim($format));
+        if (!in_array($format, ['csv', 'excel', 'pdf'], true)) {
+            abort(404);
+        }
+
+        $filterCampus = $request->get('filter_campus');
+        $filterClass = $request->get('filter_class');
+        $filterSection = $request->get('filter_section');
+        $hasFilters = $request->filled('filter_campus') || $request->filled('filter_class') || $request->filled('filter_section');
+
+        if (!$hasFilters) {
+            return redirect()
+                ->route('reports.head-wise-dues')
+                ->with('error', 'Please apply at least one filter (Campus, Class, or Section) before exporting.');
+        }
+
+        $campuses = $this->getCampusesList();
+        $report = $this->buildReportData($campuses, $filterCampus, $filterClass, $filterSection, $hasFilters);
+        $allCampusData = $report['allCampusData'];
+        $feeHeads = $report['feeHeads'];
+        $grandTotal = $report['grandTotal'];
+        $filterDescription = $this->buildFilterDescription($filterCampus, $filterClass, $filterSection);
+        $filenameDate = now()->format('Y-m-d_H-i');
+
+        if ($format === 'csv') {
+            $headers = [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="head-wise-dues-' . $filenameDate . '.csv"',
+            ];
+
+            $callback = function () use ($allCampusData, $feeHeads, $grandTotal, $filterDescription) {
+                $stream = fopen('php://output', 'w');
+                fprintf($stream, chr(0xEF) . chr(0xBB) . chr(0xBF));
+                fputcsv($stream, ['Filters: ' . $filterDescription]);
+
+                $csvHeaders = ['Campus', 'Class'];
+                foreach ($feeHeads as $head) {
+                    $csvHeaders[] = $head . ' Paid';
+                    $csvHeaders[] = $head . ' Due';
+                }
+                $csvHeaders[] = 'Total Paid';
+                $csvHeaders[] = 'Total Due';
+                fputcsv($stream, $csvHeaders);
+
+                foreach ($allCampusData as $campusData) {
+                    foreach ($campusData['rows'] as $row) {
+                        $line = [
+                            $campusData['campus'],
+                            $row['class'],
+                        ];
+                        foreach ($feeHeads as $head) {
+                            $headData = $row['heads'][$head] ?? ['paid' => 0, 'due' => 0];
+                            $line[] = number_format((float) ($headData['paid'] ?? 0), 2, '.', '');
+                            $line[] = number_format((float) ($headData['due'] ?? 0), 2, '.', '');
+                        }
+                        $line[] = number_format((float) ($row['total_paid'] ?? 0), 2, '.', '');
+                        $line[] = number_format((float) ($row['total'] ?? 0), 2, '.', '');
+                        fputcsv($stream, $line);
+                    }
+                    $summaryPaid = [$campusData['campus'], 'Total Paid'];
+                    $summaryDue = [$campusData['campus'], 'Total Due'];
+                    foreach ($feeHeads as $head) {
+                        $summaryPaid[] = number_format((float) ($campusData['head_paid_totals'][$head] ?? 0), 2, '.', '');
+                        $summaryDue[] = number_format((float) ($campusData['head_totals'][$head] ?? 0), 2, '.', '');
+                    }
+                    $summaryPaid[] = number_format((float) ($campusData['total_paid'] ?? 0), 2, '.', '');
+                    $summaryPaid[] = '';
+                    $summaryDue[] = '';
+                    $summaryDue[] = number_format((float) ($campusData['total'] ?? 0), 2, '.', '');
+                    fputcsv($stream, $summaryPaid);
+                    fputcsv($stream, $summaryDue);
+                }
+
+                if ($allCampusData->count() > 1) {
+                    $grandPaid = ['GRAND TOTAL', 'Total Paid'];
+                    $grandDue = ['GRAND TOTAL', 'Total Due'];
+                    foreach ($feeHeads as $head) {
+                        $grandPaid[] = number_format((float) ($grandTotal['heads_paid'][$head] ?? 0), 2, '.', '');
+                        $grandDue[] = number_format((float) ($grandTotal['heads'][$head] ?? 0), 2, '.', '');
+                    }
+                    $grandPaid[] = number_format((float) ($grandTotal['total_paid'] ?? 0), 2, '.', '');
+                    $grandPaid[] = '';
+                    $grandDue[] = '';
+                    $grandDue[] = number_format((float) ($grandTotal['total'] ?? 0), 2, '.', '');
+                    fputcsv($stream, $grandPaid);
+                    fputcsv($stream, $grandDue);
+                }
+
+                fclose($stream);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        }
+
+        $rows = $this->buildExportRows($allCampusData, $feeHeads, $grandTotal);
+        $html = view('reports.head-wise-dues-export-excel', [
+            'rows' => $rows,
+            'feeHeads' => $feeHeads,
+            'filterDescription' => $filterDescription,
+        ])->render();
+
+        if ($format === 'excel') {
+            return response($html, 200, [
+                'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="head-wise-dues-' . $filenameDate . '.xls"',
+            ]);
+        }
+
+        $settings = GeneralSetting::getSettings();
+        $schoolName = trim((string) ($settings->school_name ?? $settings->system_name ?? config('app.name', 'School Management System')));
+        $schoolEmail = trim((string) ($settings->school_email ?? ''));
+        $schoolAddress = trim((string) ($settings->address ?? ''));
+        $schoolPhone = trim((string) ($settings->school_phone ?? ''));
+
+        $pdf = Pdf::loadView('reports.head-wise-dues-pdf', [
+            'allCampusData' => $allCampusData,
+            'feeHeads' => $feeHeads,
+            'grandTotal' => $grandTotal,
+            'filterDescription' => $filterDescription,
+            'schoolName' => $schoolName,
+            'schoolEmail' => $schoolEmail,
+            'schoolAddress' => $schoolAddress,
+            'schoolPhone' => $schoolPhone,
+            'schoolLogoUrl' => $this->resolveSchoolLogoUrl($settings->logo ?? null),
+            'printedAt' => now()->format('d-m-Y H:i'),
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('head-wise-dues-' . $filenameDate . '.pdf');
+    }
+
+    private function getCampusesList()
+    {
+        $campuses = Campus::orderBy('campus_name', 'asc')->get();
+        if ($campuses->isEmpty()) {
+            $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
+            $campuses = $campusesFromClasses->unique()->sort()->map(function ($campus) {
+                return (object) ['campus_name' => $campus];
+            });
+        }
+
+        return $campuses;
+    }
+
+    private function buildReportData($campuses, ?string $filterCampus, ?string $filterClass, ?string $filterSection, bool $hasFilters): array
+    {
+        $allCampusData = collect();
+        $feeHeads = collect();
+        $grandTotal = [
+            'heads' => [],
+            'heads_paid' => [],
+            'total' => 0,
+            'total_paid' => 0,
+        ];
+
+        if (!$hasFilters) {
+            return compact('allCampusData', 'feeHeads', 'grandTotal');
+        }
+
+        $campusesToProcess = $campuses;
+        if ($filterCampus) {
+            $campusesToProcess = collect([(object) ['campus_name' => trim((string) $filterCampus)]]);
+        }
+
+        $feeHeads = collect();
+        foreach ($campusesToProcess as $campus) {
+            $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+            if ($campusName !== '') {
+                $feeHeads = $feeHeads->merge($this->buildFeeHeads((string) $campusName));
             }
         }
-        
-        // Get total paid for this custom fee
-        $totalPaid = StudentPayment::where('student_code', $student->student_code)
-            ->where('campus', $student->campus)
-            ->where('payment_title', $feeName)
-            ->sum('payment_amount');
-        
-        $unpaid = max(0, $customFeeAmount - $totalPaid);
-        
-        return $unpaid;
+        $feeHeads = $feeHeads
+            ->unique(fn ($head) => strtolower(trim((string) $head)))
+            ->values();
+
+        foreach ($campusesToProcess as $campus) {
+            $campusName = is_object($campus) ? ($campus->campus_name ?? '') : $campus;
+            if (empty($campusName)) {
+                continue;
+            }
+
+            $classes = ClassModel::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))])
+                ->whereNotNull('class_name')
+                ->distinct()
+                ->pluck('class_name')
+                ->sort()
+                ->values();
+
+            if ($classes->isEmpty()) {
+                $classes = Student::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))])
+                    ->whereNotNull('class')
+                    ->distinct()
+                    ->pluck('class')
+                    ->sort()
+                    ->values();
+            }
+
+            if ($filterClass) {
+                $classes = $classes->filter(function ($className) use ($filterClass) {
+                    return strtolower(trim($className)) === strtolower(trim($filterClass));
+                })->values();
+            }
+
+            $campusFeeHeads = $this->buildFeeHeads($campusName);
+            if ($campusFeeHeads->isEmpty()) {
+                continue;
+            }
+
+            $headWiseData = collect();
+            $campusHeadTotals = [];
+            $campusHeadPaidTotals = [];
+            foreach ($campusFeeHeads as $head) {
+                $campusHeadTotals[$head] = 0;
+                $campusHeadPaidTotals[$head] = 0;
+            }
+            $campusTotalDue = 0;
+            $campusTotalPaid = 0;
+
+            foreach ($classes as $className) {
+                $students = Student::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $className))])
+                    ->when($filterSection, function ($query) use ($filterSection) {
+                        $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $filterSection))]);
+                    })
+                    ->get();
+
+                $classHeadTotals = [];
+                $classHeadPaidTotals = [];
+                foreach ($campusFeeHeads as $head) {
+                    $classHeadTotals[$head] = 0;
+                    $classHeadPaidTotals[$head] = 0;
+                }
+
+                foreach ($students as $student) {
+                    $headAmounts = $this->calculateStudentHeadAmounts($student, $campusFeeHeads);
+
+                    foreach ($campusFeeHeads as $head) {
+                        $classHeadTotals[$head] += $headAmounts[$head]['due'] ?? 0;
+                        $classHeadPaidTotals[$head] += $headAmounts[$head]['paid'] ?? 0;
+                    }
+                }
+
+                $classTotalDue = collect($classHeadTotals)->sum();
+                $classTotalPaid = collect($classHeadPaidTotals)->sum();
+
+                foreach ($campusFeeHeads as $head) {
+                    $campusHeadTotals[$head] += $classHeadTotals[$head];
+                    $campusHeadPaidTotals[$head] += $classHeadPaidTotals[$head];
+                }
+                $campusTotalDue += $classTotalDue;
+                $campusTotalPaid += $classTotalPaid;
+
+                $classHeads = [];
+                foreach ($campusFeeHeads as $head) {
+                    $classHeads[$head] = [
+                        'paid' => $classHeadPaidTotals[$head],
+                        'due' => $classHeadTotals[$head],
+                    ];
+                }
+
+                $headWiseData->push([
+                    'class' => $className,
+                    'heads' => $classHeads,
+                    'total_paid' => $classTotalPaid,
+                    'total' => $classTotalDue,
+                ]);
+            }
+
+            foreach ($campusFeeHeads as $head) {
+                $grandTotal['heads'][$head] = ($grandTotal['heads'][$head] ?? 0) + ($campusHeadTotals[$head] ?? 0);
+                $grandTotal['heads_paid'][$head] = ($grandTotal['heads_paid'][$head] ?? 0) + ($campusHeadPaidTotals[$head] ?? 0);
+            }
+            $grandTotal['total'] += $campusTotalDue;
+            $grandTotal['total_paid'] += $campusTotalPaid;
+
+            if ($headWiseData->count() > 0) {
+                $allCampusData->push([
+                    'campus' => $campusName,
+                    'fee_heads' => $campusFeeHeads,
+                    'rows' => $headWiseData,
+                    'head_totals' => $campusHeadTotals,
+                    'head_paid_totals' => $campusHeadPaidTotals,
+                    'total_paid' => $campusTotalPaid,
+                    'total' => $campusTotalDue,
+                ]);
+            }
+        }
+
+        return compact('allCampusData', 'feeHeads', 'grandTotal');
     }
-    
+
     /**
-     * Calculate unpaid card fees for a student.
+     * Columns only from Fee Type / Fee Head module for the selected campus (strict — no global/auto heads).
      */
-    private function calculateCardFeesUnpaid($student): float
+    private function buildFeeHeads(?string $campus): \Illuminate\Support\Collection
     {
-        // Get card fee amount from student's other_fee_amount when fee_type is Card Fee
-        $cardFeeAmount = 0;
-        if (isset($student->fee_type) && 
-            (strtolower($student->fee_type) == 'card fee' || strtolower($student->fee_type) == 'card')) {
-            $cardFeeAmount = $student->other_fee_amount ?? 0;
+        $campus = trim((string) ($campus ?? ''));
+        if ($campus === '') {
+            return collect();
         }
-        
-        // Also check CustomFee table
-        if ($cardFeeAmount == 0) {
-            $cardFee = CustomFee::where('campus', $student->campus)
-                ->where('class', $student->class)
-                ->where('section', $student->section)
-                ->where(function($query) {
-                    $query->where('fee_type', 'Card Fee')
-                          ->orWhere('fee_type', 'Card Fees')
-                          ->orWhere('fee_type', 'like', '%Card%');
-                })
-                ->first();
-            
-            $cardFeeAmount = $cardFee ? ($cardFee->amount ?? 0) : 0;
+
+        return FeeType::query()
+            ->whereNotNull('fee_name')
+            ->whereRaw('TRIM(fee_name) != ?', [''])
+            ->whereNotNull('campus')
+            ->whereRaw('TRIM(campus) != ?', [''])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)])
+            ->orderBy('fee_name')
+            ->pluck('fee_name')
+            ->map(fn ($name) => $this->normalizeFeeHead((string) $name))
+            ->filter(fn ($name) => $name !== '')
+            ->unique(fn ($name) => strtolower($name))
+            ->values();
+    }
+
+    /**
+     * Paid / due per fee head — same ledger math as Fee Payment (outstanding + fully paid titles).
+     *
+     * @return array<string, array{paid: float, due: float}>
+     */
+    private function calculateStudentHeadAmounts(Student $student, \Illuminate\Support\Collection $feeHeads): array
+    {
+        $result = [];
+        foreach ($feeHeads as $head) {
+            $result[$head] = ['paid' => 0.0, 'due' => 0.0];
         }
-        
-        if ($cardFeeAmount == 0) {
-            return 0;
+
+        if (empty($student->student_code)) {
+            return $result;
         }
-        
-        // Get total paid for card fees
-        $totalPaid = StudentPayment::where('student_code', $student->student_code)
-            ->where('campus', $student->campus)
-            ->where(function($query) {
-                $query->where('payment_title', 'Card Fee')
-                      ->orWhere('payment_title', 'Card Fees')
-                      ->orWhere('payment_title', 'like', '%Card%');
-            })
-            ->sum('payment_amount');
-        
-        $unpaid = max(0, $cardFeeAmount - $totalPaid);
-        
-        return $unpaid;
+
+        $split = FeePaymentWebTables::feeResultsSplitForStudent($student);
+        $rows = array_merge(
+            $split['outstanding']['rows'] ?? [],
+            $split['paid']['rows'] ?? []
+        );
+
+        foreach ($rows as $row) {
+            $title = (string) ($row['fee_type'] ?? '');
+            $head = $this->resolveFeeHeadForTitle($title, $feeHeads);
+            if ($head === null) {
+                continue;
+            }
+
+            $result[$head]['paid'] += (float) ($row['cash_paid'] ?? 0);
+            $result[$head]['due'] += (float) ($row['due'] ?? 0);
+        }
+
+        foreach ($feeHeads as $head) {
+            $result[$head]['paid'] = round($result[$head]['paid'] ?? 0, 2);
+            $result[$head]['due'] = round($result[$head]['due'] ?? 0, 2);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Map ledger title to a fee head column only when that head exists in Fee Type / Fee Head for the campus.
+     */
+    private function resolveFeeHeadForTitle(string $paymentTitle, \Illuminate\Support\Collection $feeHeads): ?string
+    {
+        $normalized = $this->normalizeFeeHead($paymentTitle);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $normalizedKey = strtolower($normalized);
+
+        foreach ($feeHeads as $head) {
+            if (strtolower(trim((string) $head)) === $normalizedKey) {
+                return (string) $head;
+            }
+        }
+
+        $best = null;
+        $bestLen = 0;
+        foreach ($feeHeads as $head) {
+            $headKey = strtolower(trim((string) $head));
+            if ($headKey === '' || ! str_starts_with($normalizedKey, $headKey)) {
+                continue;
+            }
+            if (strlen($headKey) > $bestLen) {
+                $best = (string) $head;
+                $bestLen = strlen($headKey);
+            }
+        }
+
+        return $best;
+    }
+
+    private function normalizeFeeHead(string $paymentTitle): string
+    {
+        $title = trim($paymentTitle);
+        if ($title === '') {
+            return '';
+        }
+
+        if (preg_match('/^(.+)\/\d+$/', $title, $matches)) {
+            $title = trim((string) $matches[1]);
+        }
+
+        $parts = preg_split('/\s+-\s+/u', $title, 2);
+
+        return trim((string) ($parts[0] ?? $title));
+    }
+
+    private function buildExportRows($allCampusData, $feeHeads, array $grandTotal): \Illuminate\Support\Collection
+    {
+        $rows = collect();
+
+        foreach ($allCampusData as $campusData) {
+            foreach ($campusData['rows'] as $row) {
+                $line = [
+                    'Campus' => $campusData['campus'],
+                    'Class' => $row['class'],
+                ];
+                foreach ($feeHeads as $head) {
+                    $headData = $row['heads'][$head] ?? ['paid' => 0, 'due' => 0];
+                    $line[$head . ' Paid'] = number_format((float) ($headData['paid'] ?? 0), 2);
+                    $line[$head . ' Due'] = number_format((float) ($headData['due'] ?? 0), 2);
+                }
+                $line['Total Paid'] = number_format((float) ($row['total_paid'] ?? 0), 2);
+                $line['Total Due'] = number_format((float) ($row['total'] ?? 0), 2);
+                $rows->push($line);
+            }
+
+            $summaryPaid = [
+                'Campus' => $campusData['campus'],
+                'Class' => 'Total Paid',
+            ];
+            $summaryDue = [
+                'Campus' => $campusData['campus'],
+                'Class' => 'Total Due',
+            ];
+            foreach ($feeHeads as $head) {
+                $summaryPaid[$head . ' Paid'] = number_format((float) ($campusData['head_paid_totals'][$head] ?? 0), 2);
+                $summaryPaid[$head . ' Due'] = '';
+                $summaryDue[$head . ' Paid'] = '';
+                $summaryDue[$head . ' Due'] = number_format((float) ($campusData['head_totals'][$head] ?? 0), 2);
+            }
+            $summaryPaid['Total Paid'] = number_format((float) ($campusData['total_paid'] ?? 0), 2);
+            $summaryPaid['Total Due'] = '';
+            $summaryDue['Total Paid'] = '';
+            $summaryDue['Total Due'] = number_format((float) ($campusData['total'] ?? 0), 2);
+            $rows->push($summaryPaid);
+            $rows->push($summaryDue);
+        }
+
+        if ($allCampusData->count() > 1) {
+            $grandPaid = [
+                'Campus' => 'GRAND TOTAL',
+                'Class' => 'Total Paid',
+            ];
+            $grandDue = [
+                'Campus' => 'GRAND TOTAL',
+                'Class' => 'Total Due',
+            ];
+            foreach ($feeHeads as $head) {
+                $grandPaid[$head . ' Paid'] = number_format((float) ($grandTotal['heads_paid'][$head] ?? 0), 2);
+                $grandPaid[$head . ' Due'] = '';
+                $grandDue[$head . ' Paid'] = '';
+                $grandDue[$head . ' Due'] = number_format((float) ($grandTotal['heads'][$head] ?? 0), 2);
+            }
+            $grandPaid['Total Paid'] = number_format((float) ($grandTotal['total_paid'] ?? 0), 2);
+            $grandPaid['Total Due'] = '';
+            $grandDue['Total Paid'] = '';
+            $grandDue['Total Due'] = number_format((float) ($grandTotal['total'] ?? 0), 2);
+            $rows->push($grandPaid);
+            $rows->push($grandDue);
+        }
+
+        return $rows;
+    }
+
+    private function buildFilterDescription(?string $filterCampus, ?string $filterClass, ?string $filterSection): string
+    {
+        $parts = [];
+        if ($filterCampus) {
+            $parts[] = 'Campus: ' . $filterCampus;
+        }
+        if ($filterClass) {
+            $parts[] = 'Class: ' . $filterClass;
+        }
+        if ($filterSection) {
+            $parts[] = 'Section: ' . $filterSection;
+        }
+
+        return $parts !== [] ? implode(' | ', $parts) : 'All';
+    }
+
+    private function resolveSchoolLogoUrl(?string $logoPath): ?string
+    {
+        $logoPath = trim((string) $logoPath);
+        if ($logoPath === '') {
+            return null;
+        }
+
+        if (str_starts_with($logoPath, 'http://') || str_starts_with($logoPath, 'https://')) {
+            return $logoPath;
+        }
+
+        if (str_starts_with($logoPath, 'storage/')) {
+            return asset($logoPath);
+        }
+
+        return asset('storage/' . ltrim($logoPath, '/'));
     }
 }

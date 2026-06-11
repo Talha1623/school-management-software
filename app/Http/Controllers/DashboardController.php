@@ -11,6 +11,8 @@ use App\Models\StaffAttendance;
 use App\Models\StudentAttendance;
 use App\Models\Campus;
 use App\Models\Task;
+use App\Models\GeneralSetting;
+use App\Models\PlatformSchool;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -335,7 +337,7 @@ class DashboardController extends Controller
         
         // Calculate Student Limit (Current Active Students / Max Limit)
         $currentActiveStudents = $activeStudentsCount; // Already calculated above
-        $maxStudentLimit = 300; // Default limit, can be made configurable
+        $maxStudentLimit = $this->resolveStudentLimit();
         $studentLimitDisplay = $currentActiveStudents . ' / ' . $maxStudentLimit;
         
         // Calculate Max Campuses (Count unique campuses)
@@ -355,6 +357,63 @@ class DashboardController extends Controller
         $latestTasks = Task::orderBy('created_at', 'desc')
             ->limit(6)
             ->get(['id', 'task_title', 'status', 'created_at']);
+
+        // Top cards: dynamic values for annual summary and session.
+        $startOfYear = Carbon::now()->startOfYear();
+        $endOfYear = Carbon::now()->endOfYear();
+        $yearlyIncome = StudentPayment::whereBetween('payment_date', [$startOfYear, $endOfYear])
+            ->where('method', '!=', 'Generated')
+            ->sum('payment_amount');
+        $yearlyExpense = ManagementExpense::whereBetween('date', [$startOfYear, $endOfYear])
+            ->sum('amount');
+        $yearlyProfit = $yearlyIncome - $yearlyExpense;
+        $settings = GeneralSetting::getSettings();
+        $currentSession = $settings->running_session ?: date('Y') . '-' . (date('Y') + 1);
+        $daysLeft = max(0, Carbon::today()->diffInDays(Carbon::now()->endOfMonth(), false));
+
+        // Dynamic highlights shown on left award cards.
+        $monthStart = Carbon::now()->startOfMonth();
+        $monthEnd = Carbon::now()->endOfMonth();
+
+        $studentMonthlyTop = StudentAttendance::selectRaw('student_id, COUNT(*) as present_count')
+            ->whereBetween('attendance_date', [$monthStart, $monthEnd])
+            ->where('status', 'Present')
+            ->groupBy('student_id')
+            ->orderByDesc('present_count')
+            ->with('student')
+            ->first();
+
+        $staffMonthlyTop = StaffAttendance::selectRaw('staff_id, COUNT(*) as present_count')
+            ->whereBetween('attendance_date', [$monthStart, $monthEnd])
+            ->where('status', 'Present')
+            ->groupBy('staff_id')
+            ->orderByDesc('present_count')
+            ->with('staff')
+            ->first();
+
+        $studentWithHighestDue = null;
+        $highestDueAmount = 0;
+        foreach ($students as $student) {
+            $totalPaid = StudentPayment::where('student_code', $student->student_code)
+                ->where('method', '!=', 'Generated')
+                ->sum('payment_amount');
+            $monthlyFee = (float) ($student->monthly_fee ?? 0);
+            $due = max(0, $monthlyFee - $totalPaid);
+            if ($due > $highestDueAmount) {
+                $highestDueAmount = $due;
+                $studentWithHighestDue = $student;
+            }
+        }
+
+        // Lightweight "best performance" metric: teacher with highest monthly present attendance.
+        $bestTeacherPerformance = $staffMonthlyTop;
+
+        $admissionsOverviewSeries = [
+            (int) ($activeStudentsCount ?? 0),
+            (int) ($totalAdmissionsThisMonth ?? 0),
+            (int) ($latestAdmissions->where('created_at', '>=', Carbon::today()->startOfDay())->count()),
+            (int) max(0, $activeStudentsCount - ($presentStudentsToday ?? 0)),
+        ];
         
         return view('dashboards.index', compact(
             'unpaidInvoicesCount',
@@ -401,8 +460,48 @@ class DashboardController extends Controller
             'monthlyLabels',
             'studentLimitDisplay',
             'maxCampuses',
-            'latestTasks'
+            'latestTasks',
+            'yearlyIncome',
+            'yearlyExpense',
+            'yearlyProfit',
+            'currentSession',
+            'daysLeft',
+            'studentMonthlyTop',
+            'staffMonthlyTop',
+            'studentWithHighestDue',
+            'highestDueAmount',
+            'bestTeacherPerformance',
+            'admissionsOverviewSeries'
         ));
+    }
+
+    private function resolveStudentLimit(): int
+    {
+        try {
+            $host = strtolower(trim((string) request()->getHost()));
+            if ($host === '') {
+                return 300;
+            }
+
+            $normalizedHost = str_starts_with($host, 'www.') ? substr($host, 4) : $host;
+            $subdomain = strtok($normalizedHost, '.') ?: $normalizedHost;
+
+            $school = PlatformSchool::on('landlord')
+                ->where(function ($query) use ($host, $normalizedHost, $subdomain) {
+                    $query->whereRaw('LOWER(domain) = ?', [$host])
+                        ->orWhereRaw('LOWER(domain) = ?', [$normalizedHost])
+                        ->orWhereRaw('LOWER(subdomain) = ?', [strtolower($subdomain)]);
+                })
+                ->first();
+
+            if ($school && !empty($school->student_limit)) {
+                return max(1, (int) $school->student_limit);
+            }
+        } catch (\Throwable $e) {
+            // Fallback to default if landlord lookup is unavailable.
+        }
+
+        return 300;
     }
 
     public function crm()

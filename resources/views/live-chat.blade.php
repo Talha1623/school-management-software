@@ -17,8 +17,52 @@
                 <!-- Chat List Sidebar -->
                 <div class="col-md-4 border-end">
                     <div class="d-flex align-items-center justify-content-between mb-3">
-                        <h5 class="mb-0 fs-16 fw-semibold">Teachers</h5>
+                        <h5 class="mb-0 fs-16 fw-semibold">Recipients</h5>
                     </div>
+
+                    <form method="GET" action="{{ route('live-chat') }}" class="mb-3">
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <select class="form-select form-select-sm" name="campus">
+                                    <option value="">All Campuses</option>
+                                    @foreach($campuses as $campusItem)
+                                        @php $campusName = $campusItem->campus_name ?? ''; @endphp
+                                        <option value="{{ $campusName }}" {{ ($selectedCampus ?? '') === $campusName ? 'selected' : '' }}>
+                                            {{ $campusName }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <select class="form-select form-select-sm" name="class">
+                                    <option value="">All Classes</option>
+                                    @foreach($classes as $className)
+                                        <option value="{{ $className }}" {{ ($selectedClass ?? '') === $className ? 'selected' : '' }}>
+                                            {{ $className }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <select class="form-select form-select-sm" name="section">
+                                    <option value="">All Sections</option>
+                                    @foreach($sections as $sectionName)
+                                        <option value="{{ $sectionName }}" {{ ($selectedSection ?? '') === $sectionName ? 'selected' : '' }}>
+                                            {{ $sectionName }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            @if(isset($selectedType) && !empty($selectedType) && isset($selectedRecipient) && $selectedRecipient)
+                                <input type="hidden" name="recipient_type" value="{{ $selectedType }}">
+                                <input type="hidden" name="recipient_id" value="{{ $selectedRecipient->id }}">
+                            @endif
+                            <div class="col-12 d-flex gap-2">
+                                <button type="submit" class="btn btn-sm btn-primary w-100">Apply</button>
+                                <a href="{{ route('live-chat') }}" class="btn btn-sm btn-outline-secondary w-100">Reset</a>
+                            </div>
+                        </div>
+                    </form>
                     
                     <!-- Search Box -->
                     <div class="mb-3">
@@ -26,17 +70,17 @@
                             <span class="input-group-text bg-light border-end-0">
                                 <span class="material-symbols-outlined" style="font-size: 16px;">search</span>
                             </span>
-                            <input type="text" class="form-control border-start-0" placeholder="Search teachers..." id="teacher-search-input" oninput="filterTeachers()">
+                            <input type="text" class="form-control border-start-0" placeholder="Search recipients..." id="teacher-search-input" oninput="filterTeachers()">
                         </div>
                     </div>
 
                     <!-- Chat List -->
                     <div class="chat-list" style="max-height: 600px; overflow-y: auto;" id="teacher-list">
-                        @forelse($teachers as $t)
+                        @foreach($teachers as $t)
                             @php
-                                $isActive = isset($selectedTeacher) && $selectedTeacher && $selectedTeacher->id === $t->id;
+                                $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'teacher' && $selectedRecipient->id === $t->id;
                             @endphp
-                            <a href="{{ route('live-chat', ['teacher_id' => $t->id]) }}"
+                            <a href="{{ route('live-chat', ['recipient_type' => 'teacher', 'recipient_id' => $t->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
                                class="text-decoration-none text-dark">
                                 <div class="chat-item p-3 border-bottom cursor-pointer {{ $isActive ? 'bg-light' : '' }}"
                                      data-teacher-name="{{ strtolower($t->name) }}"
@@ -58,11 +102,91 @@
                                     </div>
                                 </div>
                             </a>
-                        @empty
-                            <div class="p-3 text-muted">
-                                No teachers found.
-                            </div>
-                        @endforelse
+                        @endforeach
+                        @foreach($accountants as $a)
+                            @php
+                                $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'accountant' && $selectedRecipient->id === $a->id;
+                            @endphp
+                            <a href="{{ route('live-chat', ['recipient_type' => 'accountant', 'recipient_id' => $a->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
+                               class="text-decoration-none text-dark">
+                                <div class="chat-item p-3 border-bottom cursor-pointer {{ $isActive ? 'bg-light' : '' }}"
+                                     data-teacher-name="{{ strtolower($a->name ?? '') }}"
+                                     style="transition: background-color 0.2s;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="flex-shrink-0 me-3">
+                                            <div class="rounded-circle bg-dark d-flex align-items-center justify-content-center text-white" style="width: 45px; height: 45px;">
+                                                <span class="material-symbols-outlined">badge</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                                <h6 class="mb-0 fs-14 fw-semibold">{{ $a->name ?? 'Accountant' }}</h6>
+                                            </div>
+                                            <p class="mb-0 text-muted fs-12" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                Accountant @if($a->campus) - {{ $a->campus }} @endif
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        @endforeach
+                        @foreach($students as $s)
+                            @php
+                                $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'student' && $selectedRecipient->id === $s->id;
+                            @endphp
+                            <a href="{{ route('live-chat', ['recipient_type' => 'student', 'recipient_id' => $s->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
+                               class="text-decoration-none text-dark">
+                                <div class="chat-item p-3 border-bottom cursor-pointer {{ $isActive ? 'bg-light' : '' }}"
+                                     data-teacher-name="{{ strtolower($s->student_name ?? '') }}"
+                                     style="transition: background-color 0.2s;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="flex-shrink-0 me-3">
+                                            <div class="rounded-circle bg-success d-flex align-items-center justify-content-center text-white" style="width: 45px; height: 45px;">
+                                                <span class="material-symbols-outlined">school</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                                <h6 class="mb-0 fs-14 fw-semibold">{{ $s->student_name ?? 'Student' }}</h6>
+                                            </div>
+                                            <p class="mb-0 text-muted fs-12" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                Student @if($s->student_code) - {{ $s->student_code }} @endif
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        @endforeach
+                        @foreach($parents as $p)
+                            @php
+                                $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'parent' && $selectedRecipient->id === $p->id;
+                            @endphp
+                            <a href="{{ route('live-chat', ['recipient_type' => 'parent', 'recipient_id' => $p->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
+                               class="text-decoration-none text-dark">
+                                <div class="chat-item p-3 border-bottom cursor-pointer {{ $isActive ? 'bg-light' : '' }}"
+                                     data-teacher-name="{{ strtolower($p->name ?? '') }}"
+                                     style="transition: background-color 0.2s;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="flex-shrink-0 me-3">
+                                            <div class="rounded-circle bg-warning d-flex align-items-center justify-content-center text-white" style="width: 45px; height: 45px;">
+                                                <span class="material-symbols-outlined">family_restroom</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                                <h6 class="mb-0 fs-14 fw-semibold">{{ $p->name ?? 'Parent' }}</h6>
+                                            </div>
+                                            <p class="mb-0 text-muted fs-12" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                Parent @if($p->id_card_number) - {{ $p->id_card_number }} @endif
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        @endforeach
+                        @if($teachers->isEmpty() && $accountants->isEmpty() && $students->isEmpty() && $parents->isEmpty())
+                            <div class="p-3 text-muted">No recipients found.</div>
+                        @endif
                     </div>
                 </div>
 
@@ -76,11 +200,23 @@
                                     <span class="material-symbols-outlined">person</span>
                                 </div>
                                 <div>
-                                    @if(isset($selectedTeacher) && $selectedTeacher)
-                                        <h6 class="mb-0 fs-15 fw-semibold">{{ $selectedTeacher->name }}</h6>
-                                        <small class="text-muted fs-12">{{ $selectedTeacher->designation ?? 'Teacher' }}</small>
+                                    @if(isset($selectedRecipient) && $selectedRecipient)
+                                        <h6 class="mb-0 fs-15 fw-semibold">
+                                            {{ ($selectedType ?? '') === 'student' ? ($selectedRecipient->student_name ?? 'Student') : ($selectedRecipient->name ?? 'Recipient') }}
+                                        </h6>
+                                        <small class="text-muted fs-12">
+                                            @if(($selectedType ?? '') === 'teacher')
+                                                {{ $selectedRecipient->designation ?? 'Teacher' }}
+                                            @elseif(($selectedType ?? '') === 'accountant')
+                                                Accountant
+                                            @elseif(($selectedType ?? '') === 'student')
+                                                Student
+                                            @else
+                                                Parent
+                                            @endif
+                                        </small>
                                     @else
-                                        <h6 class="mb-0 fs-15 fw-semibold">Select a Teacher</h6>
+                                        <h6 class="mb-0 fs-15 fw-semibold">Select a Recipient</h6>
                                         <small class="text-muted fs-12">From the left list to start chat</small>
                                     @endif
                                 </div>
@@ -88,8 +224,8 @@
                         </div>
 
                         <!-- Messages Area -->
-                        <div class="flex-grow-1 p-3" style="overflow-y: auto; background-color: #f8f9fa;">
-                            @if(isset($selectedTeacher) && $selectedTeacher)
+                        <div class="flex-grow-1 p-3" style="overflow-y: auto; background-color: #f8f9fa;" id="chat-messages-area">
+                            @if(isset($selectedRecipient) && $selectedRecipient)
                                 @forelse($messages as $msg)
                                     @php
                                         $isAdmin = $msg['from_type'] === 'admin';
@@ -150,9 +286,14 @@
 
                         <!-- Message Input -->
                         <div class="p-3 border-top">
-                            @if(isset($selectedTeacher) && $selectedTeacher)
-                                <form action="{{ route('live-chat.send-teacher', $selectedTeacher->id) }}" method="POST" enctype="multipart/form-data" id="admin-chat-form">
+                            @if(isset($selectedRecipient) && $selectedRecipient)
+                                <form action="{{ route('live-chat.send') }}" method="POST" enctype="multipart/form-data" id="admin-chat-form">
                                     @csrf
+                                    <input type="hidden" name="recipient_type" value="{{ $selectedType }}">
+                                    <input type="hidden" name="recipient_id" value="{{ $selectedRecipient->id }}">
+                                    <input type="hidden" name="campus" value="{{ $selectedCampus ?? '' }}">
+                                    <input type="hidden" name="class" value="{{ $selectedClass ?? '' }}">
+                                    <input type="hidden" name="section" value="{{ $selectedSection ?? '' }}">
                                     <div id="admin-file-name-display" class="mb-2 text-muted fs-12" style="display: none;"></div>
                                     <div class="d-flex align-items-center gap-2">
                                         <label class="btn btn-sm btn-outline-secondary mb-0" for="admin-attachment-input" style="cursor: pointer;">
@@ -164,10 +305,13 @@
                                             <span class="material-symbols-outlined" style="font-size: 20px;">send</span>
                                         </button>
                                     </div>
+                                    <div class="mt-2">
+                                        <div class="alert alert-danger py-2 px-3 mb-0 d-none" id="admin-chat-error" role="alert"></div>
+                                    </div>
                                 </form>
                             @else
                                 <div class="text-muted fs-13">
-                                    Please select a teacher to enable message sending.
+                                    Please select a recipient to enable message sending.
                                 </div>
                             @endif
                         </div>
@@ -207,6 +351,10 @@ function filterTeachers() {
 document.addEventListener('DOMContentLoaded', function() {
     const adminFileInput = document.getElementById('admin-attachment-input');
     const adminFileNameDisplay = document.getElementById('admin-file-name-display');
+    const adminChatForm = document.getElementById('admin-chat-form');
+    const adminMessageText = document.getElementById('admin-message-text');
+    const messagesArea = document.getElementById('chat-messages-area');
+    const errorBox = document.getElementById('admin-chat-error');
 
     if (adminFileInput && adminFileNameDisplay) {
         adminFileInput.addEventListener('change', function(e) {
@@ -230,18 +378,124 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // Auto scroll to bottom on page load
-    const messagesArea = document.querySelector('.flex-grow-1.p-3');
     if (messagesArea) {
         messagesArea.scrollTop = messagesArea.scrollHeight;
     }
 
-    // Success/Error messages
-    @if(session('success'))
-        alert('{{ session('success') }}');
-    @endif
-    @if(session('error'))
-        alert('{{ session('error') }}');
-    @endif
+    function showError(msg) {
+        if (!errorBox) return;
+        errorBox.textContent = msg || 'Something went wrong.';
+        errorBox.classList.remove('d-none');
+    }
+
+    function clearError() {
+        if (!errorBox) return;
+        errorBox.textContent = '';
+        errorBox.classList.add('d-none');
+    }
+
+    function escapeHtml(unsafe) {
+        const div = document.createElement('div');
+        div.textContent = unsafe ?? '';
+        return div.innerHTML;
+    }
+
+    function renderAttachmentHtml(attachmentUrl, attachmentType, isAdmin) {
+        if (!attachmentUrl) return '';
+        if (attachmentType === 'image') {
+            return `
+                <div class="mt-2">
+                    <a href="${attachmentUrl}" download class="d-inline-block text-decoration-none">
+                        <img src="${attachmentUrl}" alt="Attachment" class="img-thumbnail" style="max-width: 150px; max-height: 150px; width: auto; height: auto; border-radius: 8px; cursor: pointer; object-fit: contain; display: block;">
+                        <small class="text-muted d-block mt-1" style="font-size: 10px;">Click to download</small>
+                    </a>
+                </div>
+            `;
+        }
+        const cls = isAdmin ? 'text-white' : 'text-primary';
+        const icon = attachmentType === 'pdf' ? 'picture_as_pdf' : 'attach_file';
+        const label = attachmentType === 'pdf' ? 'PDF Attachment - Click to download' : 'Document Attachment - Click to download';
+        return `
+            <div class="mt-2">
+                <a href="${attachmentUrl}" download class="text-decoration-none d-inline-flex align-items-center gap-1 ${cls}" style="cursor: pointer;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">${icon}</span>
+                    <span>${label}</span>
+                </a>
+            </div>
+        `;
+    }
+
+    function appendAdminMessage(payload) {
+        if (!messagesArea) return;
+
+        const textHtml = payload.text ? `<p class="mb-1 fs-14">${escapeHtml(payload.text)}</p>` : '';
+        const attachmentHtml = renderAttachmentHtml(payload.attachment_url, payload.attachment_type, true);
+        const createdAt = escapeHtml(payload.created_at || '');
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mb-3 d-flex justify-content-end';
+        wrapper.innerHTML = `
+            <div class="d-flex align-items-start justify-content-end">
+                <div class="flex-grow-1 d-flex justify-content-end">
+                    <div class="bg-primary text-white rounded-3 p-3 shadow-sm" style="max-width: 70%;">
+                        ${textHtml}
+                        ${attachmentHtml}
+                        <small class="text-white-50 fs-11 d-block mt-1">${createdAt}</small>
+                    </div>
+                </div>
+                <div class="rounded-circle bg-success d-flex align-items-center justify-content-center text-white ms-2" style="width: 32px; height: 32px; flex-shrink: 0;">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">person</span>
+                </div>
+            </div>
+        `;
+
+        // If there was "no messages" placeholder, remove it
+        const emptyPlaceholder = messagesArea.querySelector('.h-100.d-flex.align-items-center.justify-content-center');
+        if (emptyPlaceholder) emptyPlaceholder.remove();
+
+        messagesArea.appendChild(wrapper);
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+    }
+
+    if (adminChatForm) {
+        adminChatForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            clearError();
+
+            const formData = new FormData(adminChatForm);
+
+            const submitBtn = adminChatForm.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+
+            try {
+                const res = await fetch(adminChatForm.action, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: formData,
+                });
+
+                const json = await res.json().catch(() => null);
+                if (!res.ok || !json || json.success !== true) {
+                    const msg = json?.message || 'Failed to send message.';
+                    showError(msg);
+                    return;
+                }
+
+                appendAdminMessage(json.data || {});
+
+                if (adminMessageText) adminMessageText.value = '';
+                if (adminFileInput) adminFileInput.value = '';
+                if (adminFileNameDisplay) adminFileNameDisplay.style.display = 'none';
+            } catch (err) {
+                showError('Network error. Please try again.');
+            } finally {
+                if (submitBtn) submitBtn.disabled = false;
+            }
+        });
+    }
 });
 </script>
 @endsection

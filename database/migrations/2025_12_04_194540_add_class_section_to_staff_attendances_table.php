@@ -11,9 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('staff_attendances')) {
+            return;
+        }
+
         Schema::table('staff_attendances', function (Blueprint $table) {
-            $table->string('class')->nullable()->after('designation');
-            $table->string('section')->nullable()->after('class');
+            if (!Schema::hasColumn('staff_attendances', 'class')) {
+                $table->string('class')->nullable()->after('designation');
+            }
+
+            if (!Schema::hasColumn('staff_attendances', 'section')) {
+                $table->string('section')->nullable()->after('class');
+            }
         });
     }
 
@@ -22,8 +31,18 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (!Schema::hasTable('staff_attendances')) {
+            return;
+        }
+
         Schema::table('staff_attendances', function (Blueprint $table) {
-            $table->dropColumn(['class', 'section']);
+            if (Schema::hasColumn('staff_attendances', 'section')) {
+                $table->dropColumn('section');
+            }
+
+            if (Schema::hasColumn('staff_attendances', 'class')) {
+                $table->dropColumn('class');
+            }
         });
     }
 };

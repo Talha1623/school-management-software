@@ -273,6 +273,8 @@ class StaffManagementController extends Controller
         }
         // Password will be hashed automatically by Staff model's setPasswordAttribute mutator
 
+        $validated['birthday'] = !empty($validated['birthday']) ? $validated['birthday'] : null;
+
         // Handle file uploads
         if ($request->hasFile('photo')) {
             $validated['photo'] = $request->file('photo')->store('staff/photos', 'public');
@@ -365,6 +367,8 @@ class StaffManagementController extends Controller
             unset($validated['password']);
         }
         // Password will be hashed automatically by Staff model's setPasswordAttribute mutator if provided
+
+        $validated['birthday'] = !empty($validated['birthday']) ? $validated['birthday'] : null;
 
         // Handle file uploads
         if ($request->hasFile('photo')) {

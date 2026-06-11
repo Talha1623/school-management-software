@@ -248,15 +248,12 @@
                             </div>
                             
                             <div class="mb-2">
-                                <label for="discounted_student" class="form-label mb-0 fs-13 fw-medium">Discounted Student?</label>
+                                <span class="form-label mb-0 fs-13 fw-medium d-block">Discounted Student?</span>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">percent</span></span>
-                                    <select class="form-select border-start-0 py-1" id="discounted_student" name="discounted_student" style="height: 32px; font-size: 13px;" onchange="toggleDiscountField()">
-                                        <option value="">Select</option>
-                                        <option value="1" {{ old('discounted_student') == '1' ? 'selected' : '' }}>Yes</option>
-                                        <option value="0" {{ old('discounted_student') == '0' ? 'selected' : '' }}>No</option>
-                                    </select>
+                                    <span class="form-control border-start-0 py-1 d-flex align-items-center bg-light text-muted" style="height: 32px; font-size: 13px;">No</span>
                                 </div>
+                                <input type="hidden" id="discounted_student" name="discounted_student" value="0">
                             </div>
 
                             <!-- Discount Amount Field (hidden by default) -->
@@ -603,8 +600,17 @@ function toggleParentPasswordField() {
     }
 }
 
+function onAdmissionReady(callback) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', callback, { once: true });
+        return;
+    }
+
+    callback();
+}
+
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
+onAdmissionReady(function() {
     toggleParentPasswordField();
     
     // Add event listener for "Create Parent Account" dropdown
@@ -617,6 +623,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const fatherIdCardInput = document.getElementById('father_id_card');
     if (fatherIdCardInput) {
         let searchTimeout;
+        let parentSearchController = null;
+        let latestParentSearchKey = '';
         
         fatherIdCardInput.addEventListener('input', function() {
             const fatherIdCard = this.value.trim();
@@ -654,11 +662,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     return;
                 }
+
+                // Cancel previous pending request (prevents stale/wrong autofill)
+                if (parentSearchController) {
+                    parentSearchController.abort();
+                }
+                parentSearchController = new AbortController();
+                const searchKey = `${fatherIdCard.toLowerCase()}|${campusValue.toLowerCase()}`;
+                latestParentSearchKey = searchKey;
                 
                 // Fetch parent details by ID Card (with campus parameter)
-                fetch(`{{ route('admission.get-parent-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}&campus=${encodeURIComponent(campusValue)}`)
+                fetch(`{{ route('admission.get-parent-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}&campus=${encodeURIComponent(campusValue)}`, {
+                    signal: parentSearchController.signal
+                })
                     .then(response => response.json())
                     .then(data => {
+                        // Ignore stale responses when user changed ID card/campus quickly
+                        const currentFatherIdCard = (document.getElementById('father_id_card')?.value || '').trim();
+                        const currentCampus = (document.getElementById('campus')?.value || '').trim();
+                        const currentKey = `${currentFatherIdCard.toLowerCase()}|${currentCampus.toLowerCase()}`;
+                        if (currentKey !== latestParentSearchKey) {
+                            return;
+                        }
+
                         if (data.success && data.found) {
                             // Parent found - auto-fill form fields
                             const parent = data.parent;
@@ -682,12 +708,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                 // This prevents email from changing incorrectly when adding multiple children
                                 if (parent.email && parent.email.trim() !== '') {
                                     fatherEmailInput.value = parent.email.trim();
-                                    console.log('Email populated from parent account:', parent.email.trim());
                                 } else {
                                     // If parent account exists but email is empty/null, clear the field
                                     // This ensures consistency - if parent has no email, field should be empty
                                     fatherEmailInput.value = '';
-                                    console.log('Parent account found but email is empty');
                                 }
                             }
                             if (fatherPhoneInput && parent.phone) {
@@ -734,6 +758,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     })
                     .catch(error => {
+                        if (error.name === 'AbortError') {
+                            return;
+                        }
                         console.error('Error fetching parent details:', error);
                         parentFoundMessage.innerHTML = '<small class="text-danger"><span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">error</span> Error searching for parent account. Please try again.</small>';
                         parentFoundMessage.className = 'mt-1';
@@ -870,7 +897,7 @@ function loadFeeTypesByCampus(campus) {
         });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+onAdmissionReady(function() {
     const campusSelect = document.getElementById('campus');
     const classSelect = document.getElementById('class');
 
@@ -1062,6 +1089,11 @@ document.getElementById('admission-form').addEventListener('submit', function(e)
             // Reset form after 1 second
             setTimeout(() => {
                 document.getElementById('admission-form').reset();
+                const discountedSelect = document.getElementById('discounted_student');
+                if (discountedSelect) {
+                    discountedSelect.value = '0';
+                }
+                toggleDiscountField();
                 // Clear captured photo
                 capturedPhotoBase64 = null;
                 document.getElementById('captured_photo_input').value = '';
@@ -1307,7 +1339,7 @@ function toggleOtherFeeAmount() {
 }
 
 // Initialize admission fee amount field visibility on page load
-document.addEventListener('DOMContentLoaded', function() {
+onAdmissionReady(function() {
     toggleAdmissionFeeAmount();
     toggleOtherFeeFields();
     toggleDiscountField();

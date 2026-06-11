@@ -27,20 +27,11 @@ class StudentInfoReportController extends Controller
     }
 
     /**
-     * Apply common filters for "current" students.
+     * @return list<string>
      */
-    private function applyCurrentStudentsFilter($query)
+    private function passoutClassNames(): array
     {
-        if ($this->usesSoftDeletes()) {
-            $query->withoutTrashed();
-        }
-
-        // Ensure only valid students with class are included
-        $query->whereNotNull('class')
-            ->where('class', '!=', '');
-
-        // Exclude passout students
-        $passoutClasses = [
+        return [
             'passout',
             'pass out',
             'passed out',
@@ -49,9 +40,54 @@ class StudentInfoReportController extends Controller
             'graduate',
             'alumni',
         ];
+    }
+
+    private function isPassoutReportType(string $type): bool
+    {
+        return in_array($type, ['all-passout', 'monthly-passout', 'daily-passout'], true);
+    }
+
+    private function baseStudentQuery()
+    {
+        $query = Student::query();
+        if ($this->usesSoftDeletes()) {
+            $query->withoutTrashed();
+        }
+
+        return $query;
+    }
+
+    /**
+     * Apply common filters for "current" students.
+     */
+    private function applyCurrentStudentsFilter($query)
+    {
+        if ($this->usesSoftDeletes()) {
+            $query->withoutTrashed();
+        }
+
+        $query->whereNotNull('class')
+            ->where('class', '!=', '');
+
+        $passoutClasses = $this->passoutClassNames();
         $query->whereRaw("LOWER(TRIM(COALESCE(class, ''))) NOT IN ('" . implode("', '", array_map('strtolower', $passoutClasses)) . "')");
 
         return $query;
+    }
+
+    private function applyPassoutReportFilters($query, Request $request): void
+    {
+        if ($request->filled('filter_campus')) {
+            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->filter_campus))]);
+        }
+
+        if ($request->filled('filter_class')) {
+            $query->whereRaw('LOWER(TRIM(COALESCE(previous_class, ""))) = ?', [strtolower(trim($request->filter_class))]);
+        }
+
+        if ($request->filled('filter_section')) {
+            $query->whereRaw('LOWER(TRIM(COALESCE(previous_section, ""))) = ?', [strtolower(trim($request->filter_section))]);
+        }
     }
 
     /**
@@ -90,21 +126,9 @@ class StudentInfoReportController extends Controller
             ->count();
 
         // Pass-out Students
-        $passoutClasses = [
-            'passout',
-            'pass out',
-            'passed out',
-            'passedout',
-            'graduated',
-            'graduate',
-            'alumni',
-        ];
-        $passoutQuery = Student::query();
-        if ($this->usesSoftDeletes()) {
-            $passoutQuery->withoutTrashed();
-        }
-        $passoutStudents = $passoutQuery->whereIn(DB::raw('LOWER(TRIM(class))'), $passoutClasses)
-            ->count();
+        $passoutQuery = $this->baseStudentQuery();
+        $this->applyPassoutFilter($passoutQuery);
+        $passoutStudents = $passoutQuery->count();
 
         return view('student.info-report', compact(
             'totalStudents',
@@ -119,7 +143,10 @@ class StudentInfoReportController extends Controller
     public function print(Request $request): View
     {
         $type = $request->get('type', 'all-active');
-        $query = $this->applyCurrentStudentsFilter(Student::query());
+        $isPassoutReport = $this->isPassoutReportType($type);
+        $query = $isPassoutReport
+            ? $this->baseStudentQuery()
+            : $this->applyCurrentStudentsFilter(Student::query());
 
         $title = 'Student Info Report';
         $subtitle = '';
@@ -148,7 +175,8 @@ class StudentInfoReportController extends Controller
             case 'all-inactive':
                 $title = 'All Inactive Students';
                 $subtitle = 'List of all inactive students';
-                $query->whereNull('admission_date');
+                Student::ensureStatusColumn();
+                $query->inactive();
                 
                 // Apply filters if provided
                 if ($request->filled('filter_campus')) {
@@ -199,19 +227,7 @@ class StudentInfoReportController extends Controller
                 $title = 'All Passout Students';
                 $subtitle = 'List of all passout students';
                 $this->applyPassoutFilter($query);
-                
-                // Apply filters if provided
-                if ($request->filled('filter_campus')) {
-                    $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->filter_campus))]);
-                }
-                
-                if ($request->filled('filter_class')) {
-                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->filter_class))]);
-                }
-                
-                if ($request->filled('filter_section')) {
-                    $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->filter_section))]);
-                }
+                $this->applyPassoutReportFilters($query, $request);
                 break;
             case 'free-students':
                 $title = 'Free Students Report';
@@ -238,40 +254,16 @@ class StudentInfoReportController extends Controller
                 $title = 'Monthly Passout Students Report';
                 $subtitle = 'Passout students for current month';
                 $this->applyPassoutFilter($query);
-                $query->whereMonth('admission_date', Carbon::now()->month)
-                    ->whereYear('admission_date', Carbon::now()->year);
-                
-                // Apply filters if provided
-                if ($request->filled('filter_campus')) {
-                    $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->filter_campus))]);
-                }
-                
-                if ($request->filled('filter_class')) {
-                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->filter_class))]);
-                }
-                
-                if ($request->filled('filter_section')) {
-                    $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->filter_section))]);
-                }
+                $query->whereMonth('updated_at', Carbon::now()->month)
+                    ->whereYear('updated_at', Carbon::now()->year);
+                $this->applyPassoutReportFilters($query, $request);
                 break;
             case 'daily-passout':
                 $title = 'Daily Passout Students Report';
                 $subtitle = 'Passout students for today';
                 $this->applyPassoutFilter($query);
-                $query->whereDate('admission_date', Carbon::today());
-                
-                // Apply filters if provided
-                if ($request->filled('filter_campus')) {
-                    $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->filter_campus))]);
-                }
-                
-                if ($request->filled('filter_class')) {
-                    $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->filter_class))]);
-                }
-                
-                if ($request->filled('filter_section')) {
-                    $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->filter_section))]);
-                }
+                $query->whereDate('updated_at', Carbon::today());
+                $this->applyPassoutReportFilters($query, $request);
                 break;
             case 'gender-wise':
                 $title = 'Gender Wise Student Report';
@@ -311,10 +303,18 @@ class StudentInfoReportController extends Controller
                 break;
         }
 
-        $students = $grouped ? collect() : $query->orderBy('class')
-            ->orderBy('section')
-            ->orderBy('student_name')
-            ->get();
+        if (!$grouped) {
+            if ($isPassoutReport) {
+                $query->orderBy('previous_class')
+                    ->orderBy('previous_section');
+            } else {
+                $query->orderBy('class')
+                    ->orderBy('section');
+            }
+            $query->orderBy('student_name');
+        }
+
+        $students = $grouped ? collect() : $query->get();
 
         return view('student.info-report-print', [
             'type' => $type,
@@ -333,20 +333,11 @@ class StudentInfoReportController extends Controller
      */
     private function applyPassoutFilter($query): void
     {
-        $passoutClasses = [
-            'passout',
-            'pass out',
-            'passed out',
-            'passedout',
-            'graduated',
-            'graduate',
-            'alumni',
-        ];
+        $passoutClasses = $this->passoutClassNames();
 
         if (Schema::hasColumn('students', 'class')) {
             $query->whereIn(DB::raw('LOWER(TRIM(class))'), $passoutClasses);
         } else {
-            // If class column is missing, return empty set
             $query->whereRaw('1 = 0');
         }
     }
@@ -613,6 +604,27 @@ class StudentInfoReportController extends Controller
     public function getClassesByCampus(Request $request): JsonResponse
     {
         $campus = $request->get('campus');
+
+        if ($request->get('report') === 'passout') {
+            $query = $this->baseStudentQuery();
+            $this->applyPassoutFilter($query);
+
+            if ($campus) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+
+            $classes = $query->whereNotNull('previous_class')
+                ->where('previous_class', '!=', '')
+                ->distinct()
+                ->pluck('previous_class')
+                ->map(fn ($className) => trim((string) $className))
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values();
+
+            return response()->json(['classes' => $classes]);
+        }
         
         $classesQuery = ClassModel::whereNotNull('class_name');
         if ($campus) {
@@ -644,6 +656,28 @@ class StudentInfoReportController extends Controller
         
         if (!$class) {
             return response()->json(['sections' => []]);
+        }
+
+        if ($request->get('report') === 'passout') {
+            $query = $this->baseStudentQuery();
+            $this->applyPassoutFilter($query);
+            $query->whereRaw('LOWER(TRIM(COALESCE(previous_class, ""))) = ?', [strtolower(trim($class))]);
+
+            if ($campus) {
+                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+
+            $sections = $query->whereNotNull('previous_section')
+                ->where('previous_section', '!=', '')
+                ->distinct()
+                ->pluck('previous_section')
+                ->map(fn ($sectionName) => trim((string) $sectionName))
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values();
+
+            return response()->json(['sections' => $sections]);
         }
         
         $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])

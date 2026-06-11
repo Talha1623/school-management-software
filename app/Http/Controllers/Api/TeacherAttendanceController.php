@@ -1150,6 +1150,7 @@ class TeacherAttendanceController extends Controller
                 'class' => ['required', 'string'],
                 'section' => ['nullable', 'string'],
                 'date' => ['nullable', 'date'],
+                'history_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             ]);
 
             $className = trim($validated['class']);
@@ -1188,9 +1189,15 @@ class TeacherAttendanceController extends Controller
             }
 
             // Get assigned sections for this class
-            $assignedSectionsForClass = $assignedSubjects->where('class', $className)
+            $assignedSectionsForClass = $assignedSubjects->filter(function ($subject) use ($className) {
+                    return strtolower(trim((string) ($subject->class ?? ''))) === strtolower(trim($className));
+                })
                 ->pluck('section')
-                ->merge($assignedSections->where('class', $className)->pluck('name'))
+                ->merge(
+                    $assignedSections->filter(function ($section) use ($className) {
+                        return strtolower(trim((string) ($section->class ?? ''))) === strtolower(trim($className));
+                    })->pluck('name')
+                )
                 ->map(function($section) {
                     return trim($section);
                 })
@@ -1198,10 +1205,15 @@ class TeacherAttendanceController extends Controller
                 ->unique()
                 ->values();
 
-            // If section is provided, verify it's assigned
-            if ($sectionName && !$assignedSectionsForClass->contains(function($s) use ($sectionName) {
-                return strtolower(trim($s)) === strtolower(trim($sectionName));
-            })) {
+            // If section is provided, verify it's assigned only when assignment data exists.
+            // Some tenants keep teacher mapping at class level only.
+            if (
+                $sectionName &&
+                $assignedSectionsForClass->isNotEmpty() &&
+                !$assignedSectionsForClass->contains(function($s) use ($sectionName) {
+                    return strtolower(trim((string) $s)) === strtolower(trim($sectionName));
+                })
+            ) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. This section is not assigned to you.',
@@ -1269,6 +1281,13 @@ class TeacherAttendanceController extends Controller
                         'marked' => $attendance !== null,
                         'remarks' => $attendance ? $attendance->remarks : null,
                     ],
+                    'today_attendance' => [
+                        'date' => Carbon::today()->format('Y-m-d'),
+                        'status' => $attendance ? $attendance->status : 'Not Marked',
+                        'is_present' => $attendance ? strtolower(trim((string) $attendance->status)) === 'present' : false,
+                        'is_absent' => $attendance ? strtolower(trim((string) $attendance->status)) === 'absent' : false,
+                        'is_marked' => $attendance !== null,
+                    ],
                 ];
             })->values();
 
@@ -1282,7 +1301,7 @@ class TeacherAttendanceController extends Controller
                     'total_students' => $students->count(),
                     'students' => $studentsData,
                 ],
-                'token' => $request->user()->currentAccessToken()->token ?? null,
+                'token' => optional($request->user()->currentAccessToken())->token ?? $request->bearerToken(),
             ], 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -1450,7 +1469,7 @@ class TeacherAttendanceController extends Controller
                     'total_count' => count($validated['attendances']),
                     'errors' => $errors,
                 ],
-                'token' => $request->user()->currentAccessToken()->token ?? null,
+                'token' => optional($request->user()->currentAccessToken())->token ?? $request->bearerToken(),
             ], 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -1467,6 +1486,29 @@ class TeacherAttendanceController extends Controller
                 'token' => null,
             ], 500);
         }
+    }
+
+    /**
+     * Gate / teacher: scan student ID card (GR number, student code, barcode) and mark Present today.
+     *
+     * POST /api/teacher/attendance/scan-student-id-card
+     * Body: { "id": "ST1-001" }
+     */
+    public function scanStudentIdCard(Request $request): JsonResponse
+    {
+        $response = app(\App\Http\Controllers\StudentAttendanceController::class)->scanBarcode($request);
+        $payload = $response->getData(true);
+
+        if (!is_array($payload)) {
+            return $response;
+        }
+
+        $teacher = $request->user();
+        if ($teacher && method_exists($teacher, 'currentAccessToken')) {
+            $payload['token'] = $teacher->currentAccessToken()->token ?? $request->bearerToken();
+        }
+
+        return response()->json($payload, $response->getStatusCode());
     }
 }
 

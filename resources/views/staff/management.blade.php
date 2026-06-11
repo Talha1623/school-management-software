@@ -338,11 +338,6 @@ use Illuminate\Support\Facades\Auth;
                                                             Attendance Report
                                                         </a>
                                                     </li>
-                                                    <li>
-                                                        <a class="dropdown-item" href="{{ route('attendance.staff-report', ['staff_id' => $member->id, 'report_type' => 'performance']) }}" target="_blank">
-                                                            Teacher Performance Report
-                                                        </a>
-                                                    </li>
                                                 </ul>
                                             </div>
                                             <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="editStaff({{ $member->id }})" title="Edit">
@@ -1534,7 +1529,6 @@ function buildStaffRow(staff, photoUrl, isSuperAdmin) {
     const appreciationUrl = "{{ route('certification.staff.generate', ['staff' => ':id', 'type' => 'Appreciation Certificate']) }}".replace(':id', staff.id);
     const salaryUrl = "{{ route('reports.staff-salary', ['staff_id' => ':id']) }}".replace(':id', staff.id);
     const attendanceUrl = "{{ route('attendance.staff-report', ['staff_id' => ':id']) }}".replace(':id', staff.id);
-    const performanceUrl = "{{ route('attendance.staff-report', ['staff_id' => ':id', 'report_type' => 'performance']) }}".replace(':id', staff.id);
     const statusColumn = isSuperAdmin ? `
         <td style="padding: 12px 15px; font-size: 14px; text-align: center;">
             <div class="form-check form-switch d-inline-block">
@@ -1621,9 +1615,6 @@ function buildStaffRow(staff, photoUrl, isSuperAdmin) {
                             </li>
                             <li>
                                 <a class="dropdown-item" href="${attendanceUrl}" target="_blank">Attendance Report</a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="${performanceUrl}" target="_blank">Teacher Performance Report</a>
                             </li>
                         </ul>
                     </div>

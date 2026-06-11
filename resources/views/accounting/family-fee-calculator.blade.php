@@ -2,6 +2,11 @@
 
 @section('title', 'Fee Calculator')
 
+@php
+    $ffcSearchUrl = $ffcSearchUrl ?? route('accounting.family-fee-calculator.search-by-id-card');
+    $ffcPayAllUrl = $ffcPayAllUrl ?? route('accounting.family-fee-calculator.pay-all');
+@endphp
+
 @section('content')
 <div class="row">
     <div class="col-12">
@@ -280,15 +285,46 @@ function hasFeeFlag(value) {
     return value === 1 || value === '1' || value === true || value === 'true';
 }
 
+function resolveFeeAmount(dueValue, fallbackValue, options = {}) {
+    const { enabled = true } = options;
+
+    if (!enabled) {
+        return 0;
+    }
+
+    const dueAmount = toNumber(dueValue);
+    if (dueAmount > 0) {
+        return dueAmount;
+    }
+
+    return toNumber(fallbackValue);
+}
+
 function computeStudentTotal(student) {
-    const monthlyFee = toNumber(student.due_monthly_fee ?? student.monthly_fee);
-    const transportFee = toNumber(student.due_transport_fare ?? student.transport_fare);
-    const admissionFee = hasFeeFlag(student.generate_admission_fee)
-        ? toNumber(student.due_admission_fee ?? student.admission_fee_amount)
-        : 0;
-    const otherFee = hasFeeFlag(student.generate_other_fee)
-        ? toNumber(student.due_other_fee ?? student.other_fee_amount)
-        : 0;
+    // Search API sends due_* from Generated vs paid (same as pay-all / print). Do not fall back to
+    // profile monthly_fee when due is 0 — that inflated the summary vs the receipt.
+    if (student && student.due_total !== undefined && student.due_total !== null) {
+        const monthlyFee = toNumber(student.due_monthly_fee);
+        const transportFee = toNumber(student.due_transport_fare);
+        const admissionFee = toNumber(student.due_admission_fee);
+        const otherFee = toNumber(student.due_other_fee);
+        return {
+            monthlyFee,
+            transportFee,
+            admissionFee,
+            otherFee,
+            total: toNumber(student.due_total),
+        };
+    }
+
+    const monthlyFee = resolveFeeAmount(student.due_monthly_fee, student.monthly_fee);
+    const transportFee = resolveFeeAmount(student.due_transport_fare, student.transport_fare);
+    const admissionFee = resolveFeeAmount(student.due_admission_fee, student.admission_fee_amount, {
+        enabled: hasFeeFlag(student.generate_admission_fee)
+    });
+    const otherFee = resolveFeeAmount(student.due_other_fee, student.other_fee_amount, {
+        enabled: hasFeeFlag(student.generate_other_fee) || toNumber(student.due_other_fee) > 0
+    });
     return {
         monthlyFee,
         transportFee,
@@ -296,6 +332,37 @@ function computeStudentTotal(student) {
         otherFee,
         total: monthlyFee + transportFee + admissionFee + otherFee
     };
+}
+
+function formatCustomFeeLines(student) {
+    if (!student || !Array.isArray(student.pending_fee_lines)) {
+        return '';
+    }
+
+    const customLines = student.pending_fee_lines.filter((line) => {
+        const title = (line.title || '').trim();
+        if (!title) {
+            return false;
+        }
+        if (title.startsWith('Monthly Fee - ')) {
+            return false;
+        }
+        if (title.startsWith('Transport Fee')) {
+            return false;
+        }
+        if (title.toLowerCase() === 'admission fee') {
+            return false;
+        }
+        return toNumber(line.total) > 0;
+    });
+
+    if (customLines.length === 0) {
+        return '';
+    }
+
+    return customLines
+        .map((line) => `${line.title}: ${toNumber(line.total).toFixed(2)}`)
+        .join(' | ');
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -384,7 +451,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Make AJAX call to search by Father ID Card
-        fetch(`{{ route('accounting.family-fee-calculator.search-by-id-card') }}?father_id_card=${encodeURIComponent(fatherIdCard)}`, {
+        fetch(`{{ $ffcSearchUrl }}?father_id_card=${encodeURIComponent(fatherIdCard)}`, {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
@@ -431,6 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                         studentsList.forEach((student, index) => {
                             const feeBreakdown = computeStudentTotal(student);
+                            const customFeeText = formatCustomFeeLines(student);
                             totalAmount += feeBreakdown.total;
 
                             // Receipt style display (Terminal Print Style)
@@ -444,6 +512,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <div style="font-size: 9px; color: rgba(255,255,255,0.8); margin-left: 12px; margin-top: 2px;">
                                     ${student.student_code || ''} | ${student.class || ''}/${student.section || ''} | ${student.campus || ''} | M:${feeBreakdown.monthlyFee.toFixed(2)} T:${feeBreakdown.transportFee.toFixed(2)} A:${feeBreakdown.admissionFee.toFixed(2)} O:${feeBreakdown.otherFee.toFixed(2)}
                                     ${student.monthly_fee_status ? ` | ${student.monthly_fee_status}` : ''}
+                                    ${customFeeText ? `<br><span style="color: #ffe082;">Custom: ${customFeeText}</span>` : ''}
                                 </div>
                             `;
                             receiptStudentsList.appendChild(receiptItem);
@@ -723,7 +792,7 @@ function printReceipt() {
             method: 'Cash Payment'
         };
 
-        fetch(`{{ route('accounting.family-fee-calculator.pay-all') }}`, {
+        fetch(`{{ $ffcPayAllUrl }}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

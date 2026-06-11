@@ -213,7 +213,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Function to load assigned teacher for selected subject
-    function loadAssignedTeacher(subject, className, sectionName) {
+    function loadAssignedTeacher(subject, className, sectionName, campusName) {
         const teacherDisplay = document.getElementById('assigned-teacher-display');
         const teacherText = document.getElementById('assigned-teacher-text');
         
@@ -239,6 +239,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Make AJAX request
         const params = new URLSearchParams();
         params.append('subject', subject);
+        if (campusName) {
+            params.append('campus', campusName);
+        }
         if (className) {
             params.append('class', className);
         }
@@ -388,7 +391,12 @@ document.addEventListener('DOMContentLoaded', function() {
         subjectSelect.addEventListener('change', function() {
             const className = classSelect ? classSelect.value : '';
             const sectionName = sectionSelect ? sectionSelect.value : '';
-            loadAssignedTeacher(this.value, className, sectionName);
+            loadAssignedTeacher(
+                this.value,
+                className,
+                sectionName,
+                campusSelect ? campusSelect.value : ''
+            );
         });
     }
     
@@ -435,7 +443,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const subjectSelect = document.getElementById('subject');
             if (subjectSelect && subjectSelect.value) {
                 const className = classSelect ? classSelect.value : '';
-                loadAssignedTeacher(subjectSelect.value, className, this.value);
+                loadAssignedTeacher(
+                    subjectSelect.value,
+                    className,
+                    this.value,
+                    campusSelect ? campusSelect.value : ''
+                );
             }
         });
     }
@@ -455,7 +468,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         const subjectSelect = document.getElementById('subject');
                         if (subjectSelect) {
                             subjectSelect.value = '{{ old('subject') }}';
-                            loadAssignedTeacher('{{ old('subject') }}', '{{ old('class') }}', '{{ old('section') }}');
+                            loadAssignedTeacher(
+                                '{{ old('subject') }}',
+                                '{{ old('class') }}',
+                                '{{ old('section') }}',
+                                '{{ old('campus') }}'
+                            );
                         }
                     }, 1000);
                 @endif

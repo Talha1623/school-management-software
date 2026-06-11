@@ -19,7 +19,8 @@
                         <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 32px;">
                             <option value="">All Campuses</option>
                             @foreach($campuses as $campus)
-                                <option value="{{ $campus->campus_name ?? $campus }}" data-campus-id="{{ $campus->id ?? '' }}" {{ $filterCampus == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>{{ $campus->campus_name ?? $campus }}</option>
+                                @php $campusName = $campus->campus_name ?? $campus; @endphp
+                                <option value="{{ $campusName }}" data-campus-id="{{ $campus->id ?? '' }}" {{ ($filterCampus == $campusName || (isset($defaultCampus) && $defaultCampus === $campusName && !$filterCampus)) ? 'selected' : '' }}>{{ $campusName }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -49,18 +50,11 @@
                     <!-- Type -->
                     <div class="col-md-2">
                         <label for="filter_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Type</label>
-                        <select class="form-select form-select-sm" id="filter_type" name="filter_type" style="height: 32px;">
+                        <select class="form-select form-select-sm" id="filter_type" name="filter_type" data-selected-type="{{ $filterType }}" style="height: 32px;">
                             <option value="">All Types</option>
-                            @if(isset($typeOptions))
-                                @foreach($typeOptions as $key => $label)
-                                    <option value="{{ $key }}" {{ $filterType == $key ? 'selected' : '' }}>{{ $label }}</option>
-                                @endforeach
-                            @else
-                                <option value="all_detailed" {{ $filterType == 'all_detailed' ? 'selected' : '' }}>All Detailed</option>
-                                <option value="admission_fee_only" {{ $filterType == 'admission_fee_only' ? 'selected' : '' }}>Admission Fee Only</option>
-                                <option value="transport_fee_only" {{ $filterType == 'transport_fee_only' ? 'selected' : '' }}>Transport Fee Only</option>
-                                <option value="card_fee_only" {{ $filterType == 'card_fee_only' ? 'selected' : '' }}>Card Fee Only</option>
-                            @endif
+                            @foreach($typeOptions as $key => $label)
+                                <option value="{{ $key }}" {{ $filterType == $key ? 'selected' : '' }}>{{ $label }}</option>
+                            @endforeach
                         </select>
                     </div>
 
@@ -88,11 +82,38 @@
             <!-- Results Table -->
             @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_type', 'filter_status']))
             <div class="mt-3">
-                <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
+                <div class="print-area">
+                <div class="d-none d-print-block text-center mb-2 print-header">
+                    <h3 class="mb-1">Fee Default Reports</h3>
+                    <div class="small">Generated: {{ now()->format('d M Y, h:i A') }}</div>
+                </div>
+
+                <div class="mb-2 p-2 rounded-8 d-print-none" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
                     <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
                         <span class="material-symbols-outlined" style="font-size: 18px;">list</span>
                         <span>Fee Default Reports</span>
                     </h5>
+                </div>
+
+                <div class="d-flex justify-content-end mb-2 d-print-none">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('accountant.fee-defaulters.export', ['format' => 'excel']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn excel-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">description</span>
+                            <span>Excel</span>
+                        </a>
+                        <a href="{{ route('accountant.fee-defaulters.export', ['format' => 'csv']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">table_view</span>
+                            <span>CSV</span>
+                        </a>
+                        <a href="{{ route('accountant.fee-defaulters.export', ['format' => 'pdf']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <a href="{{ route('accountant.fee-defaulters.print') }}?{{ http_build_query(array_merge(request()->except(['page']), ['auto_print' => 1])) }}" class="btn btn-sm px-2 py-1 export-btn print-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                            <span>Print</span>
+                        </a>
+                    </div>
                 </div>
 
                 <div class="default-table-area" style="margin-top: 0;">
@@ -107,13 +128,12 @@
                                     <th>Class</th>
                                     <th>Last Payment</th>
                                     <th>Due Invoices</th>
-                                    <th>Total</th>
-                                    <th>Paid</th>
-                                    <th>Late</th>
-                                    <th>Remaining</th>
+                                    <th>Total Amount</th>
+                                    <th>Late Fee</th>
+                                    <th>Total Dues</th>
                                     <th>Phone</th>
                                     <th>Whatsapp</th>
-                                    <th>Action</th>
+                                    <th class="no-print">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -127,13 +147,12 @@
                                             <td>{{ $row['class'] ?? 'N/A' }}</td>
                                             <td>{{ $row['last_payment'] ? \Carbon\Carbon::parse($row['last_payment'])->format('d-m-Y') : 'N/A' }}</td>
                                             <td>{{ $row['due_invoices'] ?? 0 }}</td>
-                                            <td>{{ number_format($row['total'] ?? 0, 2) }}</td>
-                                            <td>{{ number_format($row['paid'] ?? 0, 2) }}</td>
+                                            <td>{{ number_format($row['total_amount'] ?? 0, 2) }}</td>
                                             <td>{{ number_format($row['late'] ?? 0, 2) }}</td>
-                                            <td>{{ number_format($row['remaining'] ?? 0, 2) }}</td>
+                                            <td>{{ number_format($row['total_dues'] ?? 0, 2) }}</td>
                                             <td>{{ $row['phone'] ?? 'N/A' }}</td>
                                             <td>{{ $row['whatsapp'] ?? 'N/A' }}</td>
-                                            <td>
+                                            <td class="no-print">
                                                 @if(!empty($row['student_code']))
                                                     <a class="btn btn-sm btn-primary" href="{{ route('accounting.particular-receipt') }}?student_code={{ urlencode($row['student_code']) }}" target="_blank">
                                                         View
@@ -145,7 +164,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="13" class="text-center text-muted py-5">
+                                            <td colspan="12" class="text-center text-muted py-5">
                                                 <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                                 <p class="mt-2 mb-0">No records found.</p>
                                             </td>
@@ -153,7 +172,7 @@
                                     @endforelse
                                 @else
                                     <tr>
-                                        <td colspan="13" class="text-center text-muted py-5">
+                                        <td colspan="12" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No records found. Please apply filters to see results.</p>
                                         </td>
@@ -162,6 +181,7 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
                 </div>
             </div>
             @endif
@@ -201,6 +221,58 @@
     .form-label {
         font-size: 12px;
         margin-bottom: 4px;
+    }
+
+    .export-btn {
+        border: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        font-size: 13px;
+    }
+
+    .excel-btn {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .excel-btn:hover {
+        background-color: #218838;
+        color: white;
+    }
+
+    .csv-btn {
+        background-color: #17a2b8;
+        color: white;
+    }
+
+    .csv-btn:hover {
+        background-color: #138496;
+        color: white;
+    }
+
+    .pdf-btn {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    .pdf-btn:hover {
+        background-color: #c82333;
+        color: white;
+    }
+
+    .print-btn {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .print-btn:hover {
+        background-color: #5a6268;
+        color: white;
     }
     
     .rounded-8 {
@@ -299,6 +371,55 @@
         padding: 3px 6px;
         font-weight: 500;
     }
+
+    @media print {
+        .filter-btn,
+        .export-btn,
+        .btn,
+        nav,
+        header,
+        footer {
+            display: none !important;
+        }
+
+        body * {
+            visibility: hidden;
+        }
+
+        .print-area, .print-area * {
+            visibility: visible;
+        }
+
+        .print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 0 10mm;
+        }
+
+        .default-table-area table {
+            width: 100% !important;
+            font-size: 12px;
+        }
+
+        .default-table-area thead th,
+        .default-table-area tbody td {
+            padding: 6px 8px !important;
+            border-color: #000 !important;
+        }
+
+        .default-table-area th.no-print,
+        .default-table-area td.no-print {
+            display: none !important;
+        }
+
+        * {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            color: #000 !important;
+        }
+    }
 </style>
 
 <script>
@@ -306,6 +427,34 @@ document.addEventListener('DOMContentLoaded', function() {
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
+    const typeSelect = document.getElementById('filter_type');
+
+    function populateFeeTypes(types, selectedType = '') {
+        typeSelect.innerHTML = '<option value="">All Types</option>';
+        if (types && types.length > 0) {
+            types.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.value;
+                option.textContent = item.label;
+                if (selectedType && selectedType === item.value) {
+                    option.selected = true;
+                }
+                typeSelect.appendChild(option);
+            });
+        }
+    }
+
+    function loadFeeTypes(campus, selectedType = '') {
+        const params = new URLSearchParams();
+        if (campus) {
+            params.append('campus', campus);
+        }
+
+        fetch(`{{ route('accountant.fee-defaulters.get-fee-types-by-campus') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => populateFeeTypes(data.types || [], selectedType))
+            .catch(error => console.error('Error loading fee types:', error));
+    }
 
     function resetSections() {
         sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -402,6 +551,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     campusSelect.addEventListener('change', function() {
         loadClassesByCampus(this.value);
+        loadFeeTypes(this.value);
     });
 
     classSelect.addEventListener('change', function() {
@@ -410,7 +560,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const selectedClass = classSelect.dataset.selectedClass || '';
     const selectedSection = sectionSelect.dataset.selectedSection || '';
+    const selectedType = typeSelect.dataset.selectedType || '';
     loadClassesByCampus(campusSelect.value, selectedClass, selectedSection);
+    loadFeeTypes(campusSelect.value, selectedType);
 });
 </script>
 @endsection

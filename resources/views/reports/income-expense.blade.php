@@ -7,7 +7,10 @@
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <h4 class="mb-0 fs-16 fw-semibold">Income & Expense Reports</h4>
+                <div>
+                    <h4 class="mb-0 fs-16 fw-semibold">Income & Expense Reports</h4>
+                    <small class="text-muted">Income: actual cash paid per transaction (Partial / Paid) · Expense: Expense Management + paid staff salary</small>
+                </div>
             </div>
 
             <!-- Filter Form -->
@@ -30,7 +33,7 @@
                         <select class="form-select form-select-sm" id="filter_user_type" name="filter_user_type" style="height: 30px; font-size: 12px;">
                             <option value="">All Types</option>
                             @foreach($userTypeOptions as $userType)
-                                <option value="{{ $userType }}" {{ $filterUserType == $userType ? 'selected' : '' }}>{{ $userType }}</option>
+                                <option value="{{ $userType['value'] }}" {{ ($filterUserType ?? '') == $userType['value'] ? 'selected' : '' }}>{{ $userType['label'] }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -78,6 +81,23 @@
                     </h5>
                 </div>
 
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('reports.income-expense.export', ['format' => 'csv']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn csv-btn">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">table_view</span>
+                            <span>CSV</span>
+                        </a>
+                        <a href="{{ route('reports.income-expense.export', ['format' => 'pdf']) }}?{{ http_build_query(request()->except(['page'])) }}" class="btn btn-sm px-2 py-1 export-btn pdf-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
+                            <span>PDF</span>
+                        </a>
+                        <a href="{{ route('reports.income-expense.print') }}?{{ http_build_query(array_merge(request()->except(['page']), ['auto_print' => 1])) }}" class="btn btn-sm px-2 py-1 export-btn print-btn" target="_blank">
+                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
+                            <span>Print</span>
+                        </a>
+                    </div>
+                </div>
+
                 <div class="default-table-area" style="margin-top: 0;">
                     <div class="table-responsive">
                         <table class="table">
@@ -89,7 +109,10 @@
                                     <th>User</th>
                                     <th>Campus</th>
                                     <th>Title</th>
-                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Paid</th>
+                                    <th>Discount</th>
+                                    <th>Remaining</th>
                                     <th>Date</th>
                                     <th>Method</th>
                                 </tr>
@@ -110,18 +133,33 @@
                                     <td>{{ $record['campus'] ?? 'N/A' }}</td>
                                     <td>{{ $record['title'] }}</td>
                                     <td>
+                                        @if(($record['status'] ?? '') === 'Partial')
+                                            <span class="badge bg-warning text-dark">Partial</span>
+                                        @elseif(($record['status'] ?? '') === 'Paid')
+                                            <span class="badge bg-success">Paid</span>
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
+                                    </td>
+                                    <td>
                                         @if($record['type'] == 'Income')
                                             <span class="text-success fw-semibold">+{{ number_format($record['amount'], 2) }}</span>
                                         @else
                                             <span class="text-danger fw-semibold">-{{ number_format($record['amount'], 2) }}</span>
                                         @endif
                                     </td>
-                                    <td>{{ date('d M Y', strtotime($record['date'])) }}</td>
+                                    <td class="{{ $record['type'] == 'Income' && (float)($record['discount'] ?? 0) > 0 ? 'text-warning' : '' }}">
+                                        {{ number_format((float) ($record['discount'] ?? 0), 2) }}
+                                    </td>
+                                    <td class="{{ $record['type'] == 'Income' && (float)($record['remaining'] ?? 0) > 0 ? 'text-danger fw-semibold' : '' }}">
+                                        {{ number_format((float) ($record['remaining'] ?? 0), 2) }}
+                                    </td>
+                                    <td>{{ !empty($record['date']) ? date('d M Y', strtotime($record['date'])) : 'N/A' }}</td>
                                     <td>{{ $record['method'] }}</td>
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="9" class="text-center py-4">
+                                    <td colspan="12" class="text-center py-4">
                                         <div class="d-flex flex-column align-items-center">
                                             <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inbox</span>
                                             <p class="text-muted mt-2 mb-0">No records found</p>
@@ -132,25 +170,29 @@
                             </tbody>
                             @if($incomeRecords->count() > 0)
                             <tfoot>
+                                @php
+                                    $incomeRows = $incomeRecords->where('type', 'Income');
+                                @endphp
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
-                                    <td colspan="6" class="text-end">Total Income:</td>
-                                    <td class="text-success">
-                                        {{ number_format($incomeRecords->where('type', 'Income')->sum('amount'), 2) }}
-                                    </td>
+                                    <td colspan="6" class="text-end">Total Income (Paid):</td>
+                                    <td></td>
+                                    <td class="text-success">{{ number_format($incomeRows->sum('amount'), 2) }}</td>
+                                    <td class="text-warning">{{ number_format($incomeRows->sum('discount'), 2) }}</td>
+                                    <td class="text-danger">{{ number_format($incomeRows->sum('remaining'), 2) }}</td>
                                     <td colspan="2"></td>
                                 </tr>
                                 <tr class="fw-bold" style="background-color: #f8f9fa;">
                                     <td colspan="6" class="text-end">Total Expense:</td>
-                                    <td class="text-danger">
-                                        {{ number_format($incomeRecords->where('type', 'Expense')->sum('amount'), 2) }}
-                                    </td>
+                                    <td colspan="3"></td>
+                                    <td class="text-danger">{{ number_format($incomeRecords->where('type', 'Expense')->sum('amount'), 2) }}</td>
                                     <td colspan="2"></td>
                                 </tr>
                                 <tr class="fw-bold" style="background-color: #e3f2fd;">
-                                    <td colspan="6" class="text-end">Net Amount:</td>
+                                    <td colspan="6" class="text-end">Net (Income Paid − Expense):</td>
+                                    <td colspan="3"></td>
                                     <td>
                                         @php
-                                            $totalIncome = $incomeRecords->where('type', 'Income')->sum('amount');
+                                            $totalIncome = $incomeRows->sum('amount');
                                             $totalExpense = $incomeRecords->where('type', 'Expense')->sum('amount');
                                             $netAmount = $totalIncome - $totalExpense;
                                         @endphp
@@ -228,6 +270,24 @@
     font-size: 11px;
     padding: 4px 8px;
 }
+
+.export-btn {
+    border: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    font-size: 12px;
+}
+.csv-btn { background-color: #17a2b8; color: white; }
+.csv-btn:hover { background-color: #138496; color: white; }
+.pdf-btn { background-color: #dc3545; color: white; }
+.pdf-btn:hover { background-color: #c82333; color: white; }
+.print-btn { background-color: #6c757d; color: white; }
+.print-btn:hover { background-color: #5a6268; color: white; }
 </style>
 
 <script>

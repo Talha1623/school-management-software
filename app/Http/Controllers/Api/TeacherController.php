@@ -9,10 +9,13 @@ use App\Models\Student;
 use App\Models\StudentAttendance;
 use App\Models\ClassModel;
 use App\Models\Exam;
+use App\Models\ExamTimetable;
+use App\Models\Test;
 use App\Models\StudentMark;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class TeacherController extends Controller
 {
@@ -385,6 +388,154 @@ class TeacherController extends Controller
             // Tests are separate and created in Test Management
             $query = Exam::query();
 
+            // Restrict exams to teacher-assigned subjects only.
+            $teacherNameKey = strtolower(trim((string) ($teacher->name ?? '')));
+            $teacherEmpIdKey = strtolower(trim((string) ($teacher->emp_id ?? '')));
+            $teacherFirstNameKey = strtolower(trim((string) explode(' ', $teacherNameKey)[0] ?? ''));
+            $teacherTokens = collect([$teacherNameKey, $teacherEmpIdKey, $teacherFirstNameKey])
+                ->filter(function ($token) {
+                    return $token !== '';
+                })
+                ->unique()
+                ->values();
+            $assignedSubjectKeys = Subject::query()
+                ->where(function ($q) use ($teacherTokens) {
+                    foreach ($teacherTokens as $token) {
+                        $q->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$token])
+                            ->orWhereRaw('LOWER(TRIM(teacher)) LIKE ?', ["%{$token}%"]);
+                    }
+                })
+                ->whereNotNull('subject_name')
+                ->when(!empty($teacher->campus), function ($q) use ($teacher) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
+                })
+                ->pluck('subject_name')
+                ->map(function ($subject) {
+                    return strtolower(trim((string) $subject));
+                })
+                ->filter(function ($subject) {
+                    return $subject !== '';
+                })
+                ->unique()
+                ->values();
+
+            // Fallback: some schools assign teacher at section level only.
+            // In that case, derive subjects from those class/section mappings.
+            if ($assignedSubjectKeys->isEmpty()) {
+                $assignedSections = Section::query()
+                    ->where(function ($q) use ($teacherTokens) {
+                        foreach ($teacherTokens as $token) {
+                            $q->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$token])
+                                ->orWhereRaw('LOWER(TRIM(teacher)) LIKE ?', ["%{$token}%"]);
+                        }
+                    })
+                    ->whereNotNull('class')
+                    ->whereNotNull('section')
+                    ->when(!empty($teacher->campus), function ($q) use ($teacher) {
+                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
+                    })
+                    ->get(['campus', 'class', 'section']);
+
+                $derivedSubjectKeys = collect();
+                foreach ($assignedSections as $sectionRow) {
+                    $sectionCampus = strtolower(trim((string) ($sectionRow->campus ?? '')));
+                    $sectionClass = strtolower(trim((string) ($sectionRow->class ?? '')));
+                    $sectionName = strtolower(trim((string) ($sectionRow->section ?? '')));
+                    if ($sectionClass === '' || $sectionName === '') {
+                        continue;
+                    }
+
+                    $derivedSubjectKeys = $derivedSubjectKeys->merge(
+                        Subject::query()
+                            ->whereRaw('LOWER(TRIM(class)) = ?', [$sectionClass])
+                            ->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName])
+                            ->when($sectionCampus !== '', function ($q) use ($sectionCampus) {
+                                return $q->whereRaw('LOWER(TRIM(campus)) = ?', [$sectionCampus]);
+                            })
+                            ->whereNotNull('subject_name')
+                            ->pluck('subject_name')
+                            ->map(function ($subject) {
+                                return strtolower(trim((string) $subject));
+                            })
+                    );
+                }
+
+                $assignedSubjectKeys = $derivedSubjectKeys
+                    ->filter(function ($subject) {
+                        return $subject !== '';
+                    })
+                    ->unique()
+                    ->values();
+            }
+
+            if ($assignedSubjectKeys->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Exam list retrieved successfully',
+                    'data' => [],
+                    'pagination' => [
+                        'current_page' => 1,
+                        'last_page' => 1,
+                        'per_page' => (int) $request->get('per_page', 15),
+                        'total' => 0,
+                        'from' => null,
+                        'to' => null,
+                    ],
+                    'filter_options' => [
+                        'campuses' => collect(),
+                        'sessions' => collect(),
+                        'exam_names' => collect(),
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
+            }
+
+            $allowedExamNameKeys = ExamTimetable::query()
+                ->where(function ($q) use ($assignedSubjectKeys) {
+                    foreach ($assignedSubjectKeys as $subjectKey) {
+                        $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectKey]);
+                    }
+                })
+                ->when(!empty($teacher->campus), function ($q) use ($teacher) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
+                })
+                ->whereNotNull('exam_name')
+                ->selectRaw('LOWER(TRIM(exam_name)) as exam_name_key')
+                ->distinct()
+                ->pluck('exam_name_key')
+                ->filter(function ($examNameKey) {
+                    return !empty($examNameKey);
+                })
+                ->values();
+
+            if ($allowedExamNameKeys->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Exam list retrieved successfully',
+                    'data' => [],
+                    'pagination' => [
+                        'current_page' => 1,
+                        'last_page' => 1,
+                        'per_page' => (int) $request->get('per_page', 15),
+                        'total' => 0,
+                        'from' => null,
+                        'to' => null,
+                    ],
+                    'filter_options' => [
+                        'campuses' => collect(),
+                        'sessions' => collect(),
+                        'exam_names' => collect(),
+                    ],
+                    'token' => $request->user()->currentAccessToken()->token ?? null,
+                ], 200);
+            }
+
+            $query->where(function ($q) use ($allowedExamNameKeys) {
+                foreach ($allowedExamNameKeys as $examNameKey) {
+                    $q->orWhereRaw('LOWER(TRIM(exam_name)) = ?', [$examNameKey]);
+                }
+            });
+
             // Filter by campus (if teacher has campus assigned)
             if ($teacher->campus) {
                 $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($teacher->campus))]);
@@ -439,12 +590,14 @@ class TeacherController extends Controller
             }
 
             // Filter by upcoming exams only
-            if ($request->filled('upcoming_only') && $request->upcoming_only == '1') {
+            $upcomingOnly = filter_var($request->get('upcoming_only', false), FILTER_VALIDATE_BOOLEAN);
+            if ($upcomingOnly) {
                 $query->whereDate('exam_date', '>=', Carbon::today()->format('Y-m-d'));
             }
 
             // Filter by past exams only
-            if ($request->filled('past_only') && $request->past_only == '1') {
+            $pastOnly = filter_var($request->get('past_only', false), FILTER_VALIDATE_BOOLEAN);
+            if ($pastOnly) {
                 $query->whereDate('exam_date', '<', Carbon::today()->format('Y-m-d'));
             }
 
@@ -458,8 +611,117 @@ class TeacherController extends Controller
                 ->paginate($perPage)
                 ->withQueryString();
 
+            // Build expected-vs-marked counters from ExamTimetable so status can be pending/partial/completed accurately.
+            $coverageByExamId = [];
+            foreach ($exams as $examItem) {
+                $examNameKey = strtolower(trim((string) ($examItem->exam_name ?? '')));
+                if ($examNameKey === '') {
+                    continue;
+                }
+
+                $ttQuery = ExamTimetable::query()
+                    ->whereRaw('LOWER(TRIM(exam_name)) = ?', [$examNameKey])
+                    ->where(function ($q) use ($assignedSubjectKeys) {
+                        foreach ($assignedSubjectKeys as $subjectKey) {
+                            $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectKey]);
+                        }
+                    });
+                if (!empty($teacher->campus)) {
+                    $ttQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
+                }
+                $examRows = $ttQuery->get(['campus', 'class', 'section', 'subject']);
+
+                $expectedTotal = 0;
+                $markedTotal = 0;
+
+                if ($examRows->isNotEmpty()) {
+                    foreach ($examRows as $row) {
+                        $rowCampus = trim((string) ($row->campus ?? ''));
+                        $rowClass = trim((string) ($row->class ?? ''));
+                        $rowSection = trim((string) ($row->section ?? ''));
+                        $rowSubject = trim((string) ($row->subject ?? ''));
+                        if ($rowClass === '' || $rowSection === '' || $rowSubject === '') {
+                            continue;
+                        }
+
+                        $studentIds = Student::query()
+                            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($rowClass)])
+                            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($rowSection)])
+                            ->when($rowCampus !== '', function ($q) use ($rowCampus) {
+                                return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($rowCampus)]);
+                            })
+                            ->pluck('id')
+                            ->toArray();
+                        $studentsCount = count($studentIds);
+                        $expectedTotal += $studentsCount;
+
+                        $markedCount = 0;
+                        if (!empty($studentIds)) {
+                            $markedCount = StudentMark::query()
+                                ->whereIn('student_id', $studentIds)
+                                ->whereRaw('LOWER(TRIM(test_name)) = ?', [$examNameKey])
+                                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($rowClass)])
+                                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($rowSection)])
+                                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower($rowSubject)])
+                                ->when($rowCampus !== '', function ($q) use ($rowCampus) {
+                                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($rowCampus)]);
+                                })
+                                ->when(!empty($examItem->created_at), function ($q) use ($examItem) {
+                                    // Ignore stale/old marks from previous exams with same name.
+                                    return $q->where('created_at', '>=', $examItem->created_at);
+                                })
+                                ->where(function ($q) {
+                                    // Count as uploaded only when actual numeric marks are entered.
+                                    $q->where(function ($q2) {
+                                        $q2->whereNotNull('marks_obtained')
+                                            ->whereRaw('TRIM(CAST(marks_obtained AS CHAR)) <> ""');
+                                    })->orWhere(function ($q2) {
+                                        $q2->whereNotNull('total_marks')
+                                            ->whereRaw('TRIM(CAST(total_marks AS CHAR)) <> ""');
+                                    })->orWhere(function ($q2) {
+                                        $q2->whereNotNull('passing_marks')
+                                            ->whereRaw('TRIM(CAST(passing_marks AS CHAR)) <> ""');
+                                    });
+                                })
+                                ->distinct('student_id')
+                                ->count('student_id');
+                        }
+                        $markedTotal += $markedCount;
+                    }
+                }
+
+                $coverageByExamId[(int) $examItem->id] = [
+                    'expected_total' => $expectedTotal,
+                    'marked_total' => $markedTotal,
+                    'has_exam_timetable' => $examRows->isNotEmpty(),
+                ];
+            }
+
             // Format exam data
-            $examsData = $exams->map(function($exam) {
+            $examsData = $exams->map(function($exam) use ($coverageByExamId) {
+                $examDate = $exam->exam_date ? Carbon::parse($exam->exam_date) : null;
+                $isUpcoming = $examDate ? $examDate->isFuture() : false;
+                $isPast = $examDate ? $examDate->isPast() : false;
+                $isToday = $examDate ? $examDate->isToday() : false;
+                $resultDeclared = (bool) ($exam->result_status ?? false);
+                $examNameKey = strtolower(trim((string) ($exam->exam_name ?? '')));
+                $expectedTotal = (int) ($coverageByExamId[(int) $exam->id]['expected_total'] ?? 0);
+                $markedTotal = (int) ($coverageByExamId[(int) $exam->id]['marked_total'] ?? 0);
+                $markedStudentsCount = $markedTotal;
+                // Do not mark uploaded/locked before web declare-result.
+                $marksUploaded = $resultDeclared;
+                $alreadyUploaded = $resultDeclared;
+                $hasExamTimetable = (bool) ($coverageByExamId[(int) $exam->id]['has_exam_timetable'] ?? false);
+                $canUploadMarks = $hasExamTimetable && !$resultDeclared;
+                $uploadStatus = $resultDeclared
+                    ? 'result_declared'
+                    : ($hasExamTimetable ? 'not_uploaded' : 'timetable_missing');
+
+                // Status should only reflect marks upload state.
+                // completed => marks uploaded
+                // pending   => marks not uploaded yet
+                $status = $resultDeclared ? 'completed' : 'pending';
+
                 return [
                     'id' => $exam->id,
                     'exam_name' => $exam->exam_name,
@@ -468,27 +730,51 @@ class TeacherController extends Controller
                     'exam_date' => $exam->exam_date ? Carbon::parse($exam->exam_date)->format('Y-m-d') : null,
                     'exam_date_formatted' => $exam->exam_date ? Carbon::parse($exam->exam_date)->format('d M Y') : null,
                     'session' => $exam->session,
+                    'result_status' => $resultDeclared,
+                    'marks_uploaded' => $marksUploaded,
+                    'already_uploaded' => $alreadyUploaded,
+                    'upload_status' => $uploadStatus,
+                    'has_exam_timetable' => $hasExamTimetable,
+                    'marks_entry_enabled' => $canUploadMarks,
+                    'can_upload_marks' => $canUploadMarks,
+                    'marked_students_count' => $markedStudentsCount,
+                    'expected_marks_count' => $expectedTotal,
+                    'uploaded_marks_count' => $markedTotal,
+                    'status' => $status,
                     'created_at' => $exam->created_at ? Carbon::parse($exam->created_at)->format('Y-m-d H:i:s') : null,
                     'created_at_formatted' => $exam->created_at ? Carbon::parse($exam->created_at)->format('d M Y, h:i A') : null,
-                    'is_upcoming' => $exam->exam_date ? Carbon::parse($exam->exam_date)->isFuture() : false,
-                    'is_past' => $exam->exam_date ? Carbon::parse($exam->exam_date)->isPast() : false,
-                    'is_today' => $exam->exam_date ? Carbon::parse($exam->exam_date)->isToday() : false,
+                    'is_upcoming' => $isUpcoming,
+                    'is_past' => $isPast,
+                    'is_today' => $isToday,
                 ];
             });
 
             // Get filter options for frontend
+            $teacherExamFilterBase = Exam::query()
+                ->where(function ($q) use ($allowedExamNameKeys) {
+                    foreach ($allowedExamNameKeys as $examNameKey) {
+                        $q->orWhereRaw('LOWER(TRIM(exam_name)) = ?', [$examNameKey]);
+                    }
+                });
+            if (!empty($teacher->campus)) {
+                $teacherExamFilterBase->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
+            }
+
             $filterOptions = [
-                'campuses' => Exam::whereNotNull('campus')
+                'campuses' => (clone $teacherExamFilterBase)
+                    ->whereNotNull('campus')
                     ->distinct()
                     ->pluck('campus')
                     ->sort()
                     ->values(),
-                'sessions' => Exam::whereNotNull('session')
+                'sessions' => (clone $teacherExamFilterBase)
+                    ->whereNotNull('session')
                     ->distinct()
                     ->pluck('session')
                     ->sort()
                     ->values(),
-                'exam_names' => Exam::whereNotNull('exam_name')
+                'exam_names' => (clone $teacherExamFilterBase)
+                    ->whereNotNull('exam_name')
                     ->distinct()
                     ->pluck('exam_name')
                     ->sort()
@@ -520,8 +806,8 @@ class TeacherController extends Controller
                         'exam_name' => $request->get('exam_name'),
                         'start_date' => $request->get('start_date'),
                         'end_date' => $request->get('end_date'),
-                        'upcoming_only' => $request->get('upcoming_only'),
-                        'past_only' => $request->get('past_only'),
+                        'upcoming_only' => $upcomingOnly,
+                        'past_only' => $pastOnly,
                     ],
                     'filter_options' => $filterOptions,
                 ],
@@ -555,7 +841,7 @@ class TeacherController extends Controller
      * - class (required): Class name (e.g., "ten", "nine")
      * - section (optional): Section name (e.g., "a", "b", "t")
      * - exam_name (optional): Exam name to load existing marks (e.g., "Mid Term Exam")
-     * - subject (optional): Subject name to load existing marks (e.g., "English")
+     * - subject (optional): Subject name to narrow marks within selected exam (e.g., "English")
      * - search (optional): Search by student name or code
      * 
      * Example: GET /api/teacher/exam/students?class=ten&section=t
@@ -626,6 +912,85 @@ class TeacherController extends Controller
                 ], 403);
             }
 
+            $sectionName = $sectionName ? trim((string) $sectionName) : null;
+            $examName = $examName ? trim((string) $examName) : null;
+            $subjectName = $subjectName ? trim((string) $subjectName) : null;
+
+            if ($examName) {
+                $timetableQuery = ExamTimetable::query()
+                    ->whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower($examName)])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)]);
+
+                if ($sectionName) {
+                    $timetableQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                }
+                if (!empty($teacher->campus)) {
+                    $timetableQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
+                }
+                if ($subjectName) {
+                    $timetableQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower($subjectName)]);
+                }
+
+                if (!$timetableQuery->exists()) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Exam timetable not found for selected class/section. Students list is not available until timetable is added.',
+                        'data' => [
+                            'teacher' => [
+                                'name' => $teacher->name,
+                                'emp_id' => $teacher->emp_id,
+                                'campus' => $teacher->campus,
+                            ],
+                            'filters' => [
+                                'class' => $className,
+                                'section' => $sectionName,
+                                'exam_name' => $examName,
+                                'subject' => $subjectName,
+                            ],
+                            'timetable_exists' => false,
+                            'students' => [],
+                            'total_students' => 0,
+                            'available_exam_names' => [],
+                            'marks_upload_status' => [
+                                'exam_name' => $examName,
+                                'subject' => $subjectName,
+                                'uploaded_students' => 0,
+                                'unuploaded_students' => 0,
+                                'is_fully_uploaded' => false,
+                            ],
+                        ],
+                        'token' => $request->user()->currentAccessToken()->token ?? null,
+                    ], 200);
+                }
+            }
+
+            // If subject is not provided, try to auto-resolve it only when teacher has
+            // exactly one assigned subject for this class/section. This keeps subject
+            // isolation while preventing blank marks in app calls that omit subject.
+            $resolvedSubjectName = $subjectName ? trim((string) $subjectName) : null;
+            if ($examName && empty($resolvedSubjectName)) {
+                $teacherNameKey = strtolower(trim((string) ($teacher->name ?? '')));
+                $subjectCandidatesQuery = Subject::query()
+                    ->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherNameKey])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $className))]);
+
+                if (!empty($sectionName)) {
+                    $subjectCandidatesQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $sectionName))]);
+                }
+
+                $subjectCandidates = $subjectCandidatesQuery
+                    ->whereNotNull('subject_name')
+                    ->pluck('subject_name')
+                    ->map(fn($s) => trim((string) $s))
+                    ->filter(fn($s) => $s !== '')
+                    ->unique()
+                    ->values();
+
+                if ($subjectCandidates->count() === 1) {
+                    $resolvedSubjectName = $subjectCandidates->first();
+                }
+            }
+
             // Build query
             $query = Student::query();
 
@@ -639,7 +1004,6 @@ class TeacherController extends Controller
 
             // Filter by section (if provided)
             if ($sectionName) {
-                $sectionName = trim($sectionName);
                 $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
             }
 
@@ -660,30 +1024,60 @@ class TeacherController extends Controller
                 ->orderBy('student_name', 'asc')
                 ->get();
 
-            // If exam_name and subject are provided, load existing exam marks
-            // NOTE: Exam marks are stored in StudentMark table with exam_name in test_name field
-            // This is different from test marks which use test names
+            // Load existing exam marks.
+            // - If exam_name + subject provided: marks for that exact exam+subject only.
+            // - If exam_name provided but subject missing: do not preload marks to avoid
+            //   leaking one subject's marks into another subject entry screen.
+            // - Otherwise: latest uploaded marks per student for class/section.
             $marksData = [];
-            if ($examName && $subjectName && $students->count() > 0) {
-                // Load existing exam marks for this exam, subject, class, and section
-                $marks = StudentMark::whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($examName))]) // exam_name stored in test_name field
-                    ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))])
+            if ($students->count() > 0) {
+                $studentIds = $students->pluck('id')->values()->all();
+                $marksQuery = StudentMark::query()
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
                     ->when($sectionName, function($q) use ($sectionName) {
                         return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($sectionName))]);
                     })
+                    ->whereIn('student_id', $studentIds);
+
+                if ($examName && $resolvedSubjectName) {
+                    $marksQuery
+                        ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($examName))])
+                        ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($resolvedSubjectName))]);
+                } elseif ($examName && !$resolvedSubjectName) {
+                    // Subject must be selected for exam-context marks loading.
+                    $marksQuery->whereRaw('1 = 0');
+                } else {
+                    $marksQuery->where(function ($q) {
+                        $q->whereNotNull('marks_obtained')
+                            ->orWhereNotNull('total_marks')
+                            ->orWhereNotNull('passing_marks')
+                            ->orWhereNotNull('teacher_remarks');
+                    });
+                }
+
+                $marks = $marksQuery
                     ->get()
-                    ->keyBy('student_id');
+                    ->groupBy('student_id')
+                    ->map(function ($rows) use ($examName, $resolvedSubjectName) {
+                        if ($examName && $resolvedSubjectName) {
+                            // For selected exam (with or without subject), keep latest row.
+                            return $rows->sortByDesc('updated_at')->first();
+                        }
+                        // No selected exam context: use most recent uploaded row.
+                        return $rows->sortByDesc('updated_at')->first();
+                    });
 
                 $marksData = $marks->map(function($mark) {
                     return [
                         'student_id' => $mark->student_id,
+                        'exam_name' => $mark->test_name,
+                        'subject' => $mark->subject,
                         'marks_obtained' => $mark->marks_obtained,
                         'total_marks' => $mark->total_marks,
                         'passing_marks' => $mark->passing_marks,
                         'remarks' => $mark->teacher_remarks,
                     ];
-                })->keyBy('student_id')->toArray();
+                })->toArray();
             }
 
             // Format students data with exam marks if available
@@ -700,8 +1094,12 @@ class TeacherController extends Controller
                     'photo' => $student->photo ? asset('storage/' . $student->photo) : null,
                 ];
 
-                // Add existing exam marks if available (when exam_name and subject are provided)
-                if (isset($marksData[$student->id])) {
+                $hasUploadedMarks = isset($marksData[$student->id]);
+                // Keep app-side re-upload always enabled.
+                $studentData['marks_uploaded'] = false;
+
+                // Add existing exam marks if available
+                if ($hasUploadedMarks) {
                     $marksObtained = $marksData[$student->id]['marks_obtained'] ?? null;
                     $totalMarks = $marksData[$student->id]['total_marks'] ?? null;
                     $passingMarks = $marksData[$student->id]['passing_marks'] ?? null;
@@ -710,6 +1108,8 @@ class TeacherController extends Controller
                     $studentData['total_marks'] = $totalMarks;
                     $studentData['passing_marks'] = $passingMarks;
                     $studentData['remarks'] = $marksData[$student->id]['remarks'] ?? null;
+                    $studentData['uploaded_exam_name'] = $marksData[$student->id]['exam_name'] ?? null;
+                    $studentData['uploaded_subject'] = $marksData[$student->id]['subject'] ?? null;
 
                     // Boolean pass based on obtained >= passing
                     if ($marksObtained !== null && $passingMarks !== null && $passingMarks !== '') {
@@ -729,10 +1129,27 @@ class TeacherController extends Controller
                 return $id ? !isset($marksData[$id]) : true;
             })->values();
 
+            // Never lock by "already uploaded" in teacher app flow.
+            $uploadedStudentsCount = 0;
+
             $message = 'Students list retrieved successfully for class: ' . $className;
             if ($sectionName) {
                 $message .= ', section: ' . $sectionName;
             }
+
+            $availableExamNames = ExamTimetable::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                ->when($sectionName, function ($q) use ($sectionName) {
+                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                })
+                ->when($teacher->campus, function ($q) use ($teacher) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($teacher->campus))]);
+                })
+                ->orderBy('exam_name', 'asc')
+                ->pluck('exam_name')
+                ->filter()
+                ->unique()
+                ->values();
 
             return response()->json([
                 'success' => true,
@@ -747,7 +1164,15 @@ class TeacherController extends Controller
                         'class' => $className,
                         'section' => $sectionName,
                         'exam_name' => $examName,
-                        'subject' => $subjectName,
+                        'subject' => $resolvedSubjectName,
+                    ],
+                    'available_exam_names' => $availableExamNames,
+                    'marks_upload_status' => [
+                        'exam_name' => $examName,
+                        'subject' => $resolvedSubjectName,
+                        'uploaded_students' => $uploadedStudentsCount,
+                        'unuploaded_students' => $studentsData->count(),
+                        'is_fully_uploaded' => false,
                     ],
                     'total_students' => $studentsData->count(),
                     'students' => $studentsData,
@@ -799,12 +1224,14 @@ class TeacherController extends Controller
                 'section' => ['required', 'string', 'max:255'],
                 'exam_name' => ['required', 'string', 'max:255'],
                 'subject' => ['required', 'string', 'max:255'],
+                'campus' => ['nullable', 'string', 'max:255'],
             ]);
 
             $className = trim((string) $validated['class']);
             $sectionName = trim((string) $validated['section']);
             $examName = trim((string) $validated['exam_name']);
             $subjectName = trim((string) $validated['subject']);
+            $campusName = isset($validated['campus']) ? trim((string) $validated['campus']) : null;
 
             // Verify class access for this teacher
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])->get();
@@ -833,7 +1260,9 @@ class TeacherController extends Controller
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
                 ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
 
-            if (!empty($teacher->campus)) {
+            if (!empty($campusName)) {
+                $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+            } elseif (!empty($teacher->campus)) {
                 $studentsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $teacher->campus))]);
             }
 
@@ -876,6 +1305,7 @@ class TeacherController extends Controller
                 'message' => 'Students list retrieved successfully.',
                 'data' => [
                     'filters' => [
+                        'campus' => $campusName ?? ($teacher->campus ?? null),
                         'class' => $className,
                         'section' => $sectionName,
                         'exam_name' => $examName,
@@ -960,7 +1390,7 @@ class TeacherController extends Controller
             if (!empty($campusName)) {
                 $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
             }
-
+                 
             if (!empty($subjectName)) {
                 $assignedSubjectsQuery->whereRaw('LOWER(TRIM(subject_name)) = ?', [strtolower(trim($subjectName))]);
             }
@@ -1130,6 +1560,7 @@ class TeacherController extends Controller
                 'class' => ['required', 'string', 'max:255'],
                 'section' => ['nullable', 'string', 'max:255'],
                 'subject' => ['required', 'string', 'max:255'],
+                'campus' => ['nullable', 'string', 'max:255'],
                 'student_id' => ['nullable', 'integer', 'exists:students,id'],
                 'remark' => ['nullable', 'string', 'max:1000'],
                 'remarks' => ['nullable', 'array', 'min:1'],
@@ -1140,6 +1571,7 @@ class TeacherController extends Controller
             $className = trim((string) $validated['class']);
             $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : null;
             $subjectName = trim((string) $validated['subject']);
+            $campusName = isset($validated['campus']) ? trim((string) $validated['campus']) : null;
 
             // Verify class assignment similar to saveExamMarks
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
@@ -1217,6 +1649,10 @@ class TeacherController extends Controller
                     $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to section {$sectionName}.";
                     continue;
                 }
+                if (!empty($campusName) && strtolower(trim($student->campus ?? '')) !== strtolower($campusName)) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to campus {$campusName}.";
+                    continue;
+                }
 
                 $campus = $student->campus ?? ($teacher->campus ?? null);
 
@@ -1256,6 +1692,7 @@ class TeacherController extends Controller
                 'success' => true,
                 'message' => "Exam remarks saved (updated: {$updated}, created: {$created}).",
                 'data' => [
+                    'campus' => $campusName ?? ($teacher->campus ?? null),
                     'exam_name' => $examName,
                     'class' => $className,
                     'section' => $sectionName,
@@ -1292,7 +1729,8 @@ class TeacherController extends Controller
      * Get subjects for a given exam + class (+ section) that this teacher can use.
      *
      * Mostly used to build subject dropdown after selecting class/section/exam.
-     * It returns subjects from Subject assignments for the logged-in teacher.
+     * By default it returns all subjects for the given class/section.
+     * Pass teacher_only=true to restrict to logged-in teacher assigned subjects.
      *
      * Query params:
      * - exam_name (required)  -> currently only echoed back (for context)
@@ -1318,33 +1756,175 @@ class TeacherController extends Controller
                 'class' => ['required', 'string', 'max:255'],
                 'section' => ['nullable', 'string', 'max:255'],
                 'campus' => ['nullable', 'string', 'max:255'],
+                'teacher_only' => ['nullable', 'boolean'],
             ]);
 
             $examName = trim((string) $validated['exam_name']);
             $className = trim((string) $validated['class']);
             $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : null;
             $campusName = isset($validated['campus']) ? trim((string) $validated['campus']) : null;
+            // Default campus to teacher's campus to mirror web filtering and avoid cross-campus subjects
+            if (empty($campusName) && !empty($teacher->campus)) {
+                $campusName = trim((string) $teacher->campus);
+            }
 
+            $teacherOnly = filter_var($request->query('teacher_only', false), FILTER_VALIDATE_BOOLEAN);
             $teacherName = strtolower(trim($teacher->name ?? ''));
 
-            // Subjects assigned to this teacher for this class/section/campus
-            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)]);
+            // Strict mode: return only subjects that were added for selected test/exam_name.
+            // Exams use ExamTimetable, while tests use Test, so support both sources.
+            $examSubjectsQuery = ExamTimetable::query()
+                ->whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower($examName)])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                ->whereNotNull('subject');
+
+            if (!empty($sectionName)) {
+                $examSubjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+            }
+            if (!empty($campusName)) {
+                $examSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+            }
+
+            $examSubjectNames = $examSubjectsQuery
+                ->pluck('subject')
+                ->map(fn($s) => trim((string) $s))
+                ->filter(fn($s) => $s !== '')
+                ->unique()
+                ->values();
+            $examSubjectKeys = $examSubjectNames
+                ->map(fn($s) => strtolower($s))
+                ->values();
+
+            $testSubjectsQuery = Test::query()
+                ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower($examName)])
+                ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower($className)])
+                ->whereNotNull('subject');
+
+            if (!empty($sectionName)) {
+                $testSubjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+            }
+            if (!empty($campusName)) {
+                $testSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+            }
+
+            $testSubjectNames = $testSubjectsQuery
+                ->pluck('subject')
+                ->map(fn($s) => trim((string) $s))
+                ->filter(fn($s) => $s !== '')
+                ->unique()
+                ->values();
+            $testSubjectKeys = $testSubjectNames
+                ->map(fn($s) => strtolower($s))
+                ->values();
+
+            $allowedSubjectKeys = $examSubjectKeys
+                ->merge($testSubjectKeys)
+                ->unique()
+                ->values();
+            $allowedSubjectNames = $examSubjectNames
+                ->merge($testSubjectNames)
+                ->unique()
+                ->values();
+
+            // Teacher assignment filter: keep only subjects assigned to logged-in teacher.
+            $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                ->whereNotNull('subject_name')
+                ->whereNotNull('class')
+                ->where(function ($q) use ($teacherName) {
+                    $q->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName]);
+                });
 
             if (!empty($sectionName)) {
                 $subjectsQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                $subjectsQuery->whereNotNull('section');
             }
             if (!empty($campusName)) {
                 $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
             }
 
-            $subjects = $subjectsQuery->pluck('subject_name')
-                ->filter()
+            $subjects = $subjectsQuery
+                ->orderBy('subject_name', 'asc')
+                ->pluck('subject_name')
                 ->map(fn($s) => trim((string) $s))
+                ->filter(fn($s) => $s !== '')
                 ->unique()
-                ->sort()
+                ->filter(fn($s) => $allowedSubjectKeys->isEmpty() || $allowedSubjectKeys->contains(strtolower($s)))
                 ->values()
                 ->toArray();
+
+            if (empty($subjects) && !$teacherOnly && $allowedSubjectNames->isNotEmpty()) {
+                $subjects = $allowedSubjectNames->toArray();
+            }
+
+            $subjectOptions = collect($subjects)->map(function ($subject) {
+                return [
+                    'subject' => $subject,
+                    'subject_name' => $subject,
+                    'name' => $subject,
+                ];
+            })->values()->toArray();
+
+            $hasStartingTimeColumn = Schema::hasColumn('exam_timetables', 'starting_time');
+            $hasEndingTimeColumn = Schema::hasColumn('exam_timetables', 'ending_time');
+            $hasStartTimeColumn = Schema::hasColumn('exam_timetables', 'start_time');
+            $hasEndTimeColumn = Schema::hasColumn('exam_timetables', 'end_time');
+            $hasTotalMarksColumn = Schema::hasColumn('exam_timetables', 'total_marks');
+            $hasPassingMarksColumn = Schema::hasColumn('exam_timetables', 'passing_marks');
+
+            $timetableRows = ExamTimetable::query()
+                ->whereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower($examName)])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                ->when(!empty($sectionName), function ($q) use ($sectionName) {
+                    $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                })
+                ->when(!empty($campusName), function ($q) use ($campusName) {
+                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+                })
+                ->orderBy('exam_date', 'asc')
+                ->orderBy('id', 'asc')
+                ->get()
+                ->map(function ($row) use ($hasStartingTimeColumn, $hasEndingTimeColumn, $hasStartTimeColumn, $hasEndTimeColumn, $hasTotalMarksColumn, $hasPassingMarksColumn) {
+                    $startTime = $hasStartingTimeColumn ? ($row->starting_time ?? null) : ($hasStartTimeColumn ? ($row->start_time ?? null) : null);
+                    $endTime = $hasEndingTimeColumn ? ($row->ending_time ?? null) : ($hasEndTimeColumn ? ($row->end_time ?? null) : null);
+
+                    return [
+                        'id' => $row->id,
+                        'campus' => $row->campus,
+                        'exam_name' => $row->exam_name,
+                        'class' => $row->class,
+                        'section' => $row->section,
+                        'subject' => $row->subject,
+                        'exam_date' => $row->exam_date ? Carbon::parse($row->exam_date)->format('Y-m-d') : null,
+                        'exam_date_formatted' => $row->exam_date ? Carbon::parse($row->exam_date)->format('d M Y') : null,
+                        'start_time' => $startTime,
+                        'starting_time' => $startTime,
+                        'end_time' => $endTime,
+                        'ending_time' => $endTime,
+                        'total_marks' => $hasTotalMarksColumn ? ($row->total_marks ?? null) : null,
+                        'passing_marks' => $hasPassingMarksColumn ? ($row->passing_marks ?? null) : null,
+                    ];
+                })
+                ->values()
+                ->toArray();
+
+            $timetableSubjects = collect($timetableRows)
+                ->pluck('subject')
+                ->map(fn ($subject) => trim((string) $subject))
+                ->filter(fn ($subject) => $subject !== '')
+                ->unique()
+                ->values()
+                ->toArray();
+
+            if (!$teacherOnly) {
+                $subjects = $timetableSubjects;
+                $subjectOptions = collect($subjects)->map(function ($subject) {
+                    return [
+                        'subject' => $subject,
+                        'subject_name' => $subject,
+                        'name' => $subject,
+                    ];
+                })->values()->toArray();
+            }
 
             return response()->json([
                 'success' => true,
@@ -1354,7 +1934,12 @@ class TeacherController extends Controller
                     'class' => $className,
                     'section' => $sectionName,
                     'campus' => $campusName,
+                    'all_subjects' => false,
                     'subjects' => $subjects,
+                    'subject_options' => $subjectOptions,
+                    'timetable_subjects' => $timetableSubjects,
+                    'timetable_exists' => !empty($timetableRows),
+                    'timetable' => $timetableRows,
                 ],
                 'token' => $request->user()->currentAccessToken()->token ?? null,
             ], 200);
@@ -1375,6 +1960,408 @@ class TeacherController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while retrieving exam subjects: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get students list for "Teacher Remarks - Final Result".
+     *
+     * Required query params:
+     * - session
+     * - class
+     *
+     * Optional query params:
+     * - section
+     * - campus (optional override; otherwise teacher token campus is used)
+     */
+    public function finalResultStudents(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'session' => ['required', 'string', 'max:255'],
+                'class' => ['required', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
+                'campus' => ['nullable', 'string', 'max:255'],
+            ]);
+
+            $sessionName = trim((string) $validated['session']);
+            $className = trim((string) $validated['class']);
+            $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : null;
+            $campusName = isset($validated['campus']) ? trim((string) $validated['campus']) : null;
+            if (empty($campusName)) {
+                $campusName = trim((string) ($teacher->campus ?? ''));
+            }
+
+            // Verify class assignment (same pattern as other teacher exam APIs)
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+                ->get();
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(fn($class) => trim((string) $class))
+                ->filter(fn($class) => !empty($class))
+                ->unique()
+                ->values();
+
+            $isClassAssigned = $assignedClasses->contains(function ($class) use ($className) {
+                return strtolower(trim((string) $class)) === strtolower($className);
+            });
+
+            if (!$isClassAssigned && $assignedClasses->isNotEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this class.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Match web logic: fetch session exams without campus restriction.
+            // Some exam rows may not have campus, and filtering by campus can
+            // wrongly drop valid exams which then makes total/obtained incorrect.
+            $examNames = Exam::query()
+                ->whereRaw('LOWER(TRIM(session)) = ?', [strtolower($sessionName)])
+                ->whereNotNull('exam_name')
+                ->pluck('exam_name')
+                ->map(fn($name) => trim((string) $name))
+                ->filter(fn($name) => !empty($name))
+                ->unique()
+                ->values();
+            $examNameKeys = $examNames->map(fn($name) => strtolower(trim((string) $name)))->values();
+
+            // Students in class/section/campus
+            $students = Student::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                ->when(!empty($sectionName), function ($q) use ($sectionName) {
+                    return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                })
+                ->when(!empty($campusName), function ($q) use ($campusName) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+                })
+                ->orderBy('student_code', 'asc')
+                ->orderBy('student_name', 'asc')
+                ->get();
+
+            // Preload marks for these students from session exams, then aggregate in-memory
+            $marks = collect();
+            if ($students->isNotEmpty() && $examNames->isNotEmpty()) {
+                $marks = StudentMark::query()
+                    ->whereIn('student_id', $students->pluck('id')->toArray())
+                    ->whereIn(\DB::raw('LOWER(TRIM(test_name))'), $examNameKeys->toArray())
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                    ->when(!empty($sectionName), function ($q) use ($sectionName) {
+                        return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                    })
+                    ->when(!empty($campusName), function ($q) use ($campusName) {
+                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+                    })
+                    ->get();
+            }
+
+            $studentsData = $students->map(function ($student) use ($marks, $sessionName, $className, $sectionName, $campusName) {
+                $studentMarks = $marks->where('student_id', $student->id);
+
+                $roll = $student->student_code ?? ($student->gr_number ?? null);
+
+                // Web-like robust final remark lookup.
+                $baseRemarkQuery = function() use ($student, $sessionName, $className, $sectionName) {
+                    $q = StudentMark::where('student_id', $student->id)
+                        ->where(function($sub) use ($sessionName) {
+                            $sub->whereRaw('LOWER(TRIM(test_name)) = ?', ['final_result'])
+                                ->orWhereRaw('LOWER(TRIM(test_name)) LIKE ?', ['%final%'])
+                                ->orWhereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($sessionName . '_FINAL'))]);
+                        })
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
+                    if (!empty($sectionName)) {
+                        $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($sectionName))]);
+                    }
+                    return $q;
+                };
+
+                $finalRemarkRow = $baseRemarkQuery()
+                    ->when(!empty($campusName), function ($q) use ($campusName) {
+                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
+                    })
+                    ->orderByDesc('updated_at')
+                    ->first();
+
+                if (!$finalRemarkRow && !empty($campusName)) {
+                    $finalRemarkRow = $baseRemarkQuery()->orderByDesc('updated_at')->first();
+                }
+
+                if (!$finalRemarkRow && !empty($sectionName)) {
+                    $finalRemarkRow = StudentMark::where('student_id', $student->id)
+                        ->where(function($sub) use ($sessionName) {
+                            $sub->whereRaw('LOWER(TRIM(test_name)) = ?', ['final_result'])
+                                ->orWhereRaw('LOWER(TRIM(test_name)) LIKE ?', ['%final%'])
+                                ->orWhereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($sessionName . '_FINAL'))]);
+                        })
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
+                        ->when(!empty($campusName), function ($q) use ($campusName) {
+                            return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
+                        })
+                        ->orderByDesc('updated_at')
+                        ->first();
+                }
+
+                return [
+                    'student_id' => $student->id,
+                    'student_code' => $student->student_code ?? null,
+                    // For UI columns: Roll / Name / Parent / Total / Obtained
+                    'roll' => $roll,
+                    'roll_number' => $roll,
+                    'name' => $student->student_name,
+                    'parent' => $student->father_name ?? null,
+                    'final_remark' => $finalRemarkRow->teacher_remarks ?? null,
+                    'total' => (float) ($studentMarks->sum('total_marks') ?? 0),
+                    'obtained' => (float) ($studentMarks->sum('marks_obtained') ?? 0),
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Final result students retrieved successfully.',
+                'data' => [
+                    'filters' => [
+                        'campus' => $campusName ?: null,
+                        'session' => $sessionName,
+                        'class' => $className,
+                        'section' => $sectionName,
+                    ],
+                    'total_students' => $studentsData->count(),
+                    'students' => $studentsData,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Final Result Students API Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'teacher_id' => $request->user()->id ?? null,
+                'request_data' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving final result students: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Save teacher remarks for final result (single or bulk).
+     *
+     * Single payload:
+     * {
+     *   "session": "2026/2027",
+     *   "class": "One",
+     *   "section": "A",
+     *   "student_id": 8,
+     *   "remark": "Good progress"
+     * }
+     *
+     * Bulk payload:
+     * {
+     *   "session": "2026/2027",
+     *   "class": "One",
+     *   "section": "A",
+     *   "remarks": {
+     *      "8": "Good progress",
+     *      "9": "Needs improvement"
+     *   }
+     * }
+     */
+    public function saveFinalResultRemarks(Request $request): JsonResponse
+    {
+        try {
+            $teacher = $request->user();
+
+            if (!$teacher || !$teacher->isTeacher()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only teachers can access this endpoint.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'session' => ['required', 'string', 'max:255'],
+                'class' => ['required', 'string', 'max:255'],
+                'section' => ['nullable', 'string', 'max:255'],
+                'campus' => ['nullable', 'string', 'max:255'],
+                'student_id' => ['nullable', 'integer', 'exists:students,id'],
+                'remark' => ['nullable', 'string', 'max:1000'],
+                'remarks' => ['nullable', 'array', 'min:1'],
+                'remarks.*' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $sessionName = trim((string) $validated['session']);
+            $className = trim((string) $validated['class']);
+            $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : null;
+            $campusName = isset($validated['campus']) ? trim((string) $validated['campus']) : null;
+            if (empty($campusName)) {
+                $campusName = trim((string) ($teacher->campus ?? ''));
+            }
+
+            // Verify teacher is assigned to this class.
+            $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])->get();
+            $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])->get();
+            $assignedClasses = $assignedSubjects->pluck('class')
+                ->merge($assignedSections->pluck('class'))
+                ->map(fn($class) => trim((string) $class))
+                ->filter(fn($class) => !empty($class))
+                ->unique()
+                ->values();
+
+            $isClassAssigned = $assignedClasses->contains(function ($class) use ($className) {
+                return strtolower(trim((string) $class)) === strtolower($className);
+            });
+
+            if (!$isClassAssigned && $assignedClasses->isNotEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this class.',
+                    'token' => null,
+                ], 403);
+            }
+
+            // Accept either single student payload or bulk remarks payload.
+            if (!empty($validated['student_id'])) {
+                if (!array_key_exists('remark', $validated)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'remark is required when student_id is provided.',
+                        'token' => null,
+                    ], 422);
+                }
+                $remarksPayload = [
+                    (string) $validated['student_id'] => $validated['remark'],
+                ];
+            } else {
+                $remarksPayload = $validated['remarks'] ?? [];
+                if (empty($remarksPayload)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please provide either student_id + remark or remarks object.',
+                        'token' => null,
+                    ], 422);
+                }
+            }
+
+            $updated = 0;
+            $created = 0;
+            $errors = [];
+
+            foreach ($remarksPayload as $studentId => $remarkText) {
+                if (!$studentId) {
+                    continue;
+                }
+
+                $student = Student::find($studentId);
+                if (!$student) {
+                    $errors[] = "Student with ID {$studentId} not found.";
+                    continue;
+                }
+
+                if (strtolower(trim((string) ($student->class ?? ''))) !== strtolower($className)) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to class {$className}.";
+                    continue;
+                }
+
+                if (!empty($sectionName) && strtolower(trim((string) ($student->section ?? ''))) !== strtolower($sectionName)) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to section {$sectionName}.";
+                    continue;
+                }
+
+                if (!empty($campusName) && strtolower(trim((string) ($student->campus ?? ''))) !== strtolower($campusName)) {
+                    $errors[] = "Student {$student->student_name} (ID: {$studentId}) does not belong to campus {$campusName}.";
+                    continue;
+                }
+
+                // Final result remarks are stored in dedicated FINAL_RESULT row.
+                $mark = StudentMark::where('student_id', $studentId)
+                    ->whereRaw('LOWER(TRIM(test_name)) = ?', ['final_result'])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                    ->when(!empty($sectionName), function ($q) use ($sectionName) {
+                        return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                    })
+                    ->when(!empty($campusName), function ($q) use ($campusName) {
+                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+                    })
+                    ->first();
+
+                if ($mark) {
+                    $mark->update([
+                        'teacher_remarks' => $remarkText,
+                    ]);
+                    $updated++;
+                } else {
+                    StudentMark::create([
+                        'student_id' => $studentId,
+                        'test_name' => 'FINAL_RESULT',
+                        'campus' => $campusName ?: ($student->campus ?? null),
+                        'class' => $className,
+                        'section' => $sectionName,
+                        'subject' => null,
+                        'marks_obtained' => null,
+                        'total_marks' => null,
+                        'passing_marks' => null,
+                        'teacher_remarks' => $remarkText,
+                    ]);
+                    $created++;
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Final result remarks saved (updated: {$updated}, created: {$created}).",
+                'data' => [
+                    'session' => $sessionName,
+                    'campus' => $campusName ?: null,
+                    'class' => $className,
+                    'section' => $sectionName,
+                    'updated_count' => $updated,
+                    'created_count' => $created,
+                    'errors' => !empty($errors) ? $errors : null,
+                ],
+                'token' => $request->user()->currentAccessToken()->token ?? null,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'token' => null,
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Save Final Result Remarks API Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'teacher_id' => $request->user()->id ?? null,
+                'request_data' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while saving final result remarks: ' . $e->getMessage(),
                 'token' => null,
             ], 500);
         }
@@ -1428,8 +2415,7 @@ class TeacherController extends Controller
                 'class' => ['required', 'string', 'max:255'],
                 'section' => ['nullable', 'string', 'max:255'],
                 'subject' => ['required', 'string', 'max:255'],
-                // If true, do not overwrite existing marks for same exam/class/section/subject.
-                // Default: true (prevents re-upload).
+                // Legacy flag only (ignored); re-upload/update is always allowed.
                 'prevent_duplicate' => ['nullable', 'boolean'],
                 'marks' => ['required', 'array', 'min:1'],
                 'marks.*.obtained' => ['nullable', 'numeric', 'min:0'],
@@ -1461,7 +2447,12 @@ class TeacherController extends Controller
                 ->unique()
                 ->values();
 
-            $className = trim($validated['class']);
+            $examName = trim((string) $validated['exam_name']);
+            $className = trim((string) $validated['class']);
+            $sectionName = isset($validated['section']) && $validated['section'] !== null
+                ? trim((string) $validated['section'])
+                : null;
+            $subjectName = trim((string) $validated['subject']);
             $isClassAssigned = $assignedClasses->contains(function($class) use ($className) {
                 return strtolower(trim($class)) === strtolower($className);
             });
@@ -1473,6 +2464,10 @@ class TeacherController extends Controller
                     'token' => null,
                 ], 403);
             }
+
+            // Allow incremental upload:
+            // already uploaded students are skipped later in the loop,
+            // while new students are still saved.
 
             // Check if marks array has valid data
             $hasValidMarks = false;
@@ -1491,6 +2486,41 @@ class TeacherController extends Controller
                 ], 400);
             }
 
+            // Validate mark relationships per student.
+            // Rules:
+            // - obtained marks cannot be greater than total marks
+            // - passing marks cannot be greater than total marks
+            $markRelationErrors = [];
+            foreach ($validated['marks'] as $studentId => $markData) {
+                $obtained = array_key_exists('obtained', $markData) && $markData['obtained'] !== '' && $markData['obtained'] !== null
+                    ? (float) $markData['obtained']
+                    : null;
+                $total = array_key_exists('total', $markData) && $markData['total'] !== '' && $markData['total'] !== null
+                    ? (float) $markData['total']
+                    : null;
+                $passing = array_key_exists('passing', $markData) && $markData['passing'] !== '' && $markData['passing'] !== null
+                    ? (float) $markData['passing']
+                    : null;
+
+                if ($total !== null) {
+                    if ($obtained !== null && $obtained > $total) {
+                        $markRelationErrors["marks.{$studentId}.obtained"][] = 'Obtained marks cannot be greater than total marks.';
+                    }
+                    if ($passing !== null && $passing > $total) {
+                        $markRelationErrors["marks.{$studentId}.passing"][] = 'Passing marks cannot be greater than total marks.';
+                    }
+                }
+            }
+
+            if (!empty($markRelationErrors)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => $markRelationErrors,
+                    'token' => null,
+                ], 422);
+            }
+
             // Get campus from first student
             $firstStudentId = array_key_first($validated['marks']);
             $firstStudent = Student::find($firstStudentId);
@@ -1500,7 +2530,7 @@ class TeacherController extends Controller
             $updatedCount = 0;
             $skippedCount = 0;
             $errors = [];
-            $preventDuplicate = filter_var($request->input('prevent_duplicate', true), FILTER_VALIDATE_BOOLEAN);
+            $preventDuplicate = false;
 
             // Save or update marks for each student
             foreach ($validated['marks'] as $studentId => $markData) {
@@ -1535,33 +2565,33 @@ class TeacherController extends Controller
                     // NOTE: test_name field stores exam_name for exams (e.g., "Mid Term Exam")
                     // This is different from test marks which use test names (e.g., "Unit Test 1")
                     $existingMark = StudentMark::where('student_id', $studentId)
-                        ->where('test_name', $validated['exam_name']) // exam_name stored in test_name field
+                        ->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower($examName)]) // exam_name stored in test_name field
                         ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
-                        ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($validated['subject']))])
-                        ->when(isset($validated['section']) && !empty($validated['section']), function($q) use ($validated) {
-                            return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($validated['section']))]);
+                        ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower($subjectName)])
+                        ->when(!empty($sectionName), function($q) use ($sectionName) {
+                            return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
                         })
                         ->first();
 
                     $isUpdate = $existingMark !== null;
+                    $existingHasNumericMarks = $existingMark
+                        && (
+                            ($existingMark->marks_obtained !== null && trim((string) $existingMark->marks_obtained) !== '')
+                            || ($existingMark->total_marks !== null && trim((string) $existingMark->total_marks) !== '')
+                            || ($existingMark->passing_marks !== null && trim((string) $existingMark->passing_marks) !== '')
+                        );
 
                     // Save exam marks in StudentMark table
                     // IMPORTANT: exam_name is stored in test_name field
                     // Exam marks and test marks are differentiated by the value in test_name field
-                    if ($isUpdate && $preventDuplicate) {
-                        // Skip overwriting existing marks
-                        $skippedCount++;
-                        continue;
-                    }
-
                     StudentMark::updateOrCreate(
                         [
                             'student_id' => $studentId,
-                            'test_name' => $validated['exam_name'], // Exam name stored here (e.g., "Mid Term Exam")
+                            'test_name' => $examName, // Exam name stored here (e.g., "Mid Term Exam")
                             'campus' => $campus,
                             'class' => $className,
-                            'section' => $validated['section'] ?? null,
-                            'subject' => $validated['subject'],
+                            'section' => $sectionName,
+                            'subject' => $subjectName,
                         ],
                         [
                             'marks_obtained' => isset($markData['obtained']) && $markData['obtained'] !== '' && $markData['obtained'] !== null 
@@ -1589,37 +2619,21 @@ class TeacherController extends Controller
             if ($totalProcessed > 0) {
                 return response()->json([
                     'success' => true,
-                    'message' => $preventDuplicate
-                        ? "Exam marks saved (new: {$savedCount}, updated: {$updatedCount}, skipped(existing): {$skippedCount})!"
-                        : "Exam marks saved successfully for {$totalProcessed} student(s)!",
+                    'message' => "Exam marks saved successfully for {$totalProcessed} student(s)!",
                     'data' => [
-                        'exam_name' => $validated['exam_name'],
+                        'exam_name' => $examName,
                         'class' => $className,
-                        'section' => $validated['section'] ?? null,
-                        'subject' => $validated['subject'],
+                        'section' => $sectionName,
+                        'subject' => $subjectName,
                         'saved_count' => $savedCount,
                         'updated_count' => $updatedCount,
-                        'skipped_count' => $skippedCount,
+                        'skipped_count' => 0,
                         'total_processed' => $totalProcessed,
                         'errors' => !empty($errors) ? $errors : null,
                     ],
                     'token' => $request->user()->currentAccessToken()->token ?? null,
                 ], 200);
             } else {
-                // If prevent_duplicate=true and everything is already uploaded, let client know.
-                if ($preventDuplicate && $skippedCount > 0) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Marks already uploaded for the selected students/exam/subject. Re-upload prevented.',
-                        'data' => [
-                            'saved_count' => $savedCount,
-                            'updated_count' => $updatedCount,
-                            'skipped_count' => $skippedCount,
-                            'errors' => !empty($errors) ? $errors : null,
-                        ],
-                        'token' => null,
-                    ], 409);
-                }
                 return response()->json([
                     'success' => false,
                     'message' => 'No marks were saved. Please enter at least one mark value.',

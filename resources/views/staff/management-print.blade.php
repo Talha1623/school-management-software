@@ -5,132 +5,84 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Staff List</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #fff;
-            color: #111;
-            margin: 0;
-            padding: 16px;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 12px;
-        }
-        .title {
-            font-size: 18px;
-            font-weight: 600;
-            margin: 0 0 4px 0;
-        }
-        .subtitle {
-            font-size: 12px;
-            color: #666;
-            margin: 0;
-        }
-        .print-btn {
-            font-size: 12px;
-            padding: 6px 10px;
-            border: 1px solid #003471;
-            background: #003471;
-            color: #fff;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .printed-at {
-            font-size: 11px;
-            color: #666;
-            margin-top: 4px;
-            text-align: right;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 6px 8px;
-            text-align: left;
-        }
-        th {
-            background: #f5f5f5;
-        }
-        .empty {
-            text-align: center;
-            color: #666;
-            padding: 24px 0;
-        }
+        @page { size: A4 landscape; margin: 6mm; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #fff; color: #111827; margin: 0; }
+        .print-container { width: 100%; max-width: 297mm; margin: 0 auto; }
+        :root { --theme-blue: #003471; }
+        .header-section { border-bottom: 3px solid var(--theme-blue); padding-bottom: 8px; text-align: center; }
+        .school-name { font-size: 18px; font-weight: 800; color: var(--theme-blue); }
+        .school-details { font-size: 11px; color: #374151; margin-top: 4px; }
+        .report-title { font-size: 14px; font-weight: 800; color: var(--theme-blue); margin-top: 6px; text-transform: uppercase; }
+        .meta { font-size: 11px; color: #374151; margin-top: 4px; }
+        .top-bar { display: flex; justify-content: flex-end; margin: 8px 0; }
+        .print-btn { border: 1px solid var(--theme-blue); background: var(--theme-blue); color: #fff; padding: 6px 12px; cursor: pointer; }
+        .table-wrap { overflow-x: auto; margin-top: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 6.5px; table-layout: fixed; }
+        th, td { border: 1px solid var(--theme-blue); padding: 3px 2px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+        th { background: var(--theme-blue); color: #fff; text-align: left; font-weight: 700; }
+        .footer-section { border-top: 2px solid var(--theme-blue); margin-top: 10px; padding-top: 8px; display: flex; justify-content: space-between; font-size: 11px; flex-wrap: wrap; gap: 8px; }
         @media print {
-            .no-print {
-                display: none !important;
-            }
-            table {
-                page-break-inside: auto;
-            }
-            tr {
-                page-break-inside: avoid;
-                page-break-after: auto;
-            }
-            thead {
-                display: table-header-group;
-            }
+            .no-print { display: none !important; }
+            thead { display: table-header-group; }
+            tr { page-break-inside: avoid; }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div>
-            <h1 class="title">Staff List</h1>
-            <p class="subtitle">List of all staff members</p>
+<div class="print-container">
+    <div class="header-section">
+        <div class="school-name">{{ $settings->school_name ?? 'School Name' }}</div>
+        <div class="school-details">
+            {{ $settings->address ?? '' }}
+            @if(!empty($settings->school_phone)) | {{ $settings->school_phone }} @endif
+            @if(!empty($settings->school_email)) | {{ $settings->school_email }} @endif
         </div>
-        <div>
-            <button type="button" class="print-btn no-print" onclick="window.print()">Print</button>
-            <div class="printed-at">Printed: {{ $printedAt }}</div>
-        </div>
+        <div class="report-title">Staff Management — Full List</div>
+        <div class="meta">Generated: {{ $printedAt }} &nbsp;|&nbsp; Records: {{ $rows->count() }}</div>
     </div>
 
-    <table>
-        <thead>
+    <div class="top-bar no-print">
+        <button type="button" class="print-btn" onclick="window.print()">Print</button>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
             <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Employee ID</th>
-                <th>Designation</th>
-                <th>Campus</th>
-                <th>Phone</th>
-                <th>Email</th>
-                <th>Gender</th>
-                <th>Joining Date</th>
+                @foreach($headers as $h)
+                    <th>{{ $h }}</th>
+                @endforeach
             </tr>
-        </thead>
-        <tbody>
-            @forelse($staff as $index => $member)
+            </thead>
+            <tbody>
+            @forelse($rows as $row)
                 <tr>
-                    <td>{{ $index + 1 }}</td>
-                    <td>{{ $member->name ?? 'N/A' }}</td>
-                    <td>{{ $member->emp_id ?? 'N/A' }}</td>
-                    <td>{{ $member->designation ?? 'N/A' }}</td>
-                    <td>{{ $member->campus ?? 'N/A' }}</td>
-                    <td>{{ $member->phone ?? 'N/A' }}</td>
-                    <td>{{ $member->email ?? 'N/A' }}</td>
-                    <td>{{ $member->gender ?? 'N/A' }}</td>
-                    <td>{{ $member->joining_date ? \Carbon\Carbon::parse($member->joining_date)->format('d M Y') : 'N/A' }}</td>
+                    @foreach($row as $cell)
+                        <td>{{ is_scalar($cell) || $cell === null ? (string) ($cell ?? '') : '' }}</td>
+                    @endforeach
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="empty">No staff found.</td>
+                    <td colspan="{{ count($headers) }}" style="text-align:center;color:#6b7280;">No staff found.</td>
                 </tr>
             @endforelse
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </div>
 
-    @if(request()->get('auto_print'))
-        <script>
-            window.addEventListener('load', function() {
-                window.print();
-            });
-        </script>
-    @endif
+    <div class="footer-section">
+        <div><strong>Total:</strong> {{ $rows->count() }}</div>
+        <div>System Generated Report</div>
+    </div>
+</div>
+
+@if(request()->get('auto_print'))
+<script>
+window.addEventListener('load', function () {
+    setTimeout(function () { window.print(); }, 300);
+});
+</script>
+@endif
 </body>
 </html>

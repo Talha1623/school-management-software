@@ -55,10 +55,10 @@
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
                             <span>PDF</span>
                         </a>
-                        <button type="button" class="btn btn-sm px-2 py-1 export-btn print-btn" onclick="printTable()">
+                        <a href="{{ route('salary-loan.loan-management.print', array_filter(['search' => request('search'), 'auto_print' => '1'])) }}" target="_blank" class="btn btn-sm px-2 py-1 export-btn print-btn d-inline-flex align-items-center gap-1 text-decoration-none" title="Opens print layout with school letterhead">
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">print</span>
                             <span>Print</span>
-                        </button>
+                        </a>
                     </div>
                     
                     <!-- Search -->
@@ -711,21 +711,5 @@ function updateEntriesPerPage(value) {
     window.location.href = url.toString();
 }
 
-// Print table
-function printTable() {
-    const printContents = document.querySelector('.default-table-area').innerHTML;
-    const originalContents = document.body.innerHTML;
-    
-    document.body.innerHTML = `
-        <div style="padding: 20px;">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #003471;">Loans List</h3>
-            ${printContents}
-        </div>
-    `;
-    
-    window.print();
-    document.body.innerHTML = originalContents;
-    window.location.reload();
-}
 </script>
 @endsection

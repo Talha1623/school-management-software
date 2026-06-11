@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Staff;
 use App\Models\Student;
 use App\Models\StudentAttendance;
+use App\Models\StudentPayment;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
@@ -261,6 +263,378 @@ class StudentAttendanceController extends Controller
                 'token' => null,
             ], 200);
         }
+    }
+
+    /**
+     * Staff / teacher app: scan student ID card and mark Present (same response as student API).
+     *
+     * POST /api/teacher/attendance/scan-id-card
+     * Body: { "id": "ST1-001" } — card / student code (also: barcode, student_code, gr_number)
+     */
+    public function scanIdCardForStaff(Request $request): JsonResponse
+    {
+        $authUser = $request->user();
+        if (!$authUser instanceof Staff) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied. Staff login required.',
+                'token' => null,
+            ], 403);
+        }
+
+        return $this->scanIdCard($request);
+    }
+
+    /**
+     * Scan student ID card (barcode / admission no) and mark today as Present.
+     * Student token: self check-in or scan own card. Staff token: scan any student card.
+     *
+     * POST /api/student/attendance/scan-id-card
+     * Body: { "id": "ST1-001" } — card / student code (also: barcode, student_code, gr_number)
+     */
+    public function scanIdCard(Request $request): JsonResponse
+    {
+        try {
+            $this->mergeScanInputsIntoRequest($request);
+
+            $authUser = $request->user();
+            $authStudent = $authUser instanceof Student ? $authUser : null;
+            $staff = $authUser instanceof Staff ? $authUser : null;
+
+            if (!$authStudent && !$staff) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Student or staff login required.',
+                    'token' => null,
+                ], 403);
+            }
+
+            $selfCheckIn = $authStudent && filter_var(
+                $request->input('self_check_in', $request->boolean('self_check_in')),
+                FILTER_VALIDATE_BOOLEAN
+            );
+
+            $requireSelfMatch = $authStudent && filter_var(
+                $request->input('require_self_match', false),
+                FILTER_VALIDATE_BOOLEAN
+            );
+
+            $barcode = $this->resolveScanRawFromRequest($request);
+
+            if ($barcode === '' && $selfCheckIn) {
+                $student = $authStudent;
+            } elseif ($barcode === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student ID is required. Send POST JSON body: {"id":"ST1-001"} (id = code on card / student_code).',
+                    'token' => null,
+                ], 422);
+            } else {
+                $student = $this->resolveStudentFromScanValue($barcode);
+
+                if (!$student && $authStudent && $this->scanMatchesLoggedInStudent($barcode, $authStudent)) {
+                    $student = $authStudent;
+                }
+            }
+
+            if (!$student) {
+                $hint = $authStudent ? [
+                    'your_student_code' => $authStudent->student_code,
+                    'your_gr_number' => $authStudent->gr_number,
+                    'your_id' => $authStudent->id,
+                    'scanned_value' => $barcode,
+                ] : ['scanned_value' => $barcode];
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student not found for this ID. Check the code on the card (e.g. ST1-001, GR-1A-007).',
+                    'token' => null,
+                    'hint' => $hint,
+                ], 404);
+            }
+
+            if ($requireSelfMatch && $authStudent && (int) $student->id !== (int) $authStudent->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This ID card does not match your logged-in account.',
+                    'token' => null,
+                ], 403);
+            }
+
+            if ($staff && !$staff->mayMarkAttendanceForStudent($student)) {
+                $assignedClasses = $staff->assignedAttendanceClassNames();
+                $message = $assignedClasses->isEmpty()
+                    ? 'No class assigned to you. Admin must set you as class teacher in Manage Section.'
+                    : 'You can only mark attendance for your assigned class(es): '
+                        . $assignedClasses->implode(', ')
+                        . '. Scanned student is in '
+                        . trim(($student->class ?? 'N/A') . ' / ' . ($student->section ?? 'N/A'))
+                        . '.';
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                    'token' => null,
+                    'assigned_classes' => $assignedClasses->values(),
+                ], 403);
+            }
+
+            $today = Carbon::today()->format('Y-m-d');
+            $attendance = StudentAttendance::where('student_id', $student->id)
+                ->whereDate('attendance_date', $today)
+                ->first();
+
+            $alreadyMarked = $attendance !== null;
+            $status = $alreadyMarked ? $attendance->status : 'Present';
+            $scanRemarks = $staff ? 'Staff app ID card scan' : 'Student app ID card scan';
+
+            if (!$alreadyMarked) {
+                StudentAttendance::create([
+                    'student_id' => $student->id,
+                    'attendance_date' => $today,
+                    'status' => 'Present',
+                    'campus' => $student->campus,
+                    'class' => $student->class,
+                    'section' => $student->section,
+                    'remarks' => $scanRemarks,
+                ]);
+            }
+
+            $token = $authUser->currentAccessToken()->token ?? null;
+            $markedForScannedCard = $authStudent
+                ? (int) $student->id !== (int) $authStudent->id
+                : true;
+
+            return response()->json([
+                'success' => true,
+                'message' => $alreadyMarked
+                    ? 'Attendance already marked for today.'
+                    : 'Attendance marked as Present.',
+                'data' => [
+                    'scanned_value' => $barcode !== '' ? $barcode : null,
+                    'marked_for_scanned_card' => $markedForScannedCard,
+                    'scanned_by' => $staff ? 'staff' : 'student',
+                    'student' => [
+                        'id' => $student->id,
+                        'name' => $student->student_name,
+                        'roll' => $student->student_code ?: ($student->gr_number ?: (string) $student->id),
+                        'student_code' => $student->student_code,
+                        'gr_number' => $student->gr_number,
+                        'parent' => $student->father_name ?: 'N/A',
+                        'class_section' => trim(($student->class ?? 'N/A') . ' / ' . ($student->section ?? 'N/A')),
+                        'campus' => $student->campus ?? 'N/A',
+                        'dues' => $this->calculateStudentDues($student),
+                    ],
+                    'attendance' => [
+                        'date' => $today,
+                        'status' => $status,
+                        'already_marked' => $alreadyMarked,
+                        'marked_present_now' => !$alreadyMarked,
+                        'time' => Carbon::now()->format('h:i A'),
+                    ],
+                ],
+                'token' => $token,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while scanning ID card: ' . $e->getMessage(),
+                'token' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Accept JSON body when Content-Type is missing (Postman / mobile scanners).
+     */
+    private function mergeScanInputsIntoRequest(Request $request): void
+    {
+        if ($this->resolveScanRawFromRequest($request) !== '') {
+            return;
+        }
+
+        $json = $request->json()->all();
+        if (is_array($json) && $json !== []) {
+            $request->merge($json);
+
+            return;
+        }
+
+        $content = trim((string) $request->getContent());
+        if ($content !== '' && str_starts_with($content, '{')) {
+            $decoded = json_decode($content, true);
+            if (is_array($decoded)) {
+                $request->merge($decoded);
+            }
+        }
+    }
+
+    private function resolveScanRawFromRequest(Request $request): string
+    {
+        foreach ([
+            'barcode',
+            'gr_number',
+            'student_code',
+            'id_card',
+            'scan',
+            'admission_no',
+            'roll_number',
+            'roll',
+            'student_id',
+            'id',
+            'code',
+            'qr',
+            'qr_code',
+        ] as $key) {
+            $value = $request->input($key);
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+            if (is_numeric($value)) {
+                return trim((string) $value);
+            }
+        }
+
+        return '';
+    }
+
+    private function resolveStudentFromScanValue(string $raw): ?Student
+    {
+        foreach ($this->parseScannedCardValues($raw) as $candidate) {
+            $found = $this->findStudentByCardScan($candidate);
+            if ($found) {
+                return $found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Values extracted from barcode gun or ID-card QR (ID:code|Name:...).
+     *
+     * @return list<string>
+     */
+    private function parseScannedCardValues(string $raw): array
+    {
+        $values = [];
+        $trimmed = trim($raw);
+        if ($trimmed === '') {
+            return [];
+        }
+
+        $values[] = $trimmed;
+        $decoded = trim(urldecode($trimmed));
+        if ($decoded !== $trimmed) {
+            $values[] = $decoded;
+        }
+
+        foreach ([$trimmed, $decoded] as $text) {
+            if (preg_match('/\bID:\s*([^|]+)/iu', $text, $matches)) {
+                $values[] = trim($matches[1]);
+            }
+        }
+
+        return array_values(array_unique(array_filter($values, static fn ($v) => $v !== '')));
+    }
+
+    private function scanMatchesLoggedInStudent(string $raw, Student $authStudent): bool
+    {
+        foreach ($this->parseScannedCardValues($raw) as $candidate) {
+            if (is_numeric($candidate) && (int) $candidate === (int) $authStudent->id) {
+                return true;
+            }
+            if ($authStudent->student_code
+                && strcasecmp(trim((string) $authStudent->student_code), $candidate) === 0) {
+                return true;
+            }
+            if ($authStudent->gr_number
+                && strcasecmp(trim((string) $authStudent->gr_number), $candidate) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Resolve student from scanned value (barcode machine + printed ID / QR).
+     */
+    private function findStudentByCardScan(string $barcode): ?Student
+    {
+        $barcodeLower = strtolower(trim($barcode));
+        $compact = $this->normalizeCardCode($barcode);
+        $normalizedCnic = $this->normalizeIdCardDigits($barcode);
+        $isDbPrimaryKey = ctype_digit(str_replace([' ', '-'], '', $barcode));
+
+        $query = Student::query()
+            ->where(function ($q) use ($barcodeLower, $barcode, $compact, $normalizedCnic, $isDbPrimaryKey) {
+                $q->whereRaw('LOWER(TRIM(student_code)) = ?', [$barcodeLower])
+                    ->orWhereRaw('LOWER(TRIM(gr_number)) = ?', [$barcodeLower])
+                    ->orWhereRaw('LOWER(TRIM(b_form_number)) = ?', [$barcodeLower]);
+
+                if ($compact !== '') {
+                    $q->orWhereRaw(
+                        "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(gr_number), '-', ''), ' ', ''), '_', ''), '.', '')) = ?",
+                        [$compact]
+                    )
+                        ->orWhereRaw(
+                            "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(student_code), '-', ''), ' ', ''), '_', ''), '.', '')) = ?",
+                            [$compact]
+                        );
+                }
+
+                if ($isDbPrimaryKey) {
+                    $q->orWhere('id', (int) $barcode);
+                }
+
+                if ($normalizedCnic !== '') {
+                    $q->orWhereRaw(
+                        'LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(father_id_card), "-", ""), " ", ""), "_", ""), ".", "")) = ?',
+                        [$normalizedCnic]
+                    );
+                }
+            });
+
+        return $query->first();
+    }
+
+    private function normalizeCardCode(string $value): string
+    {
+        return strtolower(str_replace(['-', ' ', '_', '.', '/'], '', trim($value)));
+    }
+
+    private function normalizeIdCardDigits(string $value): string
+    {
+        $digitMap = [
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+        ];
+        $cleaned = trim(strtr($value, $digitMap));
+
+        return str_replace(['-', ' ', '_', '.', '/'], '', strtolower($cleaned));
+    }
+
+    private function calculateStudentDues(Student $student): float
+    {
+        $currentYear = Carbon::now()->year;
+        $totalFee = $student->monthly_fee ? (float) $student->monthly_fee * 12 : 0.0;
+
+        if (!$student->student_code) {
+            return 0.0;
+        }
+
+        $payments = StudentPayment::where('student_code', $student->student_code)
+            ->whereYear('payment_date', $currentYear)
+            ->get();
+
+        $paidFee = (float) $payments->sum('payment_amount');
+        $discount = (float) $payments->sum('discount');
+        $lateFee = (float) $payments->sum('late_fee');
+
+        return max($totalFee - $paidFee - $discount + $lateFee, 0.0);
     }
 }
 

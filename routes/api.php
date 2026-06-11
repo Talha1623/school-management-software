@@ -36,6 +36,15 @@ Route::match(['GET', 'POST'], '/staff/login', function (Request $request) {
     ], 404);
 })->name('api.staff.login.block');
 
+// Staff API Routes (mobile app uses /api/staff/* prefix)
+Route::prefix('staff')->name('api.staff.')->middleware(['auth:sanctum'])->group(function () {
+    Route::get('/chat/contacts', [App\Http\Controllers\Api\TeacherChatController::class, 'contacts'])->name('chat.contacts');
+    Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\TeacherChatController::class, 'contactShow'])->name('chat.contacts.show');
+    Route::get('/chat/messages', [App\Http\Controllers\Api\StaffChatController::class, 'index'])->name('chat.messages');
+    Route::post('/chat/messages', [App\Http\Controllers\Api\StaffChatController::class, 'store'])->name('chat.messages.store');
+    Route::post('/chat/messages/read', [App\Http\Controllers\Api\StaffChatController::class, 'markRead'])->name('chat.messages.read');
+});
+
 Route::match(['GET', 'POST'], '/student/login', function (Request $request) {
     if ($request->isMethod('GET')) {
         return redirect('/student/login', 301);
@@ -143,6 +152,15 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         Route::get('/fee-vouchers', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'index'])->name('fee-vouchers.index');
         Route::get('/fee-vouchers/{student_id}', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'show'])->name('fee-vouchers.show');
         Route::get('/fee-vouchers/{student_id}/pdf', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'pdf'])->name('fee-vouchers.pdf');
+
+        // Live Chat (Parent ↔ Admin / Teachers)
+        Route::get('/chat/contacts', [App\Http\Controllers\Api\ParentChatController::class, 'contacts'])->name('chat.contacts');
+        Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\ParentChatController::class, 'contactShow'])
+            ->where(['type' => 'admin|teacher|student', 'id' => '[0-9]+'])
+            ->name('chat.contacts.show');
+        Route::get('/chat/messages', [App\Http\Controllers\Api\ParentChatController::class, 'index'])->name('chat.messages');
+        Route::post('/chat/messages', [App\Http\Controllers\Api\ParentChatController::class, 'store'])->name('chat.messages.store');
+        Route::post('/chat/messages/read', [App\Http\Controllers\Api\ParentChatController::class, 'markRead'])->name('chat.messages.read');
     });
 });
 
@@ -165,6 +183,7 @@ Route::prefix('student')->name('api.student.')->group(function () {
         
         // Attendance Routes
         Route::get('/attendance/class', [App\Http\Controllers\Api\StudentAttendanceController::class, 'classAttendance'])->name('attendance.class');
+        Route::post('/attendance/scan-id-card', [App\Http\Controllers\Api\StudentAttendanceController::class, 'scanIdCard'])->name('attendance.scan-id-card');
         
         // Leave Management Routes
         Route::post('/leave/create', [App\Http\Controllers\Api\StudentLeaveController::class, 'create'])->name('leave.create');
@@ -228,6 +247,15 @@ Route::prefix('student')->name('api.student.')->group(function () {
         // In-app notifications (student-specific)
         Route::get('/notifications', [App\Http\Controllers\Api\StudentNotificationController::class, 'index'])->name('notifications.index');
         Route::post('/notifications/{id}/read', [App\Http\Controllers\Api\StudentNotificationController::class, 'markRead'])->name('notifications.read');
+
+        // Live Chat (Student — same endpoints as /api/teacher/chat/* but for student login)
+        Route::get('/chat/contacts', [App\Http\Controllers\Api\StudentChatController::class, 'contacts'])->name('chat.contacts');
+        Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\StudentChatController::class, 'contactShow'])
+            ->where(['type' => 'admin|teacher|parent', 'id' => '[0-9]+'])
+            ->name('chat.contacts.show');
+        Route::get('/chat/messages', [App\Http\Controllers\Api\StudentChatController::class, 'index'])->name('chat.messages');
+        Route::post('/chat/messages', [App\Http\Controllers\Api\StudentChatController::class, 'store'])->name('chat.messages.store');
+        Route::post('/chat/messages/read', [App\Http\Controllers\Api\StudentChatController::class, 'markRead'])->name('chat.messages.read');
     });
 });
 
@@ -253,6 +281,8 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/exam/marks/list', [App\Http\Controllers\Api\TeacherController::class, 'examMarksList'])->name('exam.marks.list');
         Route::post('/exam/marks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveExamMarks'])->name('exam.marks.save');
         Route::post('/exam/remarks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveExamRemarks'])->name('exam.remarks.save');
+        Route::match(['GET', 'POST'], '/exam/final-result/students', [App\Http\Controllers\Api\TeacherController::class, 'finalResultStudents'])->name('exam.final-result.students');
+        Route::post('/exam/final-result/remarks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveFinalResultRemarks'])->name('exam.final-result.remarks.save');
         
         // Student List Routes
         Route::match(['GET', 'POST'], '/students', [App\Http\Controllers\Api\TeacherStudentController::class, 'index'])->name('students.index');
@@ -270,14 +300,18 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::post('/online-classes', [App\Http\Controllers\Api\TeacherOnlineClassController::class, 'store'])->name('online-classes.store');
 
         // Chat with Super Admin/Admin (Teacher side)
+        Route::get('/chat/contacts', [App\Http\Controllers\Api\TeacherChatController::class, 'contacts'])->name('chat.contacts');
+        Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\TeacherChatController::class, 'contactShow'])->name('chat.contacts.show');
         Route::get('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'index'])->name('chat.messages');
         Route::post('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'store'])->name('chat.messages.store');
+        Route::post('/chat/messages/read', [App\Http\Controllers\Api\TeacherChatController::class, 'markRead'])->name('chat.messages.read');
 
         // In-app notifications (teacher/staff)
         Route::get('/notifications', [App\Http\Controllers\Api\TeacherNotificationController::class, 'index'])->name('notifications.index');
         Route::post('/notifications/{id}/read', [App\Http\Controllers\Api\TeacherNotificationController::class, 'markRead'])->name('notifications.read');
         
         // Attendance Routes
+        Route::post('/attendance/scan-id-card', [App\Http\Controllers\Api\StudentAttendanceController::class, 'scanIdCardForStaff'])->name('attendance.scan-id-card');
         Route::post('/attendance/mark', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'mark'])->name('attendance.mark');
         Route::post('/attendance/mark-bulk', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'markBulk'])->name('attendance.mark-bulk');
         Route::match(['GET', 'POST'], '/attendance/list', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'list'])->name('attendance.list');
@@ -328,6 +362,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/homework-diary/my-subjects', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getMySubjects'])->name('homework-diary.my-subjects');
         Route::get('/homework-diary/teacher-subjects', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getTeacherSubjects'])->name('homework-diary.teacher-subjects');
         Route::get('/homework-diary/subjects-by-class', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getSubjectsByClass'])->name('homework-diary.subjects-by-class');
+        Route::get('/homework-diary/all-assigned-subjects', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getAllAssignedSubjects'])->name('homework-diary.all-assigned-subjects');
         Route::get('/homework-diary/subjects-with-homework', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getSubjectsWithHomework'])->name('homework-diary.subjects-with-homework');
         Route::get('/homework-diary/entries', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getEntries'])->name('homework-diary.entries');
         Route::get('/homework-diary/students-list', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getStudentsList'])->name('homework-diary.students-list');
@@ -370,6 +405,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         
         // Test Management - Get Test List (Teacher's created tests) - Must be before {id} route
         Route::match(['GET', 'POST'], '/test-management/list', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getTestList'])->name('test-management.list');
+        Route::match(['GET', 'POST'], '/test-management/class-teacher/list', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getClassTeacherTestList'])->name('test-management.class-teacher.list');
         
         // Test Management - Get Test by ID
         Route::get('/test-management/{id}', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getTest'])->name('test-management.get');
@@ -390,5 +426,11 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/quizzes/upload/template', [App\Http\Controllers\Api\TeacherQuizUploadController::class, 'template'])->name('quizzes.upload.template');
         Route::post('/quizzes/upload', [App\Http\Controllers\Api\TeacherQuizUploadController::class, 'upload'])->name('quizzes.upload');
     });
+});
+
+// Platform Super Admin APIs
+Route::prefix('platform-admin')->name('api.platform-admin.')->group(function () {
+    Route::get('/schools', [App\Http\Controllers\Api\PlatformSchoolApiController::class, 'list'])
+        ->name('schools.list');
 });
 

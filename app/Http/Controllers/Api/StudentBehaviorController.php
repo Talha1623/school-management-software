@@ -112,21 +112,21 @@ class StudentBehaviorController extends Controller
     {
         try {
             $student = $request->user();
+            $requestedStudentId = $request->filled('student_id') ? (int) $request->student_id : null;
 
-            if (!$student) {
+            // Web-like behavior: if no token, allow by student_id.
+            if (!$student && !$requestedStudentId) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not found',
+                    'message' => 'Unauthenticated. Please provide token or student_id.',
                     'data' => null,
-                ], 404);
+                    'token' => null,
+                ], 401);
             }
 
-            // Optional filter: specific student_id (must be the authenticated student)
-            if ($request->filled('student_id')) {
-                $studentId = (int) $request->student_id;
-                
-                // Verify the student_id belongs to authenticated student
-                if ($studentId !== $student->id) {
+            if ($student) {
+                // Authenticated student can only see own records
+                if ($requestedStudentId && $requestedStudentId !== (int) $student->id) {
                     return response()->json([
                         'success' => false,
                         'message' => 'You are not allowed to view this student\'s behavior.',
@@ -134,14 +134,21 @@ class StudentBehaviorController extends Controller
                         'token' => null,
                     ], 403);
                 }
+                $targetStudent = $student;
+            } else {
+                // Unauthenticated access must include valid student_id
+                $targetStudent = Student::find($requestedStudentId);
+                if (!$targetStudent) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Student not found.',
+                        'data' => null,
+                        'token' => null,
+                    ], 404);
+                }
             }
 
-            $query = BehaviorRecord::where('student_id', $student->id);
-
-            // Apply student_id filter if provided
-            if ($request->filled('student_id')) {
-                $query->where('student_id', (int) $request->student_id);
-            }
+            $query = BehaviorRecord::where('student_id', $targetStudent->id);
 
             // Optional filter: type
             if ($request->filled('type')) {
@@ -189,17 +196,20 @@ class StudentBehaviorController extends Controller
                 ->paginate($perPage);
 
             // Format response (same format as parent API)
-            $recordsData = $records->map(function (BehaviorRecord $record) use ($student) {
+            $recordsData = $records->map(function (BehaviorRecord $record) use ($targetStudent) {
                 return [
                     'id' => $record->id,
                     'student_id' => (string) $record->student_id,
-                    'student_name' => $record->student_name ?? $student->student_name,
+                    'student_name' => $record->student_name ?? $targetStudent->student_name,
                     'type' => $record->type,
+                    'category' => $record->category ?? '',
                     'points' => $record->points, // -2, -1, 0, +1, +2 (teacher ne jo save kiya)
+                    'points_display' => ((int) $record->points > 0 ? '+' : '') . (string) ((int) $record->points),
                     'class' => $record->class,
                     'section' => $record->section,
                     'campus' => $record->campus,
                     'date' => $record->date ? $record->date->format('Y-m-d') : null,
+                    'date_formatted' => $record->date ? $record->date->format('d-m-Y') : null,
                     'description' => $record->description, // e.g. "+2 Points" / "-1 Points"
                     'recorded_by' => $record->recorded_by,
                     'created_at' => $record->created_at ? $record->created_at->format('Y-m-d H:i:s') : null,
@@ -209,8 +219,26 @@ class StudentBehaviorController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Behavior records loaded successfully.',
-                'data' => $recordsData->values()->all(),
-                'token' => $request->user()->currentAccessToken()->token ?? null,
+                'data' => [
+                    'student' => [
+                        'id' => $targetStudent->id,
+                        'name' => $targetStudent->student_name,
+                        'student_code' => $targetStudent->student_code,
+                        'class' => $targetStudent->class,
+                        'section' => $targetStudent->section,
+                        'campus' => $targetStudent->campus,
+                    ],
+                    'records' => $recordsData->values()->all(),
+                    'pagination' => [
+                        'current_page' => $records->currentPage(),
+                        'last_page' => $records->lastPage(),
+                        'per_page' => $records->perPage(),
+                        'total' => $records->total(),
+                        'from' => $records->firstItem(),
+                        'to' => $records->lastItem(),
+                    ],
+                ],
+                'token' => $request->user()?->currentAccessToken()?->token ?? null,
             ], 200);
 
         } catch (\Exception $e) {

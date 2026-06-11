@@ -299,7 +299,13 @@ function scanProduct() {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ barcode: barcode, campus: campus })
+        body: JSON.stringify({
+            barcode: barcode,
+            campus: campus,
+            exclude_ids: basket
+                .filter(item => item.quantity >= item.stock)
+                .map(item => item.id)
+        })
     })
     .then(response => response.json())
     .then(data => {

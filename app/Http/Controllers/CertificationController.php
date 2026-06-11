@@ -353,16 +353,15 @@ class CertificationController extends Controller
             abort(404, 'Invalid certificate type');
         }
         
-        // Get school information
-        $schoolName = config('app.name', 'School Management System');
-        $schoolAddress = 'School Address'; // You can add this to config or database
+        // Get school information from General Settings
+        $settings = \App\Models\GeneralSetting::getSettings();
+        $schoolName = $settings->school_name ?? config('app.name', 'School Management System');
         $currentDate = now()->format('d F Y');
         
         return view("certification.certificates.staff.{$this->getStaffCertificateViewName($certificateType)}", compact(
             'staff',
             'certificateType',
             'schoolName',
-            'schoolAddress',
             'currentDate'
         ));
     }

@@ -6,15 +6,120 @@ use App\Http\Controllers\Controller;
 use App\Models\StudentMark;
 use App\Models\Test;
 use App\Models\Exam;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class StudentTestResultController extends Controller
 {
     /**
+     * Only marks linked to an existing announced test/exam — deleted announcements (and unpublished results when result_status=false) disappear from the API.
+     * Keeps remarks-only synthetic rows used by the web (`COMBINED_RESULT`).
+     */
+    private function visibleStudentMarksQuery(int $studentId): EloquentBuilder
+    {
+        $markModel = new StudentMark;
+
+        return StudentMark::query()
+            ->where($markModel->qualifyColumn('student_id'), $studentId)
+            ->where(function (EloquentBuilder $outer) use ($markModel) {
+                $outer->where($markModel->qualifyColumn('test_name'), 'COMBINED_RESULT')
+                    ->orWhereExists(function (QueryBuilder $sub) use ($markModel) {
+                        $tests = new Test;
+                        $testsTable = $tests->getTable();
+                        $sub->selectRaw('1')
+                            ->from($testsTable)
+                            ->whereRaw(
+                                'LOWER(TRIM(' . $tests->qualifyColumn('test_name') . ')) = LOWER(TRIM(' . $markModel->qualifyColumn('test_name') . '))'
+                            );
+
+                    if (Schema::hasColumn($testsTable, 'deleted_at')) {
+                        $sub->whereNull($tests->qualifyColumn('deleted_at'));
+                    }
+
+                        if (Schema::hasColumn($testsTable, 'result_status')) {
+                            $sub->where(function (QueryBuilder $w) use ($tests) {
+                                $w->whereNull($tests->qualifyColumn('result_status'))
+                                    ->orWhere($tests->qualifyColumn('result_status'), true);
+                            });
+                        }
+                    })
+                    ->orWhereExists(function (QueryBuilder $sub) use ($markModel) {
+                        $exams = new Exam;
+                        $examsTable = $exams->getTable();
+                        $sub->selectRaw('1')
+                            ->from($examsTable)
+                            ->whereRaw(
+                                'LOWER(TRIM(' . $exams->qualifyColumn('exam_name') . ')) = LOWER(TRIM(' . $markModel->qualifyColumn('test_name') . '))'
+                            );
+
+                    if (Schema::hasColumn($examsTable, 'deleted_at')) {
+                        $sub->whereNull($exams->qualifyColumn('deleted_at'));
+                    }
+
+                        if (Schema::hasColumn($examsTable, 'result_status')) {
+                            $sub->where(function (QueryBuilder $w) use ($exams) {
+                                $w->whereNull($exams->qualifyColumn('result_status'))
+                                    ->orWhere($exams->qualifyColumn('result_status'), true);
+                            });
+                        }
+                    });
+            });
+    }
+
+    /** Teacher remarks sheet often saves one row per test with subject=null; subject marks rows may have remarks=null. */
+    private function markSubjectBlank(mixed $subject): bool
+    {
+        return $subject === null || trim((string) $subject) === '';
+    }
+
+    private function normalizedRemark(?string $value): ?string
+    {
+        $s = trim((string) ($value ?? ''));
+
+        return $s !== '' ? $s : null;
+    }
+
+    /**
+     * @return array<string, string|null> lowercase trimmed test_name => remark (nullable)
+     */
+    private function aggregatedTeacherRemarksByTestName(Collection $marks): array
+    {
+        $out = [];
+
+        foreach ($marks->groupBy(fn ($m) => strtolower(trim((string) ($m->test_name ?? '')))) as $key => $group) {
+            if ($key === '') {
+                continue;
+            }
+
+            $particular = $group->first(fn ($mark) => $this->markSubjectBlank($mark->subject ?? null));
+            $remark = $particular
+                ? $this->normalizedRemark($particular->teacher_remarks ?? null)
+                : null;
+
+            if ($remark === null) {
+                foreach ($group as $mark) {
+                    $candidate = $this->normalizedRemark($mark->teacher_remarks ?? null);
+                    if ($candidate !== null) {
+                        $remark = $candidate;
+                        break;
+                    }
+                }
+            }
+
+            $out[$key] = $remark;
+        }
+
+        return $out;
+    }
+    /**
      * Get Test Results for Logged-in Student
-     * Returns: subject_name (test_name), session, subject, total, pass, obtained
-     * 
+     * Returns: subject_name (test_name), session, subject, total, pass, obtained, teacher_remarks, remarks (same text)
+     * Remarks: prefers row-level teacher_remarks; else same test_name row with blank subject (web teacher remarks)
+     *
      * GET /api/student/test-results
      * Optional: test_name, session
      * Note: subject parameter is no longer accepted
@@ -35,12 +140,11 @@ class StudentTestResultController extends Controller
                 ], 404);
             }
 
-            // Build query for student's marks
-            $query = StudentMark::where('student_id', $student->id);
+            $query = $this->visibleStudentMarksQuery((int) $student->id);
 
             // Filter by test_name (optional)
             if ($request->filled('test_name')) {
-                $query->where('test_name', $request->test_name);
+                $query->where((new StudentMark)->qualifyColumn('test_name'), $request->test_name);
             }
 
             // Subject filter removed - no longer accepting subject parameter
@@ -55,16 +159,50 @@ class StudentTestResultController extends Controller
 
             // Fetch sessions from Test model
             $testSessions = [];
+            $testTypeByName = [];
             if ($testNames->isNotEmpty()) {
                 $tests = Test::whereIn('test_name', $testNames->toArray())
-                    ->select('test_name', 'session')
+                    ->select('test_name', 'session', 'test_type')
                     ->get()
                     ->keyBy('test_name');
                 
                 foreach ($tests as $test) {
                     $testSessions[$test->test_name] = $test->session;
+                    $testTypeByName[strtolower(trim((string) $test->test_name))] = strtolower(trim((string) ($test->test_type ?? '')));
                 }
             }
+
+            // If a name exists in Exam table, treat it as exam and exclude from test-results endpoint.
+            $examNameSet = [];
+            if ($testNames->isNotEmpty()) {
+                $examRows = Exam::query()
+                    ->where(function ($q) use ($testNames) {
+                        foreach ($testNames as $testName) {
+                            $q->orWhereRaw('LOWER(TRIM(exam_name)) = ?', [strtolower(trim((string) $testName))]);
+                        }
+                    })
+                    ->select('exam_name')
+                    ->get();
+
+                foreach ($examRows as $exam) {
+                    $examNameSet[strtolower(trim((string) ($exam->exam_name ?? '')))] = true;
+                }
+            }
+
+            // test-results should return only non-exam entries (web behavior).
+            $marks = $marks->filter(function ($mark) use ($testTypeByName, $examNameSet) {
+                $name = strtolower(trim((string) ($mark->test_name ?? '')));
+                if ($name === '') {
+                    return false;
+                }
+
+                if (($examNameSet[$name] ?? false) === true) {
+                    return false;
+                }
+
+                $testType = $testTypeByName[$name] ?? '';
+                return $testType !== 'exam';
+            })->values();
 
             // Filter by session if provided
             if ($request->filled('session')) {
@@ -75,8 +213,15 @@ class StudentTestResultController extends Controller
                 })->values();
             }
 
+            // Subject rows often have null remarks while web saves remarks on subject=null rows for same test_name
+            $remarkFallbackByTest = $this->aggregatedTeacherRemarksByTestName($marks);
+
             // Format response with all required fields
-            $results = $marks->map(function ($mark) use ($testSessions) {
+            $results = $marks->map(function ($mark) use ($testSessions, $remarkFallbackByTest) {
+                $tkey = strtolower(trim((string) ($mark->test_name ?? '')));
+                $remark = $this->normalizedRemark($mark->teacher_remarks ?? null)
+                    ?? ($remarkFallbackByTest[$tkey] ?? null);
+
                 return [
                     'subject_name' => $mark->test_name ?? null, // Test name (subject_name)
                     'session' => $testSessions[$mark->test_name] ?? null, // Session from Test model
@@ -84,6 +229,8 @@ class StudentTestResultController extends Controller
                     'total' => $mark->total_marks ? (float) $mark->total_marks : null,
                     'pass' => $mark->passing_marks ? (float) $mark->passing_marks : null,
                     'obtained' => $mark->marks_obtained ? (float) $mark->marks_obtained : null,
+                    'teacher_remarks' => $remark,
+                    'remarks' => $remark,
                 ];
             });
 
@@ -136,11 +283,12 @@ class StudentTestResultController extends Controller
                 ], 404);
             }
 
-            // Get all unique test names for this student from marks
-            $marks = StudentMark::where('student_id', $student->id)
-                ->select('test_name')
+            // Get unique test names from marks tied to announcements that still exist
+            $markModel = new StudentMark;
+            $marks = $this->visibleStudentMarksQuery((int) $student->id)
+                ->select($markModel->qualifyColumn('test_name'))
                 ->distinct()
-                ->whereNotNull('test_name')
+                ->whereNotNull($markModel->qualifyColumn('test_name'))
                 ->get();
 
             // Get unique test names
@@ -260,12 +408,12 @@ class StudentTestResultController extends Controller
                 ], 404);
             }
 
-            // Build query for student's marks
-            $query = StudentMark::where('student_id', $studentId);
+            $query = $this->visibleStudentMarksQuery($studentId);
 
             // Filter by test_name (optional) - case-insensitive and trimmed
             if ($request->filled('test_name')) {
-                $query->whereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($request->test_name))]);
+                $tnCol = (new StudentMark)->qualifyColumn('test_name');
+                $query->whereRaw('LOWER(TRIM(' . $tnCol . ')) = ?', [strtolower(trim((string) $request->test_name))]);
             }
 
             // Get marks
@@ -348,12 +496,17 @@ class StudentTestResultController extends Controller
                 })->values();
             }
 
+            $remarkFallbackByTest = $this->aggregatedTeacherRemarksByTestName($marks);
+
             // Format response with all required fields
-            $results = $marks->map(function ($mark) use ($testSessions, $testTypes) {
+            $results = $marks->map(function ($mark) use ($testSessions, $testTypes, $remarkFallbackByTest) {
                 // Get session and test_type using case-insensitive key
                 $testNameKey = strtolower(trim($mark->test_name ?? ''));
                 $session = $testSessions[$mark->test_name] ?? $testSessions[$testNameKey] ?? null;
                 $testType = $testTypes[$mark->test_name] ?? $testTypes[$testNameKey] ?? null;
+
+                $remark = $this->normalizedRemark($mark->teacher_remarks ?? null)
+                    ?? ($remarkFallbackByTest[$testNameKey] ?? null);
                 
                 return [
                     'subject_name' => $mark->test_name ?? null, // Test name (subject_name)
@@ -363,6 +516,8 @@ class StudentTestResultController extends Controller
                     'total' => $mark->total_marks ? (float) $mark->total_marks : null,
                     'pass' => $mark->passing_marks ? (float) $mark->passing_marks : null,
                     'obtained' => $mark->marks_obtained ? (float) $mark->marks_obtained : null,
+                    'teacher_remarks' => $remark,
+                    'remarks' => $remark,
                 ];
             });
 

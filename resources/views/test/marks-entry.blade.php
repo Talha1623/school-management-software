@@ -3,6 +3,11 @@
 @section('title', 'Marks Entry')
 
 @section('content')
+@php
+    $isStaffMarksUser = $isStaffMarksUser ?? false;
+    $uploadableSubjects = collect($uploadableSubjects ?? []);
+    $canUploadMarks = $canUploadMarks ?? true;
+@endphp
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
@@ -71,8 +76,15 @@
                         <select class="form-select form-select-sm" id="filter_subject" name="filter_subject" style="height: 32px;" {{ !$filterClass ? 'disabled' : '' }}>
                             <option value="">All Subjects</option>
                             @if($filterClass)
+                                @php
+                                    $uploadableSubjectKeys = collect($uploadableSubjects ?? [])->map(fn ($s) => strtolower(trim((string) $s)));
+                                @endphp
                                 @foreach($subjects as $subjectName)
-                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectName }}</option>
+                                    @php
+                                        $subjectCanEdit = empty($isStaffMarksUser) || $uploadableSubjectKeys->contains(strtolower(trim((string) $subjectName)));
+                                        $subjectLabel = $subjectName . (!empty($isStaffMarksUser) ? ($subjectCanEdit ? ' (Edit)' : ' (View only)') : '');
+                                    @endphp
+                                    <option value="{{ $subjectName }}" {{ $filterSubject == $subjectName ? 'selected' : '' }}>{{ $subjectLabel }}</option>
                                 @endforeach
                             @endif
                         </select>
@@ -91,7 +103,7 @@
                         </select>
                         <small id="testInfoMsg" class="text-muted d-block mt-1" style="font-size: 11px; display: none;">
                             <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">info</span>
-                            No tests with declared results found. Please declare result in Test List first.
+                            No tests found for selected filters.
                         </small>
                     </div>
 
@@ -108,6 +120,24 @@
             <!-- Results Table -->
             @if(request()->hasAny(['filter_campus', 'filter_class', 'filter_section', 'filter_test', 'filter_subject']))
             <div class="mt-3">
+                @if(!empty($isStaffMarksUser))
+                    <div id="marksStaffEditBanner" class="alert alert-info py-2 mb-3" style="font-size: 13px; {{ !empty($canUploadMarks) && $filterSubject ? '' : 'display:none;' }}">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">edit</span>
+                        You can enter marks for <strong id="marksStaffEditSubject">{{ $filterSubject }}</strong> (assigned to you in Manage Subjects).
+                    </div>
+                    <div id="marksStaffViewBanner" class="alert alert-warning py-2 mb-3" style="font-size: 13px; {{ empty($canUploadMarks) && $filterSubject ? '' : 'display:none;' }}">
+                        <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">visibility</span>
+                        View only: <strong id="marksStaffViewSubject">{{ $filterSubject }}</strong> is not assigned to you. Marks cannot be changed.
+                    </div>
+                    @if(!$filterSubject)
+                        <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                            Select a subject. You can save marks only for subjects marked <strong>(Edit)</strong> in the dropdown.
+                        </div>
+                    @endif
+                @endif
+
+                @php $marksReadonly = isset($canUploadMarks) && !$canUploadMarks; @endphp
+
                 <!-- Search Bar -->
                 <div class="mb-3">
                     <div class="input-group input-group-sm search-input-group" style="max-width: 400px;">
@@ -156,13 +186,13 @@
                                         </td>
                                         <td>{{ $student->father_name ?? 'N/A' }}</td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->marks_obtained ?? '') : '' }}">
+                                            <input type="number" name="marks[{{ $student->id }}][obtained]" class="form-control form-control-sm marks-obtained" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->marks_obtained ?? '') : '' }}" @if($marksReadonly) readonly disabled @endif>
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->total_marks ?? '') : '' }}">
+                                            <input type="number" name="marks[{{ $student->id }}][total]" class="form-control form-control-sm marks-total" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->total_marks ?? '') : '' }}" @if($marksReadonly) readonly disabled @endif>
                                         </td>
                                         <td>
-                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->passing_marks ?? '') : '' }}">
+                                            <input type="number" name="marks[{{ $student->id }}][passing]" class="form-control form-control-sm marks-passing" placeholder="0" min="0" step="1" style="width: 100px;" value="{{ $existingMark ? ($existingMark->passing_marks ?? '') : '' }}" @if($marksReadonly) readonly disabled @endif>
                                         </td>
                                     </tr>
                                     @empty
@@ -178,7 +208,7 @@
                                 </tbody>
                             </table>
                             
-                            @if($students->count() > 0)
+                            @if($students->count() > 0 && empty($marksReadonly))
                             <div class="text-center mt-3">
                                 <button type="submit" class="btn btn-success px-4 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none; font-weight: 500;">
                                     <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">thumb_up</span>
@@ -310,6 +340,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const sectionSelect = document.getElementById('filter_section');
     const testSelect = document.getElementById('filter_test');
     const subjectSelect = document.getElementById('filter_subject');
+    const isStaffMarksUser = {{ !empty($isStaffMarksUser) ? 'true' : 'false' }};
+    let marksUploadableKeys = @json(collect($uploadableSubjects ?? [])->map(fn ($s) => strtolower(trim((string) $s)))->values());
+
+    function applyMarksEditMode() {
+        const subject = subjectSelect ? String(subjectSelect.value || '').toLowerCase().trim() : '';
+        const canEdit = !isStaffMarksUser || (subject !== '' && marksUploadableKeys.includes(subject));
+
+        document.querySelectorAll('.marks-obtained, .marks-total, .marks-passing').forEach(function(input) {
+            input.readOnly = !canEdit;
+            input.disabled = !canEdit;
+        });
+
+        const saveBtn = document.querySelector('#marksForm button[type="submit"]');
+        if (saveBtn) {
+            saveBtn.style.display = canEdit ? '' : 'none';
+        }
+
+        const bannerEdit = document.getElementById('marksStaffEditBanner');
+        const bannerView = document.getElementById('marksStaffViewBanner');
+        if (bannerEdit) bannerEdit.style.display = (isStaffMarksUser && canEdit && subject) ? '' : 'none';
+        if (bannerView) bannerView.style.display = (isStaffMarksUser && !canEdit && subject) ? '' : 'none';
+    }
 
     // On page load, reload subjects if class is already selected (to get latest filtered subjects)
     // This ensures subjects are filtered correctly based on current Class and Section
@@ -376,6 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (subjectSelect) {
         subjectSelect.addEventListener('change', function() {
+            applyMarksEditMode();
             const classValue = classSelect ? classSelect.value : '';
             if (classValue) {
                 loadTests();
@@ -501,28 +554,61 @@ document.addEventListener('DOMContentLoaded', function() {
         if (classValue) params.append('class', classValue);
         if (section) params.append('section', section);
         
-        fetch(`{{ route('test.marks-entry.get-subjects') }}?${params.toString()}`)
-            .then(response => response.json())
+        fetch(`{{ route('test.marks-entry.get-subjects') }}?${params.toString()}`, {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        })
+            .then(async response => {
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    throw new Error('Invalid response from server');
+                }
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || ('Server returned ' + response.status));
+                }
+                return data;
+            })
             .then(data => {
                 subjectSelect.innerHTML = '<option value="">All Subjects</option>';
-                if (data.subjects && data.subjects.length > 0) {
-                    data.subjects.forEach(subject => {
+                const subjectList = Array.isArray(data.subjects)
+                    ? data.subjects
+                    : (data.subjects ? Object.values(data.subjects) : []);
+                if (subjectList.length > 0) {
+                    const uploadableKeys = (Array.isArray(data.uploadable_subjects)
+                        ? data.uploadable_subjects
+                        : (data.uploadable_subjects ? Object.values(data.uploadable_subjects) : subjectList))
+                        .map(s => String(s).toLowerCase().trim());
+                    const preservedSubject = @json($filterSubject ?? '');
+                    subjectList.forEach(subject => {
                         const option = document.createElement('option');
                         option.value = subject;
-                        option.textContent = subject;
-                        // Preserve selected subject if it exists
-                        @if($filterSubject)
-                        if (subject === '{{ $filterSubject }}') {
+                        if (isStaffMarksUser) {
+                            const canEdit = uploadableKeys.includes(String(subject).toLowerCase().trim());
+                            option.textContent = subject + (canEdit ? ' (Edit)' : ' (View only)');
+                        } else {
+                            option.textContent = subject;
+                        }
+                        if (preservedSubject && subject === preservedSubject) {
                             option.selected = true;
                         }
-                        @endif
                         subjectSelect.appendChild(option);
                     });
+                    marksUploadableKeys = uploadableKeys;
+                    applyMarksEditMode();
                 }
             })
             .catch(error => {
                 console.error('Error loading subjects:', error);
-                subjectSelect.innerHTML = '<option value="">Error loading subjects</option>';
+                subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                const fallback = document.createElement('option');
+                fallback.value = '';
+                fallback.textContent = 'No subjects found';
+                fallback.disabled = true;
+                subjectSelect.appendChild(fallback);
             });
     }
 
@@ -626,6 +712,8 @@ document.addEventListener('DOMContentLoaded', function() {
             this.value = normalizeNumberInput(this.value);
         });
     });
+
+    applyMarksEditMode();
 });
 </script>
 @endsection

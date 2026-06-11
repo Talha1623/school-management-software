@@ -33,7 +33,7 @@
                                         @php
                                             $campusName = is_object($campus) ? ($campus->campus_name ?? $campus->name ?? '') : $campus;
                                         @endphp
-                                        <option value="{{ $campusName }}">{{ $campusName }}</option>
+                                        <option value="{{ $campusName }}" {{ isset($defaultCampus) && $defaultCampus === $campusName ? 'selected' : '' }}>{{ $campusName }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -177,6 +177,71 @@
     </div>
 </div>
 
+<!-- Available Products Section (same as super admin POS) -->
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card bg-white border border-white rounded-10 p-2 mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h4 class="mb-0 fw-semibold" style="color: #003471; font-size: 16px;">Available Products</h4>
+                <button type="button" class="btn btn-sm btn-primary" onclick="refreshProducts()" style="font-size: 11px; padding: 4px 12px;">
+                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">refresh</span>
+                    Refresh
+                </button>
+            </div>
+            
+            <div class="mb-2">
+                <input type="text" class="form-control form-control-sm" id="productSearchInput" placeholder="Search products by name or code..." style="font-size: 11px; padding: 4px 8px;" onkeyup="filterProducts()">
+            </div>
+            
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-bordered table-sm table-hover" style="font-size: 11px;">
+                    <thead style="background-color: #f8f9fa; position: sticky; top: 0; z-index: 10;">
+                        <tr>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Sr.</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Product Name</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Product Code</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Category</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Campus</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Sale Price</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Stock</th>
+                            <th style="padding: 6px; font-size: 11px; font-weight: 600;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsTableBody">
+                        @forelse($products as $index => $product)
+                        <tr class="product-row" data-product-id="{{ $product->id }}" data-name="{{ strtolower($product->product_name ?? '') }}" data-code="{{ strtolower($product->product_code ?? '') }}" data-campus="{{ strtolower($product->campus ?? '') }}">
+                            <td style="padding: 6px;">{{ $index + 1 }}</td>
+                            <td style="padding: 6px; font-weight: 500;">{{ $product->product_name ?? 'N/A' }}</td>
+                            <td style="padding: 6px;">{{ $product->product_code ?? 'N/A' }}</td>
+                            <td style="padding: 6px;">{{ $product->category ?? 'N/A' }}</td>
+                            <td style="padding: 6px;">{{ $product->campus ?? 'N/A' }}</td>
+                            <td style="padding: 6px; text-align: right;">PKR {{ number_format($product->sale_price ?? 0, 2) }}</td>
+                            <td style="padding: 6px; text-align: center;">
+                                <span data-stock-badge class="badge {{ ($product->total_stock ?? 0) > 0 ? 'bg-success' : 'bg-danger' }}" style="font-size: 10px;">
+                                    {{ $product->total_stock ?? 0 }}
+                                </span>
+                            </td>
+                            <td style="padding: 6px; text-align: center;">
+                                <button type="button" class="btn btn-sm btn-warning btn-add-product" data-product-id="{{ $product->id }}" onclick="addProductToBasket({{ $product->id }}, @json($product->product_name ?? ''), @json($product->product_code ?? ''), {{ $product->sale_price ?? 0 }}, {{ $product->total_stock ?? 0 }})" style="padding: 2px 8px; font-size: 10px; color: white;" {{ ($product->total_stock ?? 0) <= 0 ? 'disabled' : '' }}>
+                                    <span class="material-symbols-outlined" style="font-size: 14px; color: white;">add_shopping_cart</span>
+                                </button>
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="8" class="text-center py-4">
+                                <span class="material-symbols-outlined text-muted" style="font-size: 48px;">inventory_2</span>
+                                <p class="text-muted mt-2 mb-0">No products available for your campus.</p>
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .bg-purple {
         background-color: #9c27b0;
@@ -234,7 +299,13 @@ function scanProduct() {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ barcode: barcode, campus: campus })
+        body: JSON.stringify({
+            barcode: barcode,
+            campus: campus,
+            exclude_ids: basket
+                .filter(item => item.quantity >= item.stock)
+                .map(item => item.id)
+        })
     })
     .then(response => response.json())
     .then(data => {
@@ -257,29 +328,46 @@ function scanProduct() {
     });
 }
 
-// Add product to basket
+// Add product to basket (cannot exceed available stock — same as super admin)
 function addToBasket(product) {
-    // Check if product already exists in basket
     const existingItem = basket.find(item => item.id === product.id);
-    
+    const availableStock = parseInt(product.stock ?? 0, 10);
+
+    if (availableStock <= 0) {
+        alert('Out of stock');
+        return;
+    }
+
     if (existingItem) {
+        if (existingItem.quantity + 1 > existingItem.stock) {
+            alert('This unit is already in the basket (stock: ' + existingItem.stock + '). Scan the same product code again to add another unit.');
+            return;
+        }
         existingItem.quantity += 1;
+        updateProductStockDisplay(product.id, 1);
     } else {
         basket.push({
             id: product.id,
             name: product.name,
             product_code: product.product_code || '',
             price: parseFloat(product.price) || 0,
-            quantity: 1
+            quantity: 1,
+            stock: availableStock
         });
+        updateProductStockDisplay(product.id, 1);
     }
-    
+
     updateBasketDisplay();
 }
 
 // Remove item from basket
 function removeFromBasket(productId) {
-    basket = basket.filter(item => item.id !== productId);
+    const item = basket.find(item => item.id === productId);
+    if (item) {
+        const quantityToRestore = item.quantity;
+        basket = basket.filter(item => item.id !== productId);
+        updateProductStockDisplay(productId, -quantityToRestore);
+    }
     updateBasketDisplay();
 }
 
@@ -287,11 +375,20 @@ function removeFromBasket(productId) {
 function updateQuantity(productId, change) {
     const item = basket.find(item => item.id === productId);
     if (item) {
-        item.quantity += change;
-        if (item.quantity <= 0) {
-            removeFromBasket(productId);
+        if (change > 0 && item.quantity + change > item.stock) {
+            alert('Stock limit reached. Available: ' + item.stock);
             return;
         }
+        const oldQuantity = item.quantity;
+        item.quantity += change;
+        if (item.quantity <= 0) {
+            updateProductStockDisplay(productId, -oldQuantity);
+            basket = basket.filter(i => i.id !== productId);
+            updateBasketDisplay();
+            return;
+        }
+        const quantityChange = item.quantity - oldQuantity;
+        updateProductStockDisplay(productId, quantityChange);
         updateBasketDisplay();
     }
 }
@@ -335,7 +432,7 @@ function updateBasketDisplay() {
                     <div class="d-flex align-items-center gap-1 justify-content-center">
                         <button class="btn btn-sm btn-outline-secondary" onclick="updateQuantity(${item.id}, -1)" style="padding: 1px 4px; font-size: 10px; min-width: 24px;">-</button>
                         <span style="min-width: 20px; text-align: center; font-weight: 600;">${item.quantity}</span>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="updateQuantity(${item.id}, 1)" style="padding: 1px 4px; font-size: 10px; min-width: 24px;">+</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="updateQuantity(${item.id}, 1)" style="padding: 1px 4px; font-size: 10px; min-width: 24px;" ${item.quantity >= item.stock ? 'disabled' : ''}>+</button>
                     </div>
                 </td>
                 <td style="font-size: 11px; text-align: right;">PKR ${item.price.toFixed(2)}</td>
@@ -356,6 +453,9 @@ function updateBasketDisplay() {
 // Clear basket
 function clearBasket() {
     if (confirm('Are you sure you want to clear the basket?')) {
+        basket.forEach(item => {
+            updateProductStockDisplay(item.id, -item.quantity);
+        });
         basket = [];
         updateBasketDisplay();
     }
@@ -383,6 +483,13 @@ function completeOrder() {
         return;
     }
     
+    for (const item of basket) {
+        if (item.quantity > item.stock) {
+            alert('Quantity for ' + item.name + ' exceeds available stock (' + item.stock + ').');
+            return;
+        }
+    }
+
     if (confirm(`Complete order for ${buyerName}?\nCampus: ${campus}\nTotal: PKR ${total.toFixed(2)}\nPayment Method: ${paymentMethod}`)) {
         // Prepare order data
         const orderData = {
@@ -433,10 +540,31 @@ function completeOrder() {
             
             if (data.success) {
                 console.log('Sale saved successfully:', data);
-                alert('Order completed successfully!\n\n' + 
+
+                const soldItems = basket.map(item => ({
+                    id: item.id,
+                    quantity: item.quantity
+                }));
+
+                soldItems.forEach(soldItem => {
+                    const productRow = getProductRow(soldItem.id);
+                    const stockBadge = productRow?.querySelector('[data-stock-badge]');
+                    if (stockBadge) {
+                        const currentStock = parseInt(stockBadge.textContent.trim(), 10) || 0;
+                        const newStock = Math.max(0, currentStock - soldItem.quantity);
+                        stockBadge.textContent = newStock;
+                        stockBadge.className = `badge ${newStock > 0 ? 'bg-success' : 'bg-danger'}`;
+                        const addButton = productRow.querySelector('.btn-add-product');
+                        if (addButton) {
+                            addButton.disabled = newStock <= 0;
+                        }
+                    }
+                });
+
+                alert('Order completed successfully!\n\n' +
                       'Records saved: ' + (data.records_saved || basket.length) + '\n' +
                       'Sale Date: ' + (data.sale_date || 'Today') + '\n\n' +
-                      'You can now view them in Manage Sale Records page.');
+                      'Stock has been updated automatically.');
                 basket = [];
                 document.getElementById('buyerNameInput').value = '';
                 document.getElementById('barcodeInput').value = '';
@@ -455,7 +583,56 @@ function completeOrder() {
     }
 }
 
-// Allow Enter key to scan
+function addProductToBasket(productId, productName, productCode, price, stock) {
+    addToBasket({
+        id: productId,
+        name: productName,
+        product_code: productCode,
+        price: parseFloat(price) || 0,
+        stock: parseInt(stock, 10) || 0
+    });
+}
+
+function getProductRow(productId) {
+    return document.querySelector(`.product-row[data-product-id="${productId}"]`);
+}
+
+function updateProductStockDisplay(productId, quantityChange) {
+    const productRow = getProductRow(productId);
+    const stockBadge = productRow?.querySelector('[data-stock-badge]');
+    if (stockBadge) {
+        const currentStock = parseInt(stockBadge.textContent.trim(), 10) || 0;
+        const newStock = Math.max(0, currentStock - quantityChange);
+        stockBadge.textContent = newStock;
+        stockBadge.className = `badge ${newStock > 0 ? 'bg-success' : 'bg-danger'}`;
+        const addButton = productRow.querySelector('.btn-add-product');
+        if (addButton) {
+            addButton.disabled = newStock <= 0;
+        }
+    }
+}
+
+function filterProducts() {
+    const searchInput = document.getElementById('productSearchInput');
+    const campusSelect = document.getElementById('campusSelect');
+    const filter = searchInput ? searchInput.value.toLowerCase() : '';
+    const selectedCampus = campusSelect ? campusSelect.value.toLowerCase() : '';
+    const rows = document.querySelectorAll('.product-row');
+
+    rows.forEach(row => {
+        const name = row.getAttribute('data-name') || '';
+        const code = row.getAttribute('data-code') || '';
+        const campus = row.getAttribute('data-campus') || '';
+        const matchesSearch = !filter || name.includes(filter) || code.includes(filter);
+        const matchesCampus = !selectedCampus || campus === selectedCampus;
+        row.style.display = (matchesSearch && matchesCampus) ? '' : 'none';
+    });
+}
+
+function refreshProducts() {
+    window.location.reload();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const barcodeInput = document.getElementById('barcodeInput');
     if (barcodeInput) {
@@ -465,6 +642,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 scanProduct();
             }
         });
+    }
+
+    const campusSelect = document.getElementById('campusSelect');
+    if (campusSelect) {
+        campusSelect.addEventListener('change', filterProducts);
+        filterProducts();
     }
 });
 </script>

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\DeletedFee;
+use App\Models\Student;
 use App\Models\StudentPayment;
+use App\Services\AdvanceFeeWallet;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -43,9 +45,9 @@ class DeletedFeeController extends Controller
             $originalData = $deletedFee->original_data ?? [];
 
             if (!empty($originalData)) {
-                StudentPayment::create($originalData);
+                $paymentPayload = $originalData;
             } else {
-                StudentPayment::create([
+                $paymentPayload = [
                     'campus' => $deletedFee->campus,
                     'student_code' => $deletedFee->student_code,
                     'payment_title' => $deletedFee->payment_title,
@@ -56,14 +58,32 @@ class DeletedFeeController extends Controller
                     'sms_notification' => 'Yes',
                     'accountant' => $deletedFee->deleted_by,
                     'late_fee' => 0,
-                ]);
+                ];
             }
+
+            $student = !empty($paymentPayload['student_code'])
+                ? Student::query()->where('student_code', $paymentPayload['student_code'])->first()
+                : null;
+
+            $walletCheck = AdvanceFeeWallet::deductCreditOnPaymentRestore($paymentPayload, $student);
+            if (!$walletCheck['ok']) {
+                return redirect()
+                    ->route('accounting.parent-wallet.deleted-fees')
+                    ->with('error', $walletCheck['message']);
+            }
+
+            StudentPayment::create($paymentPayload);
 
             $deletedFee->delete();
 
+            $successMessage = 'Fee restored successfully!';
+            if (($walletCheck['amount'] ?? 0) > 0) {
+                $successMessage .= ' Rs. ' . number_format((float) $walletCheck['amount'], 2) . ' deducted from parent wallet.';
+            }
+
             return redirect()
                 ->route('accounting.parent-wallet.deleted-fees')
-                ->with('success', 'Fee restored successfully!');
+                ->with('success', $successMessage);
         } catch (\Exception $e) {
             return redirect()
                 ->route('accounting.parent-wallet.deleted-fees')

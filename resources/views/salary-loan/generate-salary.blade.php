@@ -258,7 +258,13 @@
                                             <strong class="text-success">{{ number_format($salary->salary_generated ?? 0, 2) }}</strong>
                                         </td>
                                         <td class="text-end">
-                                            <strong class="text-info">{{ number_format($salary->amount_paid ?? 0, 2) }}</strong>
+                                            @php
+                                                $displayAmountPaid = (float) ($salary->amount_paid ?? 0);
+                                                if ($displayAmountPaid <= 0 && $salary->status === 'Paid') {
+                                                    $displayAmountPaid = max(0, (float) ($salary->salary_generated ?? 0) + (float) ($salary->bonus_amount ?? 0) - (float) ($salary->deduction_amount ?? 0) - (float) ($salary->loan_repayment ?? 0));
+                                                }
+                                            @endphp
+                                            <strong class="text-info">{{ number_format($displayAmountPaid, 2) }}</strong>
                                         </td>
                                         <td class="text-end">
                                             <strong class="text-warning">{{ number_format($salary->loan_repayment ?? 0, 2) }}</strong>
@@ -285,7 +291,7 @@
                                                     Print Slip
                                                 </button>
                                             @else
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="openMakePaymentModal({{ $salary->id }}, '{{ addslashes($salary->staff->campus ?? 'N/A') }}', '{{ addslashes($salary->staff->name ?? 'N/A') }}', '{{ $salary->salary_month }} {{ $salary->year }}', {{ $salary->salary_generated ?? 0 }}, {{ $salary->amount_paid ?? 0 }}, {{ $salary->loan_repayment ?? 0 }})" title="Make Payment" style="color: white; font-size: 11px;">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="openMakePaymentModal({{ $salary->id }}, '{{ addslashes($salary->staff->campus ?? 'N/A') }}', '{{ addslashes($salary->staff->name ?? 'N/A') }}', '{{ $salary->salary_month }} {{ $salary->year }}', {{ $salary->salary_generated ?? 0 }}, {{ $salary->amount_paid ?? 0 }}, {{ $salary->loan_repayment ?? 0 }}, '{{ strtolower(trim((string) ($salary->staff->salary_type ?? ''))) }}')" title="Make Payment" style="color: white; font-size: 11px;">
                                                     Make Payment
                                                 </button>
                                             @endif
@@ -331,7 +337,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="makePaymentForm" method="POST">
+            <form id="makePaymentForm" method="POST" onsubmit="calculateGenerateSalaryModalTotals(); return true;">
                 @csrf
                 @method('PUT')
                 <div class="modal-body p-4" style="max-height: 70vh; overflow-y: auto;">
@@ -369,7 +375,7 @@
                         <!-- Loan Repayment -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Loan Repayment</label>
-                            <input type="number" class="form-control form-control-sm" name="loan_repayment" id="payment_loan_repayment" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;">
+                            <input type="number" class="form-control form-control-sm" name="loan_repayment" id="payment_loan_repayment" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;" oninput="calculateGenerateSalaryModalTotals()">
                         </div>
                         
                         <!-- Bonus Title -->
@@ -381,7 +387,7 @@
                         <!-- Bonus Amount -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Bonus Amount</label>
-                            <input type="number" class="form-control form-control-sm" name="bonus_amount" id="payment_bonus_amount" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;">
+                            <input type="number" class="form-control form-control-sm" name="bonus_amount" id="payment_bonus_amount" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;" oninput="calculateGenerateSalaryModalTotals()">
                         </div>
                         
                         <!-- Deduction Title -->
@@ -393,7 +399,7 @@
                         <!-- Deduction Amount -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Deduction Amount</label>
-                            <input type="number" class="form-control form-control-sm" name="deduction_amount" id="payment_deduction_amount" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;">
+                            <input type="number" class="form-control form-control-sm" name="deduction_amount" id="payment_deduction_amount" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;" oninput="calculateGenerateSalaryModalTotals()">
                         </div>
                         
                         <!-- Payment Method -->
@@ -405,7 +411,7 @@
                                 <option value="Wallet">Wallet</option>
                                 <option value="Transfer">Transfer</option>
                                 <option value="Card">Card</option>
-                                <option value="Check">Check</option>
+                                <option value="Cheque">Check</option>
                                 <option value="Deposit">Deposit</option>
                                 <option value="Cash">Cash</option>
                             </select>
@@ -414,7 +420,7 @@
                         <!-- Fully Paid? -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Fully Paid?</label>
-                            <select class="form-control form-control-sm" name="fully_paid" id="payment_fully_paid" style="height: 32px; font-size: 12px;">
+                            <select class="form-control form-control-sm" name="fully_paid" id="payment_fully_paid" style="height: 32px; font-size: 12px;" onchange="if(this.value==='1'){calculateGenerateSalaryModalTotals();}">
                                 <option value="0">No</option>
                                 <option value="1">Yes</option>
                             </select>
@@ -818,12 +824,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Open Make Payment Modal
-function openMakePaymentModal(salaryId, campus, employeeName, month, salaryGenerated, amountPaid, loanRepayment) {
+function openMakePaymentModal(salaryId, campus, employeeName, month, salaryGenerated, amountPaid, loanRepayment, salaryType) {
     // Populate readonly fields
     document.getElementById('payment_campus').value = campus;
     document.getElementById('payment_employee').value = employeeName;
     document.getElementById('payment_month').value = month;
-    document.getElementById('payment_salary_generated').value = '₹' + parseFloat(salaryGenerated).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const generatedInput = document.getElementById('payment_salary_generated');
+    generatedInput.setAttribute('data-base-generated', parseFloat(salaryGenerated || 0).toFixed(2));
+    generatedInput.value = '₹' + parseFloat(salaryGenerated).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     
     // Populate editable fields
     document.getElementById('payment_amount_paid').value = amountPaid || 0;
@@ -836,6 +844,27 @@ function openMakePaymentModal(salaryId, campus, employeeName, month, salaryGener
     document.getElementById('payment_fully_paid').value = '0';
     document.getElementById('payment_date').value = '{{ date('Y-m-d') }}';
     document.getElementById('payment_notify_employee').value = '0';
+
+    const normalizedType = (salaryType || '').toLowerCase().trim();
+    const isPerHourOrLecture = normalizedType === 'per hour' || normalizedType === 'lecture';
+    const bonusTitleInput = document.getElementById('payment_bonus_title');
+    const bonusAmountInput = document.getElementById('payment_bonus_amount');
+    const deductionTitleInput = document.getElementById('payment_deduction_title');
+    const deductionAmountInput = document.getElementById('payment_deduction_amount');
+
+    [bonusTitleInput, bonusAmountInput, deductionTitleInput, deductionAmountInput].forEach(input => {
+        input.disabled = isPerHourOrLecture;
+    });
+
+    if (isPerHourOrLecture) {
+        bonusTitleInput.placeholder = 'Disabled for per hour/lecture salary';
+        deductionTitleInput.placeholder = 'Disabled for per hour/lecture salary';
+    } else {
+        bonusTitleInput.placeholder = 'Enter bonus title';
+        deductionTitleInput.placeholder = 'Enter deduction title';
+    }
+
+    calculateGenerateSalaryModalTotals();
     
     // Update form action
     document.getElementById('makePaymentForm').action = `/salary-loan/generate-salary/${salaryId}/payment`;
@@ -843,6 +872,23 @@ function openMakePaymentModal(salaryId, campus, employeeName, month, salaryGener
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('makePaymentModal'));
     modal.show();
+}
+
+function calculateGenerateSalaryModalTotals() {
+    const generatedInput = document.getElementById('payment_salary_generated');
+    const amountPaidInput = document.getElementById('payment_amount_paid');
+    if (!generatedInput || !amountPaidInput) return;
+
+    const baseGenerated = parseFloat(generatedInput.getAttribute('data-base-generated') || 0);
+    const loanRepayment = parseFloat(document.getElementById('payment_loan_repayment').value || 0);
+    const bonusAmount = parseFloat(document.getElementById('payment_bonus_amount').value || 0);
+    const deductionAmount = parseFloat(document.getElementById('payment_deduction_amount').value || 0);
+
+    const grossGenerated = Math.max(0, baseGenerated + Math.max(0, bonusAmount) - Math.max(0, deductionAmount));
+    const netPayable = Math.max(0, grossGenerated - Math.max(0, loanRepayment));
+
+    generatedInput.value = '₹' + grossGenerated.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    amountPaidInput.value = netPayable.toFixed(2);
 }
 
 // Print Salary Slip

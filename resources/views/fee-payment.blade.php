@@ -271,6 +271,7 @@
                                     <span class="material-symbols-outlined" style="font-size: 16px;">receipt</span>
                                 </span>
                                 <input type="text" class="form-control" id="partial_fee_title" name="payment_title" placeholder="Enter Fee Title" readonly style="background-color: #f8f9fa; cursor: not-allowed;" required>
+                                <input type="hidden" id="partial_generated_id" name="generated_id">
                             </div>
                         </div>
 
@@ -667,8 +668,7 @@
 </style>
 
 <script>
-function renderStatusCell(due, paidForStatus, studentCode, studentName, isInstallment = false) {
-    // For installments, always show as Installment regardless of payment status
+function renderStatusCell(due, paidForStatus, studentCode, studentName, isInstallment = false, principalDue = null, remainingLate = null, serverStatus = '') {
     if (isInstallment) {
         return `
             <button class="btn btn-sm btn-info" style="padding: 4px 12px; font-size: 12px; color: white !important; background-color: #0dcaf0;" title="Installment payment">
@@ -677,7 +677,23 @@ function renderStatusCell(due, paidForStatus, studentCode, studentName, isInstal
             </button>
         `;
     }
-    if (due <= 0) {
+
+    const statusLabel = String(serverStatus || '').trim();
+    const principal = principalDue !== null ? parseFloat(principalDue) : parseFloat(due);
+    const lateRem = remainingLate !== null ? parseFloat(remainingLate) : 0;
+    const paid = parseFloat(paidForStatus || 0);
+    const dueAmt = parseFloat(due || 0);
+
+    if (statusLabel === 'Late Due' || (principal <= 0.01 && lateRem > 0.01 && dueAmt > 0.01)) {
+        return `
+            <button class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Fee paid — late fee still due: ${lateRem.toFixed(2)}">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">schedule</span>
+                <span style="color: white;">Late Due</span>
+            </button>
+        `;
+    }
+
+    if (statusLabel === 'Paid' || dueAmt <= 0.01) {
         return `
             <button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed">
                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span>
@@ -685,18 +701,20 @@ function renderStatusCell(due, paidForStatus, studentCode, studentName, isInstal
             </button>
         `;
     }
-    if (paidForStatus > 0) {
+
+    if (statusLabel === 'Unpaid' || paid <= 0.01) {
         return `
-            <button class="btn btn-sm btn-warning" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Partial payment">
-                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">hourglass_top</span>
-                <span style="color: white;">Partial</span>
+            <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${studentCode}', '${studentName}', ${dueAmt})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${dueAmt.toFixed(2)}">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
+                <span style="color: white;">Unpaid</span>
             </button>
         `;
     }
+
     return `
-        <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${studentCode}', '${studentName}', ${due})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${due.toFixed(2)}">
-            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
-            <span style="color: white;">Unpaid</span>
+        <button class="btn btn-sm btn-warning" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Partial payment — fee or late still due">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">hourglass_top</span>
+            <span style="color: white;">Partial</span>
         </button>
     `;
 }
@@ -725,11 +743,26 @@ function searchByName() {
             'Accept': 'application/json',
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.message || 'Search failed');
+            }).catch(() => {
+                throw new Error('Search failed (' + response.status + ')');
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         searchResultsBody.innerHTML = '';
+
+        if (!data.success) {
+            searchResultsBody.innerHTML = `<tr><td colspan="13" class="text-center py-4 text-danger">${data.message || 'Search failed. Please try again.'}</td></tr>`;
+            renderLatestPaymentsForStudents([]);
+            return;
+        }
         
-        if (data.success && data.students && data.students.length > 0) {
+        if (data.students && data.students.length > 0) {
             const grandTotals = { total: 0, discount: 0, late: 0, paid: 0, due: 0, generated: 0 };
             data.students.forEach((student) => {
                 const feeRows = Array.isArray(student.fee_rows) && student.fee_rows.length > 0
@@ -749,14 +782,16 @@ function searchByName() {
                     const total = parseFloat(fee.total || 0);
                     const discount = parseFloat(fee.discount || 0);
                     const lateFee = parseFloat(fee.late_fee || 0);
-                    const paid = parseFloat(fee.paid || 0);
                     const due = parseFloat(fee.due || 0);
-                    // Generated fee = total - discount (fee after discount is applied)
+                    const principalDue = parseFloat(fee.amount ?? Math.max(0, due - lateFee));
+                    const remainingLate = parseFloat(fee.remaining_late ?? lateFee);
+                    const paid = parseFloat(fee.cash_paid ?? fee.paid ?? 0);
                     const generatedFee = parseFloat(fee.generated_fee || (total - discount));
                     const isEmptyFee = !!fee.is_empty;
                     const isInstallment = !!fee.is_installment;
                     const paidForStatus = paid;
                     const paidDisplay = paid;
+                    const feeStatus = fee.status || '';
                     grandTotals.total += total;
                     grandTotals.discount += discount;
                     grandTotals.late += lateFee;
@@ -806,7 +841,7 @@ function searchByName() {
                             ${generatedFee.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
-                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name, isInstallment)}
+                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name, isInstallment, principalDue, remainingLate, feeStatus)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
                             <div class="btn-group" style="position: static;">
@@ -819,12 +854,12 @@ function searchByName() {
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
                                         Full Payment
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due}, generated_fee: ${generatedFee}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due}, generated_fee: ${generatedFee}, generated_id: ${fee.generated_id ? fee.generated_id : 'null'}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
                                         Partial Payment
                                     </a></li>
                                     <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}, amount: ${principalDue}, remaining_late: ${remainingLate}, fee_due: ${due}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
                                         Pay without late fee
                                     </a></li>
@@ -879,15 +914,21 @@ function searchByName() {
                 <td colspan="3"></td>
             `;
             searchResultsBody.appendChild(totalRow);
-            renderLatestPaymentsForStudents(data.students);
+            if (!window.suppressLatestPaymentsOnSearch) {
+                renderLatestPaymentsForStudents(data.students);
+            }
         } else {
             searchResultsBody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-muted">No students found matching your search.</td></tr>';
-            renderLatestPaymentsForStudents([]);
+            if (!window.suppressLatestPaymentsOnSearch) {
+                renderLatestPaymentsForStudents([]);
+            }
         }
+        window.suppressLatestPaymentsOnSearch = false;
     })
     .catch(error => {
         console.error('Error:', error);
         searchResultsBody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-danger">An error occurred while searching. Please try again.</td></tr>';
+        window.suppressLatestPaymentsOnSearch = false;
     });
 }
 
@@ -1082,15 +1123,10 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
             if (data.success) {
                 // Update button status from Unpaid to Paid
                 updatePaymentStatus(studentCode, false);
-                
-                // Add payment directly to Latest Payments if available
-                if (data.data && data.data.payment) {
-                    addLatestPaymentRow(data.data.payment);
-                } else {
-                    // Fallback: refresh from server
-                    refreshLatestPaymentsForStudent(studentCode);
-                }
-                
+
+                // Rebuild Latest Payments from server (prevents duplicate rows after partial + full)
+                refreshLatestPaymentsForStudent(studentCode);
+
                 refreshSearchResultsAfterPayment();
                 alert('Payment recorded successfully!');
             } else {
@@ -1107,8 +1143,17 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
     
     // For without late fee, create payment automatically (without late fees)
     if (paymentType === 'without_late_fee') {
-        // Confirm before processing
-        if (!confirm(`Are you sure you want to process payment without late fee for ${studentName} (${studentCode})?`)) {
+        const principalDue = studentData && studentData.fee_due != null
+            ? parseFloat(studentData.amount ?? studentData.fee_due ?? 0)
+            : null;
+        const remainingLate = studentData && studentData.remaining_late != null
+            ? parseFloat(studentData.remaining_late)
+            : null;
+        const lateOnly = principalDue !== null && principalDue <= 0.01 && remainingLate > 0.01;
+        const confirmMsg = lateOnly
+            ? `Fee is already paid; only late fee (Rs. ${remainingLate.toFixed(2)}) remains. Waive late fee and mark as paid for ${studentName} (${studentCode})?`
+            : `Pay principal only (no late fee) for ${studentName} (${studentCode})?`;
+        if (!confirm(confirmMsg)) {
             return;
         }
         
@@ -1134,24 +1179,35 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
                 generated_id: studentData && studentData.generated_id ? studentData.generated_id : null
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.message || 'Payment failed');
+                }).catch(() => {
+                    throw new Error('Payment failed (' + response.status + ')');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             document.body.removeChild(loadingMsg);
-            
+
             if (data.success) {
-                // Update button status from Unpaid to Paid
-                updatePaymentStatus(studentCode, false);
-                
-                // Add payment directly to Latest Payments if available
-                if (data.data && data.data.payment) {
-                    addLatestPaymentRow(data.data.payment);
-                } else {
-                    // Fallback: refresh from server
+                if (!data.late_fee_waived) {
+                    const paid = data.data && data.data.payment ? data.data.payment : null;
+                    if (paid) {
+                        addLatestPaymentRow({
+                            ...paid,
+                            method: paid.method || 'Cash Payment',
+                        });
+                    }
                     refreshLatestPaymentsForStudent(studentCode);
                 }
-                
+                window.suppressLatestPaymentsOnSearch = true;
                 refreshSearchResultsAfterPayment();
-                alert('Payment recorded successfully without late fee!');
+                alert(data.message || (data.late_fee_waived
+                    ? 'Late fee waived. Fee is now marked as paid.'
+                    : 'Payment recorded successfully without late fee!'));
             } else {
                 alert(data.message || 'Error processing payment');
             }
@@ -1159,7 +1215,7 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
         .catch(error => {
             document.body.removeChild(loadingMsg);
             console.error('Error:', error);
-            alert('Error processing payment. Please try again.');
+            alert(error.message || 'Error processing payment. Please try again.');
         });
         return;
     }
@@ -1188,11 +1244,13 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
     
     // Store generated fee globally for dynamic calculation
     window.partialPaymentGeneratedFee = generatedFee;
+    window.partialPaymentBaseDue = dueAmount;
     
     // Set initial due amount to the actual remaining due amount
     document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
     document.getElementById('partial_fee_title').value = studentData.fee_title || '';
     document.getElementById('partial_student_code').value = studentCode;
+    document.getElementById('partial_generated_id').value = studentData.generated_id || '';
     
     // Load students for the selected campus
     if (campusValue && campusValue !== 'N/A') {
@@ -1215,9 +1273,6 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
     if (studentData.paymentAmount !== undefined && studentData.paymentAmount !== null) {
         const paymentAmount = parseFloat(studentData.paymentAmount || 0);
         document.getElementById('partial_payment').value = paymentAmount.toFixed(2);
-        // Update due amount: Current Due Amount - Payment Amount
-        const remainingDue = Math.max(0, dueAmount - paymentAmount);
-        document.getElementById('partial_due_amount').value = 'Rs. ' + remainingDue.toFixed(2);
     } else {
         document.getElementById('partial_payment').value = '';
     }
@@ -1227,23 +1282,22 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
     document.getElementById('partial_date').value = new Date().toISOString().split('T')[0];
     document.getElementById('partial_notify').value = 'Yes';
     
-    // Add event listener to payment input to update due amount dynamically
+    // Add event listeners so due preview updates from a stable base.
     const paymentInput = document.getElementById('partial_payment');
     if (paymentInput) {
-        // Remove existing listeners by cloning and replacing
         const newPaymentInput = paymentInput.cloneNode(true);
         paymentInput.parentNode.replaceChild(newPaymentInput, paymentInput);
-        
-        // Add new event listener
-        newPaymentInput.addEventListener('input', function() {
-            const paymentAmount = parseFloat(this.value || 0);
-            // Get current due amount from the field (initial due amount)
-            const currentDueAmount = parseFloat(document.getElementById('partial_due_amount').value.replace('Rs. ', '').replace(/,/g, '') || dueAmount || 0);
-            // Calculate remaining due: Current Due - Payment Amount
-            const remainingDue = Math.max(0, currentDueAmount - paymentAmount);
-            document.getElementById('partial_due_amount').value = 'Rs. ' + remainingDue.toFixed(2);
-        });
+        newPaymentInput.addEventListener('input', updatePartialDueAmountPreview);
     }
+
+    const discountInput = document.getElementById('partial_discount');
+    if (discountInput) {
+        const newDiscountInput = discountInput.cloneNode(true);
+        discountInput.parentNode.replaceChild(newDiscountInput, discountInput);
+        newDiscountInput.addEventListener('input', updatePartialDueAmountPreview);
+    }
+
+    updatePartialDueAmountPreview();
     
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('partialPaymentModal'));
@@ -1290,11 +1344,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 partialStudentSelect.value = '';
                 document.getElementById('partial_student_code').value = '';
                 document.getElementById('partial_fee_title').value = '';
+                document.getElementById('partial_generated_id').value = '';
                 document.getElementById('partial_due_amount').value = '';
             } else {
                 partialStudentSelect.innerHTML = '<option value="">Select Student</option>';
                 document.getElementById('partial_student_code').value = '';
                 document.getElementById('partial_fee_title').value = '';
+                document.getElementById('partial_generated_id').value = '';
                 document.getElementById('partial_due_amount').value = '';
             }
         });
@@ -1323,15 +1379,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Store generated fee for dynamic calculation
                     window.partialPaymentGeneratedFee = generatedFee;
                     
-                    // Get current payment amount
-                    const paymentAmount = parseFloat(document.getElementById('partial_payment').value || 0);
-                    // Calculate remaining due: Current Due Amount - Payment Amount
-                    const remainingDue = Math.max(0, dueAmount - paymentAmount);
-                    
-                    document.getElementById('partial_due_amount').value = 'Rs. ' + remainingDue.toFixed(2);
+                    window.partialPaymentBaseDue = dueAmount;
+                    document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
                     if (window.partialPaymentStudentData.fee_title) {
                         document.getElementById('partial_fee_title').value = window.partialPaymentStudentData.fee_title;
                     }
+                    updatePartialDueAmountPreview();
                     // Clear stored data after using it
                     window.partialPaymentStudentData = null;
                     return;
@@ -1368,14 +1421,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             window.partialPaymentGeneratedFee = generatedFee;
                             
                             // Set due amount (this is the remaining amount to be paid)
+                            window.partialPaymentBaseDue = dueAmount;
                             document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
-                            
-                            // Get current payment amount and calculate remaining due
-                            const paymentAmount = parseFloat(document.getElementById('partial_payment').value || 0);
-                            if (paymentAmount > 0) {
-                                const remainingDue = Math.max(0, dueAmount - paymentAmount);
-                                document.getElementById('partial_due_amount').value = 'Rs. ' + remainingDue.toFixed(2);
-                            }
+                            updatePartialDueAmountPreview();
                         }
                     })
                     .catch(error => {
@@ -1384,6 +1432,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 document.getElementById('partial_student_code').value = '';
                 document.getElementById('partial_fee_title').value = '';
+                document.getElementById('partial_generated_id').value = '';
                 document.getElementById('partial_due_amount').value = '';
                 window.partialPaymentStudentData = null;
             }
@@ -1398,6 +1447,7 @@ document.addEventListener('DOMContentLoaded', function() {
             partialStudentSelect.innerHTML = '<option value="">Select Student</option>';
             document.getElementById('partial_student_code').value = '';
             document.getElementById('partial_fee_title').value = '';
+            document.getElementById('partial_generated_id').value = '';
             document.getElementById('partial_due_amount').value = '';
             document.getElementById('partial_payment').value = '';
             document.getElementById('partial_discount').value = '0';
@@ -1483,31 +1533,61 @@ function parsePaymentDateTime(dateTime) {
 }
 
 function buildLatestPaymentActionDropdown(payment) {
-    const paymentId = payment.id || '';
+    const paymentId = payment.id != null ? String(payment.id) : '';
     const studentCode = payment.student_code || '';
-    const studentName = (payment.student_name || '').replace(/'/g, "\\'");
-    const feeTitle = (payment.payment_title || '').replace(/'/g, "\\'");
+    const studentName = payment.student_name || '';
+    const feeTitle = payment.payment_title || '';
+    const sc = JSON.stringify(studentCode);
+    const sn = JSON.stringify(studentName);
+    const ft = JSON.stringify(feeTitle);
+    const pid = JSON.stringify(paymentId);
     return `
         <div class="btn-group" style="position: static;">
             <button type="button" class="btn btn-sm" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 2px 6px; border: none; background: #000; color: #fff; border-radius: 4px;" title="Actions">
                 <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #fff;">arrow_drop_down</span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end" style="position: absolute; z-index: 1050;">
-                <li><a class="dropdown-item" href="#" onclick="particularReceipt('${studentCode}', '${studentName}'); return false;">
+                <li><a class="dropdown-item" href='#' onclick='particularReceipt(${sc}, ${sn}, ${pid}); return false;'>
                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">print</span>
                     Print
                 </a></li>
-                <li><a class="dropdown-item" href="#" onclick="editPayment('${studentCode}', '${feeTitle}'); return false;">
+                <li><a class="dropdown-item" href='#' onclick='editPayment(${sc}, ${ft}); return false;'>
                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">edit</span>
                     Edit
                 </a></li>
-                <li><a class="dropdown-item text-danger" href="#" onclick="deletePayment('${paymentId}'); return false;">
+                <li><a class="dropdown-item text-danger" href='#' onclick='deletePayment(${pid}); return false;'>
                     <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">delete</span>
                     Delete
                 </a></li>
             </ul>
         </div>
     `;
+}
+
+function recalculateStudentLatestPaymentTotals(studentCode) {
+    if (!studentCode || studentCode === 'N/A') return;
+    const tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
+    if (!tbody) return;
+    let sumAmount = 0;
+    let sumLate = 0;
+    let sumDiscount = 0;
+    tbody.querySelectorAll('tr[data-payment-id]').forEach((row) => {
+        sumAmount += parseFloat(row.getAttribute('data-amount') || '0') || 0;
+        sumLate += parseFloat(row.getAttribute('data-late') || '0') || 0;
+        sumDiscount += parseFloat(row.getAttribute('data-discount') || '0') || 0;
+    });
+    const amountCell = document.querySelector(`[data-student-total="${studentCode}"]`);
+    if (amountCell) {
+        amountCell.textContent = sumAmount.toFixed(2);
+    }
+    const lateCell = document.querySelector(`[data-student-total-late="${studentCode}"]`);
+    if (lateCell) {
+        lateCell.textContent = sumLate.toFixed(2);
+    }
+    const discCell = document.querySelector(`[data-student-total-discount="${studentCode}"]`);
+    if (discCell) {
+        discCell.textContent = sumDiscount.toFixed(2);
+    }
 }
 
 function addLatestPaymentRow(payment) {
@@ -1532,6 +1612,7 @@ function addLatestPaymentRow(payment) {
 
     const studentCode = payment.student_code || 'N/A';
     const key = [
+        payment.id ?? '',
         payment.student_code,
         payment.payment_title,
         payment.payment_date,
@@ -1560,7 +1641,7 @@ function addLatestPaymentRow(payment) {
                                 <th style="padding: 8px 12px; font-size: 13px;">Student</th>
                                 <th style="padding: 8px 12px; font-size: 13px;">Parent</th>
                                 <th style="padding: 8px 12px; font-size: 13px;">Title</th>
-                                <th style="padding: 8px 12px; font-size: 13px;">Amount Paid</th>
+                                <th style="padding: 8px 12px; font-size: 13px;">Fee</th>
                                 <th style="padding: 8px 12px; font-size: 13px;">Late Fee</th>
                                 <th style="padding: 8px 12px; font-size: 13px;">Discount</th>
                                 <th style="padding: 8px 12px; font-size: 13px;">Date</th>
@@ -1575,7 +1656,9 @@ function addLatestPaymentRow(payment) {
                             <tr>
                                 <td colspan="4" class="text-end fw-semibold">Total</td>
                                 <td class="fw-semibold" data-student-total="${studentCode}">0.00</td>
-                                <td colspan="7"></td>
+                                <td class="fw-semibold" data-student-total-late="${studentCode}">0.00</td>
+                                <td class="fw-semibold" data-student-total-discount="${studentCode}">0.00</td>
+                                <td colspan="5"></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -1586,16 +1669,40 @@ function addLatestPaymentRow(payment) {
         tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
     }
 
-    if (!tbody || tbody.querySelector(`tr[data-key="${key}"]`)) {
+    const paymentIdStr = payment.id != null && String(payment.id) !== '' ? String(payment.id) : '';
+    if (paymentIdStr !== '') {
+        const dupId = Array.from(container.querySelectorAll('tr[data-payment-id]')).some(
+            (tr) => tr.getAttribute('data-payment-id') === paymentIdStr
+        );
+        if (dupId) {
+            return;
+        }
+    }
+
+    if (!tbody) {
+        return;
+    }
+
+    const dupKey = Array.from(tbody.querySelectorAll('tr[data-key]')).some(
+        (tr) => tr.getAttribute('data-key') === key
+    );
+    if (dupKey) {
         return;
     }
 
     const { date, time } = parsePaymentDateTime(payment.payment_date);
+    const gross = parseFloat(payment.payment_amount || 0) || 0;
+    const late = parseFloat(payment.late_fee || 0) || 0;
+    // DB stores payment_amount as gross (includes late portion); show fee net of late in first column (matches wallet late-first split).
+    const feeExclLate = Math.max(0, gross - late);
+    const disc = parseFloat(payment.discount || 0) || 0;
     const row = document.createElement('tr');
     row.setAttribute('data-key', key);
-    row.setAttribute('data-payment-id', payment.id || '');
+    row.setAttribute('data-payment-id', payment.id != null ? String(payment.id) : '');
     row.setAttribute('data-student-code', studentCode);
-    row.setAttribute('data-amount', parseFloat(payment.payment_amount || 0).toFixed(2));
+    row.setAttribute('data-amount', feeExclLate.toFixed(2));
+    row.setAttribute('data-late', late.toFixed(2));
+    row.setAttribute('data-discount', disc.toFixed(2));
     row.innerHTML = `
         <td style="padding: 8px 12px; font-size: 13px;">
             <strong>${payment.student_code || 'N/A'}</strong>
@@ -1610,13 +1717,13 @@ function addLatestPaymentRow(payment) {
             ${payment.payment_title || 'N/A'}
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
-            <strong style="color: #28a745;">${parseFloat(payment.payment_amount || 0).toFixed(2)}</strong>
+            <strong style="color: #28a745;">${feeExclLate.toFixed(2)}</strong>
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
-            ${parseFloat(payment.late_fee || 0) > 0 ? `<span style="color: #dc3545; font-weight: 600;">${parseFloat(payment.late_fee || 0).toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
+            ${late > 0 ? `<span style="color: #dc3545; font-weight: 600;">${late.toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
-            ${parseFloat(payment.discount || 0) > 0 ? `<span style="color: #ff9800; font-weight: 600;">${parseFloat(payment.discount || 0).toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
+            ${disc > 0 ? `<span style="color: #ff9800; font-weight: 600;">${disc.toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
             ${date}
@@ -1638,12 +1745,7 @@ function addLatestPaymentRow(payment) {
     `;
     tbody.insertBefore(row, tbody.firstChild);
 
-    const totalCell = container.querySelector(`[data-student-total="${studentCode}"]`);
-    if (totalCell) {
-        const currentTotal = parseFloat(totalCell.textContent || '0') || 0;
-        const newTotal = currentTotal + parseFloat(payment.payment_amount || 0);
-        totalCell.textContent = newTotal.toFixed(2);
-    }
+    recalculateStudentLatestPaymentTotals(studentCode);
 }
 
 function refreshLatestPaymentsForStudent(studentCode) {
@@ -1658,8 +1760,6 @@ function refreshLatestPaymentsForStudent(studentCode) {
     .then(response => response.json())
     .then(data => {
         if (data.success && Array.isArray(data.payments)) {
-            // Filter out only unpaid installments (method = 'Generated' or 'Installment')
-            // Paid installments should appear in Latest Payments
             const nonInstallmentPayments = data.payments.filter(payment => {
                 const paymentTitle = (payment.payment_title || '').toLowerCase();
                 const paymentMethod = (payment.method || '').toLowerCase();
@@ -1667,26 +1767,14 @@ function refreshLatestPaymentsForStudent(studentCode) {
                 const isUnpaidInstallment = isInstallment && (paymentMethod === 'generated' || paymentMethod === 'installment');
                 return !isUnpaidInstallment;
             });
-            
-            // Get existing payment IDs to avoid duplicates
-            const container = document.getElementById('latestPaymentsContainer');
-            const existingPaymentIds = new Set();
-            if (container) {
-                container.querySelectorAll('[data-payment-id]').forEach(row => {
-                    const paymentId = row.getAttribute('data-payment-id');
-                    if (paymentId) {
-                        existingPaymentIds.add(paymentId);
-                    }
-                });
-            }
-            
-            // Add only new payments (not already in the list)
+
+            // Drop this student's block and rebuild from API so partial + full never duplicate rows.
+            document.getElementById(`latestPaymentsStudent_${studentCode}`)?.remove();
+
             for (let i = nonInstallmentPayments.length - 1; i >= 0; i -= 1) {
-                const payment = nonInstallmentPayments[i];
-                if (!existingPaymentIds.has(String(payment.id))) {
-                    addLatestPaymentRow(payment);
-                }
+                addLatestPaymentRow(nonInstallmentPayments[i]);
             }
+            recalculateStudentLatestPaymentTotals(studentCode);
         }
     })
     .catch(error => {
@@ -1771,6 +1859,13 @@ function renderLatestPaymentsForStudents(students) {
                     </div>
                 </div>
             `;
+        } else {
+            container.querySelectorAll('tbody[data-student-code]').forEach((tb) => {
+                const code = tb.getAttribute('data-student-code');
+                if (code) {
+                    recalculateStudentLatestPaymentTotals(code);
+                }
+            });
         }
     })
     .catch((error) => {
@@ -1801,15 +1896,9 @@ function deletePayment(paymentId) {
         const row = document.querySelector(`tr[data-payment-id="${paymentId}"]`);
         if (!row) return;
         const studentCode = row.getAttribute('data-student-code');
-        const amount = parseFloat(row.getAttribute('data-amount') || '0') || 0;
         row.remove();
 
-        const totalCell = document.querySelector(`[data-student-total="${studentCode}"]`);
-        if (totalCell) {
-            const currentTotal = parseFloat(totalCell.textContent || '0') || 0;
-            const newTotal = Math.max(0, currentTotal - amount);
-            totalCell.textContent = newTotal.toFixed(2);
-        }
+        recalculateStudentLatestPaymentTotals(studentCode);
 
         const tbody = document.getElementById(`latestPaymentsBody_${studentCode}`);
         if (tbody && tbody.children.length === 0) {
@@ -1904,6 +1993,14 @@ function handlePartialPaymentSubmit(event) {
     const form = event.target;
     const formData = new FormData(form);
     const studentCode = formData.get('student_code');
+    const baseDue = parseFloat(window.partialPaymentBaseDue || 0);
+    const paymentAmount = parseFloat(formData.get('payment_amount') || 0);
+    const discountAmount = parseFloat(formData.get('discount') || 0);
+
+    if ((paymentAmount + discountAmount) > (baseDue + 0.01)) {
+        alert('Payment Amount aur Discount milakar Due Amount se zyada nahi ho sakte.');
+        return;
+    }
     
     // Show loading
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -1920,12 +2017,19 @@ function handlePartialPaymentSubmit(event) {
             'Accept': 'application/json',
         }
     })
-    .then(response => {
-        // Check if response is OK
+    .then(async response => {
         if (!response.ok) {
-            return response.text().then(text => {
-                throw new Error(`HTTP error! status: ${response.status}, body: ${text}`);
-            });
+            const ct = response.headers.get('content-type') || '';
+            let payload = null;
+            if (ct.includes('application/json')) {
+                try {
+                    payload = await response.json();
+                } catch (e) { /* ignore */ }
+            }
+            const err = new Error(`HTTP error! status: ${response.status}`);
+            err.status = response.status;
+            err.payload = payload;
+            throw err;
         }
         
         // Check if response is JSON or HTML redirect
@@ -1943,14 +2047,7 @@ function handlePartialPaymentSubmit(event) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('partialPaymentModal'));
             if (modal) modal.hide();
 
-            if (result.isJson && result.data && result.data.payment) {
-                addLatestPaymentRow(result.data.payment);
-                if (!result.data.payment.accountant) {
-                    refreshLatestPaymentsForStudent(studentCode);
-                }
-            } else {
-                refreshLatestPaymentsForStudent(studentCode);
-            }
+            refreshLatestPaymentsForStudent(studentCode);
             refreshSearchResultsAfterPayment();
             
             // Fetch updated student data to check unpaid amount
@@ -1992,16 +2089,40 @@ function handlePartialPaymentSubmit(event) {
         console.error('Error:', error);
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
-        
-        // Check if it's a validation error
-        if (error.message && error.message.includes('422')) {
+
+        if (error.status === 422 && error.payload) {
+            const p = error.payload;
+            const msg = p.message || 'Validation failed';
+            const detail = p.errors
+                ? Object.values(p.errors).flat().join('\n')
+                : '';
+            alert(detail ? `${msg}\n\n${detail}` : msg);
+            return;
+        }
+        if (error.status === 500 && error.payload && error.payload.message) {
+            alert(error.payload.message);
+            return;
+        }
+        if (error.status === 422) {
             alert('Validation error: Please check all required fields are filled correctly.');
-        } else if (error.message && error.message.includes('500')) {
+        } else if (error.status === 500) {
             alert('Server error: Please try again or contact administrator.');
         } else {
             alert('Error processing payment: ' + (error.message || 'Unknown error. Please try again.'));
         }
     });
+}
+
+function updatePartialDueAmountPreview() {
+    const baseDue = parseFloat(window.partialPaymentBaseDue || 0);
+    const paymentAmount = parseFloat(document.getElementById('partial_payment')?.value || 0);
+    const discountAmount = parseFloat(document.getElementById('partial_discount')?.value || 0);
+    const remainingDue = Math.max(0, baseDue - paymentAmount - discountAmount);
+
+    const dueField = document.getElementById('partial_due_amount');
+    if (dueField) {
+        dueField.value = 'Rs. ' + remainingDue.toFixed(2);
+    }
 }
 
 function searchByCNIC() {
@@ -2068,14 +2189,16 @@ function searchByCNIC() {
                     const total = parseFloat(fee.total || 0);
                     const discount = parseFloat(fee.discount || 0);
                     const lateFee = parseFloat(fee.late_fee || 0);
-                    const paid = parseFloat(fee.paid || 0);
                     const due = parseFloat(fee.due || 0);
-                    // Generated fee = total - discount (fee after discount is applied)
+                    const principalDue = parseFloat(fee.amount ?? Math.max(0, due - lateFee));
+                    const remainingLate = parseFloat(fee.remaining_late ?? lateFee);
+                    const paid = parseFloat(fee.cash_paid ?? fee.paid ?? 0);
                     const generatedFee = parseFloat(fee.generated_fee || (total - discount));
                     const isEmptyFee = !!fee.is_empty;
                     const isInstallment = !!fee.is_installment;
                     const paidForStatus = paid;
                     const paidDisplay = paid;
+                    const feeStatus = fee.status || '';
                     grandTotals.total += total;
                     grandTotals.discount += discount;
                     grandTotals.late += lateFee;
@@ -2122,7 +2245,7 @@ function searchByCNIC() {
                             ${due.toFixed(2)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
-                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name, isInstallment)}
+                            ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name, isInstallment, principalDue, remainingLate, feeStatus)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px; position: relative; overflow: visible;">
                             <div class="btn-group" style="position: static;">
@@ -2135,12 +2258,12 @@ function searchByCNIC() {
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">check_circle</span>
                                         Full Payment
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due || 0}, generated_fee: ${generatedFee || 0}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'partial', {student_code: '${student.student_code}', student_name: '${student.student_name}', campus: '${student.campus || ''}', monthly_fee: ${student.monthly_fee || 0}, fee_title: '${feeTitleSafe}', fee_due: ${due || 0}, generated_fee: ${generatedFee || 0}, generated_id: ${fee.generated_id ? fee.generated_id : 'null'}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">account_balance_wallet</span>
                                         Partial Payment
                                     </a></li>
                                     <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="takePayment('${student.student_code}', '${student.student_name}', 'without_late_fee', {payment_title: '${feeTitleSafe}', generated_id: ${fee.generated_id ? fee.generated_id : 'null'}, payment_id: ${fee.payment_id ? fee.payment_id : 'null'}, is_installment: ${isInstallment ? 'true' : 'false'}, amount: ${principalDue}, remaining_late: ${remainingLate}, fee_due: ${due}}); return false;">
                                         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 5px;">remove_circle</span>
                                         Pay without late fee
                                     </a></li>
@@ -2195,11 +2318,16 @@ function searchByCNIC() {
                 <td colspan="3"></td>
             `;
             searchResultsBody.appendChild(totalRow);
-            renderLatestPaymentsForStudents(data.students);
+            if (!window.suppressLatestPaymentsOnSearch) {
+                renderLatestPaymentsForStudents(data.students);
+            }
         } else {
             searchResultsBody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-muted">No students found matching this CNIC / Parent ID.</td></tr>';
-            renderLatestPaymentsForStudents([]);
+            if (!window.suppressLatestPaymentsOnSearch) {
+                renderLatestPaymentsForStudents([]);
+            }
         }
+        window.suppressLatestPaymentsOnSearch = false;
     })
     .catch(error => {
         console.error('Error searching by CNIC:', error);
@@ -2466,8 +2594,8 @@ function handleInstallmentSubmit(event) {
     for (let i = 1; i <= totalInstallments; i++) {
         let installmentDiscount;
         if (i === totalInstallments) {
-            // Last installment gets the remaining discount to ensure total equals original
-            installmentDiscount = (totalDiscount - totalDiscountUsed).toFixed(2);
+            // Last installment gets the remaining discount; clamp so validation (min:0) never fails on rounding drift
+            installmentDiscount = Math.max(0, totalDiscount - totalDiscountUsed).toFixed(2);
         } else {
             installmentDiscount = perInstallmentDiscountBase.toFixed(2);
             totalDiscountUsed += parseFloat(installmentDiscount);
@@ -2576,10 +2704,11 @@ function handleInstallmentSubmit(event) {
     });
 }
 
-function particularReceipt(studentCode, studentName) {
-    // Redirect to thermal print particular receipt page
-    const url = `{{ url('/fee-payment/particular-receipt-thermal') }}/${encodeURIComponent(studentCode)}`;
-    window.open(url, '_blank');
+function particularReceipt(studentCode, studentName, paymentId) {
+    const base = `{{ url('/fee-payment/particular-receipt-thermal') }}/${encodeURIComponent(studentCode)}`;
+    const hasId = paymentId !== undefined && paymentId !== null && String(paymentId).trim() !== '';
+    const q = hasId ? `?payment_id=${encodeURIComponent(String(paymentId))}` : '';
+    window.open(base + q, '_blank');
 }
 
 // Allow Enter key to trigger search
