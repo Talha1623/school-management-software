@@ -44,10 +44,7 @@ class ParentHomeworkController extends Controller
             }
 
             // Build query to get homework for all parent's students
-            // Only show homework where homework_content is not empty
-            $query = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', ['']);
+            $query = HomeworkDiary::query()->withContent();
 
             // Filter by student_id (optional - specific student)
             if ($request->filled('student_id')) {
@@ -70,7 +67,7 @@ class ParentHomeworkController extends Controller
                     ], 404);
                 }
 
-                if (!$student->campus || !$student->class || !$student->section) {
+                if (!$student->class || !$student->section) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Student information incomplete. Cannot fetch homework.',
@@ -79,36 +76,18 @@ class ParentHomeworkController extends Controller
                 }
 
                 // Filter homework only for this specific student
-                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                      ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                      ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))]);
+                $query->forStudent($student);
             } else {
-                // Get unique combinations of campus, class, section from all students
-                $studentFilters = [];
-                foreach ($students as $student) {
-                    if ($student->campus && $student->class && $student->section) {
-                        $key = strtolower(trim($student->campus)) . '|' . 
-                               strtolower(trim($student->class)) . '|' . 
-                               strtolower(trim($student->section));
-                        
-                        if (!isset($studentFilters[$key])) {
-                            $studentFilters[$key] = [
-                                'campus' => $student->campus,
-                                'class' => $student->class,
-                                'section' => $student->section,
-                            ];
-                        }
-                    }
-                }
+                $hasPlacement = $students->contains(fn ($student) => $student->class && $student->section);
 
-                // Filter homework by students' campus, class, section
-                if (!empty($studentFilters)) {
-                    $query->where(function($q) use ($studentFilters) {
-                        foreach ($studentFilters as $filter) {
-                            $q->orWhere(function($subQ) use ($filter) {
-                                $subQ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filter['campus']))])
-                                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filter['class']))])
-                                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filter['section']))]);
+                if ($hasPlacement) {
+                    $query->where(function ($q) use ($students) {
+                        foreach ($students as $student) {
+                            if (!$student->class || !$student->section) {
+                                continue;
+                            }
+                            $q->orWhere(function ($subQ) use ($student) {
+                                $subQ->forStudent($student);
                             });
                         }
                     });
@@ -239,7 +218,7 @@ class ParentHomeworkController extends Controller
             }
 
             // Check if student has complete information
-            if (!$student->campus || !$student->class || !$student->section) {
+            if (!$student->class || !$student->section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Student information incomplete. Cannot fetch homework.',
@@ -258,14 +237,11 @@ class ParentHomeworkController extends Controller
                 ], 422);
             }
 
-            // Get homework for specific date
-            $homeworkList = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', [''])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))])
-                ->whereDate('date', $date)
+            // Get homework for specific date (flexible class/campus match like web diary).
+            $homeworkList = HomeworkDiary::query()
+                ->withContent()
+                ->forStudent($student)
+                ->onDate($dateObj->toDateString())
                 ->with('subject')
                 ->orderBy('subject_id', 'asc')
                 ->get();
@@ -338,7 +314,7 @@ class ParentHomeworkController extends Controller
             // Verify student belongs to this parent
             $student = $parent->students()->findOrFail($studentId);
 
-            if (!$student->campus || !$student->class || !$student->section) {
+            if (!$student->class || !$student->section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Student information incomplete. Cannot fetch homework.',
@@ -347,13 +323,9 @@ class ParentHomeworkController extends Controller
             }
 
             // Get homework for this student's class, section, campus
-            // Only show homework where homework_content is not empty
-            $query = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', [''])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))]);
+            $query = HomeworkDiary::query()
+                ->withContent()
+                ->forStudent($student);
 
             // Filter by date (optional)
             if ($request->filled('date')) {
@@ -470,37 +442,22 @@ class ParentHomeworkController extends Controller
                 ], 200);
             }
 
-            // Get unique combinations of campus, class, section
-            $studentFilters = [];
-            foreach ($students as $student) {
-                if ($student->campus && $student->class && $student->section) {
-                    $key = strtolower(trim($student->campus)) . '|' . 
-                           strtolower(trim($student->class)) . '|' . 
-                           strtolower(trim($student->section));
-                    
-                    if (!isset($studentFilters[$key])) {
-                        $studentFilters[$key] = [
-                            'campus' => $student->campus,
-                            'class' => $student->class,
-                            'section' => $student->section,
-                        ];
+            $subjectIds = HomeworkDiary::query()
+                ->withContent()
+                ->where(function ($q) use ($students) {
+                    foreach ($students as $student) {
+                        if (!$student->class || !$student->section) {
+                            continue;
+                        }
+                        $q->orWhere(function ($subQ) use ($student) {
+                            $subQ->forStudent($student);
+                        });
                     }
-                }
-            }
-
-            // Get subjects from homework diaries
-            $subjectIds = [];
-            foreach ($studentFilters as $filter) {
-                $homeworkSubjectIds = HomeworkDiary::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filter['campus']))])
-                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filter['class']))])
-                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filter['section']))])
-                    ->pluck('subject_id')
-                    ->toArray();
-                
-                $subjectIds = array_merge($subjectIds, $homeworkSubjectIds);
-            }
-
-            $subjectIds = array_unique($subjectIds);
+                })
+                ->pluck('subject_id')
+                ->unique()
+                ->values()
+                ->all();
 
             $subjects = Subject::whereIn('id', $subjectIds)
                 ->orderBy('subject_name', 'asc')

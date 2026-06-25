@@ -576,11 +576,11 @@ class HomeworkDiaryController extends Controller
                 [
                     'subject_id' => $diaryData['subject_id'],
                     'date' => $validated['date'],
+                    'campus' => $validated['campus'],
                     'class' => $validated['class'],
                     'section' => $validated['section'],
                 ],
                 [
-                    'campus' => $validated['campus'],
                     'homework_content' => $diaryData['homework_content'],
                 ]
             );

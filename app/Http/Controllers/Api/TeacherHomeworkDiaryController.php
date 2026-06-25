@@ -16,6 +16,82 @@ use Carbon\Carbon;
 class TeacherHomeworkDiaryController extends Controller
 {
     /**
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    private function getTeacherIdentityKeys($teacher)
+    {
+        return collect([
+            strtolower(trim((string) ($teacher->name ?? ''))),
+            strtolower(trim((string) ($teacher->emp_id ?? ''))),
+        ])->filter()->unique()->values();
+    }
+
+    private function isClassTeacherForContext($teacher, string $campus, string $class, string $section): bool
+    {
+        $identityKeys = $this->getTeacherIdentityKeys($teacher);
+        if ($identityKeys->isEmpty()) {
+            return false;
+        }
+
+        return Section::query()
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($section))])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            ->where(function ($query) use ($identityKeys) {
+                foreach ($identityKeys as $key) {
+                    $query->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                }
+            })
+            ->exists();
+    }
+
+    private function findSubjectByNameForTeacher(
+        $teacher,
+        string $subjectName,
+        string $campus,
+        string $class,
+        string $section,
+        bool $isClassTeacher
+    ): ?Subject {
+        $subjectNameLower = strtolower(trim($subjectName));
+
+        if ($isClassTeacher) {
+            return Subject::query()
+                ->whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . $subjectNameLower . '%'])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+                ->orderBy('subject_name', 'asc')
+                ->first();
+        }
+
+        $identityKeys = $this->getTeacherIdentityKeys($teacher);
+
+        return Subject::query()
+            ->where(function ($query) use ($identityKeys) {
+                foreach ($identityKeys as $key) {
+                    $query->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                }
+            })
+            ->whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . $subjectNameLower . '%'])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            ->first();
+    }
+
+    private function teacherCanManageHomeworkForSubject($teacher, Subject $subject, bool $isClassTeacher): bool
+    {
+        if ($isClassTeacher) {
+            return true;
+        }
+
+        $subjectTeacher = strtolower(trim((string) ($subject->teacher ?? '')));
+
+        return $this->getTeacherIdentityKeys($teacher)->contains($subjectTeacher);
+    }
+
+    /**
      * Get Filter Options (Campuses, Classes, Sections)
      * 
      * @param Request $request
@@ -368,11 +444,12 @@ class TeacherHomeworkDiaryController extends Controller
             ]);
 
             // Check if teacher is class teacher for requested class/section/campus.
-            $isClassTeacher = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
-                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($validated['section']))])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))])
-                ->whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim((string) ($teacher->name ?? '')))])
-                ->exists();
+            $isClassTeacher = $this->isClassTeacherForContext(
+                $teacher,
+                $validated['campus'],
+                $validated['class'],
+                $validated['section']
+            );
 
             // Resolve subject for further use.
             $subject = null;
@@ -399,10 +476,8 @@ class TeacherHomeworkDiaryController extends Controller
                 ], 422);
             }
 
-            // Additional security check: Verify subject is assigned to this teacher.
-            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
-            $subjectTeacher = strtolower(trim((string) ($subject->teacher ?? '')));
-            if (!$isClassTeacher && $subjectTeacher !== $teacherName) {
+            // Additional security check: subject teacher OR class teacher of this section.
+            if (!$this->teacherCanManageHomeworkForSubject($teacher, $subject, $isClassTeacher)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This subject is not assigned to you. You can only add homework for your assigned subjects.',
@@ -844,11 +919,18 @@ class TeacherHomeworkDiaryController extends Controller
 
             $homeworkDiary = HomeworkDiary::with('subject')->findOrFail($id);
 
-            // Validate that homework subject belongs to logged-in teacher
-            if (strtolower(trim($homeworkDiary->subject->teacher ?? '')) !== strtolower(trim($teacher->name ?? ''))) {
+            $isClassTeacher = $this->isClassTeacherForContext(
+                $teacher,
+                (string) ($homeworkDiary->campus ?? ''),
+                (string) ($homeworkDiary->class ?? ''),
+                (string) ($homeworkDiary->section ?? '')
+            );
+
+            // Subject teacher OR class teacher of this section can update.
+            if (!$this->teacherCanManageHomeworkForSubject($teacher, $homeworkDiary->subject, $isClassTeacher)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You can only update homework for your assigned subjects.',
+                    'message' => 'You can only update homework for your assigned subjects or your class section.',
                 ], 403);
             }
 
@@ -923,11 +1005,17 @@ class TeacherHomeworkDiaryController extends Controller
 
             $homeworkDiary = HomeworkDiary::with('subject')->findOrFail($id);
 
-            // Validate that homework subject belongs to logged-in teacher
-            if (strtolower(trim($homeworkDiary->subject->teacher ?? '')) !== strtolower(trim($teacher->name ?? ''))) {
+            $isClassTeacher = $this->isClassTeacherForContext(
+                $teacher,
+                (string) ($homeworkDiary->campus ?? ''),
+                (string) ($homeworkDiary->class ?? ''),
+                (string) ($homeworkDiary->section ?? '')
+            );
+
+            if (!$this->teacherCanManageHomeworkForSubject($teacher, $homeworkDiary->subject, $isClassTeacher)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You can only delete homework for your assigned subjects.',
+                    'message' => 'You can only delete homework for your assigned subjects or your class section.',
                 ], 403);
             }
 
@@ -1237,7 +1325,9 @@ class TeacherHomeworkDiaryController extends Controller
     }
 
     /**
-     * Get all assigned subjects by class/section (not limited to logged-in teacher).
+     * Get all assigned subjects by class/section with homework.
+     *
+     * GET /api/teacher/homework-diary/all-assigned-subjects?class=One&section=A&date=2026-06-20&campus=
      *
      * @param Request $request
      * @return JsonResponse
@@ -1599,9 +1689,9 @@ class TeacherHomeworkDiaryController extends Controller
 
     /**
      * Get Previous Date Homework Diary by Subject and Date
-     * Returns homework for a specific subject and date (for teachers)
+     * Returns previous homework (before the given date) for a subject.
      * 
-     * GET /api/teacher/homework-diary/previous?subject={subject_name}&date={date}
+     * GET /api/teacher/homework-diary/previous?subject={subject_name}&date={date}&campus=&class=&section=
      * 
      * @param Request $request
      * @return JsonResponse
@@ -1646,22 +1736,52 @@ class TeacherHomeworkDiaryController extends Controller
                 ], 422);
             }
 
-            // Get teacher's assigned subject IDs first
-            $teacherSubjectIds = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
-                ->pluck('id')
-                ->toArray();
+            $campus = $request->filled('campus') ? trim((string) $request->campus) : '';
+            $class = $request->filled('class') ? trim((string) $request->class) : '';
+            $section = $request->filled('section') ? trim((string) $request->section) : '';
 
-            if (empty($teacherSubjectIds)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No subjects assigned to you. Please contact administrator.',
-                ], 403);
+            $isClassTeacher = false;
+            if ($campus !== '' && $class !== '' && $section !== '') {
+                $isClassTeacher = $this->isClassTeacherForContext($teacher, $campus, $class, $section);
+                $subject = $this->findSubjectByNameForTeacher(
+                    $teacher,
+                    $subjectName,
+                    $campus,
+                    $class,
+                    $section,
+                    $isClassTeacher
+                );
+            } else {
+                $identityKeys = $this->getTeacherIdentityKeys($teacher);
+                if ($identityKeys->isEmpty()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'No subjects assigned to you. Please contact administrator.',
+                    ], 403);
+                }
+
+                $subjectQuery = Subject::query()
+                    ->where(function ($query) use ($identityKeys) {
+                        foreach ($identityKeys as $key) {
+                            $query->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                        }
+                    })
+                    ->whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . strtolower($subjectName) . '%']);
+
+                if ($class !== '') {
+                    $subjectQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+                }
+
+                if ($section !== '') {
+                    $subjectQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+                }
+
+                if ($campus !== '') {
+                    $subjectQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                }
+
+                $subject = $subjectQuery->orderBy('subject_name', 'asc')->first();
             }
-
-            // Find subject by name (case-insensitive, partial match) - must be assigned to teacher
-            $subject = Subject::whereIn('id', $teacherSubjectIds)
-                ->whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . strtolower($subjectName) . '%'])
-                ->first();
 
             if (!$subject) {
                 return response()->json([
@@ -1670,37 +1790,45 @@ class TeacherHomeworkDiaryController extends Controller
                 ], 404);
             }
 
-            // Optional filters (campus, class, section)
-            $campus = $request->get('campus');
-            $class = $request->get('class');
-            $section = $request->get('section');
-
-            // Build query for homework
-            $homeworkQuery = HomeworkDiary::where('subject_id', $subject->id)
-                ->whereDate('date', $date);
-
-            // Apply optional filters
-            if ($campus) {
-                $homeworkQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            if (!$this->teacherCanManageHomeworkForSubject($teacher, $subject, $isClassTeacher)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You can only view homework for your assigned subjects or your class section.',
+                ], 403);
             }
 
-            if ($class) {
-                $homeworkQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            $campus = $campus !== '' ? $campus : trim((string) ($subject->campus ?? ''));
+            $class = $class !== '' ? $class : trim((string) ($subject->class ?? ''));
+            $section = $section !== '' ? $section : trim((string) ($subject->section ?? ''));
+
+            $homeworkQuery = HomeworkDiary::where('subject_id', $subject->id);
+
+            if ($campus !== '') {
+                $homeworkQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
             }
 
-            if ($section) {
-                $homeworkQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            if ($class !== '') {
+                $homeworkQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
             }
 
-            // Get homework entries
-            $homeworkList = $homeworkQuery->with('subject')
-                ->orderBy('campus', 'asc')
-                ->orderBy('class', 'asc')
-                ->orderBy('section', 'asc')
+            if ($section !== '') {
+                $homeworkQuery->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
+            }
+
+            $homeworkForDate = (clone $homeworkQuery)
+                ->whereDate('date', $date)
+                ->with('subject')
+                ->orderBy('created_at', 'desc')
                 ->get();
 
-            // Format homework data
-            $homeworkData = $homeworkList->map(function($homework) {
+            $homeworkList = (clone $homeworkQuery)
+                ->whereDate('date', '<', $date)
+                ->with('subject')
+                ->orderBy('date', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            $formatHomework = static function ($homework) {
                 return [
                     'id' => $homework->id,
                     'subject_id' => $homework->subject_id,
@@ -1717,7 +1845,10 @@ class TeacherHomeworkDiaryController extends Controller
                     'created_at' => $homework->created_at->format('Y-m-d H:i:s'),
                     'created_at_formatted' => $homework->created_at->format('d M Y, h:i A'),
                 ];
-            });
+            };
+
+            $homeworkData = $homeworkList->map($formatHomework)->values();
+            $homeworkForDateData = $homeworkForDate->map($formatHomework)->values();
 
             return response()->json([
                 'success' => true,
@@ -1734,17 +1865,20 @@ class TeacherHomeworkDiaryController extends Controller
                         'subject_name' => $subject->subject_name,
                         'class' => $subject->class,
                         'section' => $subject->section,
+                        'campus' => $subject->campus,
                     ],
                     'date' => $date,
                     'date_formatted' => $dateObj->format('d M Y'),
                     'date_formatted_full' => $dateObj->format('l, d F Y'),
                     'filters' => [
-                        'campus' => $campus,
-                        'class' => $class,
-                        'section' => $section,
+                        'campus' => $campus !== '' ? $campus : null,
+                        'class' => $class !== '' ? $class : null,
+                        'section' => $section !== '' ? $section : null,
                     ],
                     'total_homework' => $homeworkList->count(),
                     'homework' => $homeworkData,
+                    'total_homework_for_date' => $homeworkForDate->count(),
+                    'homework_for_date' => $homeworkForDateData,
                 ],
                 'token' => $request->user()->currentAccessToken()->token ?? null,
             ], 200);
@@ -1801,37 +1935,44 @@ class TeacherHomeworkDiaryController extends Controller
                 ], 422);
             }
 
-            // Get teacher's assigned subject IDs first
-            $teacherSubjectIds = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
-                ->pluck('id')
-                ->toArray();
-
-            if (empty($teacherSubjectIds)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No subjects assigned to you. Please contact administrator.',
-                ], 403);
-            }
-
-            // Find subject by name (case-insensitive, partial match) - must be assigned to teacher
-            $subject = Subject::whereIn('id', $teacherSubjectIds)
-                ->whereRaw('LOWER(TRIM(subject_name)) LIKE ?', ['%' . strtolower($subjectName) . '%'])
-                ->first();
-
-            if (!$subject) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Subject not found or not assigned to you: ' . $subjectName,
-                ], 404);
-            }
-
-            // Validate required fields for update
             $validated = $request->validate([
                 'campus' => ['required', 'string'],
                 'class' => ['required', 'string'],
                 'section' => ['required', 'string'],
                 'homework_content' => ['nullable', 'string'],
             ]);
+
+            $isClassTeacher = $this->isClassTeacherForContext(
+                $teacher,
+                $validated['campus'],
+                $validated['class'],
+                $validated['section']
+            );
+
+            $subject = $this->findSubjectByNameForTeacher(
+                $teacher,
+                $subjectName,
+                $validated['campus'],
+                $validated['class'],
+                $validated['section'],
+                $isClassTeacher
+            );
+
+            if (!$subject) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $isClassTeacher
+                        ? 'Subject not found for this class/section: ' . $subjectName
+                        : 'Subject not found or not assigned to you: ' . $subjectName,
+                ], 404);
+            }
+
+            if (!$this->teacherCanManageHomeworkForSubject($teacher, $subject, $isClassTeacher)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You can only manage homework for your assigned subjects or your class section.',
+                ], 403);
+            }
 
             // Find homework entry
             $homework = HomeworkDiary::where('subject_id', $subject->id)
@@ -1901,6 +2042,7 @@ class TeacherHomeworkDiaryController extends Controller
                         'name' => $teacher->name,
                         'emp_id' => $teacher->emp_id ?? null,
                         'designation' => $teacher->designation,
+                        'is_class_teacher' => $isClassTeacher,
                     ],
                     'subject' => [
                         'id' => $subject->id,

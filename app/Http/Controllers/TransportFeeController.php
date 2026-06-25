@@ -145,7 +145,7 @@ class TransportFeeController extends Controller
                 'campus' => $student->campus ?? $validated['campus'],
                 'student_code' => $student->student_code,
                 'payment_title' => $paymentTitle,
-                'payment_amount' => (float) $student->transport_fare,
+                'payment_amount' => (float) ($student->resolvedTransportFare() ?? 0),
                 'discount' => 0,
                 'method' => 'Generated',
                 'payment_date' => $dueDate->format('Y-m-d'),
@@ -231,7 +231,12 @@ class TransportFeeController extends Controller
         }
 
         if ($class) {
-            $studentsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+            $className = trim((string) $class);
+            $classKey = strtolower(preg_replace('/^class\s+/i', '', strtolower($className)) ?? strtolower($className));
+            $studentsQuery->where(function ($q) use ($className, $classKey) {
+                $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                    ->orWhereRaw("LOWER(TRIM(REPLACE(REPLACE(class, 'Class ', ''), 'class ', ''))) = ?", [trim($classKey)]);
+            });
         }
 
         if ($section) {
@@ -239,9 +244,12 @@ class TransportFeeController extends Controller
         }
 
         $students = $studentsQuery
+            ->active()
             ->eligibleForTransportFee()
             ->orderBy('student_code', 'asc')
-            ->get();
+            ->get()
+            ->filter(fn (Student $student) => $student->hasTransportConfigured())
+            ->values();
 
         // Build payment title if month and year are provided
         $paymentTitle = null;
@@ -268,6 +276,8 @@ class TransportFeeController extends Controller
                 'student_code' => $student->student_code ?? '',
                 'student_name' => $student->student_name ?? '',
                 'parent_name' => $parentName,
+                'transport_route' => $student->transport_route ?? '',
+                'transport_fare' => $student->resolvedTransportFare(),
                 'has_fee_generated' => $hasFeeGenerated,
                 'status' => $hasFeeGenerated ? 'Generated' : 'Ready',
             ];

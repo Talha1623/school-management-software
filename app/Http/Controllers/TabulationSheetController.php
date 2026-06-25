@@ -90,25 +90,10 @@ class TabulationSheetController extends Controller
             $subjects = collect(['Mathematics', 'English', 'Science', 'Urdu', 'Islamiat', 'Social Studies']);
         }
 
-        // Get tests (filtered by other criteria if provided)
-        $testsQuery = Test::query();
-        if ($filterCampus) {
-            $testsQuery->where('campus', $filterCampus);
-        }
-        if ($filterClass) {
-            $testsQuery->where('for_class', $filterClass);
-        }
-        if ($filterSection) {
-            $testsQuery->where('section', $filterSection);
-        }
-        if ($filterSubject) {
-            $testsQuery->where('subject', $filterSubject);
-        }
-        $tests = $testsQuery->whereNotNull('test_name')->distinct()->pluck('test_name')->sort()->values();
-        
-        if ($tests->isEmpty()) {
-            $tests = collect(['Quiz 1', 'Mid Term', 'Final Term', 'Assignment 1']);
-        }
+        // Get tests only when subject is selected
+        $tests = $filterSubject
+            ? $this->queryTestsForFilters($filterCampus, $filterClass, $filterSection, $filterSubject)
+            : collect();
 
         // Get grades from CombinedResultGrade model (dynamic grades)
         $grades = CombinedResultGrade::orderBy('from_percentage', 'desc')
@@ -159,7 +144,7 @@ class TabulationSheetController extends Controller
                     $marksQuery->where('section', $filterSection);
                 }
                 if ($filterSubject) {
-                    $marksQuery->where('subject', $filterSubject);
+                    $marksQuery->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($filterSubject))]);
                 }
                 
                 $studentMarks = $marksQuery->get()->keyBy('student_id');
@@ -372,6 +357,68 @@ class TabulationSheetController extends Controller
             ->values();
         
         return response()->json(['subjects' => $subjects]);
+    }
+
+    /**
+     * Get tests by campus/class/section/subject (AJAX).
+     */
+    public function getTestsByFilters(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $campus = $request->get('campus');
+        $class = $request->get('class');
+        $section = $request->get('section');
+        $subject = $request->get('subject');
+
+        if (!$class || !$subject) {
+            return response()->json(['tests' => []]);
+        }
+
+        $tests = $this->queryTestsForFilters($campus, $class, $section, $subject);
+
+        return response()->json(['tests' => $tests]);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    private function queryTestsForFilters(
+        ?string $campus,
+        ?string $class,
+        ?string $section,
+        ?string $subject
+    ) {
+        if (!$class) {
+            return collect();
+        }
+
+        $testsQuery = Test::query()
+            ->whereRaw('LOWER(TRIM(for_class)) = ?', [strtolower(trim($class))]);
+
+        if ($campus) {
+            $testsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        if ($section) {
+            $sectionLower = strtolower(trim($section));
+            $testsQuery->where(function ($query) use ($sectionLower) {
+                $query->whereNull('section')
+                    ->orWhereRaw('TRIM(section) = ?', [''])
+                    ->orWhereRaw('LOWER(TRIM(section)) = ?', [$sectionLower]);
+            });
+        }
+
+        if ($subject) {
+            $subjectLower = strtolower(trim($subject));
+            $testsQuery->whereRaw('LOWER(TRIM(subject)) = ?', [$subjectLower]);
+        }
+
+        return $testsQuery
+            ->whereNotNull('test_name')
+            ->whereRaw("TRIM(test_name) != ''")
+            ->distinct()
+            ->pluck('test_name')
+            ->sort()
+            ->values();
     }
 
     /**

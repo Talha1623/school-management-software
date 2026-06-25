@@ -172,156 +172,14 @@
             </div>
 
             <!-- Generated Salaries Table -->
-            @if(isset($generatedSalaries) && $generatedSalaries->count() > 0)
-            <div class="mt-4">
-                <div class="card bg-white border border-white rounded-10 p-3">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0 fs-16 fw-semibold">Generated Salaries</h5>
-                        @if(isset($generatedCampus) && isset($generatedMonth) && isset($generatedYear))
-                        <span class="badge bg-info text-white">
-                            {{ $generatedCampus }} - 
-                            @php
-                                $monthNames = [
-                                    '01' => 'January', '02' => 'February', '03' => 'March', '04' => 'April',
-                                    '05' => 'May', '06' => 'June', '07' => 'July', '08' => 'August',
-                                    '09' => 'September', '10' => 'October', '11' => 'November', '12' => 'December'
-                                ];
-                                $monthName = $monthNames[$generatedMonth] ?? $generatedMonth;
-                            @endphp
-                            {{ $monthName }} {{ $generatedYear }}
-                        </span>
-                        @endif
-                    </div>
-
-                    <div class="default-table-area">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Photo</th>
-                                        <th>Name</th>
-                                        <th>Salary Month</th>
-                                        <th class="text-center">Present</th>
-                                        <th class="text-center">Absent</th>
-                                        <th class="text-center">Late</th>
-                                        <th class="text-center">Early Exit</th>
-                                        <th class="text-end">Basic</th>
-                                        <th class="text-end">Salary Generated</th>
-                                        <th class="text-end">Amount Paid</th>
-                                        <th class="text-end">Loan Repayment</th>
-                                        <th>Status</th>
-                                        <th class="text-center">Make Payment</th>
-                                        <th class="text-center">Delete</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($generatedSalaries as $salary)
-                                    <tr>
-                                        <td>{{ $salary->id }}</td>
-                                        <td>
-                                            @if($salary->staff && $salary->staff->photo)
-                                                <img src="{{ asset('storage/' . $salary->staff->photo) }}" alt="Photo" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
-                                            @else
-                                                <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #e0e7ff; display: flex; align-items: center; justify-content: center;">
-                                                    <span class="material-symbols-outlined" style="font-size: 20px; color: #003471;">person</span>
-                                                </div>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            <strong class="text-dark">{{ $salary->staff->name ?? 'N/A' }}</strong>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-info text-white" style="font-size: 11px;">{{ $salary->salary_month }} {{ $salary->year }}</span>
-                                        </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-success text-white" style="font-size: 11px;">{{ $salary->present ?? 0 }}</span>
-                                        </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-danger text-white" style="font-size: 11px;">{{ $salary->absent ?? 0 }}</span>
-                                        </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-warning text-dark" style="font-size: 11px;">{{ $salary->late ?? 0 }}</span>
-                                        </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-danger text-white" style="font-size: 11px;">{{ $salary->early_exit ?? 0 }}</span>
-                                        </td>
-                                        <td class="text-end">
-                                            <strong class="text-primary">{{ number_format($salary->basic ?? 0, 2) }}</strong>
-                                            <div>
-                                                <span class="badge bg-light text-dark" style="font-size: 10px;">
-                                                    {{ $salary->staff->salary_type ?? 'full time' }}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td class="text-end">
-                                            <strong class="text-success">{{ number_format($salary->salary_generated ?? 0, 2) }}</strong>
-                                        </td>
-                                        <td class="text-end">
-                                            @php
-                                                $displayAmountPaid = (float) ($salary->amount_paid ?? 0);
-                                                if ($displayAmountPaid <= 0 && $salary->status === 'Paid') {
-                                                    $displayAmountPaid = max(0, (float) ($salary->salary_generated ?? 0) + (float) ($salary->bonus_amount ?? 0) - (float) ($salary->deduction_amount ?? 0) - (float) ($salary->loan_repayment ?? 0));
-                                                }
-                                            @endphp
-                                            <strong class="text-info">{{ number_format($displayAmountPaid, 2) }}</strong>
-                                        </td>
-                                        <td class="text-end">
-                                            <strong class="text-warning">{{ number_format($salary->loan_repayment ?? 0, 2) }}</strong>
-                                        </td>
-                                        <td>
-                                        @if($salary->status == 'Pending')
-                                            <form action="{{ route('salary-loan.generate-salary.update-status', $salary->id) }}" method="POST" class="d-inline">
-                                                @csrf
-                                                @method('PUT')
-                                                <input type="hidden" name="status" value="Paid">
-                                                <button type="submit" class="btn btn-sm px-2 py-0 btn-warning" title="Click to mark as Paid and print receipt">
-                                                    <span class="badge bg-warning text-dark" style="font-size: 11px; cursor: pointer;">Pending</span>
-                                                </button>
-                                            </form>
-                                        @elseif($salary->status == 'Paid')
-                                            <span class="badge bg-success text-white" style="font-size: 11px;">Paid</span>
-                                        @else
-                                            <span class="badge bg-info text-white" style="font-size: 11px;">Issued</span>
-                                        @endif
-                                        </td>
-                                        <td class="text-center">
-                                        @if($salary->status != 'Pending')
-                                                <button type="button" class="btn btn-sm btn-success px-2 py-1" onclick="printSalarySlip({{ $salary->id }})" title="Print Slip" style="color: white; font-size: 11px;">
-                                                    Print Slip
-                                                </button>
-                                            @else
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" onclick="openMakePaymentModal({{ $salary->id }}, '{{ addslashes($salary->staff->campus ?? 'N/A') }}', '{{ addslashes($salary->staff->name ?? 'N/A') }}', '{{ $salary->salary_month }} {{ $salary->year }}', {{ $salary->salary_generated ?? 0 }}, {{ $salary->amount_paid ?? 0 }}, {{ $salary->loan_repayment ?? 0 }}, '{{ strtolower(trim((string) ($salary->staff->salary_type ?? ''))) }}')" title="Make Payment" style="color: white; font-size: 11px;">
-                                                    Make Payment
-                                                </button>
-                                            @endif
-                                        </td>
-                                        <td class="text-center">
-                                            <button type="button" class="btn btn-sm btn-danger px-2 py-1" onclick="deleteSalary({{ $salary->id }})" title="Delete">
-                                                <span class="material-symbols-outlined" style="font-size: 16px; color: white;">delete</span>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    @endforeach
-                                </tbody>
-                                @if($generatedSalaries->count() > 0)
-                                <tfoot>
-                                    <tr style="background-color: #f8f9fa; font-weight: 600;">
-                                        <td colspan="8" class="text-end"><strong>Total:</strong></td>
-                                        <td class="text-end"><strong class="text-primary">{{ number_format($generatedSalaries->sum('basic'), 2) }}</strong></td>
-                                        <td class="text-end"><strong class="text-success">{{ number_format($generatedSalaries->sum('salary_generated'), 2) }}</strong></td>
-                                        <td class="text-end"><strong class="text-info">{{ number_format($generatedSalaries->sum('amount_paid'), 2) }}</strong></td>
-                                        <td class="text-end"><strong class="text-warning">{{ number_format($generatedSalaries->sum('loan_repayment'), 2) }}</strong></td>
-                                        <td colspan="2"></td>
-                                    </tr>
-                                </tfoot>
-                                @endif
-                            </table>
-                        </div>
-                    </div>
-                </div>
+            <div id="generated-salaries-container">
+                @include('salary-loan.partials.generated-salaries-table', [
+                    'generatedSalaries' => $generatedSalaries ?? collect(),
+                    'generatedCampus' => $generatedCampus ?? null,
+                    'generatedMonth' => $generatedMonth ?? null,
+                    'generatedYear' => $generatedYear ?? null,
+                ])
             </div>
-            @endif
         </div>
     </div>
 </div>
@@ -362,7 +220,7 @@
                         
                         <!-- Generated Salary -->
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Generated Salary</label>
+                            <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Generated Salary <small class="text-muted">(before loan)</small></label>
                             <input type="text" class="form-control form-control-sm" id="payment_salary_generated" readonly style="background-color: #f8f9fa; height: 32px; font-size: 12px;">
                         </div>
                         
@@ -374,8 +232,8 @@
                         
                         <!-- Loan Repayment -->
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Loan Repayment</label>
-                            <input type="number" class="form-control form-control-sm" name="loan_repayment" id="payment_loan_repayment" step="0.01" min="0" value="0" style="height: 32px; font-size: 12px;" oninput="calculateGenerateSalaryModalTotals()">
+                            <label class="form-label fw-semibold mb-1" style="color: #003471; font-size: 12px;">Loan Repayment <small class="text-muted">(auto from approved loan)</small></label>
+                            <input type="number" class="form-control form-control-sm" name="loan_repayment" id="payment_loan_repayment" step="0.01" min="0" value="0" readonly style="background-color: #f8f9fa; height: 32px; font-size: 12px;">
                         </div>
                         
                         <!-- Bonus Title -->
@@ -672,11 +530,17 @@ function loadStaffList() {
         </div>
     `;
     
-    // Fetch staff list
-    fetch(`{{ route('salary-loan.generate-salary.get-staff') }}?campus=${campus}&month=${month}&year=${year}`)
-        .then(response => response.json())
-        .then(data => {
-            renderStaffList(data.staff || []);
+    // Fetch staff list and generated salaries (with loan sync)
+    Promise.all([
+        fetch(`{{ route('salary-loan.generate-salary.get-staff') }}?campus=${encodeURIComponent(campus)}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`).then(r => r.json()),
+        fetch(`{{ route('salary-loan.generate-salary.get-generated-salaries') }}?campus=${encodeURIComponent(campus)}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`).then(r => r.json()),
+    ])
+        .then(([staffData, salariesData]) => {
+            renderStaffList(staffData.staff || []);
+            const container = document.getElementById('generated-salaries-container');
+            if (container) {
+                container.innerHTML = salariesData.html || '';
+            }
         })
         .catch(error => {
             console.error('Error loading staff:', error);
@@ -714,6 +578,10 @@ function renderStaffList(staffList) {
         const statusClass = isGenerated ? 'text-success' : 'text-warning';
         const statusText = isGenerated ? 'Generated' : 'Ready';
         const rowBg = isGenerated ? 'background-color: #fff3cd;' : '';
+        const loanInstallment = parseFloat(staff.loan_installment || 0);
+        const loanBadge = loanInstallment > 0
+            ? `<span class="badge bg-warning text-dark ms-2" style="font-size: 10px;">Loan: ${loanInstallment.toFixed(2)}/instalment</span>`
+            : '';
         
         html += `
             <div class="list-group-item d-flex justify-content-between align-items-center" style="${rowBg} border: 1px solid #dee2e6; margin-bottom: 8px; border-radius: 6px; padding: 12px;">
@@ -730,6 +598,7 @@ function renderStaffList(staffList) {
                             <strong>${staff.emp_id}</strong> | 
                             <span style="color: #dc3545; font-weight: 500;">${staff.name}</span> | 
                             ${staff.designation}
+                            ${loanBadge}
                         </div>
                     </div>
                 </div>
@@ -824,52 +693,69 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Open Make Payment Modal
-function openMakePaymentModal(salaryId, campus, employeeName, month, salaryGenerated, amountPaid, loanRepayment, salaryType) {
-    // Populate readonly fields
+function openMakePaymentModal(salaryId, campus, employeeName, month, salaryType) {
     document.getElementById('payment_campus').value = campus;
     document.getElementById('payment_employee').value = employeeName;
     document.getElementById('payment_month').value = month;
+
     const generatedInput = document.getElementById('payment_salary_generated');
-    generatedInput.setAttribute('data-base-generated', parseFloat(salaryGenerated || 0).toFixed(2));
-    generatedInput.value = '₹' + parseFloat(salaryGenerated).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    
-    // Populate editable fields
-    document.getElementById('payment_amount_paid').value = amountPaid || 0;
-    document.getElementById('payment_loan_repayment').value = loanRepayment || 0;
-    document.getElementById('payment_bonus_title').value = '';
-    document.getElementById('payment_bonus_amount').value = 0;
-    document.getElementById('payment_deduction_title').value = '';
-    document.getElementById('payment_deduction_amount').value = 0;
-    document.getElementById('payment_method').value = '';
-    document.getElementById('payment_fully_paid').value = '0';
-    document.getElementById('payment_date').value = '{{ date('Y-m-d') }}';
-    document.getElementById('payment_notify_employee').value = '0';
+    const amountPaidInput = document.getElementById('payment_amount_paid');
+    const loanInput = document.getElementById('payment_loan_repayment');
 
-    const normalizedType = (salaryType || '').toLowerCase().trim();
-    const isPerHourOrLecture = normalizedType === 'per hour' || normalizedType === 'lecture';
-    const bonusTitleInput = document.getElementById('payment_bonus_title');
-    const bonusAmountInput = document.getElementById('payment_bonus_amount');
-    const deductionTitleInput = document.getElementById('payment_deduction_title');
-    const deductionAmountInput = document.getElementById('payment_deduction_amount');
+    generatedInput.value = 'Loading...';
+    amountPaidInput.value = '0';
+    loanInput.value = '0';
 
-    [bonusTitleInput, bonusAmountInput, deductionTitleInput, deductionAmountInput].forEach(input => {
-        input.disabled = isPerHourOrLecture;
-    });
+    fetch(`{{ url('/salary-loan/generate-salary') }}/${salaryId}/net-payable-preview`)
+        .then(response => response.json())
+        .then(data => {
+            const salaryGenerated = parseFloat(data.gross_salary_generated ?? data.salary_generated ?? 0);
+            const loanRepayment = parseFloat(data.loan_repayment || 0);
+            const amountPaid = parseFloat(data.amount_paid || 0);
+            const netPayable = parseFloat(data.net_payable ?? Math.max(0, salaryGenerated - loanRepayment));
 
-    if (isPerHourOrLecture) {
-        bonusTitleInput.placeholder = 'Disabled for per hour/lecture salary';
-        deductionTitleInput.placeholder = 'Disabled for per hour/lecture salary';
-    } else {
-        bonusTitleInput.placeholder = 'Enter bonus title';
-        deductionTitleInput.placeholder = 'Enter deduction title';
-    }
+            generatedInput.setAttribute('data-base-generated', salaryGenerated.toFixed(2));
+            generatedInput.value = '₹' + salaryGenerated.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            amountPaidInput.value = amountPaid > 0 ? amountPaid.toFixed(2) : netPayable.toFixed(2);
+            loanInput.value = loanRepayment.toFixed(2);
 
-    calculateGenerateSalaryModalTotals();
-    
-    // Update form action
+            document.getElementById('payment_bonus_title').value = '';
+            document.getElementById('payment_bonus_amount').value = 0;
+            document.getElementById('payment_deduction_title').value = '';
+            document.getElementById('payment_deduction_amount').value = 0;
+            document.getElementById('payment_method').value = '';
+            document.getElementById('payment_fully_paid').value = '0';
+            document.getElementById('payment_date').value = '{{ date('Y-m-d') }}';
+            document.getElementById('payment_notify_employee').value = '0';
+
+            const normalizedType = (salaryType || '').toLowerCase().trim();
+            const isPerHourOrLecture = normalizedType === 'per hour' || normalizedType === 'lecture';
+            const bonusTitleInput = document.getElementById('payment_bonus_title');
+            const bonusAmountInput = document.getElementById('payment_bonus_amount');
+            const deductionTitleInput = document.getElementById('payment_deduction_title');
+            const deductionAmountInput = document.getElementById('payment_deduction_amount');
+
+            [bonusTitleInput, bonusAmountInput, deductionTitleInput, deductionAmountInput].forEach(input => {
+                input.disabled = isPerHourOrLecture;
+            });
+
+            if (isPerHourOrLecture) {
+                bonusTitleInput.placeholder = 'Disabled for per hour/lecture salary';
+                deductionTitleInput.placeholder = 'Disabled for per hour/lecture salary';
+            } else {
+                bonusTitleInput.placeholder = 'Enter bonus title';
+                deductionTitleInput.placeholder = 'Enter deduction title';
+            }
+
+            calculateGenerateSalaryModalTotals();
+        })
+        .catch(error => {
+            console.error('Error loading payment preview:', error);
+            alert('Could not load loan details. Please try again.');
+        });
+
     document.getElementById('makePaymentForm').action = `/salary-loan/generate-salary/${salaryId}/payment`;
-    
-    // Show modal
+
     const modal = new bootstrap.Modal(document.getElementById('makePaymentModal'));
     modal.show();
 }
@@ -884,10 +770,8 @@ function calculateGenerateSalaryModalTotals() {
     const bonusAmount = parseFloat(document.getElementById('payment_bonus_amount').value || 0);
     const deductionAmount = parseFloat(document.getElementById('payment_deduction_amount').value || 0);
 
-    const grossGenerated = Math.max(0, baseGenerated + Math.max(0, bonusAmount) - Math.max(0, deductionAmount));
-    const netPayable = Math.max(0, grossGenerated - Math.max(0, loanRepayment));
-
-    generatedInput.value = '₹' + grossGenerated.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    generatedInput.value = '₹' + baseGenerated.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const netPayable = Math.max(0, baseGenerated + Math.max(0, bonusAmount) - Math.max(0, deductionAmount) - Math.max(0, loanRepayment));
     amountPaidInput.value = netPayable.toFixed(2);
 }
 

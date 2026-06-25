@@ -3,6 +3,22 @@
 @section('title', 'Edit Student')
 
 @section('content')
+@php
+    $yesNoValue = function ($value) {
+        if (in_array($value, [true, 1, '1', 'yes', 'Yes', 'YES'], true)) {
+            return '1';
+        }
+        if (in_array($value, [false, 0, '0', 'no', 'No', 'NO'], true)) {
+            return '0';
+        }
+        return '';
+    };
+    $generateAdmissionFeeValue = $yesNoValue(old('generate_admission_fee', $student->generate_admission_fee ?? ''));
+    $generateOtherFeeValue = $yesNoValue(old('generate_other_fee', $student->generate_other_fee ?? ''));
+    $discountedStudentValue = $yesNoValue(old('discounted_student', $student->discounted_student ?? false));
+    $discountAmountValue = old('discount_amount', optional($studentDiscount)->discount_amount ?? '');
+    $discountReasonValue = old('discount_reason', $student->discount_reason ?: (optional($studentDiscount)->discount_title ?? ''));
+@endphp
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-4">
@@ -139,6 +155,11 @@
                                 <label for="whatsapp_number" class="form-label mb-0 fs-13 fw-medium">WhatsApp Number</label>
                                 <input type="text" class="form-control form-control-sm" id="whatsapp_number" name="whatsapp_number" value="{{ old('whatsapp_number', $student->whatsapp_number) }}" style="height: 32px; font-size: 13px;">
                             </div>
+
+                            <div class="mb-2">
+                                <label for="religion" class="form-label mb-0 fs-13 fw-medium">Religion</label>
+                                <input type="text" class="form-control form-control-sm" id="religion" name="religion" value="{{ old('religion', $student->religion) }}" style="height: 32px; font-size: 13px;">
+                            </div>
                             
                             <div class="mb-2">
                                 <label for="home_address" class="form-label mb-0 fs-13 fw-medium">Home Address</label>
@@ -197,6 +218,11 @@
                                 <label for="previous_school" class="form-label mb-0 fs-13 fw-medium">Previous School</label>
                                 <input type="text" class="form-control form-control-sm" id="previous_school" name="previous_school" value="{{ old('previous_school', $student->previous_school) }}" style="height: 32px; font-size: 13px;">
                             </div>
+
+                            <div class="mb-2">
+                                <label for="reference_remarks" class="form-label mb-0 fs-13 fw-medium">Reference/Remarks</label>
+                                <textarea class="form-control form-control-sm" id="reference_remarks" name="reference_remarks" rows="2" style="font-size: 13px;">{{ old('reference_remarks', $student->reference_remarks) }}</textarea>
+                            </div>
                         </div>
                     </div>
                     
@@ -209,13 +235,9 @@
                             </div>
                             
                             <div class="mb-2">
-                                <label for="religion" class="form-label mb-0 fs-13 fw-medium">Religion</label>
-                                <input type="text" class="form-control form-control-sm" id="religion" name="religion" value="{{ old('religion', $student->religion) }}" style="height: 32px; font-size: 13px;">
-                            </div>
-                            
-                            <div class="mb-2">
-                                <label for="b_form_number" class="form-label mb-0 fs-13 fw-medium">B-Form Number</label>
-                                <input type="text" class="form-control form-control-sm" id="b_form_number" name="b_form_number" value="{{ old('b_form_number', $student->b_form_number) }}" style="height: 32px; font-size: 13px;">
+                                <label for="b_form_number" class="form-label mb-0 fs-13 fw-medium">Student Password</label>
+                                <input type="text" class="form-control form-control-sm" id="b_form_number" name="b_form_number" value="{{ old('b_form_number', $student->b_form_number) }}" placeholder="Student Password" style="height: 32px; font-size: 13px;">
+                                <small class="text-muted">Login password is not changed from this screen.</small>
                             </div>
                             
                             <div class="mb-2">
@@ -224,56 +246,76 @@
                             </div>
                             
                             <div class="mb-2">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="discounted_student" name="discounted_student" value="1" {{ old('discounted_student', $student->discounted_student) ? 'checked' : '' }}>
-                                    <label class="form-check-label fs-13" for="discounted_student">Discounted Student</label>
-                                </div>
+                                <label for="discounted_student" class="form-label mb-0 fs-13 fw-medium">Discounted Student?</label>
+                                <select class="form-select form-select-sm" id="discounted_student" name="discounted_student" style="height: 32px; font-size: 13px;" onchange="toggleDiscountFields()">
+                                    <option value="0" {{ $discountedStudentValue === '0' ? 'selected' : '' }}>No</option>
+                                    <option value="1" {{ $discountedStudentValue === '1' ? 'selected' : '' }}>Yes</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-2" id="discount_amount_container" style="display: none;">
+                                <label for="discount_amount" class="form-label mb-0 fs-13 fw-medium">Discount Amount</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="discount_amount" name="discount_amount" value="{{ $discountAmountValue }}" style="height: 32px; font-size: 13px;">
+                            </div>
+
+                            <div class="mb-2" id="discount_reason_container" style="display: none;">
+                                <label for="discount_reason" class="form-label mb-0 fs-13 fw-medium">Discount Reason</label>
+                                <input type="text" class="form-control form-control-sm" id="discount_reason" name="discount_reason" value="{{ $discountReasonValue }}" style="height: 32px; font-size: 13px;">
                             </div>
                             
                             <div class="mb-2">
                                 <label for="transport_route" class="form-label mb-0 fs-13 fw-medium">Transport Route</label>
-                                <select class="form-control form-control-sm" id="transport_route" name="transport_route" style="height: 32px; font-size: 13px;" onchange="loadTransportFare(this.value)">
+                                <select class="form-select form-select-sm" id="transport_route" name="transport_route" style="height: 32px; font-size: 13px;" onchange="loadTransportFare(this.value)">
                                     <option value="">Select Transport Route</option>
                                     @foreach($transportRoutes as $route)
                                         <option value="{{ $route }}" {{ old('transport_route', $student->transport_route) == $route ? 'selected' : '' }}>{{ $route }}</option>
                                     @endforeach
                                 </select>
                             </div>
+
+                            <div class="mb-2 transport-route-selected-wrap" id="transport_route_selected_wrap" style="display: none;">
+                                <label class="form-label mb-0 fs-13 fw-medium">Selected Route</label>
+                                <div class="form-control form-control-sm bg-light" id="transport_route_selected_name" style="height: 32px; font-size: 13px; line-height: 20px;">—</div>
+                            </div>
                             
-                            <!-- Transport Route Fare Field (hidden by default) -->
                             <div class="mb-2" id="transport_fare_container" style="display: none;">
-                                <label for="transport_fare" class="form-label mb-0 fs-13 fw-medium">Transport Fare</label>
+                                <label for="transport_fare" class="form-label mb-0 fs-13 fw-medium" id="transport_fare_label">Transport Fare</label>
                                 <input type="number" step="0.01" class="form-control form-control-sm" id="transport_fare" name="transport_fare" placeholder="Transport fare amount" readonly style="height: 32px; font-size: 13px; background-color: #f8f9fa;" value="{{ old('transport_fare', $student->transport_fare) }}">
+                            </div>
+
+                            <div class="mb-2">
+                                <label for="admission_notification" class="form-label mb-0 fs-13 fw-medium">Admission Notification</label>
+                                <select class="form-select form-select-sm" id="admission_notification" name="admission_notification" style="height: 32px; font-size: 13px;">
+                                    <option value="sms_app" {{ old('admission_notification', $student->admission_notification ?? 'sms_app') == 'sms_app' ? 'selected' : '' }}>SMS App</option>
+                                </select>
                             </div>
                             
                             <div class="mb-2">
                                 <label for="generate_admission_fee" class="form-label mb-0 fs-13 fw-medium">Generate Admission Fee</label>
-                                <select class="form-control form-control-sm" id="generate_admission_fee" name="generate_admission_fee" style="height: 32px; font-size: 13px;" onchange="toggleAdmissionFeeAmount()">
+                                <select class="form-select form-select-sm" id="generate_admission_fee" name="generate_admission_fee" style="height: 32px; font-size: 13px;" onchange="toggleAdmissionFeeAmount()">
                                     <option value="">Select</option>
-                                    <option value="1" {{ old('generate_admission_fee', $student->generate_admission_fee ?? '') == '1' ? 'selected' : '' }}>Yes</option>
-                                    <option value="0" {{ old('generate_admission_fee', $student->generate_admission_fee ?? '') == '0' ? 'selected' : '' }}>No</option>
+                                    <option value="1" {{ $generateAdmissionFeeValue === '1' ? 'selected' : '' }}>Yes</option>
+                                    <option value="0" {{ $generateAdmissionFeeValue === '0' ? 'selected' : '' }}>No</option>
                                 </select>
                             </div>
                             
-                            <!-- Admission Fee Amount Field (hidden by default) -->
                             <div class="mb-2" id="admission_fee_amount_container" style="display: none;">
-                                <label for="admission_fee_amount" class="form-label mb-0 fs-13 fw-medium">Amount</label>
-                                <input type="number" step="0.01" class="form-control form-control-sm" id="admission_fee_amount" name="admission_fee_amount" placeholder="admission fee amount" style="height: 32px; font-size: 13px;" value="{{ old('admission_fee_amount', $student->admission_fee_amount) }}">
+                                <label for="admission_fee_amount" class="form-label mb-0 fs-13 fw-medium">Admission Fee Amount</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="admission_fee_amount" name="admission_fee_amount" placeholder="Admission fee amount" style="height: 32px; font-size: 13px;" value="{{ old('admission_fee_amount', $student->admission_fee_amount) }}">
                             </div>
                             
                             <div class="mb-2">
                                 <label for="generate_other_fee" class="form-label mb-0 fs-13 fw-medium">Generate Other Fee</label>
-                                <select class="form-control form-control-sm" id="generate_other_fee" name="generate_other_fee" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeFields()">
+                                <select class="form-select form-select-sm" id="generate_other_fee" name="generate_other_fee" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeFields()">
                                     <option value="">Select</option>
-                                    <option value="1" {{ old('generate_other_fee', $student->generate_other_fee ?? '') == '1' ? 'selected' : '' }}>Yes</option>
-                                    <option value="0" {{ old('generate_other_fee', $student->generate_other_fee ?? '') == '0' ? 'selected' : '' }}>No</option>
+                                    <option value="1" {{ $generateOtherFeeValue === '1' ? 'selected' : '' }}>Yes</option>
+                                    <option value="0" {{ $generateOtherFeeValue === '0' ? 'selected' : '' }}>No</option>
                                 </select>
                             </div>
                             
-                            <!-- Fee Type / Fee Head Dropdown (hidden by default) -->
                             <div class="mb-2" id="fee_type_container" style="display: none;">
                                 <label for="fee_type" class="form-label mb-0 fs-13 fw-medium">Fee Type / Fee Head</label>
-                                <select class="form-control form-control-sm" id="fee_type" name="fee_type" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeAmount()">
+                                <select class="form-select form-select-sm" id="fee_type" name="fee_type" style="height: 32px; font-size: 13px;" onchange="toggleOtherFeeAmount()">
                                     <option value="">Select Fee Type</option>
                                     @foreach($feeTypes as $feeType)
                                         <option value="{{ $feeType }}" {{ old('fee_type', $student->fee_type) == $feeType ? 'selected' : '' }}>{{ $feeType }}</option>
@@ -281,15 +323,9 @@
                                 </select>
                             </div>
                             
-                            <!-- Other Fee Amount Field (hidden by default) -->
                             <div class="mb-2" id="other_fee_amount_container" style="display: none;">
-                                <label for="other_fee_amount" class="form-label mb-0 fs-13 fw-medium">Amount</label>
+                                <label for="other_fee_amount" class="form-label mb-0 fs-13 fw-medium">Other Fee Amount</label>
                                 <input type="number" step="0.01" class="form-control form-control-sm" id="other_fee_amount" name="other_fee_amount" placeholder="Enter amount" style="height: 32px; font-size: 13px;" value="{{ old('other_fee_amount', $student->other_fee_amount) }}">
-                            </div>
-                            
-                            <div class="mb-2">
-                                <label for="reference_remarks" class="form-label mb-0 fs-13 fw-medium">Reference Remarks</label>
-                                <textarea class="form-control form-control-sm" id="reference_remarks" name="reference_remarks" rows="2" style="font-size: 13px;">{{ old('reference_remarks', $student->reference_remarks) }}</textarea>
                             </div>
                         </div>
                     </div>
@@ -312,14 +348,31 @@
 </div>
 
 <script>
-// Load transport route fare when route is selected
+function updateTransportRouteDisplay(routeName) {
+    const wrap = document.getElementById('transport_route_selected_wrap');
+    const nameEl = document.getElementById('transport_route_selected_name');
+    const fareLabel = document.getElementById('transport_fare_label');
+    const trimmed = (routeName || '').trim();
+
+    if (wrap) {
+        wrap.style.display = trimmed ? 'block' : 'none';
+    }
+    if (nameEl) {
+        nameEl.textContent = trimmed || '—';
+    }
+    if (fareLabel) {
+        fareLabel.textContent = trimmed ? `Transport Fare (${trimmed})` : 'Transport Fare';
+    }
+}
+
 function loadTransportFare(routeName) {
     const transportFareContainer = document.getElementById('transport_fare_container');
     const transportFareInput = document.getElementById('transport_fare');
-    const campusValue = document.getElementById('campus')?.value;
-    
+    const campusValue = document.getElementById('campus')?.value || '';
+
+    updateTransportRouteDisplay(routeName);
+
     if (!routeName) {
-        // Hide transport fare field if no route selected
         if (transportFareContainer) {
             transportFareContainer.style.display = 'none';
         }
@@ -328,36 +381,42 @@ function loadTransportFare(routeName) {
         }
         return;
     }
-    
-    // Show transport fare field
+
     if (transportFareContainer) {
         transportFareContainer.style.display = 'block';
     }
-    
-    // Fetch route fare via AJAX
+
     const params = new URLSearchParams();
     params.append('route', routeName);
     if (campusValue) {
         params.append('campus', campusValue);
     }
+
     fetch(`{{ route('admission.get-route-fare') }}?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
-            if (transportFareInput) {
-                if (data.fare && data.fare > 0) {
-                    // Set fare amount in transport fare field (don't add to monthly fee)
-                    transportFareInput.value = parseFloat(data.fare).toFixed(2);
-                } else {
-                    transportFareInput.value = '';
-                }
+            if (!transportFareInput) {
+                return;
+            }
+            if (data.fare && parseFloat(data.fare) > 0) {
+                transportFareInput.value = parseFloat(data.fare).toFixed(2);
+            } else if (!transportFareInput.value) {
+                transportFareInput.value = '';
             }
         })
         .catch(error => {
             console.error('Error loading transport fare:', error);
-            if (transportFareInput) {
-                transportFareInput.value = '';
-            }
         });
+}
+
+function appendRouteOption(selectEl, route, selectedRoute) {
+    const option = document.createElement('option');
+    option.value = route;
+    option.textContent = route;
+    if (selectedRoute && route.toLowerCase().trim() === selectedRoute.toLowerCase().trim()) {
+        option.selected = true;
+    }
+    selectEl.appendChild(option);
 }
 
 function loadTransportRoutesByCampus(campusValue, selectedRoute = '') {
@@ -366,9 +425,12 @@ function loadTransportRoutesByCampus(campusValue, selectedRoute = '') {
     const transportFareInput = document.getElementById('transport_fare');
     if (!transportRouteSelect) return;
 
+    const normalizedSelected = (selectedRoute || transportRouteSelect.value || '').trim();
+
     if (!campusValue) {
         transportRouteSelect.innerHTML = '<option value="">Select Campus First</option>';
         transportRouteSelect.disabled = true;
+        updateTransportRouteDisplay('');
         if (transportFareContainer) {
             transportFareContainer.style.display = 'none';
         }
@@ -386,25 +448,28 @@ function loadTransportRoutesByCampus(campusValue, selectedRoute = '') {
         .then(data => {
             const routes = Array.isArray(data.routes) ? data.routes : [];
             transportRouteSelect.innerHTML = '<option value="">Select Transport Route</option>';
-            routes.forEach(route => {
-                const option = document.createElement('option');
-                option.value = route;
-                option.textContent = route;
-                if (selectedRoute && route.toLowerCase().trim() === selectedRoute.toLowerCase().trim()) {
-                    option.selected = true;
-                }
-                transportRouteSelect.appendChild(option);
-            });
-            transportRouteSelect.disabled = routes.length === 0;
 
-            if (selectedRoute && transportRouteSelect.value) {
+            let matched = false;
+            routes.forEach(route => {
+                appendRouteOption(transportRouteSelect, route, normalizedSelected);
+                if (normalizedSelected && route.toLowerCase().trim() === normalizedSelected.toLowerCase()) {
+                    matched = true;
+                }
+            });
+
+            if (normalizedSelected && !matched) {
+                appendRouteOption(transportRouteSelect, normalizedSelected, normalizedSelected);
+                matched = true;
+            }
+
+            transportRouteSelect.disabled = routes.length === 0 && !matched;
+
+            if (normalizedSelected && transportRouteSelect.value) {
                 loadTransportFare(transportRouteSelect.value);
             } else {
+                updateTransportRouteDisplay('');
                 if (transportFareContainer) {
                     transportFareContainer.style.display = 'none';
-                }
-                if (transportFareInput) {
-                    transportFareInput.value = '';
                 }
             }
         })
@@ -415,7 +480,68 @@ function loadTransportRoutesByCampus(campusValue, selectedRoute = '') {
         });
 }
 
-// Toggle admission fee amount field based on "Generate Admission Fee" selection
+function loadFeeTypesByCampus(campusValue, selectedFeeType = '') {
+    const feeTypeSelect = document.getElementById('fee_type');
+    if (!feeTypeSelect) return;
+
+    const normalizedSelected = (selectedFeeType || feeTypeSelect.value || '').trim();
+
+    fetch(`{{ route('admission.get-fee-types') }}?campus=${encodeURIComponent(campusValue || '')}`)
+        .then(response => response.json())
+        .then(data => {
+            const feeTypes = Array.isArray(data.fee_types) ? data.fee_types : [];
+            const currentValue = feeTypeSelect.value;
+            feeTypeSelect.innerHTML = '<option value="">Select Fee Type</option>';
+
+            let matched = false;
+            feeTypes.forEach(feeType => {
+                const option = document.createElement('option');
+                option.value = feeType;
+                option.textContent = feeType;
+                if (normalizedSelected && feeType.toLowerCase().trim() === normalizedSelected.toLowerCase()) {
+                    option.selected = true;
+                    matched = true;
+                }
+                feeTypeSelect.appendChild(option);
+            });
+
+            if (normalizedSelected && !matched) {
+                const option = document.createElement('option');
+                option.value = normalizedSelected;
+                option.textContent = normalizedSelected;
+                option.selected = true;
+                feeTypeSelect.appendChild(option);
+            } else if (!matched && currentValue) {
+                feeTypeSelect.value = currentValue;
+            }
+
+            toggleOtherFeeAmount();
+        })
+        .catch(error => console.error('Error loading fee types:', error));
+}
+
+function toggleDiscountFields() {
+    const discountedStudent = document.getElementById('discounted_student');
+    const discountAmountContainer = document.getElementById('discount_amount_container');
+    const discountReasonContainer = document.getElementById('discount_reason_container');
+
+    if (!discountedStudent || !discountAmountContainer) {
+        return;
+    }
+
+    if (discountedStudent.value === '1') {
+        discountAmountContainer.style.display = 'block';
+        if (discountReasonContainer) {
+            discountReasonContainer.style.display = 'block';
+        }
+    } else {
+        discountAmountContainer.style.display = 'none';
+        if (discountReasonContainer) {
+            discountReasonContainer.style.display = 'none';
+        }
+    }
+}
+
 function toggleAdmissionFeeAmount() {
     const generateAdmissionFee = document.getElementById('generate_admission_fee');
     const admissionFeeAmountContainer = document.getElementById('admission_fee_amount_container');
@@ -494,45 +620,22 @@ function toggleOtherFeeAmount() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    toggleDiscountFields();
     toggleAdmissionFeeAmount();
     toggleOtherFeeFields();
-    
-    // Load transport fare if route is already selected
+
     const transportRoute = document.getElementById('transport_route');
-    const transportFareContainer = document.getElementById('transport_fare_container');
-    const transportFareInput = document.getElementById('transport_fare');
-    
     if (transportRoute && transportRoute.value) {
-        // If route is selected, show fare field
-        if (transportFareContainer) {
-            transportFareContainer.style.display = 'block';
-        }
-        // If fare value already exists, keep it; otherwise fetch from route
-        if (transportFareInput && !transportFareInput.value) {
-            loadTransportFare(transportRoute.value);
-        }
-    } else {
-        // Hide transport fare field if no route selected
-        if (transportFareContainer) {
-            transportFareContainer.style.display = 'none';
-        }
+        loadTransportFare(transportRoute.value);
     }
-    
-    // Show fee type and amount fields if they have values
+
     const feeTypeInput = document.getElementById('fee_type');
-    const otherFeeAmountInput = document.getElementById('other_fee_amount');
     if (feeTypeInput && feeTypeInput.value) {
         const feeTypeContainer = document.getElementById('fee_type_container');
         if (feeTypeContainer) {
             feeTypeContainer.style.display = 'block';
         }
         toggleOtherFeeAmount();
-    }
-    if (otherFeeAmountInput && otherFeeAmountInput.value) {
-        const otherFeeAmountContainer = document.getElementById('other_fee_amount_container');
-        if (otherFeeAmountContainer) {
-            otherFeeAmountContainer.style.display = 'block';
-        }
     }
 });
 
@@ -632,6 +735,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedClass = '{{ old('class', $student->class) }}';
     const selectedSection = '{{ old('section', $student->section) }}';
     const selectedRoute = '{{ old('transport_route', $student->transport_route) }}';
+    const selectedFeeType = '{{ old('fee_type', $student->fee_type) }}';
     const campusValue = campusSelect ? campusSelect.value : '';
 
     loadClassesByCampus(campusValue, selectedClass).then(() => {
@@ -641,6 +745,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     loadTransportRoutesByCampus(campusValue, selectedRoute);
+    loadFeeTypesByCampus(campusValue, selectedFeeType);
 
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
@@ -651,6 +756,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
             loadTransportRoutesByCampus(this.value);
+            loadFeeTypesByCampus(this.value);
         });
     }
 });

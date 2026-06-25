@@ -10,6 +10,7 @@ use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\AdvanceFee;
 use App\Services\AdvanceFeeWallet;
+use App\Services\FeePaymentWebTables;
 use App\Models\AdminRole;
 use App\Models\Message;
 use Illuminate\Http\RedirectResponse;
@@ -189,7 +190,7 @@ class StudentPaymentController extends Controller
             ->get()
             ->each(function (AdminRole $admin) use ($accountant, $text) {
                 Message::create([
-                    'from_type' => 'accountant',
+                    'from_type' => 'accountant_notification',
                     'from_id' => $accountant->id,
                     'to_type' => 'admin',
                     'to_id' => $admin->id,
@@ -448,6 +449,7 @@ class StudentPaymentController extends Controller
                     'payment_date' => ['required', 'date'],
                     'sms_notification' => ['required', 'string', 'in:Yes,No'],
                     'generated_id' => ['nullable', 'integer'],
+                    'late_fee' => ['nullable', 'numeric', 'min:0'],
                 ]);
             } catch (\Illuminate\Validation\ValidationException $e) {
                 // If request expects JSON, return JSON response with validation errors
@@ -462,6 +464,10 @@ class StudentPaymentController extends Controller
             }
 
         $validated['discount'] = round((float) ($validated['discount'] ?? 0), 2);
+        $validated['payment_date'] = Carbon::parse(
+            $validated['payment_date'],
+            config('app.timezone')
+        )->toDateString();
 
         // Initialize late_fee
         $lateFee = 0;
@@ -472,6 +478,32 @@ class StudentPaymentController extends Controller
         // Check if this is an installment (payment_title contains /number pattern)
         $isInstallment = preg_match('/\/\d+$/', $validated['payment_title']);
         $isInstallmentCreation = $isInstallment && empty($validated['generated_id']);
+
+        if ($isInstallmentCreation) {
+            $lateFee = max(0, round((float) ($request->input('late_fee') ?? 0), 2));
+            $totalInstallments = max(1, (int) $request->input('total_installments', 1));
+            $installmentIndex = 1;
+            $baseTitle = preg_replace('/\/\d+$/', '', $validated['payment_title']);
+            if (preg_match('/\/(\d+)$/', $validated['payment_title'], $indexMatch)) {
+                $installmentIndex = max(1, (int) $indexMatch[1]);
+            }
+
+            if ($student) {
+                if ($lateFee <= 0.0001) {
+                    $lateFee = $this->installmentLateFeeSlice($student, $baseTitle, $installmentIndex, $totalInstallments);
+                }
+
+                $requestedPrincipal = round((float) ($validated['payment_amount'] ?? 0), 2);
+                if ($requestedPrincipal <= 0.0001) {
+                    $validated['payment_amount'] = $this->installmentPrincipalSlice(
+                        $student,
+                        $baseTitle,
+                        $installmentIndex,
+                        $totalInstallments
+                    );
+                }
+            }
+        }
         
         // Store original method for wallet deduction
         $originalMethod = $validated['method'] ?? 'Cash Payment';
@@ -741,7 +773,9 @@ class StudentPaymentController extends Controller
         }
 
         $validated['late_fee'] = $lateFee;
-        $this->applyLedgerGrossFromPrincipal($validated, $lateFee, $originalMethod);
+        if (! $isInstallmentCreation) {
+            $this->applyLedgerGrossFromPrincipal($validated, $lateFee, $originalMethod);
+        }
 
         try {
             $payment = StudentPayment::create($validated);
@@ -807,6 +841,38 @@ class StudentPaymentController extends Controller
             }
             throw $e;
         }
+    }
+
+    private function installmentLateFeeSlice(
+        Student $student,
+        string $baseTitle,
+        int $installmentIndex,
+        int $totalInstallments
+    ): float {
+        $generatedFees = StudentPayment::ledgerActive()
+            ->where('student_code', $student->student_code)
+            ->whereIn('method', ['Generated', 'Installment'])
+            ->get();
+
+        $totalLate = FeePaymentWebTables::resolveBaseFeeLateTotal($student, $baseTitle, $generatedFees);
+
+        return FeePaymentWebTables::divideInstallmentSlice($totalLate, $installmentIndex, $totalInstallments);
+    }
+
+    private function installmentPrincipalSlice(
+        Student $student,
+        string $baseTitle,
+        int $installmentIndex,
+        int $totalInstallments
+    ): float {
+        $generatedFees = StudentPayment::ledgerActive()
+            ->where('student_code', $student->student_code)
+            ->whereIn('method', ['Generated', 'Installment'])
+            ->get();
+
+        $totalPrincipal = FeePaymentWebTables::resolveBaseFeePrincipalTotal($student, $baseTitle, $generatedFees);
+
+        return FeePaymentWebTables::divideInstallmentSlice($totalPrincipal, $installmentIndex, $totalInstallments);
     }
 }
 

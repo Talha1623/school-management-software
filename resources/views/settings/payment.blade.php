@@ -18,7 +18,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="#">
+            <form method="POST" action="{{ route('settings.payment.store') }}">
                 @csrf
                 <div class="row">
                     <div class="col-md-6 mb-4">
@@ -108,22 +108,23 @@
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Bank Name</label>
-                                <input type="text" class="form-control" name="bank_name" placeholder="Enter bank name">
+                                <input type="text" class="form-control" name="bank_name" placeholder="Enter bank name" value="{{ old('bank_name', $settings->fee_voucher_bank_name ?? '') }}">
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Account Number</label>
-                                <input type="text" class="form-control" name="account_number" placeholder="Enter account number">
+                                <input type="text" class="form-control" name="account_number" placeholder="Enter account number" value="{{ old('account_number', $settings->fee_voucher_account_number ?? '') }}">
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Account Holder Name</label>
-                                <input type="text" class="form-control" name="account_holder" placeholder="Enter account holder name">
+                                <input type="text" class="form-control" name="account_holder" placeholder="Enter account holder name" value="{{ old('account_holder', $settings->fee_voucher_account_title ?? '') }}">
+                                <small class="text-muted">Shown as Account Title on fee voucher print.</small>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">IBAN / Swift Code</label>
-                                <input type="text" class="form-control" name="iban" placeholder="Enter IBAN or Swift code">
+                                <input type="text" class="form-control" name="iban" placeholder="Enter IBAN or Swift code" value="{{ old('iban', $settings->fee_voucher_iban ?? '') }}">
                             </div>
                         </div>
                     </div>

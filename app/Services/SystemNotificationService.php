@@ -23,7 +23,7 @@ class SystemNotificationService
 
         foreach ($admins as $admin) {
             Message::create([
-                'from_type' => 'accountant',
+                'from_type' => 'accountant_notification',
                 'from_id' => $accountantId,
                 'to_type' => 'admin',
                 'to_id' => (int) $admin->id,

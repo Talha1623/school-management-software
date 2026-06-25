@@ -113,7 +113,9 @@
                                 <th>#</th>
                                 <th>For Teacher</th>
                                 <th>Requested Amount</th>
-                                <th>Approved Amount</th>
+                                <th>Total Approved</th>
+                                <th>Paid Amount</th>
+                                <th>Remaining</th>
                                 <th>Repayment Instalments</th>
                                 <th>Status</th>
                                 <th class="text-end">Actions</th>
@@ -131,10 +133,16 @@
                                             <strong class="text-success">₹{{ number_format($loan->requested_amount, 2) }}</strong>
                                         </td>
                                         <td>
-                                            @if($loan->approved_amount)
-                                                <strong class="text-info">₹{{ number_format($loan->approved_amount, 2) }}</strong>
+                                            <strong class="text-primary">₹{{ number_format($loan->totalApprovedAmount(), 2) }}</strong>
+                                        </td>
+                                        <td>
+                                            <strong class="text-secondary">₹{{ number_format($loan->amountPaid(), 2) }}</strong>
+                                        </td>
+                                        <td>
+                                            @if($loan->remainingAmount() > 0)
+                                                <strong class="text-info">₹{{ number_format($loan->remainingAmount(), 2) }}</strong>
                                             @else
-                                                <span class="text-muted">N/A</span>
+                                                <span class="text-muted">₹0.00</span>
                                             @endif
                                         </td>
                                         <td>
@@ -147,8 +155,10 @@
                                                 <span class="badge bg-success text-white">{{ $loan->status }}</span>
                                             @elseif($loan->status == 'Rejected')
                                                 <span class="badge bg-danger text-white">{{ $loan->status }}</span>
-                                            @else
+                                            @elseif($loan->status == 'Completed')
                                                 <span class="badge bg-info text-white">{{ $loan->status }}</span>
+                                            @else
+                                                <span class="badge bg-secondary text-white">{{ $loan->status }}</span>
                                             @endif
                                         </td>
                                         <td class="text-end">
@@ -168,7 +178,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-5">
+                                        <td colspan="9" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No loans found.</p>
                                         </td>
@@ -176,7 +186,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
+                                    <td colspan="9" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No loans found.</p>
                                     </td>
@@ -238,7 +248,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Approved Amount</label>
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Approved Amount <small class="text-muted">(remaining)</small></label>
                             <div class="input-group input-group-sm loan-input-group">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">check_circle</span>

@@ -37,12 +37,12 @@ class OnlineClassesController extends Controller
             $assignedClasses = $assignedSubjects->pluck('class')
                 ->merge($assignedSections->pluck('class'))
                 ->map(function ($class) {
-                    return trim($class);
+                    return trim((string) $class);
                 })
                 ->filter(function ($class) {
-                    return !empty($class);
+                    return $class !== '';
                 })
-                ->unique()
+                ->unique(fn ($class) => strtolower($class))
                 ->sort()
                 ->values();
 
@@ -143,51 +143,15 @@ class OnlineClassesController extends Controller
             }
         }
         
-        // Build classes list for dropdown
+        // Build classes list for dropdown (loaded dynamically by campus in the modal)
         if ($staff && $staff->isTeacher()) {
-            // For teachers, show only their assigned classes
-            $classes = collect();
-            foreach ($assignedClasses as $className) {
-                $classes->push((object)['class_name' => $className]);
-            }
+            $classes = $assignedClasses->map(fn ($className) => (object) ['class_name' => $className])->values();
         } else {
-            // For non-teachers, get all classes
-        $classes = ClassModel::orderBy('class_name', 'asc')->get();
-        
-        // If no classes found, get from online classes
-        if ($classes->isEmpty()) {
-            $classesFromOnlineClasses = OnlineClass::whereNotNull('class')
-                ->distinct()
-                ->pluck('class')
-                ->sort()
-                ->values();
-            
-            // Convert to collection of objects with class_name property
             $classes = collect();
-            foreach ($classesFromOnlineClasses as $className) {
-                $classes->push((object)['class_name' => $className]);
-                }
-            }
         }
         
-        // Get sections from Section model
-        $sections = Section::whereNotNull('name')
-            ->distinct()
-            ->orderBy('name', 'asc')
-            ->pluck('name')
-            ->sort()
-            ->values();
-        
-        // If no sections found, get from online classes
-        if ($sections->isEmpty()) {
-            $sectionsFromOnlineClasses = OnlineClass::whereNotNull('section')
-                ->distinct()
-                ->pluck('section')
-                ->sort()
-                ->values();
-            
-            $sections = $sectionsFromOnlineClasses;
-        }
+        // Sections are loaded dynamically when class is selected
+        $sections = collect();
         
         return view('online-classes', compact('onlineClasses', 'campuses', 'classes', 'sections'));
     }
@@ -208,8 +172,8 @@ class OnlineClassesController extends Controller
             $assignedClasses = $assignedSubjects->pluck('class')
                 ->merge($assignedSections->pluck('class'))
                 ->map(fn ($class) => trim((string) $class))
-                ->filter(fn ($class) => !empty($class))
-                ->unique()
+                ->filter(fn ($class) => $class !== '')
+                ->unique(fn ($class) => strtolower($class))
                 ->sort()
                 ->values();
 
@@ -309,69 +273,162 @@ class OnlineClassesController extends Controller
     }
 
     /**
+     * Get classes based on campus (AJAX).
+     */
+    public function getClassesByCampus(Request $request): JsonResponse
+    {
+        $campus = trim((string) $request->get('campus', ''));
+        $staff = Auth::guard('staff')->user();
+
+        if ($campus === '') {
+            return response()->json(['classes' => []]);
+        }
+
+        if ($staff && $staff->isTeacher()) {
+            $teacherName = strtolower(trim($staff->name ?? ''));
+            $campusKey = strtolower($campus);
+
+            $classes = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusKey])
+                ->pluck('class')
+                ->merge(
+                    Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                        ->whereRaw('LOWER(TRIM(campus)) = ?', [$campusKey])
+                        ->pluck('class')
+                )
+                ->map(fn ($class) => trim((string) $class))
+                ->filter(fn ($class) => $class !== '')
+                ->unique(fn ($class) => strtolower($class))
+                ->sort()
+                ->values();
+        } else {
+            $classes = $this->getDistinctClassesForDropdown($campus)
+                ->pluck('class_name')
+                ->values();
+        }
+
+        return response()->json(['classes' => $classes]);
+    }
+
+    /**
      * Get sections based on class (AJAX).
      * Filter by teacher's assigned sections if teacher.
      */
     public function getSections(Request $request): JsonResponse
     {
-        $class = $request->get('class');
+        $class = trim((string) $request->get('class', ''));
+        $campus = trim((string) $request->get('campus', ''));
         
         $staff = Auth::guard('staff')->user();
         $sections = collect();
         
         // Filter by teacher's assigned sections if teacher
-        if ($staff && $staff->isTeacher() && $class) {
+        if ($staff && $staff->isTeacher() && $class !== '') {
             $teacherName = strtolower(trim($staff->name ?? ''));
             
-            // Get sections from teacher's assigned subjects for this class
             $assignedSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->get();
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+            if ($campus !== '') {
+                $assignedSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            }
+            $assignedSubjects = $assignedSubjects->get();
             
-            // Get sections from teacher's assigned sections for this class
             $assignedSections = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->get();
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+            if ($campus !== '') {
+                $assignedSections->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+            }
+            $assignedSections = $assignedSections->get();
             
-            // Merge sections from both sources
             $sections = $assignedSubjects->pluck('section')
                 ->merge($assignedSections->pluck('name'))
-                ->map(function($section) {
-                    return trim($section);
-                })
-                ->filter(function($section) {
-                    return !empty($section);
-                })
-                ->unique()
+                ->map(fn ($section) => trim((string) $section))
+                ->filter(fn ($section) => $section !== '')
+                ->unique(fn ($section) => strtolower($section))
                 ->sort()
                 ->values();
-        } else {
-            // For non-teachers, get all sections
-            $sectionsQuery = Section::query();
-            if ($class) {
-                $sectionsQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+        } elseif ($class !== '') {
+            $sectionsQuery = Section::query()
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+            if ($campus !== '') {
+                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
             }
             
             $sections = $sectionsQuery->whereNotNull('name')
                 ->distinct()
                 ->pluck('name')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter(fn ($name) => $name !== '')
+                ->unique(fn ($name) => strtolower($name))
                 ->sort()
                 ->values();
             
-            // If no sections found, try fallback
-            if ($sections->isEmpty() && $class) {
-                $sectionsFromOnlineClasses = OnlineClass::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                    ->whereNotNull('section')
+            if ($sections->isEmpty()) {
+                $subjectsQuery = Subject::query()
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+                if ($campus !== '') {
+                    $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                }
+                $sections = $subjectsQuery->whereNotNull('section')
                     ->distinct()
                     ->pluck('section')
+                    ->map(fn ($name) => trim((string) $name))
+                    ->filter(fn ($name) => $name !== '')
+                    ->unique(fn ($name) => strtolower($name))
                     ->sort()
                     ->values();
-                
-                $sections = $sectionsFromOnlineClasses;
+            }
+            
+            if ($sections->isEmpty()) {
+                $onlineQuery = OnlineClass::whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                    ->whereNotNull('section');
+                if ($campus !== '') {
+                    $onlineQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                }
+                $sections = $onlineQuery->distinct()
+                    ->pluck('section')
+                    ->map(fn ($name) => trim((string) $name))
+                    ->filter(fn ($name) => $name !== '')
+                    ->unique(fn ($name) => strtolower($name))
+                    ->sort()
+                    ->values();
             }
         }
         
         return response()->json(['sections' => $sections]);
+    }
+
+    /**
+     * Build distinct class options for dropdowns.
+     */
+    private function getDistinctClassesForDropdown(?string $campus = null): \Illuminate\Support\Collection
+    {
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus !== null && trim($campus) !== '') {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        $classNames = $classesQuery->pluck('class_name')
+            ->map(fn ($name) => trim((string) $name))
+            ->filter(fn ($name) => $name !== '')
+            ->unique(fn ($name) => strtolower($name))
+            ->sort()
+            ->values();
+
+        if ($classNames->isEmpty()) {
+            $onlineQuery = OnlineClass::whereNotNull('class');
+            if ($campus !== null && trim($campus) !== '') {
+                $onlineQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            }
+            $classNames = $onlineQuery->pluck('class')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter(fn ($name) => $name !== '')
+                ->unique(fn ($name) => strtolower($name))
+                ->sort()
+                ->values();
+        }
+
+        return $classNames->map(fn ($className) => (object) ['class_name' => $className])->values();
     }
 
     /**

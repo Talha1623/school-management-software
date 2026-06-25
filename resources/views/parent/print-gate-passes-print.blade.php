@@ -394,40 +394,46 @@
             box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
         }
 
-        .design-panel-actions {
+        .print-toolbar {
             display: flex;
-            flex-wrap: wrap;
+            justify-content: flex-end;
+            align-items: center;
             gap: 10px;
-            margin-top: 15px;
-        }
-
-        .design-panel-actions .apply-btn {
-            margin-top: 0;
+            margin-bottom: 16px;
         }
 
         .print-btn {
-            background: #fff;
-            color: #003471;
-            border: 2px solid #003471;
+            background: linear-gradient(135deg, #198754 0%, #157347 100%);
+            color: white;
+            border: none;
             border-radius: 6px;
             padding: 10px 24px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 6px rgba(0, 52, 113, 0.1);
+            box-shadow: 0 2px 6px rgba(25, 135, 84, 0.25);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .print-btn:hover {
-            background: #003471;
-            color: #fff;
+            background: linear-gradient(135deg, #157347 0%, #198754 100%);
             transform: translateY(-1px);
-            box-shadow: 0 4px 10px rgba(0, 52, 113, 0.25);
+            box-shadow: 0 4px 10px rgba(25, 135, 84, 0.35);
+        }
+
+        .print-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
         }
 
         @media print {
             .no-print,
-            .design-panel {
+            .design-panel,
+            .print-toolbar {
                 display: none !important;
             }
             body {
@@ -465,6 +471,13 @@
             : asset('storage/' . ltrim((string) $settings->logo, '/')))
         : asset('assets/images/logo-icon.png');
 @endphp
+
+<div class="print-toolbar no-print">
+    <button type="button" class="print-btn" onclick="window.print()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8H5a3 3 0 0 0-3 3v6h4v4h12v-4h4v-6a3 3 0 0 0-3-3zm-1 9h-2v-4H8v4H6v-5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5zm1-10H5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2z"/></svg>
+        Print
+    </button>
+</div>
 
 <div class="design-panel no-print">
     <h3>Gate Pass Design Customization</h3>
@@ -514,10 +527,7 @@
                 <input type="color" id="footerTextColor" value="{{ $designSettings['footer_text_color'] ?? '#FFFFFF' }}">
                 <input type="text" id="footerTextColorText" value="{{ $designSettings['footer_text_color'] ?? '#FFFFFF' }}">
             </div>
-            <div class="design-panel-actions">
-                <button type="button" class="apply-btn" onclick="applyDesignSettings()">Apply Design</button>
-                <button type="button" class="print-btn" onclick="printGatePasses()">Print Gate Passes</button>
-            </div>
+            <button type="button" class="apply-btn" onclick="applyDesignSettings()">Apply Design</button>
         </div>
     </div>
 </div>
@@ -566,9 +576,11 @@
         window.history.replaceState({}, '', '?' + params.toString());
     }
 
-    function printGatePasses() {
-        window.print();
-    }
+    @if(request()->boolean('auto_print'))
+    window.addEventListener('load', function () {
+        setTimeout(function () { window.print(); }, 400);
+    });
+    @endif
 </script>
 
 <div class="cards-grid" id="gatePassCards">

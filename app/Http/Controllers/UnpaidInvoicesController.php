@@ -25,6 +25,7 @@ class UnpaidInvoicesController extends Controller
         'Monthly Fee',
         'Transport Fee',
         'Admission Fee',
+        'Arrears',
         'Custom Fee',
     ];
 

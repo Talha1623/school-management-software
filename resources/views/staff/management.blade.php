@@ -67,7 +67,7 @@ use Illuminate\Support\Facades\Auth;
                         <span class="material-symbols-outlined" style="font-size: 16px;">calendar_month</span>
                         <span>Staff Attendance Overview</span>
                     </a>
-                    <a href="{{ route('reports.staff-salary-summarized') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
+                    <a href="{{ route('reports.staff-salary') }}" target="_blank" class="btn btn-sm py-2 px-3 d-inline-flex align-items-center gap-1 rounded-8 staff-salary-report-btn">
                         <span class="material-symbols-outlined" style="font-size: 16px;">receipt_long</span>
                         <span>Staff Salary Report</span>
                     </a>
@@ -493,10 +493,10 @@ use Illuminate\Support\Facades\Auth;
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">business</span>
                                 </span>
-                                <select class="form-control staff-input" name="campus" id="campus" style="font-size: 12px;">
+                                <select class="form-control staff-input" name="campus" id="campus" required style="font-size: 12px;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus->campus_name }}">{{ $campus->campus_name }}</option>
+                                        <option value="{{ $campus->campus_name }}" data-code-prefix="{{ $campus->code_prefix ?? '' }}">{{ $campus->campus_name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -536,7 +536,7 @@ use Illuminate\Support\Facades\Auth;
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">badge</span>
                                 </span>
-                                <input type="text" class="form-control staff-input" name="emp_id" id="emp_id" placeholder="Auto-generated Employee ID" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                                <input type="text" class="form-control staff-input" name="emp_id" id="emp_id" placeholder="Select campus first" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
                             </div>
                         </div>
 
@@ -887,7 +887,6 @@ use Illuminate\Support\Facades\Auth;
         text-decoration: none;
     }
 
-
     .staff-attendance-overview-btn {
         background: linear-gradient(135deg, #17a2b8 0%, #0dcaf0 100%);
         color: white;
@@ -905,6 +904,7 @@ use Illuminate\Support\Facades\Auth;
         color: white;
         text-decoration: none;
     }
+
 
     .staff-performance-report-btn {
         background: linear-gradient(135deg, #6f42c1 0%, #9c27b0 100%);
@@ -1154,48 +1154,59 @@ function resetForm() {
 function updateEmployeeId() {
     const campusField = document.getElementById('campus');
     const empIdField = document.getElementById('emp_id');
-    const campus = campusField ? campusField.value : '';
+    const campus = campusField ? campusField.value.trim() : '';
     
     if (!empIdField) {
-        console.log('Emp ID field not found');
+        return;
+    }
+
+    if (!campus) {
+        empIdField.value = '';
+        empIdField.placeholder = 'Select campus first';
         return;
     }
     
-    // Build URL with campus parameter
-    let url = '{{ route('staff.management.next-emp-id') }}';
-    if (campus) {
-        url += '?campus=' + encodeURIComponent(campus);
-    }
+    let url = '{{ route('staff.management.next-emp-id') }}?campus=' + encodeURIComponent(campus);
     
-    console.log('Updating Employee ID for campus:', campus, 'URL:', url);
-    
-    // Show loading state
-    empIdField.value = 'Loading...';
+    empIdField.value = '';
+    empIdField.placeholder = 'Loading...';
     
     fetch(url, {
+        credentials: 'same-origin',
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
         }
     })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
+    .then(async (response) => {
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = {};
         }
-        return response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || data.message || ('HTTP ' + response.status));
+        }
+
+        return data;
     })
     .then(data => {
-        console.log('Employee ID response:', data);
         if (data.emp_id) {
             empIdField.value = data.emp_id;
+            empIdField.placeholder = 'Auto-generated Employee ID';
         } else if (data.error) {
-            console.error('Error from server:', data.error);
             empIdField.value = '';
+            empIdField.placeholder = data.error;
+        } else if (data.message) {
+            empIdField.value = '';
+            empIdField.placeholder = data.message;
         }
     })
-    .catch(error => {
-        console.error('Error fetching Employee ID:', error);
+    .catch((error) => {
         empIdField.value = '';
+        empIdField.placeholder = error.message || 'Could not load Employee ID';
     });
 }
 
@@ -1205,13 +1216,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (campusField) {
         // Add event listener for campus change
         campusField.addEventListener('change', function() {
-            console.log('Campus changed to:', this.value);
-            
-            // Check if we're in add mode (not edit mode)
             const methodField = document.getElementById('methodField');
             const isEditMode = methodField && methodField.innerHTML.includes('PUT');
             
-            // Update Employee ID only in add mode (not edit mode)
             if (!isEditMode) {
                 updateEmployeeId();
             }

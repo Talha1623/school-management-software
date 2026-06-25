@@ -16,6 +16,58 @@ use Carbon\Carbon;
 class TeacherTestManagementController extends Controller
 {
     /**
+     * Resolve saved final/combined remark for a student in class/section context.
+     */
+    private function resolveFinalRemarkForStudent(
+        Student $student,
+        ?string $session,
+        string $class,
+        ?string $section,
+        ?string $campus
+    ): ?string {
+        $baseRemarkQuery = function () use ($student, $session, $class, $section) {
+            $query = StudentMark::query()
+                ->where('student_id', $student->id)
+                ->where(function ($sub) use ($session) {
+                    $sub->whereRaw('LOWER(TRIM(test_name)) = ?', ['final_result'])
+                        ->orWhereRaw('LOWER(TRIM(test_name)) = ?', ['combined_result'])
+                        ->orWhereRaw('LOWER(TRIM(test_name)) LIKE ?', ['%final%']);
+
+                    if (!empty($session)) {
+                        $sub->orWhereRaw(
+                            'LOWER(TRIM(test_name)) = ?',
+                            [strtolower(trim($session . '_FINAL'))]
+                        );
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
+
+            if (!empty($section)) {
+                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+            }
+
+            return $query;
+        };
+
+        $finalRemarkRow = $baseRemarkQuery()
+            ->when(!empty($campus), function ($query) use ($campus) {
+                return $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            })
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$finalRemarkRow && !empty($campus)) {
+            $finalRemarkRow = $baseRemarkQuery()
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        return $finalRemarkRow?->teacher_remarks;
+    }
+
+    /**
      * Get Subjects by Test Name for Marks/Remarks entry
      *
      * Params:
@@ -497,7 +549,7 @@ class TeacherTestManagementController extends Controller
 
                 $marksByStudent = $marksQuery->get()->groupBy('student_id');
 
-                $studentsData = $students->map(function ($student) use ($marksByStudent) {
+                $studentsData = $students->map(function ($student) use ($marksByStudent, $session, $class, $section, $campus) {
                     $studentMarks = $marksByStudent->get($student->id, collect());
                     $roll = $student->student_code ?? ($student->gr_number ?? null);
                     return [
@@ -507,7 +559,13 @@ class TeacherTestManagementController extends Controller
                         'roll_number' => $roll,
                         'name' => $student->student_name,
                         'parent' => $student->father_name ?? null,
-                        'final_remark' => null,
+                        'final_remark' => $this->resolveFinalRemarkForStudent(
+                            $student,
+                            $session,
+                            (string) $class,
+                            $section ? (string) $section : null,
+                            $campus ? (string) $campus : null
+                        ),
                         'total' => (float) ($studentMarks->sum('total_marks') ?? 0),
                         'obtained' => (float) ($studentMarks->sum('marks_obtained') ?? 0),
                     ];
@@ -727,9 +785,31 @@ class TeacherTestManagementController extends Controller
             $matchingTests = $testStatusQuery->get();
             $isDeclared = $matchingTests->contains(fn ($test) => (int) ($test->result_status ?? 0) === 1);
 
-            // Verify teacher access for requested class/section.
-            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
-            $hasAccess = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+            // Verify teacher access for requested class/section (subject teacher OR class teacher).
+            $identityKeys = collect([
+                strtolower(trim((string) ($teacher->name ?? ''))),
+                strtolower(trim((string) ($teacher->emp_id ?? ''))),
+            ])->filter()->unique()->values();
+
+            $isClassTeacher = Section::query()
+                ->where(function ($query) use ($identityKeys) {
+                    foreach ($identityKeys as $key) {
+                        $query->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($section)])
+                ->when($campus !== '', function ($q) use ($campus) {
+                    return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+                })
+                ->exists();
+
+            $hasAccess = Subject::query()
+                ->where(function ($query) use ($identityKeys) {
+                    foreach ($identityKeys as $key) {
+                        $query->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                    }
+                })
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
                 ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)])
                 ->when($subject !== '', function ($q) use ($subject) {
@@ -738,17 +818,7 @@ class TeacherTestManagementController extends Controller
                 ->when($campus !== '', function ($q) use ($campus) {
                     return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
                 })
-                ->exists();
-
-            if (!$hasAccess) {
-                $hasAccess = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)])
-                    ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($section)])
-                    ->when($campus !== '', function ($q) use ($campus) {
-                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
-                    })
-                    ->exists();
-            }
+                ->exists() || $isClassTeacher;
 
             if (!$hasAccess) {
                 return response()->json([
@@ -852,6 +922,12 @@ class TeacherTestManagementController extends Controller
                 'success' => true,
                 'message' => 'Uploaded test marks retrieved successfully',
                 'data' => [
+                    'teacher' => [
+                        'id' => $teacher->id,
+                        'name' => $teacher->name,
+                        'emp_id' => $teacher->emp_id ?? null,
+                        'is_class_teacher' => $isClassTeacher,
+                    ],
                     'filters' => [
                         'campus' => $campus !== '' ? $campus : null,
                         'class' => $class,
@@ -1912,14 +1988,22 @@ class TeacherTestManagementController extends Controller
                 'per_page' => ['nullable', 'integer'],
             ]);
 
-            $teacherName = strtolower(trim((string) ($teacher->name ?? '')));
             $className = trim((string) $validated['class']);
             $sectionName = isset($validated['section']) ? trim((string) $validated['section']) : '';
             $requestedCampus = isset($validated['campus']) ? trim((string) $validated['campus']) : '';
             $effectiveCampus = $requestedCampus !== '' ? $requestedCampus : trim((string) ($teacher->campus ?? ''));
 
+            $identityKeys = collect([
+                strtolower(trim((string) ($teacher->name ?? ''))),
+                strtolower(trim((string) ($teacher->emp_id ?? ''))),
+            ])->filter()->unique()->values();
+
             $classTeacherSectionsQuery = Section::query()
-                ->whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
+                ->where(function ($query) use ($identityKeys) {
+                    foreach ($identityKeys as $key) {
+                        $query->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                    }
+                })
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)]);
 
             if ($sectionName !== '') {

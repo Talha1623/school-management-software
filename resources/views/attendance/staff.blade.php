@@ -231,7 +231,7 @@
                                                     </td>
                                                 @else
                                                     <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                        <select name="attendance[{{ $staff->id }}][status]" class="form-select form-select-sm attendance-status" style="min-width: 120px;">
+                                                        <select name="attendance[{{ $staff->id }}][status]" class="form-select form-select-sm attendance-status" data-staff-id="{{ $staff->id }}" style="min-width: 120px;">
                                                             <option value="">Select Status</option>
                                                             <option value="Present" {{ $status == 'Present' ? 'selected' : '' }}>Present</option>
                                                             <option value="Absent" {{ $status == 'Absent' ? 'selected' : '' }}>Absent</option>
@@ -249,10 +249,11 @@
                                                             $timetableEndTime = $timetableTime['end_time'] ?? null;
                                                             $totalHours = $timetableTime['total_hours'] ?? null;
                                                             
-                                                            // For per hour teacher, use timetable time if available, otherwise use saved time
+                                                            // Per hour: show saved times only (manual entry on Present)
                                                             $displayStartTime = $startTime;
-                                                            if ($isPerHour && $timetableStartTime && empty($startTime)) {
-                                                                $displayStartTime = $timetableStartTime;
+                                                            $isPresentLike = in_array($status, ['Present', 'Half Day'], true);
+                                                            if ($isPerHour && !$isPresentLike) {
+                                                                $displayStartTime = '';
                                                             }
                                                         @endphp
                                                         <div class="d-flex flex-column gap-1">
@@ -260,6 +261,12 @@
                                                                 @if($isPerHour) 
                                                                     @if($timetableStartTime)
                                                                         data-timetable-start="{{ $timetableStartTime }}" 
+                                                                    @endif
+                                                                    @if($timetableEndTime)
+                                                                        data-timetable-end="{{ $timetableEndTime }}"
+                                                                    @endif
+                                                                    @if($totalHours !== null)
+                                                                        data-timetable-hours="{{ $totalHours }}"
                                                                     @endif
                                                                     data-is-per-hour="true"
                                                                     data-staff-name="{{ $staff->name }}"
@@ -270,7 +277,7 @@
                                                                 <small class="text-muted per-hour-count" style="font-size: 11px;" data-staff-id="{{ $staff->id }}">
                                                                     <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle;">schedule</span>
                                                                     <span class="hours-text">
-                                                                        @if($totalHours !== null)
+                                                                        @if($isPresentLike && $totalHours !== null)
                                                                             Total: {{ $totalHours }} hrs
                                                                         @else
                                                                             Total: 0 hrs
@@ -295,9 +302,8 @@
                                                                 }
                                                             }
                                                             
-                                                            // For per hour teacher, use timetable time if available, otherwise use saved time
-                                                            if ($isPerHour && $timetableEndTime && empty($exitTimeValue)) {
-                                                                $exitTimeValue = $timetableEndTime;
+                                                            if ($isPerHour && !$isPresentLike) {
+                                                                $exitTimeValue = '';
                                                             }
                                                         @endphp
                                                         <input type="time" name="attendance[{{ $staff->id }}][end_time]" class="form-control form-control-sm exit-time" value="{{ $exitTimeValue }}" style="min-width: 100px;" placeholder="HH:MM" 
@@ -506,6 +512,9 @@ function markAllStaffStatus(status) {
     const statusSelects = document.querySelectorAll('.attendance-status');
     statusSelects.forEach(select => {
         select.value = status;
+        if (typeof window.handlePerHourStatusChange === 'function') {
+            window.handlePerHourStatusChange(select);
+        }
     });
 }
 
@@ -613,53 +622,105 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Calculate late arrival on page load for existing values (with delay to ensure DOM is ready)
+    // Calculate late arrival on page load only for saved present rows
     setTimeout(function() {
         arrivalTimeInputs.forEach(input => {
-            if (input && input.value && input.value.length >= 5) {
-                calculateLateArrival(input);
-            }
-            // Calculate per hour count on page load
             const row = input.closest('tr');
-            if (row) {
+            const statusSelect = row ? row.querySelector('.attendance-status') : null;
+            const status = statusSelect ? (statusSelect.value || '').trim() : '';
+            const isPresentLike = status === 'Present' || status === 'Half Day';
+
+            if (input && input.value && input.value.length >= 5 && isPresentLike) {
+                calculateLateArrival(input);
+                const exitInput = row ? row.querySelector('.exit-time') : null;
+                if (exitInput && exitInput.value) {
+                    calculateEarlyExit(exitInput);
+                }
+            }
+            if (row && isPresentLike) {
                 calculatePerHourCount(row);
             }
         });
     }, 500);
+
+    window.handlePerHourStatusChange = function(statusSelect) {
+        if (!statusSelect) {
+            return;
+        }
+
+        const row = statusSelect.closest('tr');
+        if (!row) {
+            return;
+        }
+
+        const arrivalInput = row.querySelector('.arrival-time');
+        const exitInput = row.querySelector('.exit-time');
+        const hoursDisplay = row.querySelector('.per-hour-count .hours-text');
+        const isPerHour = arrivalInput?.getAttribute('data-is-per-hour') === 'true';
+        if (!isPerHour) {
+            return;
+        }
+
+        const status = (statusSelect.value || '').trim();
+        const isPresentLike = status === 'Present' || status === 'Half Day';
+
+        if (!isPresentLike) {
+            if (arrivalInput) {
+                arrivalInput.value = '';
+            }
+            if (exitInput) {
+                exitInput.value = '';
+            }
+            const lateArrivalDisplay = row.querySelector('.late-arrival-display');
+            const earlyExitDisplay = row.querySelector('.early-exit-display');
+            if (lateArrivalDisplay) {
+                lateArrivalDisplay.innerHTML = '<span class="text-muted">-</span>';
+            }
+            if (earlyExitDisplay) {
+                earlyExitDisplay.innerHTML = '<span class="text-muted">-</span>';
+            }
+            if (hoursDisplay) {
+                hoursDisplay.textContent = 'Total: 0 hrs';
+            }
+            return;
+        }
+
+        if (arrivalInput && arrivalInput.value) {
+            calculateLateArrival(arrivalInput);
+        }
+        if (exitInput && exitInput.value) {
+            calculateEarlyExit(exitInput);
+        }
+        calculatePerHourCount(row);
+    };
+
+    document.querySelectorAll('.attendance-status').forEach(select => {
+        select.addEventListener('change', function() {
+            window.handlePerHourStatusChange(this);
+        });
+    });
     
     arrivalTimeInputs.forEach(input => {
-        // Auto-populate timetable time for per hour teachers if field is empty
-        const isPerHour = input.getAttribute('data-is-per-hour') === 'true';
-        if (isPerHour && !input.value) {
-            const timetableStartTime = input.getAttribute('data-timetable-start');
-            if (timetableStartTime) {
-                input.value = timetableStartTime;
-                // Trigger calculation after setting value
-                setTimeout(() => {
-                    calculateLateArrival(input);
-                    const row = input.closest('tr');
-                    if (row) {
-                        calculatePerHourCount(row);
-                    }
-                }, 100);
-            }
-        }
-        
         input.addEventListener('change', function() {
             calculateLateArrival(this);
-            // Calculate per hour count when arrival time changes
             const row = this.closest('tr');
             if (row) {
+                const exitInput = row.querySelector('.exit-time');
+                if (exitInput && exitInput.value) {
+                    calculateEarlyExit(exitInput);
+                }
                 calculatePerHourCount(row);
             }
         });
         
-        // Also add input event for real-time updates as user types/changes time
         input.addEventListener('input', function() {
             calculateLateArrival(this);
-            // Calculate per hour count when arrival time changes
             const row = this.closest('tr');
             if (row) {
+                const exitInput = row.querySelector('.exit-time');
+                if (exitInput && exitInput.value) {
+                    calculateEarlyExit(exitInput);
+                }
                 calculatePerHourCount(row);
             }
         });
@@ -976,47 +1037,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Also calculate when Exit Time changes (recalculate late arrival and early exit)
     const exitTimeInputs = document.querySelectorAll('.exit-time');
     
-    // Calculate early exit on page load for existing values (with delay to ensure DOM is ready)
+    // Calculate early exit on page load only for saved present rows
     setTimeout(function() {
         exitTimeInputs.forEach(input => {
-            if (input && input.value && input.value.length >= 5) {
+            const row = input.closest('tr');
+            const statusSelect = row ? row.querySelector('.attendance-status') : null;
+            const status = statusSelect ? (statusSelect.value || '').trim() : '';
+            const isPresentLike = status === 'Present' || status === 'Half Day';
+
+            if (input && input.value && input.value.length >= 5 && isPresentLike) {
                 calculateEarlyExit(input);
             }
-            // Calculate per hour count on page load
-            const row = input.closest('tr');
-            if (row) {
-                calculatePerHourCount(row);
-            }
-        });
-        
-        // Also calculate per hour count for all per hour staff rows (even if times are empty)
-        const allRows = document.querySelectorAll('tr');
-        allRows.forEach(row => {
-            const arrivalInput = row.querySelector('.arrival-time');
-            if (arrivalInput && arrivalInput.getAttribute('data-is-per-hour') === 'true') {
+            if (row && isPresentLike) {
                 calculatePerHourCount(row);
             }
         });
     }, 500);
     
     exitTimeInputs.forEach(input => {
-        // Auto-populate timetable time for per hour teachers if field is empty
-        const isPerHour = input.getAttribute('data-is-per-hour') === 'true';
-        if (isPerHour && !input.value) {
-            const timetableEndTime = input.getAttribute('data-timetable-end');
-            if (timetableEndTime) {
-                input.value = timetableEndTime;
-                // Trigger calculation after setting value
-                setTimeout(() => {
-                    calculateEarlyExit(input);
-                    const row = input.closest('tr');
-                    if (row) {
-                        calculatePerHourCount(row);
-                    }
-                }, 100);
-            }
-        }
-        
         // Calculate on change event - immediate calculation
         input.addEventListener('change', function() {
             const row = this.closest('tr');
@@ -1131,8 +1169,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Please select at least one attendance status before saving.');
                 return false;
             }
-            
-            // Allow form to submit - only entries with status will be saved
+
+            // Per hour: clear times on rows without Present/Half Day so only selected day is saved
+            statusSelects.forEach(select => {
+                const status = (select.value || '').trim();
+                const row = select.closest('tr');
+                if (!row) {
+                    return;
+                }
+                const arrivalInput = row.querySelector('.arrival-time');
+                const isPerHour = arrivalInput?.getAttribute('data-is-per-hour') === 'true';
+                if (!isPerHour) {
+                    return;
+                }
+                if (status !== 'Present' && status !== 'Half Day') {
+                    if (arrivalInput) {
+                        arrivalInput.value = '';
+                    }
+                    const exitInput = row.querySelector('.exit-time');
+                    if (exitInput) {
+                        exitInput.value = '';
+                    }
+                }
+            });
         });
     }
 });

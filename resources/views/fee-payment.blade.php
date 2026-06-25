@@ -456,6 +456,8 @@
                                 <input type="text" class="form-control" id="installment_remaining_amount" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
                             </div>
                         </div>
+                        <input type="hidden" id="installment_principal_remaining" value="">
+                        <input type="hidden" id="installment_late_remaining" value="">
 
                         <!-- Total Installments -->
                         <div class="col-md-6">
@@ -668,6 +670,38 @@
 </style>
 
 <script>
+function localTodayDateString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) {
+        return meta.content;
+    }
+    const input = document.querySelector('input[name="_token"]');
+    return input ? input.value : '';
+}
+
+function ajaxPostHeaders() {
+    return {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': getCsrfToken(),
+    };
+}
+
+function ensureFormCsrfToken(formData) {
+    const token = getCsrfToken();
+    if (token) {
+        formData.set('_token', token);
+    }
+    return formData;
+}
 function renderStatusCell(due, paidForStatus, studentCode, studentName, isInstallment = false, principalDue = null, remainingLate = null, serverStatus = '') {
     if (isInstallment) {
         return `
@@ -1106,7 +1140,7 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'X-CSRF-TOKEN': getCsrfToken(),
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
@@ -1169,7 +1203,7 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'X-CSRF-TOKEN': getCsrfToken(),
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
@@ -1279,7 +1313,7 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
     
     document.getElementById('partial_discount').value = '0';
     document.getElementById('partial_method').value = 'Cash Payment';
-    document.getElementById('partial_date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('partial_date').value = localTodayDateString();
     document.getElementById('partial_notify').value = 'Yes';
     
     // Add event listeners so due preview updates from a stable base.
@@ -1452,7 +1486,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('partial_payment').value = '';
             document.getElementById('partial_discount').value = '0';
             document.getElementById('partial_method').value = 'Cash Payment';
-            document.getElementById('partial_date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('partial_date').value = localTodayDateString();
             document.getElementById('partial_notify').value = 'Yes';
             // Clear stored studentData
             window.partialPaymentStudentData = null;
@@ -1882,7 +1916,7 @@ function deletePayment(paymentId) {
     fetch(deleteUrl, {
         method: 'DELETE',
         headers: {
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'X-CSRF-TOKEN': getCsrfToken(),
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json',
         }
@@ -1934,7 +1968,7 @@ function deleteFeePayment(paymentId, studentCode, feeTitle) {
     fetch(deleteUrl, {
         method: 'DELETE',
         headers: {
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'X-CSRF-TOKEN': getCsrfToken(),
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json',
         }
@@ -1991,7 +2025,7 @@ function handlePartialPaymentSubmit(event) {
     event.preventDefault();
     
     const form = event.target;
-    const formData = new FormData(form);
+    const formData = ensureFormCsrfToken(new FormData(form));
     const studentCode = formData.get('student_code');
     const baseDue = parseFloat(window.partialPaymentBaseDue || 0);
     const paymentAmount = parseFloat(formData.get('payment_amount') || 0);
@@ -2012,10 +2046,8 @@ function handlePartialPaymentSubmit(event) {
     fetch(form.action, {
         method: 'POST',
         body: formData,
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json',
-        }
+        headers: ajaxPostHeaders(),
+        credentials: 'same-origin',
     })
     .then(async response => {
         if (!response.ok) {
@@ -2090,6 +2122,10 @@ function handlePartialPaymentSubmit(event) {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
 
+        if (error.status === 419) {
+            alert('Session expired. Please refresh the page and try again.');
+            return;
+        }
         if (error.status === 422 && error.payload) {
             const p = error.payload;
             const msg = p.message || 'Validation failed';
@@ -2351,7 +2387,7 @@ function deleteStudent(studentId, studentCode, studentName) {
         fetch('{{ route("student.delete", ":id") }}'.replace(':id', studentId), {
             method: 'DELETE',
             headers: {
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'X-CSRF-TOKEN': getCsrfToken(),
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             }
@@ -2426,6 +2462,11 @@ function makeInstallment(studentCode, studentName, selectedFeeData = null) {
                     option.dataset.amountPaid = fee.paid || 0;
                     option.dataset.discount = fee.discount || 0;
                     option.dataset.remaining = fee.due || 0;
+                    const principalVal = parseFloat(fee.amount ?? 0);
+                    const dueVal = parseFloat(fee.due || 0);
+                    const lateVal = parseFloat(fee.remaining_late ?? fee.late_fee ?? 0) || Math.max(0, dueVal - principalVal);
+                    option.dataset.principalRemaining = (fee.amount != null ? principalVal : Math.max(0, dueVal - lateVal));
+                    option.dataset.lateRemaining = lateVal;
                     updatedSelect.appendChild(option);
                     
                     // Create fee card
@@ -2475,11 +2516,21 @@ function makeInstallment(studentCode, studentName, selectedFeeData = null) {
                     const amountPaid = parseFloat(selectedOption.dataset.amountPaid || 0);
                     const discount = parseFloat(selectedOption.dataset.discount || 0);
                     const remaining = parseFloat(selectedOption.dataset.remaining || 0);
+                    let principalRemaining = parseFloat(selectedOption.dataset.principalRemaining || 0);
+                    let lateRemaining = parseFloat(selectedOption.dataset.lateRemaining || 0);
+                    if (lateRemaining <= 0 && remaining > principalRemaining) {
+                        lateRemaining = Math.max(0, remaining - principalRemaining);
+                    }
+                    if (principalRemaining <= 0 && remaining > lateRemaining) {
+                        principalRemaining = Math.max(0, remaining - lateRemaining);
+                    }
                     
                     document.getElementById('installment_total_amount').value = totalAmount.toFixed(2);
                     document.getElementById('installment_amount_paid').value = amountPaid.toFixed(2);
                     document.getElementById('installment_discount').value = discount.toFixed(2);
                     document.getElementById('installment_remaining_amount').value = remaining.toFixed(2);
+                    document.getElementById('installment_principal_remaining').value = principalRemaining.toFixed(2);
+                    document.getElementById('installment_late_remaining').value = lateRemaining.toFixed(2);
                     
                     // Calculate per installment amount
                     calculatePerInstallment();
@@ -2497,6 +2548,8 @@ function makeInstallment(studentCode, studentName, selectedFeeData = null) {
             document.getElementById('installment_amount_paid').value = '';
             document.getElementById('installment_discount').value = '';
             document.getElementById('installment_remaining_amount').value = '';
+            document.getElementById('installment_principal_remaining').value = '';
+            document.getElementById('installment_late_remaining').value = '';
             document.getElementById('installment_per_installment').value = '';
             document.getElementById('installment_total_installments').value = '';
             
@@ -2545,7 +2598,7 @@ function handleInstallmentSubmit(event) {
     event.preventDefault();
     
     const form = event.target;
-    const formData = new FormData(form);
+    const formData = ensureFormCsrfToken(new FormData(form));
     const studentCode = formData.get('student_code');
     const feeTitle = formData.get('payment_title');
     const totalInstallments = parseInt(formData.get('total_installments') || 1);
@@ -2561,20 +2614,23 @@ function handleInstallmentSubmit(event) {
         return;
     }
     
-    // Get total amount and discount to divide proportionally
-    const totalAmount = parseFloat(document.getElementById('installment_total_amount').value || 0);
+    // Get principal, late fee, and discount to divide equally across installments
+    let principalRemaining = parseFloat(document.getElementById('installment_principal_remaining').value || 0);
+    let lateRemaining = parseFloat(document.getElementById('installment_late_remaining').value || 0);
     const totalDiscount = parseFloat(document.getElementById('installment_discount').value || 0);
+
+    // Dynamic fallback for any fee type (custom, transport, monthly, etc.)
+    if (lateRemaining <= 0 && remainingAmount > principalRemaining) {
+        lateRemaining = Math.max(0, remainingAmount - principalRemaining);
+    }
+    if (principalRemaining <= 0 && remainingAmount > lateRemaining) {
+        principalRemaining = Math.max(0, remainingAmount - lateRemaining);
+    }
     
-    // Calculate per installment:
-    // - Total Amount per installment = Total Amount / Number of Installments (this is payment_amount)
-    // - Discount per installment = Total Discount / Number of Installments (divided equally)
-    // - Generated Fee per installment = (Total Amount - Discount) / Number of Installments
-    // Example: 5000 fee, 1000 discount, 2 installments
-    //   Total Amount per installment = 5000 / 2 = 2500 (payment_amount)
-    //   Discount per installment = 1000 / 2 = 500
-    //   Generated Fee per installment = (5000 - 1000) / 2 = 2000 (calculated by backend)
-    const perInstallmentAmount = totalAmount / totalInstallments; // Total amount per installment (2500 in example)
-    const perInstallmentDiscountBase = totalDiscount / totalInstallments; // Base discount per installment (500 in example)
+    // Per installment: principal and late fee split separately (e.g. 2000 fee + 500 late, 2 installments → 1000 + 250 each)
+    const perInstallmentPrincipalBase = principalRemaining / totalInstallments;
+    const perInstallmentLateBase = lateRemaining / totalInstallments;
+    const perInstallmentDiscountBase = totalDiscount / totalInstallments;
     
     // Show loading
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -2582,43 +2638,49 @@ function handleInstallmentSubmit(event) {
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Creating...';
     
-    // Create installments
-    const installmentAmount = perInstallmentAmount.toFixed(2);
     const promises = [];
     
     // Get payment method from form (default to Cash Payment)
     const paymentMethod = document.getElementById('installment_payment_method')?.value || 'Cash Payment';
     
-    // Calculate discount for each installment, ensuring total equals original discount
     let totalDiscountUsed = 0;
+    let totalPrincipalUsed = 0;
+    let totalLateUsed = 0;
     for (let i = 1; i <= totalInstallments; i++) {
+        let installmentPrincipal;
+        let installmentLate;
         let installmentDiscount;
         if (i === totalInstallments) {
-            // Last installment gets the remaining discount; clamp so validation (min:0) never fails on rounding drift
+            installmentPrincipal = Math.max(0, principalRemaining - totalPrincipalUsed).toFixed(2);
+            installmentLate = Math.max(0, lateRemaining - totalLateUsed).toFixed(2);
             installmentDiscount = Math.max(0, totalDiscount - totalDiscountUsed).toFixed(2);
         } else {
+            installmentPrincipal = perInstallmentPrincipalBase.toFixed(2);
+            installmentLate = perInstallmentLateBase.toFixed(2);
             installmentDiscount = perInstallmentDiscountBase.toFixed(2);
+            totalPrincipalUsed += parseFloat(installmentPrincipal);
+            totalLateUsed += parseFloat(installmentLate);
             totalDiscountUsed += parseFloat(installmentDiscount);
         }
         
         const installmentFormData = new FormData();
-        installmentFormData.append('_token', formData.get('_token'));
+        installmentFormData.append('_token', getCsrfToken());
         installmentFormData.append('student_code', studentCode);
         installmentFormData.append('payment_title', `${feeTitle}/${i}`);
-        installmentFormData.append('payment_amount', installmentAmount);
-        installmentFormData.append('discount', installmentDiscount); // Divide discount proportionally across installments (500 per installment in example)
+        installmentFormData.append('payment_amount', installmentPrincipal);
+        installmentFormData.append('late_fee', installmentLate);
+        installmentFormData.append('total_installments', String(totalInstallments));
+        installmentFormData.append('discount', installmentDiscount);
         installmentFormData.append('method', paymentMethod); // Use selected payment method instead of 'Generated'
-        installmentFormData.append('payment_date', new Date().toISOString().split('T')[0]);
+        installmentFormData.append('payment_date', localTodayDateString());
         installmentFormData.append('sms_notification', 'Yes');
         
         promises.push(
             fetch(form.action, {
                 method: 'POST',
                 body: installmentFormData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                }
+                headers: ajaxPostHeaders(),
+                credentials: 'same-origin',
             })
         );
     }

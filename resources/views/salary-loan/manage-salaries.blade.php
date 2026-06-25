@@ -27,15 +27,23 @@
             <!-- Table Toolbar -->
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3 p-3 rounded-8" style="background-color: #f8f9fa; border: 1px solid #e9ecef;">
                 <!-- Left Side -->
-                <div class="d-flex align-items-center gap-3 flex-wrap">
+                <form method="GET" action="{{ route('salary-loan.manage-salaries') }}" id="salaryFiltersForm" class="d-flex align-items-center gap-3 flex-wrap">
+                    @if(request('search'))
+                        <input type="hidden" name="search" value="{{ request('search') }}">
+                    @endif
                     <div class="d-flex align-items-center gap-2">
                         <label for="campusFilter" class="mb-0 fs-13 fw-medium text-dark">Campus:</label>
-                        <select id="campusFilter" class="form-select form-select-sm" style="width: auto; min-width: 150px;" onchange="filterByCampus(this.value)">
+                        <select name="campus" id="campusFilter" class="form-select form-select-sm" style="width: auto; min-width: 150px;" onchange="this.form.submit()">
                             <option value="">All Campuses</option>
                             @if(isset($campuses) && $campuses->count() > 0)
                                 @foreach($campuses as $campus)
-                                    <option value="{{ $campus->campus_name ?? $campus }}" {{ request('campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
-                                        {{ $campus->campus_name ?? $campus }}
+                                    @php
+                                        $campusValue = $campus->filter_value ?? $campus->campus_name ?? $campus;
+                                        $campusLabel = $campus->campus_name ?? $campus;
+                                        $isSelected = !empty($selectedCampus) && strcasecmp(trim((string) $selectedCampus), trim((string) $campusValue)) === 0;
+                                    @endphp
+                                    <option value="{{ $campusValue }}" {{ $isSelected ? 'selected' : '' }}>
+                                        {{ $campusLabel }}
                                     </option>
                                 @endforeach
                             @endif
@@ -43,14 +51,14 @@
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <label for="entriesPerPage" class="mb-0 fs-13 fw-medium text-dark">Show:</label>
-                        <select id="entriesPerPage" class="form-select form-select-sm" style="width: auto; min-width: 70px;" onchange="updateEntriesPerPage(this.value)">
+                        <select name="per_page" id="entriesPerPage" class="form-select form-select-sm" style="width: auto; min-width: 70px;" onchange="this.form.submit()">
                             <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
                             <option value="25" {{ request('per_page', 25) == 25 ? 'selected' : '' }}>25</option>
                             <option value="50" {{ request('per_page', 50) == 50 ? 'selected' : '' }}>50</option>
                             <option value="100" {{ request('per_page', 100) == 100 ? 'selected' : '' }}>100</option>
                         </select>
                     </div>
-                </div>
+                </form>
 
                 <!-- Right Side -->
                 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -141,6 +149,7 @@
                                 <th>#</th>
                                 <th>Photo</th>
                                 <th>Name</th>
+                                <th>Campus</th>
                                 <th>Salary Month</th>
                                 <th>Present</th>
                                 <th>Absent</th>
@@ -169,6 +178,9 @@
                                         </td>
                                         <td>
                                             <strong class="text-primary">{{ $salary->staff->name ?? 'N/A' }}</strong>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-dark">{{ $salary->staff->campus ?? 'N/A' }}</span>
                                         </td>
                                         <td>
                                             <span class="badge bg-info text-white">{{ $salary->salary_month }} {{ $salary->year }}</span>
@@ -207,20 +219,20 @@
                                                         <strong style="color: #28a745; font-size: 10px;">
                                                             {{ number_format($salary->basic, 2) }} × {{ number_format($totalHours, 2) }}
                                                             <br>
-                                                            = {{ number_format($salary->salary_generated, 2) }}
+                                                            = {{ number_format($salary->grossSalaryGenerated(), 2) }}
                                                         </strong>
                                                     </div>
                                                 </div>
                                             @endif
                                         </td>
                                         <td>
-                                            <strong class="text-success">{{ number_format($salary->salary_generated, 2) }}</strong>
+                                            <strong class="text-success">{{ number_format($salary->grossSalaryGenerated(), 2) }}</strong>
                                         </td>
                                         <td>
                                             @php
                                                 $displayAmountPaid = (float) ($salary->amount_paid ?? 0);
                                                 if ($displayAmountPaid <= 0 && $salary->status === 'Paid') {
-                                                    $displayAmountPaid = max(0, (float) ($salary->salary_generated ?? 0) + (float) ($salary->bonus_amount ?? 0) - (float) ($salary->deduction_amount ?? 0) - (float) ($salary->loan_repayment ?? 0));
+                                                    $displayAmountPaid = max(0, (float) ($salary->salary_generated ?? 0) + (float) ($salary->bonus_amount ?? 0) - (float) ($salary->deduction_amount ?? 0));
                                                 }
                                             @endphp
                                             <strong class="text-info">{{ number_format($displayAmountPaid, 2) }}</strong>
@@ -266,7 +278,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="13" class="text-center text-muted py-5">
+                                        <td colspan="14" class="text-center text-muted py-5">
                                             <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                             <p class="mt-2 mb-0">No salaries found.</p>
                                         </td>
@@ -274,7 +286,7 @@
                                 @endforelse
                             @else
                                 <tr>
-                                    <td colspan="13" class="text-center text-muted py-5">
+                                    <td colspan="14" class="text-center text-muted py-5">
                                         <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
                                         <p class="mt-2 mb-0">No salaries found.</p>
                                     </td>
@@ -440,7 +452,7 @@
 
                         <!-- Generated Salary (editable; loan/bonus/deduction do not change this value automatically) -->
                         <div class="col-md-6">
-                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Generated Salary</label>
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Generated Salary <small class="text-muted">(before loan)</small></label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">currency_rupee</span>
@@ -463,12 +475,12 @@
 
                         <!-- Loan Repayment -->
                         <div class="col-md-6">
-                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Loan Repayment</label>
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Loan Repayment <small class="text-muted">(auto from approved loan)</small></label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">account_balance</span>
                                 </span>
-                                <input type="number" class="form-control" id="payment_loan_repayment" name="loan_repayment" step="0.01" min="0" value="0" style="height: 38px;" oninput="syncPaymentAmountPaid()">
+                                <input type="number" class="form-control" id="payment_loan_repayment" name="loan_repayment" step="0.01" min="0" value="0" readonly style="background-color: #f8f9fa; height: 38px;">
                             </div>
                         </div>
 
@@ -864,8 +876,25 @@
 </style>
 
 <script>
-// Filter by Campus
+function localTodayDateString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+// Filter by Campus (fallback for older browsers)
 function filterByCampus(campus) {
+    const form = document.getElementById('salaryFiltersForm');
+    if (form) {
+        const campusField = form.querySelector('[name="campus"]');
+        if (campusField) {
+            campusField.value = campus;
+        }
+        form.submit();
+        return;
+    }
+
     const url = new URL(window.location.href);
     
     if (campus) {
@@ -928,6 +957,16 @@ function clearSearch() {
 
 // Update entries per page
 function updateEntriesPerPage(value) {
+    const form = document.getElementById('salaryFiltersForm');
+    if (form) {
+        const perPageField = form.querySelector('[name="per_page"]');
+        if (perPageField) {
+            perPageField.value = value;
+        }
+        form.submit();
+        return;
+    }
+
     const url = new URL(window.location.href);
     url.searchParams.set('per_page', value);
     url.searchParams.set('page', '1');
@@ -969,14 +1008,18 @@ function syncPaymentAmountPaid() {
 
 // Open Payment Modal
 function openPaymentModal(salaryId) {
-    // Fetch salary data
-    fetch(`{{ url('/salary-loan/manage-salaries') }}/${salaryId}`, {
+    fetch(`{{ route('salary-loan.manage-salaries.show', ['salary' => '__ID__']) }}`.replace('__ID__', salaryId), {
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Failed to load salary data (${response.status})`);
+        }
+        return response.json();
+    })
     .then(data => {
         // Set form action
         document.getElementById('paymentForm').action = `{{ url('/salary-loan/manage-salaries') }}/${salaryId}/payment`;
@@ -1022,7 +1065,7 @@ function openPaymentModal(salaryId) {
         document.getElementById('payment_deduction_amount').value = 0;
         document.getElementById('payment_method').value = '';
         document.getElementById('payment_fully_paid').value = data.status === 'Paid' ? '1' : '0';
-        document.getElementById('payment_date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('payment_date').value = localTodayDateString();
         document.getElementById('payment_notify_employee').value = '0';
         
         // Populate fees fields dynamically
@@ -1045,13 +1088,15 @@ function openPaymentModal(salaryId) {
         }
         
         // Show modal
-        const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+        const paymentModalEl = document.getElementById('paymentModal');
+        const paymentModal = bootstrap.Modal.getOrCreateInstance(paymentModalEl);
         paymentModal.show();
         
         // Reset readonly state when modal is hidden (for next time)
         document.getElementById('paymentModal').addEventListener('hidden.bs.modal', function() {
             const amountPaidInput = document.getElementById('payment_amount_paid');
             const amountPaidNote = document.getElementById('amount_paid_note');
+            const loanInput = document.getElementById('payment_loan_repayment');
             amountPaidInput.removeAttribute('readonly');
             amountPaidInput.style.backgroundColor = '';
             amountPaidInput.style.cursor = '';
@@ -1066,14 +1111,18 @@ function openPaymentModal(salaryId) {
 
 // Open Edit Modal
 function openEditModal(salaryId) {
-    // Fetch salary data
-    fetch(`{{ url('/salary-loan/manage-salaries') }}/${salaryId}`, {
+    fetch(`{{ route('salary-loan.manage-salaries.show', ['salary' => '__ID__']) }}`.replace('__ID__', salaryId), {
         headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Failed to load salary data (${response.status})`);
+        }
+        return response.json();
+    })
     .then(data => {
         // Set form action
         document.getElementById('editForm').action = `{{ url('/salary-loan/manage-salaries') }}/${salaryId}`;
@@ -1083,7 +1132,7 @@ function openEditModal(salaryId) {
         document.getElementById('edit_present').value = data.present || 0;
         document.getElementById('edit_absent').value = data.absent || 0;
         document.getElementById('edit_late').value = data.late || 0;
-        document.getElementById('edit_salary_generated').value = parseFloat(data.salary_generated || 0).toFixed(2);
+        document.getElementById('edit_salary_generated').value = parseFloat((data.gross_salary_generated ?? data.salary_generated) || 0).toFixed(2);
         
         // Store original values for calculation
         const editModal = document.getElementById('editModal');
@@ -1096,7 +1145,7 @@ function openEditModal(salaryId) {
         editModal.setAttribute('data-month', data.salary_month || '');
         
         // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('editModal'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal'));
         modal.show();
     })
     .catch(error => {

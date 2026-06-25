@@ -169,6 +169,8 @@
 <script>
 const campusSelect = document.getElementById('campus');
 const classSelect = document.getElementById('class');
+const selectedClass = @json(request('class'));
+const selectedSection = @json(request('section'));
 
 function resetClassAndSection() {
     classSelect.innerHTML = '<option value="">Select Campus First</option>';
@@ -178,73 +180,82 @@ function resetClassAndSection() {
     sectionSelect.disabled = true;
 }
 
-function loadClassesForCampus() {
+function populateClassOptions(classes, selectedValue) {
+    classSelect.innerHTML = '<option value="">All Classes</option>';
+    (classes || []).forEach(className => {
+        const option = document.createElement('option');
+        option.value = className;
+        option.textContent = className;
+        if (selectedValue && selectedValue === className) {
+            option.selected = true;
+        }
+        classSelect.appendChild(option);
+    });
+    classSelect.disabled = false;
+}
+
+function loadClassesForCampus(preserveSelection) {
     const campus = campusSelect.value;
     resetClassAndSection();
-
     if (!campus) {
         return;
     }
 
     classSelect.innerHTML = '<option value="">Loading...</option>';
-    fetch(`{{ route('accounting.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+    fetch(`{{ route('accounting.fee-voucher.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
         .then(response => response.json())
         .then(data => {
-            classSelect.innerHTML = '<option value="">All Classes</option>';
-            if (data.classes && data.classes.length > 0) {
-                data.classes.forEach(className => {
-                    const option = document.createElement('option');
-                    option.value = className;
-                    option.textContent = className;
-                    classSelect.appendChild(option);
-                });
-                classSelect.disabled = false;
+            populateClassOptions(data.classes || [], preserveSelection ? selectedClass : '');
+            if (preserveSelection && selectedClass) {
+                classSelect.dispatchEvent(new Event('change'));
             }
         })
-        .catch(error => {
-            console.error('Error loading classes:', error);
-            classSelect.innerHTML = '<option value="">All Classes</option>';
-            classSelect.disabled = false;
+        .catch(() => {
+            populateClassOptions([], preserveSelection ? selectedClass : '');
         });
 }
 
 if (campusSelect) {
-    campusSelect.addEventListener('change', loadClassesForCampus);
+    campusSelect.addEventListener('change', function () {
+        loadClassesForCampus(false);
+    });
+
+    if (campusSelect.value && classSelect && classSelect.disabled) {
+        loadClassesForCampus(true);
+    }
 }
 
-// Load sections when class is selected
 document.getElementById('class').addEventListener('change', function() {
     const classValue = this.value;
     const sectionSelect = document.getElementById('section');
     const campus = campusSelect ? campusSelect.value : '';
-    
-    // Clear existing options except "All Sections"
+
     sectionSelect.innerHTML = '<option value="">All Sections</option>';
-    
+
     if (classValue) {
-        // Show loading state
         sectionSelect.disabled = true;
         sectionSelect.innerHTML = '<option value="">Loading...</option>';
-        
-        // Fetch sections via AJAX
+
         fetch(`{{ route('accounting.fee-voucher.get-sections-by-class') }}?class=${encodeURIComponent(classValue)}&campus=${encodeURIComponent(campus)}`)
             .then(response => response.json())
             .then(data => {
                 sectionSelect.innerHTML = '<option value="">All Sections</option>';
-                
+
                 if (data.sections && data.sections.length > 0) {
                     data.sections.forEach(section => {
                         const option = document.createElement('option');
                         option.value = section.name;
                         option.textContent = section.name;
+                        if (selectedSection && selectedSection === section.name) {
+                            option.selected = true;
+                        }
                         sectionSelect.appendChild(option);
                     });
                 }
-                
+
                 sectionSelect.disabled = false;
             })
-            .catch(error => {
-                console.error('Error loading sections:', error);
+            .catch(() => {
                 sectionSelect.innerHTML = '<option value="">All Sections</option>';
                 sectionSelect.disabled = false;
             });
@@ -252,11 +263,5 @@ document.getElementById('class').addEventListener('change', function() {
         sectionSelect.disabled = false;
     }
 });
-
-function generateVoucher(studentId) {
-    // Add voucher generation logic here
-    alert('Generate voucher for student ID: ' + studentId);
-    // You can redirect to a voucher generation page or open a modal
-}
 </script>
 @endsection

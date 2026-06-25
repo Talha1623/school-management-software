@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
 
 class ParentAccount extends Authenticatable
@@ -13,6 +15,30 @@ class ParentAccount extends Authenticatable
     use HasFactory, Notifiable, HasApiTokens;
 
     protected $table = 'parent_accounts';
+
+    protected static function booted(): void
+    {
+        static::saving(function (ParentAccount $parent) {
+            self::ensurePlainPasswordColumn();
+
+            if (!Schema::hasColumn('parent_accounts', 'plain_password')) {
+                unset($parent->attributes['plain_password']);
+            }
+        });
+    }
+
+    public static function ensurePlainPasswordColumn(): void
+    {
+        if (Schema::hasColumn('parent_accounts', 'plain_password')) {
+            return;
+        }
+
+        Schema::table('parent_accounts', function (Blueprint $table) {
+            if (!Schema::hasColumn('parent_accounts', 'plain_password')) {
+                $table->string('plain_password', 255)->nullable();
+            }
+        });
+    }
 
     protected $fillable = [
         'name',

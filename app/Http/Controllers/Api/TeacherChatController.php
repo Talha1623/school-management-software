@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Storage;
 class TeacherChatController extends Controller
 {
     /**
-     * Directory for chat: super admin and students (each with parent info).
+     * Directory for chat: super admin, colleague teachers, and students (each with parent info).
      *
      * GET /api/teacher/chat/contacts
      */
@@ -47,11 +47,26 @@ class TeacherChatController extends Controller
         $superAdmin = AdminRole::where('super_admin', true)->first() ?? AdminRole::orderBy('id')->first();
         $superAdminPayload = $superAdmin ? $this->formatAdminContactRow($superAdmin) : null;
 
+        $teachersQuery = Staff::query()
+            ->where('id', '!=', $teacher->id)
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhereRaw('LOWER(TRIM(status)) = ?', ['active']);
+            })
+            ->orderBy('name');
+
+        if ($teacher->campus) {
+            $teachersQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($teacher->campus))]);
+        }
+
+        $teachersPayload = $teachersQuery->get()->map(fn (Staff $s) => $this->formatTeacherContactRow($s));
+
         return response()->json([
             'success' => true,
             'message' => 'Chat contacts loaded successfully.',
             'data' => [
                 'super_admin' => $superAdminPayload,
+                'teachers' => $teachersPayload,
                 'students' => $studentsPayload,
                 'students_truncated' => $students->count() >= $limit,
                 'limit' => $limit,
@@ -267,29 +282,15 @@ class TeacherChatController extends Controller
                     'peer_id' => $numericId,
                 ],
             ];
-        } elseif ($type === 'student') {
-            $messagesQuery = [
-                'peer_type' => 'student',
-                'peer_id' => $numericId,
-                'send' => [
-                    'method' => 'POST',
-                    'endpoint' => '/api/teacher/chat/messages',
-                    'peer_type' => 'student',
-                    'peer_id' => $numericId,
-                    'student_id' => $numericId,
-                ],
-            ];
         } elseif ($type === 'parent') {
             $messagesQuery = [
                 'peer_type' => 'parent',
                 'peer_id' => $numericId,
-                'send' => [
-                    'method' => 'POST',
-                    'endpoint' => '/api/teacher/chat/messages',
-                    'peer_type' => 'parent',
-                    'peer_id' => $numericId,
-                    'parent_id' => $numericId,
-                ],
+            ];
+        } elseif ($type === 'student') {
+            $messagesQuery = [
+                'peer_type' => 'student',
+                'peer_id' => $numericId,
             ];
         }
 
@@ -318,8 +319,6 @@ class TeacherChatController extends Controller
                     'my_message_align' => 'right',
                     'peer_message_align' => 'left',
                     'check_field' => 'is_mine',
-                    'fallback_fields' => ['isMine', 'show_on_right', 'align', 'direction'],
-                    'contact_id' => $numericId,
                 ],
                 'contact' => $contact,
                 'messages_query' => $messagesQuery,
@@ -468,17 +467,7 @@ class TeacherChatController extends Controller
             $responsePeerId = $peerIdForResponse;
         }
 
-        $contactTypeForFormat = in_array($peerType, ['admin', 'teacher', 'parent', 'student'], true)
-            ? $peerType
-            : null;
-        $contactIdForFormat = $responsePeerId;
-
-        $data = $messages->map(fn (Message $message) => $this->formatMessageRow(
-            $message,
-            $teacher,
-            $contactTypeForFormat,
-            $contactIdForFormat
-        ));
+        $data = $messages->map(fn (Message $message) => $this->formatMessageRow($message, $teacher));
 
         return response()->json([
             'success' => true,
@@ -496,8 +485,6 @@ class TeacherChatController extends Controller
                     'my_message_align' => 'right',
                     'peer_message_align' => 'left',
                     'check_field' => 'is_mine',
-                    'fallback_fields' => ['isMine', 'show_on_right', 'align', 'direction'],
-                    'contact_id' => $responsePeerId,
                 ],
                 'messages' => $data,
                 'unread_count' => $unreadCount,
@@ -538,25 +525,13 @@ class TeacherChatController extends Controller
         }
 
         if (!$request->filled('peer_id')) {
-            if ($request->filled('student_id')) {
-                $request->merge([
-                    'peer_id' => $request->input('student_id'),
-                    'peer_type' => $request->input('peer_type', 'student'),
-                ]);
-            } elseif ($request->filled('parent_id')) {
-                $request->merge([
-                    'peer_id' => $request->input('parent_id'),
-                    'peer_type' => $request->input('peer_type', 'parent'),
-                ]);
-            } else {
-                foreach (['staff_id', 'teacher_id', 'to_staff_id', 'recipient_id', 'receiver_id'] as $alias) {
-                    if ($request->filled($alias)) {
-                        $request->merge([
-                            'peer_id' => $request->input($alias),
-                            'peer_type' => $request->input('peer_type', 'teacher'),
-                        ]);
-                        break;
-                    }
+            foreach (['staff_id', 'teacher_id', 'to_staff_id', 'recipient_id', 'receiver_id'] as $alias) {
+                if ($request->filled($alias)) {
+                    $request->merge([
+                        'peer_id' => $request->input($alias),
+                        'peer_type' => $request->input('peer_type', 'teacher'),
+                    ]);
+                    break;
                 }
             }
         }
@@ -696,7 +671,7 @@ class TeacherChatController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Message sent successfully.',
-            'data' => $this->formatMessageRow($message, $teacher, $toType, $toId),
+            'data' => $this->formatMessageRow($message, $teacher),
         ], 201);
     }
 
@@ -969,7 +944,7 @@ class TeacherChatController extends Controller
             ->values();
 
         return [
-            'messages' => $messages->map(fn (Message $m) => $this->formatMessageRow($m, $teacher, $type, $numericId))->values()->all(),
+            'messages' => $messages->map(fn (Message $m) => $this->formatMessageRow($m, $teacher))->values()->all(),
             'unread_count' => $unreadCount,
             'messages_limit' => $limit,
             'messages_truncated' => $totalCount > $limit,
@@ -1118,12 +1093,8 @@ class TeacherChatController extends Controller
         })->whereNull('read_at');
     }
 
-    private function formatMessageRow(
-        Message $message,
-        ?Staff $viewer = null,
-        ?string $contactType = null,
-        ?int $contactId = null,
-    ): array {
+    private function formatMessageRow(Message $message, ?Staff $viewer = null): array
+    {
         $row = [
             'id' => $message->id,
             'from_type' => $message->from_type,
@@ -1143,11 +1114,7 @@ class TeacherChatController extends Controller
 
         if ($viewer) {
             $viewerId = (int) $viewer->id;
-            $fromType = strtolower(trim((string) $message->from_type));
-            $isMine = in_array($fromType, ['teacher', 'staff'], true)
-                && (int) $message->from_id === $viewerId;
-
-            $row['viewer_staff_id'] = $viewerId;
+            $isMine = $message->from_type === 'teacher' && (int) $message->from_id === $viewerId;
             $row['is_mine'] = $isMine;
             $row['isMine'] = $isMine;
             $row['is_sent_by_me'] = $isMine;
@@ -1158,8 +1125,6 @@ class TeacherChatController extends Controller
             $row['display_as'] = $isMine ? 'sent' : 'received';
             $row['align'] = $isMine ? 'right' : 'left';
             $row['bubble_align'] = $isMine ? 'end' : 'start';
-            $row['show_on_right'] = $isMine;
-            $row['show_on_left'] = !$isMine;
             $row['sender'] = [
                 'type' => $message->from_type,
                 'id' => (int) $message->from_id,
@@ -1168,33 +1133,6 @@ class TeacherChatController extends Controller
                 'type' => $message->to_type,
                 'id' => (int) $message->to_id,
             ];
-
-            if ($contactType && $contactId) {
-                $row['contact_peer'] = [
-                    'type' => $contactType,
-                    'id' => $contactId,
-                ];
-                $row['is_from_contact'] = !$isMine;
-                $row['isFromContact'] = !$isMine;
-                $row['is_from_admin'] = $fromType === 'admin';
-                $row['isFromAdmin'] = $fromType === 'admin';
-                $row['message_belongs_to'] = $isMine ? 'viewer' : match ($fromType) {
-                    'student' => 'student',
-                    'parent' => 'parent',
-                    'admin' => 'admin',
-                    'teacher', 'staff' => 'staff',
-                    default => 'other',
-                };
-
-                // Legacy mobile builds often treat from_id == viewer_staff_id as "my message" (right).
-                // Only remap outgoing messages; keep real sender id for admin/parent/student incoming.
-                $row['db_from_id'] = (int) $message->from_id;
-                $row['db_to_id'] = (int) $message->to_id;
-                if ($isMine) {
-                    $row['from_id'] = $viewerId;
-                    $row['to_id'] = $contactId;
-                }
-            }
         }
 
         return $row;

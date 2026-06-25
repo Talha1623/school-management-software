@@ -11,6 +11,7 @@ use App\Models\ManagementExpense;
 use App\Models\GeneralSetting;
 use App\Models\FeeType;
 use App\Services\FeePaymentWebTables;
+use App\Services\FeeVoucherBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
@@ -783,6 +784,11 @@ class AccountantController extends Controller
         return response()->json([
             'success' => true,
             'student_code' => $studentCode,
+            'totals' => [
+                'fee' => round((float) ($history['total_amount_paid'] ?? 0), 2),
+                'late_fee' => round((float) ($history['total_late_fee'] ?? 0), 2),
+                'discount' => round((float) ($history['total_discount'] ?? 0), 2),
+            ],
             'payments' => collect($history['rows'] ?? [])->map(function (array $row) {
                 return [
                     'id' => $row['id'] ?? null,
@@ -1088,7 +1094,7 @@ class AccountantController extends Controller
                 'campus' => $student->campus ?? $validated['campus'],
                 'student_code' => $student->student_code,
                 'payment_title' => $paymentTitle,
-                'payment_amount' => (float) $student->transport_fare,
+                'payment_amount' => (float) ($student->resolvedTransportFare() ?? 0),
                 'discount' => 0,
                 'method' => 'Generated',
                 'payment_date' => $dueDate->format('Y-m-d'),
@@ -1150,7 +1156,7 @@ class AccountantController extends Controller
             ->get()
             ->each(function (AdminRole $admin) use ($accountant, $text) {
                 \App\Models\Message::create([
-                    'from_type' => 'accountant',
+                    'from_type' => 'accountant_notification',
                     'from_id' => $accountant->id,
                     'to_type' => 'admin',
                     'to_id' => $admin->id,
@@ -2162,100 +2168,17 @@ class AccountantController extends Controller
      */
     public function studentVouchers(Request $request): View
     {
-        // Get default campus from logged-in accountant
         $defaultCampus = null;
         if (auth()->guard('accountant')->check()) {
             $defaultCampus = auth()->guard('accountant')->user()->campus;
         }
-        
-        $filterCampus = $request->get('campus', $defaultCampus);
-        
-        // Get campuses - if filterCampus is set, show only that campus
-        if (!empty($filterCampus)) {
-            $campuses = \App\Models\Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower(trim($filterCampus))])
-                ->orderBy('campus_name', 'asc')
-                ->get();
-            
-            if ($campuses->isEmpty()) {
-                // If not found in Campus table, create a collection with the campus name
-                $campuses = collect();
-                $campuses->push((object)['campus_name' => $filterCampus]);
-            }
-        } else {
-            // Get all campuses if no filter
-            $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
-            if ($campuses->isEmpty()) {
-                $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
-                    ->distinct()
-                    ->pluck('campus')
-                    ->sort()
-                    ->values();
-                $campusesFromSections = \App\Models\Section::whereNotNull('campus')
-                    ->distinct()
-                    ->pluck('campus')
-                    ->sort()
-                    ->values();
-                $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-                $campuses = collect();
-                foreach ($allCampuses as $campusName) {
-                    $campuses->push((object)['campus_name' => $campusName]);
-                }
-            }
-        }
 
-        // Get classes (campus-wise)
-        $classes = collect();
-        if (!empty($filterCampus)) {
-            $classes = \App\Models\ClassModel::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
-                ->orderBy('class_name', 'asc')
-                ->get();
-        }
-        
-        // Get sections (will be filtered by class via AJAX)
-        $sections = collect();
-        if ($request->filled('class')) {
-            $sectionsQuery = \App\Models\Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
-            if (!empty($filterCampus)) {
-                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-            }
-            $sections = $sectionsQuery
-                ->orderBy('name', 'asc')
-                ->get();
-        }
-        
-        $query = \App\Models\Student::query();
-        $currentYear = date('Y');
-        $vouchersFor = $request->get('vouchers_for');
-        $pendingPaymentsQuery = \App\Models\StudentPayment::where('method', 'Generated')
-            ->whereNotNull('student_code')
-            ->where('student_code', '!=', '');
-        if ($vouchersFor) {
-            $paymentTitle = "Monthly Fee - {$vouchersFor} {$currentYear}";
-            $pendingPaymentsQuery->where('payment_title', $paymentTitle);
-        }
-        $pendingStudentCodes = $pendingPaymentsQuery->distinct()->pluck('student_code');
-        if ($pendingStudentCodes->isNotEmpty()) {
-            $query->whereIn('student_code', $pendingStudentCodes);
-        } else {
-            $query->whereRaw('1 = 0');
-        }
-        
-        // Apply filters
-        if (!empty($filterCampus)) {
-            $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-        }
-
-        if ($request->filled('class')) {
-            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($request->class))]);
-        }
-        
-        if ($request->filled('section')) {
-            $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($request->section))]);
-        }
-        
-        $students = $query->orderBy('student_name')->paginate(20)->withQueryString();
-        
-        return view('accountant.fee-voucher.student', compact('students', 'classes', 'sections', 'campuses', 'filterCampus'));
+        return app(StudentVoucherController::class)->index(
+            $request,
+            app(FeeVoucherBuilder::class),
+            'accountant.fee-voucher.student',
+            $defaultCampus
+        );
     }
 
     /**
@@ -2263,77 +2186,17 @@ class AccountantController extends Controller
      */
     public function familyVouchers(Request $request): View
     {
-        $copyTypes = [
-            'three_copies' => 'Three Copy',
-            'two_copies' => 'Two Copy',
-            'one_copy' => 'One Copy',
-        ];
-        $months = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December',
-        ];
         $defaultCampus = null;
         if (auth()->guard('accountant')->check()) {
             $defaultCampus = auth()->guard('accountant')->user()->campus;
         }
 
-        $filterCampus = $request->get('campus');
-        if ($defaultCampus) {
-            $filterCampus = $defaultCampus;
-        }
-
-        // Get campuses from Campus model
-        $campuses = \App\Models\Campus::orderBy('campus_name', 'asc')->get();
-        
-        // If no campuses found, get from classes or sections
-        if ($campuses->isEmpty()) {
-            $campusesFromClasses = \App\Models\ClassModel::whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
-            
-            $campusesFromSections = \App\Models\Section::whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
-            
-            $allCampuses = $campusesFromClasses->merge($campusesFromSections)->unique()->sort()->values();
-            
-            // Convert to collection of objects with campus_name property
-            $campuses = collect();
-            foreach ($allCampuses as $campusName) {
-                $campuses->push((object)['campus_name' => $campusName]);
-            }
-        }
-
-        if ($defaultCampus) {
-            $campuses = $campuses->filter(function ($campus) use ($defaultCampus) {
-                return ($campus->campus_name ?? $campus) === $defaultCampus;
-            })->values();
-        }
-
-        // Group students by parent (using father_name or parent_id)
-        $query = \App\Models\Student::select(
-            \Illuminate\Support\Facades\DB::raw('COALESCE(father_name, "Unknown") as parent_name'),
-            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT student_name) as student_names'),
-            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT student_code) as student_codes'),
-            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT class) as classes'),
-            \Illuminate\Support\Facades\DB::raw('GROUP_CONCAT(DISTINCT section) as sections'),
-            \Illuminate\Support\Facades\DB::raw('MAX(campus) as campus'),
-            \Illuminate\Support\Facades\DB::raw('COUNT(*) as student_count')
-        )
-        ->groupBy('father_name');
-        
-        // Apply filters
-        if ($filterCampus) {
-            $query->where('campus', $filterCampus);
-        }
-        
-        $families = $query->orderBy('parent_name')->paginate(20)->withQueryString();
-        
-        return view('accountant.fee-voucher.family', compact('families', 'campuses', 'filterCampus', 'defaultCampus', 'copyTypes', 'months'));
+        return app(FamilyVoucherController::class)->index(
+            $request,
+            app(FeeVoucherBuilder::class),
+            'accountant.fee-voucher.family',
+            $defaultCampus
+        );
     }
 
     /**

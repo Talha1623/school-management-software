@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AdminRole;
 use App\Models\Message;
+use App\Services\ChatSmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -13,6 +14,11 @@ use Illuminate\Http\RedirectResponse;
 
 class StaffChatController extends Controller
 {
+    public function __construct(
+        private readonly ChatSmsService $chatSmsService,
+    ) {
+    }
+
     /**
      * Show chat page for teacher (staff) with assigned admin/super admin.
      */
@@ -39,18 +45,20 @@ class StaffChatController extends Controller
 
         if ($admin) {
             $messages = Message::query()
-                ->where(function ($q) use ($teacher, $admin) {
-                    $q->where('from_type', 'teacher')
-                        ->where('from_id', $teacher->id)
-                        ->where('to_type', 'admin')
-                        ->where('to_id', $admin->id);
+                ->where(function ($outer) use ($teacher, $admin) {
+                    $outer->where(function ($q) use ($teacher, $admin) {
+                        $q->where('from_type', 'teacher')
+                            ->where('from_id', $teacher->id)
+                            ->where('to_type', 'admin')
+                            ->where('to_id', $admin->id);
+                    })->orWhere(function ($q) use ($teacher, $admin) {
+                        $q->where('from_type', 'admin')
+                            ->where('from_id', $admin->id)
+                            ->where('to_type', 'teacher')
+                            ->where('to_id', $teacher->id);
+                    });
                 })
-                ->orWhere(function ($q) use ($teacher, $admin) {
-                    $q->where('from_type', 'admin')
-                        ->where('from_id', $admin->id)
-                        ->where('to_type', 'teacher')
-                        ->where('to_id', $teacher->id);
-                })
+                ->forLiveChat()
                 ->orderBy('created_at', 'asc')
                 ->get()
                 ->map(function (Message $message) {
@@ -169,7 +177,7 @@ class StaffChatController extends Controller
             }
         }
 
-        Message::create([
+        $message = Message::create([
             'from_type' => 'teacher',
             'from_id' => $teacher->id,
             'to_type' => 'admin',
@@ -179,6 +187,8 @@ class StaffChatController extends Controller
             'attachment_type' => $attachmentType,
             'read_at' => null,
         ]);
+
+        $this->chatSmsService->notifyForChatMessage($message);
 
         return redirect()
             ->route('staff.chat')

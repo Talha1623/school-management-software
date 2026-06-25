@@ -6,6 +6,7 @@ use App\Models\Staff;
 use App\Models\Campus;
 use App\Models\Section;
 use App\Models\Subject;
+use App\Services\CampusCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -123,91 +124,48 @@ class StaffManagementController extends Controller
     }
 
     /**
-     * Generate unique Employee ID based on campus (using same campus number as Student Code)
+     * Generate unique Employee ID based on campus (matches student code campus: ST3 → EMP3-001).
      */
     private function generateEmployeeId(?string $campus = null): string
     {
-        // Use the same logic as Student Code generation to get campus number
-        // This ensures Employee ID uses the same campus number as Student Code (ST1 → EMP1, ST2 → EMP2, etc.)
-        $campusNumber = '1'; // Default to 1 if no campus
-        
-        if ($campus) {
-            $campus = trim((string) $campus);
-            
-            // First, try to get code_prefix from Campus model (same as Student Code does)
-            $campusRecord = \App\Models\Campus::whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($campus)])->first();
-            
-            if ($campusRecord && !empty($campusRecord->code_prefix)) {
-                // Extract number from code_prefix (e.g., ST1 → 1, ST2 → 2)
-                if (preg_match('/ST(\d+)/i', $campusRecord->code_prefix, $matches)) {
-                    $campusNumber = $matches[1];
-                } elseif (preg_match('/(\d+)/', $campusRecord->code_prefix, $matches)) {
-                    $campusNumber = $matches[1];
-                }
-            } else {
-                // Fallback: Extract number from campus name (handles: campus1, Campus1, Campus 1, etc.)
-                if (preg_match('/(\d+)/', $campus, $matches)) {
-                    $campusNumber = $matches[1];
-                } else {
-                    // If no number found, use first letter or default to 1
-                    $campusLower = strtolower(trim($campus));
-                    if (strpos($campusLower, 'main') !== false || strpos($campusLower, 'primary') !== false) {
-                        $campusNumber = '1';
-                    } elseif (strpos($campusLower, 'secondary') !== false || strpos($campusLower, 'branch') !== false) {
-                        $campusNumber = '2';
-                    } else {
-                        // Use first character as number (A=1, B=2, etc.) or default to 1
-                        $firstChar = strtoupper(substr($campus, 0, 1));
-                        if (is_numeric($firstChar)) {
-                            $campusNumber = $firstChar;
-                        } else {
-                            $campusNumber = ord($firstChar) - ord('A') + 1;
-                            if ($campusNumber < 1 || $campusNumber > 9) {
-                                $campusNumber = '1';
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Get the last employee ID for this campus
-        $prefix = 'EMP' . $campusNumber . '-';
-        $lastStaff = Staff::whereNotNull('emp_id')
-            ->where('emp_id', 'like', $prefix . '%')
-            ->orderByRaw('CAST(SUBSTRING(emp_id, ' . (strlen($prefix) + 1) . ') AS UNSIGNED) DESC')
-            ->first();
-
-        if ($lastStaff && $lastStaff->emp_id) {
-            // Extract the number part after "EMP{campusNumber}-" and increment
-            $lastNumber = (int) substr($lastStaff->emp_id, strlen($prefix));
-            $newNumber = $lastNumber + 1;
-        } else {
-            // Start from 1 if no employee ID exists for this campus
-            $newNumber = 1;
-        }
-
-        // Format as EMP1-001, EMP2-001, etc. (matching Student Code format ST1-001, ST2-001, etc.)
-        return 'EMP' . $campusNumber . '-' . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
+        return app(CampusCodeService::class)->generateNextEmployeeId($campus);
     }
 
     /**
      * Get next Employee ID (for AJAX request)
      */
-    public function getNextEmployeeId(Request $request)
+    public function getNextEmployeeId(Request $request): JsonResponse
     {
-        // Check if user is super admin
-        if (!Auth::guard('admin')->check()) {
+        if (! Auth::guard('admin')->check()) {
             return response()->json(['error' => 'Access denied. Please login.'], 403);
         }
 
-        $admin = Auth::guard('admin')->user();
-        if (!$admin || !$admin->isSuperAdmin()) {
-            return response()->json(['error' => 'Access denied. Super Admin access required.'], 403);
+        $campus = trim((string) $request->input('campus', ''));
+        if ($campus === '') {
+            return response()->json([
+                'emp_id' => '',
+                'message' => 'Please select a campus first.',
+            ]);
         }
 
-        $campus = $request->input('campus');
-        return response()->json(['emp_id' => $this->generateEmployeeId($campus)]);
+        try {
+            $service = app(CampusCodeService::class);
+
+            return response()->json([
+                'emp_id' => $service->generateNextEmployeeId($campus),
+                'prefix' => $service->employeePrefixForCampus($campus),
+                'campus' => $campus,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('getNextEmployeeId failed: '.$e->getMessage(), [
+                'campus' => $campus,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'error' => 'Could not generate Employee ID. Please try again.',
+            ], 500);
+        }
     }
 
     /**
@@ -232,7 +190,7 @@ class StaffManagementController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'father_husband_name' => ['nullable', 'string', 'max:255'],
-            'campus' => ['nullable', 'string', 'max:255'],
+            'campus' => ['required', 'string', 'max:255'],
             'designation' => ['nullable', 'string', 'max:255'],
             'gender' => ['nullable', 'string', 'in:Male,Female,Other'],
             'emp_id' => ['nullable', 'string', 'max:255'],

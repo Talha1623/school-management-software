@@ -629,9 +629,10 @@
                             </li>
                             <li class="menu-item">
                                 <a href="{{ route('attendance.all-reports') }}" class="menu-link {{ request()->routeIs('attendance.all-reports') ? 'active' : '' }}">
-                                    All Attendance
+                                Attendance Report
                                 </a>
                             </li>
+                            
                         </ul>
                     </li>
                     <li class="menu-item">

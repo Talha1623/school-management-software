@@ -177,10 +177,10 @@
     </button>
     
     <div class="print-header">
-        <h2>{{ config('app.name', 'ICMS') }}</h2>
+        <h2>{{ $settings->school_name ?? 'School Name' }}</h2>
         <h3>Transport Passes</h3>
-        <p>{{ config('app.address', 'Defence View') }}</p>
-        <p>Phone: {{ config('app.phone', '+923316074246') }} | Email: {{ config('app.email', 'arainabdurrehman3@gmail.com') }}</p>
+        <p>{{ $settings->address ?? '' }}</p>
+        <p>Phone: {{ $settings->school_phone ?? '' }} | Email: {{ $settings->school_email ?? '' }}</p>
         <p>Generated: {{ date('d-m-Y H:i:s') }}</p>
     </div>
     
@@ -191,7 +191,7 @@
             <div class="pass-card">
                 <div class="pass-header">
                     <h4>TRANSPORT PASS</h4>
-                    <p>{{ config('app.name', 'ICMS') }}</p>
+                    <p>{{ $settings->school_name ?? 'School Name' }}</p>
                 </div>
                 
                 <div class="pass-content">

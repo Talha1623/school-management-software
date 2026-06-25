@@ -801,6 +801,14 @@
 </style>
 
 <script>
+function localTodayDateString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // Reset form when opening modal for new expense
 function resetForm() {
     document.getElementById('expenseForm').reset();
@@ -815,8 +823,7 @@ function resetForm() {
         Save Expense
     `;
     // Set today's date as default
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('date').value = today;
+    document.getElementById('date').value = localTodayDateString();
     // Reset image previews
     document.getElementById('imagePreview').style.display = 'none';
     document.getElementById('existingImage').style.display = 'none';
@@ -1009,8 +1016,7 @@ function printTable() {
 document.addEventListener('DOMContentLoaded', function() {
     const dateInput = document.getElementById('date');
     if (dateInput && !dateInput.value) {
-        const today = new Date().toISOString().split('T')[0];
-        dateInput.value = today;
+        dateInput.value = localTodayDateString();
     }
     
     const normalizeText = (value) => (value || '').toString().trim().toLowerCase();

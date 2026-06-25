@@ -106,26 +106,6 @@
                                 </div>
 
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-medium">Fee Voucher Bank Name</label>
-                                    <input type="text" class="form-control" name="fee_voucher_bank_name" placeholder="Enter bank name" value="{{ old('fee_voucher_bank_name', $settings->fee_voucher_bank_name ?? '') }}">
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-medium">Fee Voucher Account Title</label>
-                                    <input type="text" class="form-control" name="fee_voucher_account_title" placeholder="Enter account title" value="{{ old('fee_voucher_account_title', $settings->fee_voucher_account_title ?? '') }}">
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-medium">Fee Voucher Account Number</label>
-                                    <input type="text" class="form-control" name="fee_voucher_account_number" placeholder="Enter account number" value="{{ old('fee_voucher_account_number', $settings->fee_voucher_account_number ?? '') }}">
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-medium">Fee Voucher IBAN</label>
-                                    <input type="text" class="form-control" name="fee_voucher_iban" placeholder="Enter IBAN" value="{{ old('fee_voucher_iban', $settings->fee_voucher_iban ?? '') }}">
-                                </div>
-                                
-                                <div class="col-md-6 mb-3">
                                     <label class="form-label fw-medium">Show Class List On Dashboard</label>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" id="show_class_list" name="show_class_list" checked>

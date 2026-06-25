@@ -78,6 +78,8 @@ class LoanManagementController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        Loan::ensureBalanceColumns();
+
         $validated = $request->validate([
             'staff_id' => ['required', 'exists:staff,id'],
             'requested_amount' => ['required', 'numeric', 'min:0'],
@@ -86,8 +88,19 @@ class LoanManagementController extends Controller
         ]);
 
         $validated['status'] = 'Approved';
+        $requested = (float) $validated['requested_amount'];
+        $approved = isset($validated['approved_amount']) ? (float) $validated['approved_amount'] : 0.0;
+        if ($approved <= 0) {
+            $approved = $requested;
+        }
+        $validated['approved_amount'] = $approved;
+        if (Loan::hasInitialApprovedColumn()) {
+            $validated['initial_approved_amount'] = max($requested, $approved);
+        }
 
         Loan::create($validated);
+
+        app(GenerateSalaryController::class)->syncPendingSalariesForStaff((int) $validated['staff_id']);
 
         return redirect()
             ->route('salary-loan.loan-management')
@@ -99,6 +112,8 @@ class LoanManagementController extends Controller
      */
     public function update(Request $request, Loan $loan): RedirectResponse
     {
+        Loan::ensureBalanceColumns();
+
         $validated = $request->validate([
             'staff_id' => ['required', 'exists:staff,id'],
             'requested_amount' => ['required', 'numeric', 'min:0'],
@@ -107,7 +122,19 @@ class LoanManagementController extends Controller
             'status' => ['required', 'in:Pending,Approved,Rejected,Completed'],
         ]);
 
+        if (empty($validated['approved_amount']) && !empty($validated['requested_amount'])) {
+            $validated['approved_amount'] = $validated['requested_amount'];
+        }
+
+        if (Loan::hasInitialApprovedColumn() && $loan->initial_approved_amount === null) {
+            $validated['initial_approved_amount'] = $validated['approved_amount'] ?? $loan->requested_amount ?? 0;
+        }
+
         $loan->update($validated);
+
+        if (($validated['status'] ?? '') === 'Approved') {
+            app(GenerateSalaryController::class)->syncPendingSalariesForStaff((int) $validated['staff_id']);
+        }
 
         return redirect()
             ->route('salary-loan.loan-management')
@@ -177,14 +204,16 @@ class LoanManagementController extends Controller
             // Add BOM for UTF-8
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             
-            fputcsv($file, ['ID', 'Teacher Name', 'Requested Amount', 'Approved Amount', 'Repayment Instalments', 'Status', 'Created At']);
+            fputcsv($file, ['ID', 'Teacher Name', 'Requested Amount', 'Total Approved', 'Paid Amount', 'Remaining Amount', 'Repayment Instalments', 'Status', 'Created At']);
             
             foreach ($loans as $loan) {
                 fputcsv($file, [
                     $loan->id,
                     $loan->staff->name ?? 'N/A',
                     $loan->requested_amount,
-                    $loan->approved_amount ?? 'N/A',
+                    $loan->totalApprovedAmount(),
+                    $loan->amountPaid(),
+                    $loan->remainingAmount(),
                     $loan->repayment_instalments,
                     $loan->status,
                     $loan->created_at->format('Y-m-d H:i:s'),
@@ -212,14 +241,16 @@ class LoanManagementController extends Controller
         $callback = function() use ($loans) {
             $file = fopen('php://output', 'w');
             
-            fputcsv($file, ['ID', 'Teacher Name', 'Requested Amount', 'Approved Amount', 'Repayment Instalments', 'Status', 'Created At']);
+            fputcsv($file, ['ID', 'Teacher Name', 'Requested Amount', 'Total Approved', 'Paid Amount', 'Remaining Amount', 'Repayment Instalments', 'Status', 'Created At']);
             
             foreach ($loans as $loan) {
                 fputcsv($file, [
                     $loan->id,
                     $loan->staff->name ?? 'N/A',
                     $loan->requested_amount,
-                    $loan->approved_amount ?? 'N/A',
+                    $loan->totalApprovedAmount(),
+                    $loan->amountPaid(),
+                    $loan->remainingAmount(),
                     $loan->repayment_instalments,
                     $loan->status,
                     $loan->created_at->format('Y-m-d H:i:s'),

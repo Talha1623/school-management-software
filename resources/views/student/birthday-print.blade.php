@@ -152,7 +152,7 @@ tbody tr:nth-child(even){
     </div>
 
     <div class="report-title">
-        Student Birthdays List
+        Student Birthdays List — {{ now()->format('d M Y') }}
     </div>
 </div>
 
@@ -202,7 +202,7 @@ tbody tr:nth-child(even){
 </tr>
 @empty
 <tr>
-    <td colspan="8" class="center">No student birthdays found</td>
+    <td colspan="8" class="center">No student birthdays today ({{ now()->format('d M') }})</td>
 </tr>
 @endforelse
 </tbody>

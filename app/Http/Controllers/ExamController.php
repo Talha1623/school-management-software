@@ -22,6 +22,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -492,61 +493,34 @@ class ExamController extends Controller
         $filterSection = $request->get('filter_section');
         $filterSubject = $request->get('filter_subject');
 
-        // Check if staff is logged in and is a teacher
         $staff = Auth::guard('staff')->user();
-        $isTeacher = $staff && $staff->isTeacher();
-        $teacherName = $isTeacher ? strtolower(trim($staff->name ?? '')) : null;
+        $isStaffTeacher = $staff && $staff->isTeacher();
+        $campusName = trim((string) ($filterCampus ?? ''));
+        $classes = collect();
 
-        // Get campuses for dropdown - filter by teacher's assigned campuses if teacher
-        if ($isTeacher && $teacherName) {
-            $teacherCampuses = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                ->whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->merge(
-                    Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                        ->whereNotNull('campus')
-                        ->distinct()
-                        ->pluck('campus')
-                )
-                ->map(fn($c) => trim($c))
-                ->filter(fn($c) => !empty($c))
-                ->unique()
-                ->sort()
-                ->values();
-
-            if ($teacherCampuses->isNotEmpty()) {
-                $campuses = Campus::orderBy('campus_name', 'asc')
-                    ->get()
-                    ->filter(function($campus) use ($teacherCampuses) {
-                        return $teacherCampuses->contains(strtolower(trim($campus->campus_name ?? '')));
-                    });
-
-                if ($campuses->isEmpty()) {
-                    $campuses = $teacherCampuses->map(function($campus) {
-                        return (object)['campus_name' => $campus];
-                    });
-                }
-            } else {
-                $campuses = collect();
+        if ($isStaffTeacher && $staff) {
+            $campuses = $this->campusesForStaffViewer($staff);
+            if ($campusName !== '') {
+                $classes = $this->classesForCampusSelection($staff, $campusName);
             }
         } else {
-            $campuses = Campus::orderBy('campus_name', 'asc')->get();
-            if ($campuses->isEmpty()) {
-                $campusesFromClasses = ClassModel::whereNotNull('campus')->distinct()->pluck('campus');
-                $campusesFromSections = Section::whereNotNull('campus')->distinct()->pluck('campus');
-                $campusesFromSubjects = Subject::whereNotNull('campus')->distinct()->pluck('campus');
-                $allCampuses = $campusesFromClasses->merge($campusesFromSections)->merge($campusesFromSubjects)->unique()->sort();
-                $campuses = $allCampuses->map(function($campus) {
-                    return (object)['campus_name' => $campus];
-                });
+            $campuses = $this->allCampusesForAdmin();
+            if ($campusName !== '') {
+                $classes = ClassModel::whereNotNull('class_name')
+                    ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)])
+                    ->distinct()
+                    ->pluck('class_name')
+                    ->sort()
+                    ->values();
             }
         }
 
+        $filterClasses = $classes;
+
         // Get exams from Exam List (show before/after declaration).
         $examsQuery = Exam::whereNotNull('exam_name');
-        if ($filterCampus) {
-            $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
+        if ($campusName !== '') {
+            $examsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
         }
         $exams = $examsQuery
             ->orderBy('exam_name', 'asc')
@@ -555,48 +529,12 @@ class ExamController extends Controller
             ->unique()
             ->values();
 
-        // Get classes - filter by teacher's assigned classes if teacher
-        $classes = $this->getClassesForMarksEntryList($filterCampus, $staff);
-        $filterClasses = $filterCampus ? $classes : $classes;
-        
-        // Get sections (will be filtered dynamically based on class selection) - filter by teacher's assigned subjects if teacher
-        $sections = collect(); // Initialized as empty, will be filled via AJAX
+        $sections = collect();
         if ($filterClass) {
-            if ($staff && $staff->isTeacher()) {
-                $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-                $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-                if ($filterCampus) {
-                    $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-                    $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-                }
-
-                $assignedSubjects = $assignedSubjectsQuery->get();
-                $assignedSections = $assignedSectionsQuery->get();
-
-                $sections = $assignedSubjects->pluck('section')
-                    ->merge($assignedSections->pluck('name'))
-                    ->map(fn($section) => trim($section))
-                    ->filter(fn($section) => !empty($section))
-                    ->unique()
-                    ->sort()
-                    ->values();
+            if ($isStaffTeacher && $staff) {
+                $sections = $this->sectionsForClassSelection($staff, $filterClass, $campusName ?: null);
             } else {
-                $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                    ->whereNotNull('name');
-                if ($filterCampus) {
-                    $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-                }
-                $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
-                if ($sections->isEmpty()) {
-                    $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
-                        ->whereNotNull('section');
-                    if ($filterCampus) {
-                        $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-                    }
-                    $sections = $subjectsQuery->distinct()->pluck('section')->sort()->values();
-                }
+                $sections = $this->sectionsForClassAtCampus($filterClass, $campusName ?: null);
             }
         }
 
@@ -748,59 +686,21 @@ class ExamController extends Controller
         if (!$class) {
             return response()->json(['sections' => []]);
         }
-        
+
         $staff = Auth::guard('staff')->user();
-        $sections = collect();
-        
-        // Filter by teacher's assigned subjects and sections if teacher
+
         if ($staff && $staff->isTeacher()) {
-            // Get sections from teacher's assigned subjects for this class
-            $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-            if ($campus) {
-                $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+            if ($campus && ! $this->staffCanUseCampus($staff, $campus)) {
+                return response()->json(['sections' => []]);
             }
-            $assignedSubjects = $assignedSubjectsQuery->get();
-            
-            // Get sections from teacher's assigned sections for this class
-            $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($staff->name ?? ''))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-            if ($campus) {
-                $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-            }
-            $assignedSections = $assignedSectionsQuery->get();
-            
-            // Merge sections from both sources
-            $sections = $assignedSubjects->pluck('section')
-                ->merge($assignedSections->pluck('name'))
-                ->map(function($section) {
-                    return trim($section);
-                })
-                ->filter(function($section) {
-                    return !empty($section);
-                })
-                ->unique()
-                ->sort()
-                ->values();
-        } else {
-            // For non-teachers, get all sections
-            $sectionsQuery = Section::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->whereNotNull('name');
-            if ($campus) {
-                $sectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-            }
-            $sections = $sectionsQuery->distinct()->pluck('name')->sort()->values();
-            
-            if ($sections->isEmpty()) {
-                $subjectsQuery = Subject::whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                    ->whereNotNull('section');
-                if ($campus) {
-                    $subjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-                }
-                $sections = $subjectsQuery->distinct()->pluck('section')->sort()->values();
-            }
+
+            $sections = $this->sectionsForClassSelection($staff, $class, $campus);
+
+            return response()->json(['sections' => $sections->values()->all()]);
         }
-        
+
+        $sections = $this->sectionsForClassAtCampus($class, $campus);
+
         return response()->json(['sections' => $sections]);
     }
 
@@ -919,50 +819,24 @@ class ExamController extends Controller
     private function getClassesForMarksEntryList(?string $campus, $staff)
     {
         $campus = trim((string) $campus);
-        $campusLower = strtolower($campus);
-        $isTeacher = $staff && $staff->isTeacher();
-        $teacherName = $isTeacher ? strtolower(trim($staff->name ?? '')) : null;
-
-        if ($isTeacher && $teacherName) {
-            $assignedSubjectsQuery = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                ->whereNotNull('class');
-            $assignedSectionsQuery = Section::whereRaw('LOWER(TRIM(teacher)) = ?', [$teacherName])
-                ->whereNotNull('class');
-            if ($campus !== '') {
-                $assignedSubjectsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
-                $assignedSectionsQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
-            }
-
-            $allClasses = $assignedSubjectsQuery->pluck('class')
-                ->merge($assignedSectionsQuery->pluck('class'))
-                ->map(fn($class) => trim((string) $class))
-                ->filter(fn($class) => $class !== '')
-                ->unique()
-                ->values();
-
-            $existingClassNames = ClassModel::whereNotNull('class_name');
-            if ($campus !== '') {
-                $existingClassNames->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
-            }
-            $existingClassNames = $existingClassNames
-                ->pluck('class_name')
-                ->map(fn($name) => strtolower(trim($name)))
-                ->toArray();
-
-            return $allClasses->filter(function($className) use ($existingClassNames) {
-                return in_array(strtolower(trim($className)), $existingClassNames);
-            })->sort()->values();
+        if ($campus === '') {
+            return collect();
         }
 
-        $classesQuery = ClassModel::whereNotNull('class_name');
-        if ($campus !== '') {
-            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusLower]);
+        if ($staff && $staff->isTeacher()) {
+            if (! $this->staffCanUseCampus($staff, $campus)) {
+                return collect();
+            }
+
+            return $this->classesForCampusSelection($staff, $campus);
         }
 
-        return $classesQuery->distinct()
+        return ClassModel::whereNotNull('class_name')
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)])
+            ->distinct()
             ->pluck('class_name')
-            ->map(fn($class) => trim((string) $class))
-            ->filter(fn($class) => $class !== '')
+            ->map(fn ($class) => trim((string) $class))
+            ->filter(fn ($class) => $class !== '')
             ->unique()
             ->sort()
             ->values();
@@ -1101,9 +975,16 @@ class ExamController extends Controller
                                 'subject' => $subjectName,
                             ],
                             [
-                                'marks_obtained' => !empty($markData['obtained']) ? $markData['obtained'] : null,
-                                'total_marks' => !empty($markData['total']) ? $markData['total'] : null,
-                                'passing_marks' => !empty($markData['passing']) ? $markData['passing'] : null,
+                                // Keep zero values (0) as valid marks instead of converting to null.
+                                'marks_obtained' => (array_key_exists('obtained', $markData) && $markData['obtained'] !== '' && $markData['obtained'] !== null)
+                                    ? $markData['obtained']
+                                    : null,
+                                'total_marks' => (array_key_exists('total', $markData) && $markData['total'] !== '' && $markData['total'] !== null)
+                                    ? $markData['total']
+                                    : null,
+                                'passing_marks' => (array_key_exists('passing', $markData) && $markData['passing'] !== '' && $markData['passing'] !== null)
+                                    ? $markData['passing']
+                                    : null,
                             ]
                         );
                         $savedCount++;
@@ -1357,7 +1238,8 @@ class ExamController extends Controller
         
         $staff = Auth::guard('staff')->user();
         if (Auth::guard('staff')->check() && $staff && $subject && $class) {
-            if (!$staff->canUploadMarksForSubject($campus, $class, $section, $subject)) {
+            if (method_exists($staff, 'canUploadMarksForSubject')
+                && !$staff->canUploadMarksForSubject($campus, $class, $section, $subject)) {
                 return response()->json([]);
             }
         }
@@ -1377,17 +1259,33 @@ class ExamController extends Controller
             ->sort()
             ->values();
 
-        // If subject selected, narrow exams to those having marks rows for this subject/class/section.
+        // If subject selected, narrow exams via ExamTimetable and/or StudentMark rows.
         if ($subject && $class && $exams->isNotEmpty()) {
-            $examKeys = $exams->map(fn($name) => strtolower(trim((string) $name)))->toArray();
-            $matchingExamKeys = StudentMark::query()
+            $examKeys = $exams->map(fn ($name) => strtolower(trim((string) $name)))->toArray();
+
+            $timetableExamKeys = ExamTimetable::query()
+                ->whereIn(\DB::raw('LOWER(TRIM(exam_name))'), $examKeys)
+                ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))])
+                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                ->when($section, function ($query) use ($section) {
+                    return $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
+                })
+                ->when($campus, function ($query) use ($campus) {
+                    return $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+                })
+                ->select(\DB::raw('LOWER(TRIM(exam_name)) as exam_name_key'))
+                ->distinct()
+                ->pluck('exam_name_key')
+                ->toArray();
+
+            $marksExamKeys = StudentMark::query()
                 ->whereIn(\DB::raw('LOWER(TRIM(test_name))'), $examKeys)
                 ->whereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subject))])
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                ->when($section, function($query) use ($section) {
+                ->when($section, function ($query) use ($section) {
                     return $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
                 })
-                ->when($campus, function($query) use ($campus) {
+                ->when($campus, function ($query) use ($campus) {
                     return $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
                 })
                 ->select(\DB::raw('LOWER(TRIM(test_name)) as exam_name_key'))
@@ -1395,8 +1293,10 @@ class ExamController extends Controller
                 ->pluck('exam_name_key')
                 ->toArray();
 
+            $matchingExamKeys = array_values(array_unique(array_merge($timetableExamKeys, $marksExamKeys)));
+
             if (!empty($matchingExamKeys)) {
-                $exams = $exams->filter(function($name) use ($matchingExamKeys) {
+                $exams = $exams->filter(function ($name) use ($matchingExamKeys) {
                     return in_array(strtolower(trim((string) $name)), $matchingExamKeys, true);
                 })->values();
             }
@@ -4087,6 +3987,196 @@ class ExamController extends Controller
             ->values();
 
         return response()->json(['classes' => $classes]);
+    }
+
+    private function staffCampusName(?Staff $staff): ?string
+    {
+        if (! $staff) {
+            return null;
+        }
+
+        $campus = trim((string) ($staff->campus ?? ''));
+
+        return $campus !== '' ? $campus : null;
+    }
+
+    private function campusesForStaffViewer(Staff $staff): Collection
+    {
+        $names = collect();
+
+        if ($staffCampus = $this->staffCampusName($staff)) {
+            $names->push($staffCampus);
+        }
+
+        $assignedSubjectsQuery = Subject::query();
+        $staff->scopeQueryToTeacherAssignments($assignedSubjectsQuery);
+        $names = $names->merge(
+            $assignedSubjectsQuery
+                ->whereNotNull('campus')
+                ->whereRaw("TRIM(campus) != ''")
+                ->distinct()
+                ->pluck('campus')
+        );
+
+        $assignedSectionsQuery = Section::query();
+        $staff->scopeQueryToTeacherAssignments($assignedSectionsQuery);
+        $names = $names->merge(
+            $assignedSectionsQuery
+                ->whereNotNull('campus')
+                ->whereRaw("TRIM(campus) != ''")
+                ->distinct()
+                ->pluck('campus')
+        );
+
+        $unique = $names
+            ->map(fn ($campus) => trim((string) $campus))
+            ->filter()
+            ->unique(fn ($campus) => strtolower($campus))
+            ->values();
+
+        return $unique->map(function (string $campus) {
+            $record = Campus::query()
+                ->whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($campus)])
+                ->first();
+
+            return (object) ['campus_name' => $record?->campus_name ?? $campus];
+        });
+    }
+
+    private function allCampusesForAdmin(): Collection
+    {
+        $names = Campus::orderBy('campus_name', 'asc')
+            ->pluck('campus_name')
+            ->map(fn ($campus) => trim((string) $campus))
+            ->filter();
+
+        return $names
+            ->merge(ClassModel::whereNotNull('campus')->distinct()->pluck('campus'))
+            ->merge(Section::whereNotNull('campus')->distinct()->pluck('campus'))
+            ->merge(Subject::whereNotNull('campus')->distinct()->pluck('campus'))
+            ->map(fn ($campus) => trim((string) $campus))
+            ->filter()
+            ->unique(fn ($campus) => strtolower($campus))
+            ->sort()
+            ->values()
+            ->map(fn (string $campus) => (object) ['campus_name' => $campus]);
+    }
+
+    private function staffCanUseCampus(Staff $staff, ?string $campus): bool
+    {
+        if ($campus === null || trim($campus) === '') {
+            return false;
+        }
+
+        $campusKey = strtolower(trim($campus));
+
+        return $this->campusesForStaffViewer($staff)
+            ->pluck('campus_name')
+            ->map(fn ($name) => strtolower(trim((string) $name)))
+            ->contains($campusKey);
+    }
+
+    private function staffAssignableClasses(Staff $staff, ?string $campus): Collection
+    {
+        if ($campus === null || trim($campus) === '') {
+            return collect();
+        }
+
+        $classes = $staff->assignedSubjectClassNames($campus);
+        if ($classes->isNotEmpty()) {
+            return $classes;
+        }
+
+        $classes = $staff->assignedTeachingClassNames($campus);
+        if ($classes->isNotEmpty()) {
+            return $classes;
+        }
+
+        return $staff->assignedAttendanceClassNames($campus);
+    }
+
+    private function classesForCampusSelection(Staff $staff, string $campus): Collection
+    {
+        $classes = $this->staffAssignableClasses($staff, $campus);
+        if ($classes->isNotEmpty()) {
+            return $classes;
+        }
+
+        return ClassModel::whereNotNull('class_name')
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+            ->distinct()
+            ->pluck('class_name')
+            ->sort()
+            ->values();
+    }
+
+    private function sectionsForClassAtCampus(string $class, ?string $campus): Collection
+    {
+        $classKey = Staff::normalizeClassKey($class);
+
+        $applyClassFilter = function ($query) use ($class, $classKey) {
+            $query->where(function ($q) use ($class, $classKey) {
+                $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->orWhereRaw('LOWER(TRIM(class)) = ?', [$classKey])
+                    ->orWhereRaw("LOWER(TRIM(REPLACE(REPLACE(class, 'Class ', ''), 'class ', ''))) = ?", [$classKey]);
+            });
+        };
+
+        $sectionsQuery = Section::query();
+        $applyClassFilter($sectionsQuery);
+        $sectionsQuery->whereNotNull('name');
+
+        if ($campus !== null && trim($campus) !== '') {
+            $campusKey = strtolower(trim($campus));
+            $sectionsQuery->where(function ($q) use ($campusKey) {
+                $q->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$campusKey])
+                    ->orWhereRaw('TRIM(COALESCE(campus, "")) = ?', ['']);
+            });
+        }
+
+        $sections = $sectionsQuery
+            ->distinct()
+            ->pluck('name')
+            ->map(fn ($section) => trim((string) $section))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($sections->isNotEmpty()) {
+            return $sections;
+        }
+
+        $subjectsQuery = Subject::query();
+        $applyClassFilter($subjectsQuery);
+        $subjectsQuery->whereNotNull('section');
+
+        if ($campus !== null && trim($campus) !== '') {
+            $campusKey = strtolower(trim($campus));
+            $subjectsQuery->where(function ($q) use ($campusKey) {
+                $q->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$campusKey])
+                    ->orWhereRaw('TRIM(COALESCE(campus, "")) = ?', ['']);
+            });
+        }
+
+        return $subjectsQuery
+            ->distinct()
+            ->pluck('section')
+            ->map(fn ($section) => trim((string) $section))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+    }
+
+    private function sectionsForClassSelection(Staff $staff, string $class, ?string $campus): Collection
+    {
+        $sections = $staff->assignedTeachingSectionsForClass($class, $campus);
+        if ($sections->isNotEmpty()) {
+            return $sections;
+        }
+
+        return $this->sectionsForClassAtCampus($class, $campus);
     }
 }
 

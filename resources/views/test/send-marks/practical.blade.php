@@ -71,9 +71,13 @@
                     </div>
                 </div>
 
-                <!-- Send SMS Button -->
+                <!-- Action Buttons -->
                 <div class="row">
-                    <div class="col-md-12 text-end">
+                    <div class="col-md-12 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-primary px-4 py-2 rounded-8 print-btn" id="printMarksBtn">
+                            <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">print</span>
+                            <span class="ms-1">Print</span>
+                        </button>
                         <button type="submit" class="btn btn-success px-4 py-2 rounded-8 send-btn">
                             <span>Send SMS</span>
                             <span class="material-symbols-outlined ms-2">thumb_up</span>
@@ -101,6 +105,20 @@
 .send-btn .material-symbols-outlined {
     font-size: 18px;
     vertical-align: middle;
+}
+
+.print-btn {
+    background: linear-gradient(135deg, #003471 0%, #004a9f 100%);
+    border: none;
+    color: white;
+    height: 42px;
+}
+
+.print-btn:hover {
+    background: linear-gradient(135deg, #004a9f 0%, #003471 100%);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 52, 113, 0.3);
 }
 </style>
 
@@ -172,6 +190,27 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             resetSelect(selects.test, 'Select a subject first');
         }
+    });
+
+    document.getElementById('printMarksBtn').addEventListener('click', function() {
+        const formData = new FormData(document.getElementById('sendMarksForm'));
+        const data = Object.fromEntries(formData);
+
+        if (!data.campus || !data.class || !data.section || !data.subject || !data.test) {
+            alert('Please select Campus, Class, Section, Subject and Test before printing.');
+            return;
+        }
+
+        const params = new URLSearchParams({
+            print: '1',
+            campus: data.campus,
+            class: data.class,
+            section: data.section,
+            subject: data.subject,
+            test: data.test,
+        });
+
+        window.open(`{{ route('test.send-marks.practical') }}?${params.toString()}`, '_blank');
     });
 
     document.getElementById('sendMarksForm').addEventListener('submit', function(e) {

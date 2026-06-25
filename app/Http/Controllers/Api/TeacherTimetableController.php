@@ -43,6 +43,49 @@ class TeacherTimetableController extends Controller
     }
 
     /**
+     * Real teaching periods only — excludes assembly, breaks, etc.
+     */
+    private function isBillableLectureSubject(?string $subject): bool
+    {
+        $subject = trim((string) $subject);
+
+        return $subject !== '' && !$this->isStaticSubject($subject);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $assignmentRows
+     */
+    private function applyTeacherAssignmentScope($query, $assignmentRows, bool $includeStaticSubjects): void
+    {
+        $staticSubjects = $this->getStaticSubjects();
+
+        $query->where(function ($outer) use ($assignmentRows, $staticSubjects, $includeStaticSubjects) {
+            foreach ($assignmentRows as $assignment) {
+                $outer->orWhere(function ($inner) use ($assignment, $staticSubjects, $includeStaticSubjects) {
+                    if ($assignment['campus'] !== '') {
+                        $inner->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$assignment['campus']]);
+                    }
+
+                    $inner->whereRaw('LOWER(TRIM(class)) = ?', [$assignment['class']]);
+
+                    if ($assignment['section'] !== '') {
+                        $inner->whereRaw('LOWER(TRIM(section)) = ?', [$assignment['section']]);
+                    }
+
+                    $inner->where(function ($subjectScope) use ($assignment, $staticSubjects, $includeStaticSubjects) {
+                        $subjectScope->whereRaw('LOWER(TRIM(subject)) = ?', [$assignment['subject']]);
+                        if ($includeStaticSubjects) {
+                            foreach ($staticSubjects as $staticSubject) {
+                                $subjectScope->orWhereRaw('TRIM(subject) = ?', [trim($staticSubject)]);
+                            }
+                        }
+                    });
+                });
+            }
+        });
+    }
+
+    /**
      * Get Filter Options (Campuses, Classes, Sections, Subjects)
      * 
      * @param Request $request
@@ -61,9 +104,19 @@ class TeacherTimetableController extends Controller
                 ], 403);
             }
 
-            // Get teacher's assigned subjects
-            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+            $teacherIdentityKeys = collect([
+                strtolower(trim((string) ($teacher->name ?? ''))),
+                strtolower(trim((string) ($teacher->emp_id ?? ''))),
+            ])->filter()->unique()->values();
+
+            // Get teacher's assigned subjects (match by name OR emp_id)
+            $teacherSubjects = Subject::query()
                 ->whereNotNull('class')
+                ->where(function ($q) use ($teacherIdentityKeys) {
+                    foreach ($teacherIdentityKeys as $key) {
+                        $q->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                    }
+                })
                 ->get();
 
             // Get campuses from teacher's assigned subjects
@@ -149,10 +202,20 @@ class TeacherTimetableController extends Controller
                 'class' => ['required', 'string'],
             ]);
 
-            // Get teacher's assigned subjects for this class
-            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+            $teacherIdentityKeys = collect([
+                strtolower(trim((string) ($teacher->name ?? ''))),
+                strtolower(trim((string) ($teacher->emp_id ?? ''))),
+            ])->filter()->unique()->values();
+
+            // Get teacher's assigned subjects for this class (match by name OR emp_id)
+            $teacherSubjects = Subject::query()
                 ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($validated['class']))])
                 ->whereNotNull('section')
+                ->where(function ($q) use ($teacherIdentityKeys) {
+                    foreach ($teacherIdentityKeys as $key) {
+                        $q->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                    }
+                })
                 ->get();
 
             // Get sections from teacher's assigned subjects
@@ -230,9 +293,19 @@ class TeacherTimetableController extends Controller
                 ]);
             }
 
-            // Get teacher's assigned subjects
-            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+            $teacherIdentityKeys = collect([
+                strtolower(trim((string) ($teacher->name ?? ''))),
+                strtolower(trim((string) ($teacher->emp_id ?? ''))),
+            ])->filter()->unique()->values();
+
+            // Get teacher's assigned subjects (match by name OR emp_id)
+            $teacherSubjects = Subject::query()
                 ->whereNotNull('class')
+                ->where(function ($q) use ($teacherIdentityKeys) {
+                    foreach ($teacherIdentityKeys as $key) {
+                        $q->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                    }
+                })
                 ->get();
 
             // If teacher has no assigned subjects, return empty
@@ -248,78 +321,29 @@ class TeacherTimetableController extends Controller
                 ], 200);
             }
 
-            // Build query for timetables
+            // Build query for timetables (assigned subjects only — no assembly/breaks).
             $query = Timetable::query();
 
-            // Get unique classes, sections, and subjects from teacher's assigned subjects
-            $teacherClasses = $teacherSubjects->pluck('class')->unique()->filter()->map(function($class) {
-                return trim($class);
-            })->filter()->toArray();
-            
-            $teacherSections = $teacherSubjects->pluck('section')->unique()->filter()->map(function($section) {
-                return trim($section);
-            })->filter()->toArray();
-            
-            // Get assigned subject names (case-insensitive matching)
-            $teacherSubjectNames = $teacherSubjects->pluck('subject_name')->unique()->filter()->map(function($subject) {
-                return trim($subject);
-            })->filter()->toArray();
+            // Strict campus+class+section+subject filtering from teacher assignment rows.
+            $assignmentRows = $teacherSubjects
+                ->map(function ($row) {
+                    return [
+                        'campus' => strtolower(trim((string) ($row->campus ?? ''))),
+                        'class' => strtolower(trim((string) ($row->class ?? ''))),
+                        'section' => strtolower(trim((string) ($row->section ?? ''))),
+                        'subject' => strtolower(trim((string) ($row->subject_name ?? ''))),
+                    ];
+                })
+                ->filter(function ($row) {
+                    return $row['class'] !== '' && $row['subject'] !== '';
+                })
+                ->unique(fn ($row) => implode('|', [$row['campus'], $row['class'], $row['section'], $row['subject']]))
+                ->values();
 
-            // Get static subjects list
-            $staticSubjects = $this->getStaticSubjects();
-            
-            // Filter by teacher's assigned subjects AND static subjects
-            // Show timetables for assigned subjects OR static subjects (not all subjects for assigned classes/sections)
-            if (!empty($teacherSubjectNames) || !empty($staticSubjects)) {
-                $query->where(function($q) use ($teacherSubjectNames, $staticSubjects) {
-                    // Include assigned subjects
-                    if (!empty($teacherSubjectNames)) {
-                        foreach ($teacherSubjectNames as $subjectName) {
-                            $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))]);
-                        }
-                    }
-                    
-                    // Include static subjects (Assembly, Lunch Break, etc.)
-                    if (!empty($staticSubjects)) {
-                        foreach ($staticSubjects as $staticSubject) {
-                            $q->orWhereRaw('TRIM(subject) = ?', [trim($staticSubject)]);
-                        }
-                    }
-                });
-                
-                // Also filter by assigned classes and sections to ensure proper matching
-                if (!empty($teacherClasses) || !empty($teacherSections)) {
-                    $query->where(function($q) use ($teacherClasses, $teacherSections) {
-                        // Match by class AND section combination (preferred)
-                        if (!empty($teacherClasses) && !empty($teacherSections)) {
-                            foreach ($teacherClasses as $class) {
-                                foreach ($teacherSections as $section) {
-                                    $q->orWhere(function($csQuery) use ($class, $section) {
-                                        $csQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                                               ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-                                    });
-                                }
-                            }
-                        }
-                        
-                        // Also match by class only (if sections are empty)
-                        if (!empty($teacherClasses) && empty($teacherSections)) {
-                            foreach ($teacherClasses as $class) {
-                                $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-                            }
-                        }
-                        
-                        // Also match by section only (if classes are empty)
-                        if (empty($teacherClasses) && !empty($teacherSections)) {
-                            foreach ($teacherSections as $section) {
-                                $q->orWhereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-                            }
-                        }
-                    });
-                }
-            } else {
-                // Fallback: If no assigned subjects and no static subjects, return empty
+            if ($assignmentRows->isEmpty()) {
                 $query->whereRaw('1 = 0');
+            } else {
+                $this->applyTeacherAssignmentScope($query, $assignmentRows, false);
             }
 
             // Apply additional filters if provided
@@ -378,47 +402,11 @@ class TeacherTimetableController extends Controller
                 END
             ")
             ->orderBy('starting_time')
-            ->get();
-
-            // Resolve assigned teacher per subject/campus for this class/section
-            $className = strtolower(trim((string)($request->class ?? '')));
-            $sectionName = strtolower(trim((string)($request->section ?? '')));
-            $subjectTeacherBySubjectCampus = Subject::query()
-                ->when($className !== '', function($q) use ($className) {
-                    $q->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
-                })
-                ->when($sectionName !== '', function($q) use ($sectionName) {
-                    $q->whereRaw('LOWER(TRIM(section)) = ?', [$sectionName]);
-                })
-                ->get()
-                ->reduce(function($carry, $row) {
-                    $subjectKey = strtolower(trim((string)($row->subject_name ?? '')));
-                    $campusKey = strtolower(trim((string)($row->campus ?? '')));
-                    if ($subjectKey === '') {
-                        return $carry;
-                    }
-
-                    $subjectCampusKey = $subjectKey . '|' . $campusKey;
-                    if (!array_key_exists($subjectCampusKey, $carry) && !empty(trim((string)($row->teacher ?? '')))) {
-                        $carry[$subjectCampusKey] = trim((string)($row->teacher ?? ''));
-                    }
-
-                    // Fallback by subject only when campus-specific is not available
-                    if (!array_key_exists($subjectKey, $carry) && !empty(trim((string)($row->teacher ?? '')))) {
-                        $carry[$subjectKey] = trim((string)($row->teacher ?? ''));
-                    }
-                    return $carry;
-                }, []);
+            ->get()
+            ->filter(fn ($timetable) => $this->isBillableLectureSubject($timetable->subject ?? null));
 
             // Format timetable data
-            $timetableData = $timetables->map(function($timetable) use ($teacher, $subjectTeacherBySubjectCampus, $dayForDate, $monthForDate, $yearForDate) {
-                $subjectKey = strtolower(trim((string)($timetable->subject ?? '')));
-                $campusKey = strtolower(trim((string)($timetable->campus ?? '')));
-                $subjectCampusKey = $subjectKey . '|' . $campusKey;
-
-                $resolvedTeacherName = $subjectTeacherBySubjectCampus[$subjectCampusKey]
-                    ?? $subjectTeacherBySubjectCampus[$subjectKey]
-                    ?? ($teacher->name ?? null);
+            $timetableData = $timetables->map(function($timetable) use ($teacher, $dayForDate, $monthForDate, $yearForDate) {
 
                 $item = [
                     'id' => $timetable->id,
@@ -427,7 +415,7 @@ class TeacherTimetableController extends Controller
                     'section' => $timetable->section,
                     'class_section' => trim((string)($timetable->class ?? '')) . (!empty($timetable->section) ? ' - ' . trim((string)$timetable->section) : ''),
                     'subject' => $timetable->subject,
-                    'teacher_name' => $resolvedTeacherName,
+                    'teacher_name' => $teacher->name ?? null,
                     'teacher_emp_id' => $teacher->emp_id ?? null,
                     'day' => $timetable->day,
                     'starting_time' => $timetable->starting_time,
@@ -491,7 +479,7 @@ class TeacherTimetableController extends Controller
                 'timetable_for' => 'Teacher assigned timetable',
                 'timetable' => $timetableData->values()->toArray(),
                 'timetable_by_day' => $timetableByDay,
-                'total_periods' => $timetables->count(),
+                'total_periods' => $timetableData->count(),
             ];
 
             // Add day, month and year info if provided
@@ -571,9 +559,19 @@ class TeacherTimetableController extends Controller
             $isPerHour = $salaryTypeRaw === 'per hour' || str_contains($salaryTypeRaw, 'hour');
             $normalizedSalaryType = $isPerLecture ? 'lecture' : ($isPerHour ? 'per hour' : 'full time');
 
-            // Get teacher's assigned subjects
-            $teacherSubjects = Subject::whereRaw('LOWER(TRIM(teacher)) = ?', [strtolower(trim($teacher->name ?? ''))])
+            $teacherIdentityKeys = collect([
+                strtolower(trim((string) ($teacher->name ?? ''))),
+                strtolower(trim((string) ($teacher->emp_id ?? ''))),
+            ])->filter()->unique()->values();
+
+            // Get teacher's assigned subjects (match by name OR emp_id)
+            $teacherSubjects = Subject::query()
                 ->whereNotNull('class')
+                ->where(function ($q) use ($teacherIdentityKeys) {
+                    foreach ($teacherIdentityKeys as $key) {
+                        $q->orWhereRaw('LOWER(TRIM(teacher)) = ?', [$key]);
+                    }
+                })
                 ->get();
 
             // Check teacher check-in/check-out for this date.
@@ -618,39 +616,26 @@ class TeacherTimetableController extends Controller
                 ], 200);
             }
 
-            $teacherSubjectNames = $teacherSubjects->pluck('subject_name')->unique()->filter()->map(function ($subject) {
-                return trim((string) $subject);
-            })->filter()->toArray();
-
-            $teacherClasses = $teacherSubjects->pluck('class')->unique()->filter()->map(function ($class) {
-                return trim((string) $class);
-            })->filter()->toArray();
-
-            $teacherSections = $teacherSubjects->pluck('section')->unique()->filter()->map(function ($section) {
-                return trim((string) $section);
-            })->filter()->toArray();
-
-            $staticSubjects = $this->getStaticSubjects();
-
-            // Build timetable query for this day only.
+            // Build timetable query for this day only (subjects only — no assembly/breaks).
             $query = Timetable::query();
             $query->whereRaw('LOWER(TRIM(day)) = ?', [$dayNameLower]);
 
-            // subject filter: teacher assigned subjects OR static subjects
-            if (!empty($teacherSubjectNames) || !empty($staticSubjects)) {
-                $query->where(function ($q) use ($teacherSubjectNames, $staticSubjects) {
-                    if (!empty($teacherSubjectNames)) {
-                        foreach ($teacherSubjectNames as $subjectName) {
-                            $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($subjectName))]);
-                        }
-                    }
-                    if (!empty($staticSubjects)) {
-                        foreach ($staticSubjects as $staticSubject) {
-                            $q->orWhereRaw('TRIM(subject) = ?', [trim($staticSubject)]);
-                        }
-                    }
-                });
-            } else {
+            $assignmentRows = $teacherSubjects
+                ->map(function ($row) {
+                    return [
+                        'campus' => strtolower(trim((string) ($row->campus ?? ''))),
+                        'class' => strtolower(trim((string) ($row->class ?? ''))),
+                        'section' => strtolower(trim((string) ($row->section ?? ''))),
+                        'subject' => strtolower(trim((string) ($row->subject_name ?? ''))),
+                    ];
+                })
+                ->filter(function ($row) {
+                    return $row['class'] !== '' && $row['subject'] !== '';
+                })
+                ->unique(fn ($row) => implode('|', [$row['campus'], $row['class'], $row['section'], $row['subject']]))
+                ->values();
+
+            if ($assignmentRows->isEmpty()) {
                 return response()->json([
                     'success' => true,
                     'message' => 'No timetable found for today.',
@@ -684,74 +669,20 @@ class TeacherTimetableController extends Controller
                 ], 200);
             }
 
-            // restrict by class/section combinations (similar to getTimetable)
-            if (!empty($teacherClasses) || !empty($teacherSections)) {
-                $query->where(function ($q) use ($teacherClasses, $teacherSections) {
-                    if (!empty($teacherClasses) && !empty($teacherSections)) {
-                        foreach ($teacherClasses as $class) {
-                            foreach ($teacherSections as $section) {
-                                $q->orWhere(function ($csQuery) use ($class, $section) {
-                                    $csQuery->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
-                                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-                                });
-                            }
-                        }
-                    }
-
-                    if (!empty($teacherClasses) && empty($teacherSections)) {
-                        foreach ($teacherClasses as $class) {
-                            $q->orWhereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))]);
-                        }
-                    }
-
-                    if (empty($teacherClasses) && !empty($teacherSections)) {
-                        foreach ($teacherSections as $section) {
-                            $q->orWhereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($section))]);
-                        }
-                    }
-                });
-            }
+            $this->applyTeacherAssignmentScope($query, $assignmentRows, false);
 
             $timetables = $query
                 ->orderBy('starting_time')
                 ->get();
 
-            // Resolve assigned teacher per subject/campus for the teacher's context.
-            // (Best-effort; the detailed mapping by class/section is already handled in /timetable/by-class.)
-            $teacherSubjectNamesForMapping = $teacherSubjectNames;
-            $subjectTeacherBySubjectCampus = Subject::query()
-                ->when(!empty($teacherSubjectNamesForMapping), function ($q) use ($teacherSubjectNamesForMapping) {
-                    $q->whereIn('subject_name', $teacherSubjectNamesForMapping);
-                })
-                ->get()
-                ->reduce(function ($carry, $row) {
-                    $subjectKey = strtolower(trim((string) ($row->subject_name ?? '')));
-                    $campusKey = strtolower(trim((string) ($row->campus ?? '')));
-                    if ($subjectKey === '') {
-                        return $carry;
-                    }
-
-                    $subjectCampusKey = $subjectKey . '|' . $campusKey;
-                    if (!array_key_exists($subjectCampusKey, $carry) && !empty(trim((string) ($row->teacher ?? '')))) {
-                        $carry[$subjectCampusKey] = trim((string) ($row->teacher ?? ''));
-                    }
-
-                    // Fallback by subject only when campus-specific is not available
-                    if (!array_key_exists($subjectKey, $carry) && !empty(trim((string) ($row->teacher ?? '')))) {
-                        $carry[$subjectKey] = trim((string) ($row->teacher ?? ''));
-                    }
-
-                    return $carry;
-                }, []);
-
-            $timetableData = $timetables->map(function ($timetable) use ($teacher, $subjectTeacherBySubjectCampus, $timestamp, $dayName) {
-                $subjectKey = strtolower(trim((string) ($timetable->subject ?? '')));
-                $campusKey = strtolower(trim((string) ($timetable->campus ?? '')));
-                $subjectCampusKey = $subjectKey . '|' . $campusKey;
-
-                $resolvedTeacherName = $subjectTeacherBySubjectCampus[$subjectCampusKey]
-                    ?? $subjectTeacherBySubjectCampus[$subjectKey]
-                    ?? ($teacher->name ?? null);
+            $lectureNumber = 0;
+            $timetableData = $timetables
+                ->filter(fn ($timetable) => $this->isBillableLectureSubject($timetable->subject ?? null))
+                ->map(function ($timetable) use ($teacher, $timestamp, $dayName, $normalizedSalaryType, &$lectureNumber) {
+                $isBillable = $this->isBillableLectureSubject($timetable->subject ?? null);
+                if ($normalizedSalaryType === 'lecture' && $isBillable) {
+                    $lectureNumber++;
+                }
 
                 return [
                     'id' => $timetable->id,
@@ -760,7 +691,9 @@ class TeacherTimetableController extends Controller
                     'section' => $timetable->section,
                     'class_section' => trim((string) ($timetable->class ?? '')) . (!empty($timetable->section) ? ' - ' . trim((string) $timetable->section) : ''),
                     'subject' => $timetable->subject,
-                    'teacher_name' => $resolvedTeacherName,
+                    'is_billable_lecture' => $isBillable,
+                    'lecture_number' => ($normalizedSalaryType === 'lecture' && $isBillable) ? $lectureNumber : null,
+                    'teacher_name' => $teacher->name ?? null,
                     'teacher_emp_id' => $teacher->emp_id ?? null,
                     'day' => $timetable->day ?? $dayName,
                     'starting_time' => $timetable->starting_time,
@@ -773,12 +706,15 @@ class TeacherTimetableController extends Controller
                 ];
             })->values();
 
+            $billableLecturesToday = $timetableData->filter(fn (array $row) => (bool) ($row['is_billable_lecture'] ?? false));
+            $periodsForDuration = $normalizedSalaryType === 'lecture' ? $billableLecturesToday : $timetableData;
+
             $classesToday = $timetableData->pluck('class_section')->unique()->values();
 
             // Compute duration based summary for salary-type (best-effort from timetable periods).
-            $totalPeriodsToday = $timetableData->count();
+            $lectureCountToday = $billableLecturesToday->count();
             $totalMinutesToday = 0;
-            foreach ($timetableData as $period) {
+            foreach ($periodsForDuration as $period) {
                 $startTs = strtotime(date('Y-m-d', $timestamp) . ' ' . ($period['starting_time'] ?? ''));
                 $endTs = strtotime(date('Y-m-d', $timestamp) . ' ' . ($period['ending_time'] ?? ''));
                 if ($startTs !== false && $endTs !== false && $endTs > $startTs) {
@@ -803,7 +739,7 @@ class TeacherTimetableController extends Controller
                     'classes_today' => $classesToday,
                     'today_salary_summary' => [
                         'salary_type' => $normalizedSalaryType,
-                        'lecture_count_today' => $normalizedSalaryType === 'lecture' ? $totalPeriodsToday : 0,
+                        'lecture_count_today' => $normalizedSalaryType === 'lecture' ? $lectureCountToday : 0,
                         'total_hours_today' => $normalizedSalaryType === 'per hour' ? $totalHoursToday : 0,
                         'full_time_active_today' => $normalizedSalaryType === 'full time' && $timetableData->isNotEmpty() ? 1 : 0,
                     ],
@@ -975,9 +911,6 @@ class TeacherTimetableController extends Controller
             if (!empty($campusName)) {
                 $query->whereRaw('LOWER(TRIM(campus)) = ?', [$campusName]);
             }
-            
-            // Include static subjects list
-            $staticSubjects = $this->getStaticSubjects();
 
             // CLASS API default: show timetable for the whole class (all subjects).
             // Only restrict to teacher subjects if explicitly requested.
@@ -985,35 +918,27 @@ class TeacherTimetableController extends Controller
             $showAllSubjects = !$teacherOnly;
 
             if ($teacherOnly) {
-                // Restrict by teacher's assigned subjects plus static subjects
-                if (!empty($teacherSubjectNames) || !empty($staticSubjects)) {
-                    $query->where(function($q) use ($teacherSubjectNames, $staticSubjects) {
-                        if (!empty($teacherSubjectNames)) {
-                            foreach ($teacherSubjectNames as $subjectName) {
-                                $subjectNameLower = strtolower(trim($subjectName));
-                                $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
+                // Restrict by teacher's assigned subjects only (no assembly/breaks).
+                if (!empty($teacherSubjectNames)) {
+                    $query->where(function($q) use ($teacherSubjectNames) {
+                        foreach ($teacherSubjectNames as $subjectName) {
+                            $subjectNameLower = strtolower(trim($subjectName));
+                            $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [$subjectNameLower]);
 
-                                $subjectVariations = [
-                                    'computer science' => ['computer science', 'computer', 'cs', 'comp science'],
-                                    'english' => ['english', 'eng'],
-                                    'mathematics' => ['mathematics', 'maths', 'math'],
-                                    'urdu' => ['urdu'],
-                                    'science' => ['science', 'sci'],
-                                    'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
-                                    'social studies' => ['social studies', 'social', 'sst'],
-                                ];
+                            $subjectVariations = [
+                                'computer science' => ['computer science', 'computer', 'cs', 'comp science'],
+                                'english' => ['english', 'eng'],
+                                'mathematics' => ['mathematics', 'maths', 'math'],
+                                'urdu' => ['urdu'],
+                                'science' => ['science', 'sci'],
+                                'islamiat' => ['islamiat', 'islamic studies', 'islamic'],
+                                'social studies' => ['social studies', 'social', 'sst'],
+                            ];
 
-                                if (isset($subjectVariations[$subjectNameLower])) {
-                                    foreach ($subjectVariations[$subjectNameLower] as $variant) {
-                                        $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($variant))]);
-                                    }
+                            if (isset($subjectVariations[$subjectNameLower])) {
+                                foreach ($subjectVariations[$subjectNameLower] as $variant) {
+                                    $q->orWhereRaw('LOWER(TRIM(subject)) = ?', [strtolower(trim($variant))]);
                                 }
-                            }
-                        }
-
-                        if (!empty($staticSubjects)) {
-                            foreach ($staticSubjects as $staticSubject) {
-                                $q->orWhereRaw('TRIM(subject) = ?', [trim($staticSubject)]);
                             }
                         }
                     });
@@ -1025,9 +950,10 @@ class TeacherTimetableController extends Controller
             // Debug: Check if any data exists for this class (without section filter)
             $debugQuery = Timetable::query();
             $debugQuery->whereRaw('LOWER(TRIM(class)) = ?', [$className]);
-            $allClassTimetables = $debugQuery->get();
+            $allClassTimetables = $debugQuery->get()
+                ->filter(fn ($timetable) => $this->isBillableLectureSubject($timetable->subject ?? null));
 
-            // Order by day and time
+            // Order by day and time (subjects only — no assembly/breaks)
             $timetables = $query->orderByRaw("
                 CASE day
                     WHEN 'Monday' THEN 1
@@ -1041,7 +967,8 @@ class TeacherTimetableController extends Controller
                 END
             ")
             ->orderBy('starting_time')
-            ->get();
+            ->get()
+            ->filter(fn ($timetable) => $this->isBillableLectureSubject($timetable->subject ?? null));
 
             // Get day, month and year for date calculation
             $dayForDate = null;

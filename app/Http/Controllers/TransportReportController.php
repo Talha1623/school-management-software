@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GeneralSetting;
 use App\Models\Transport;
 use App\Models\Student;
 use App\Models\StudentPayment;
@@ -37,11 +38,14 @@ class TransportReportController extends Controller
             ->where('transport_route', '!=', '')
             ->count();
         
+        $settings = GeneralSetting::getSettings();
+
         return view('transport.print.all-transport-report', compact(
             'transports',
             'totalRoutes',
             'totalVehicles',
-            'totalStudents'
+            'totalStudents',
+            'settings'
         ));
     }
 
@@ -77,10 +81,13 @@ class TransportReportController extends Controller
             return max(0, $amount - $discount) + max(0, $lateFee);
         });
         
+        $settings = GeneralSetting::getSettings();
+
         return view('transport.print.transport-income-report', compact(
             'monthlyIncome',
             'totalIncome',
-            'payments'
+            'payments',
+            'settings'
         ));
     }
 
@@ -104,11 +111,14 @@ class TransportReportController extends Controller
         $totalStudents = $students->count();
         $totalRoutes = $studentsByRoute->count();
         
+        $settings = GeneralSetting::getSettings();
+
         return view('transport.print.connected-students-report', compact(
             'students',
             'studentsByRoute',
             'totalStudents',
-            'totalRoutes'
+            'totalRoutes',
+            'settings'
         ));
     }
 
@@ -125,6 +135,8 @@ class TransportReportController extends Controller
             ->orderBy('student_name', 'asc')
             ->get();
         
-        return view('transport.print.transport-passes', compact('students'));
+        $settings = GeneralSetting::getSettings();
+
+        return view('transport.print.transport-passes', compact('students', 'settings'));
     }
 }

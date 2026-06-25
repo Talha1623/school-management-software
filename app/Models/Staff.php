@@ -198,6 +198,248 @@ class Staff extends Authenticatable
     }
 
     /**
+     * Class names from Manage Subjects only (subject-teacher assignments).
+     */
+    public function assignedSubjectClassNames(?string $selectedCampus = null): Collection
+    {
+        if ($this->teacherIdentityKeys() === []) {
+            return collect();
+        }
+
+        $campus = $this->campusForTeachingAssignments($selectedCampus);
+
+        $subjectsQuery = Subject::query();
+        $this->scopeQueryToTeacherAssignments($subjectsQuery);
+        $this->scopeQueryToFlexibleCampus($subjectsQuery, $campus);
+
+        $classes = $subjectsQuery->pluck('class')
+            ->map(fn ($class) => trim((string) $class))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($classes->isEmpty() && $campus !== null) {
+            $fallbackQuery = Subject::query();
+            $this->scopeQueryToTeacherAssignments($fallbackQuery);
+
+            $classes = $fallbackQuery->pluck('class')
+                ->map(fn ($class) => trim((string) $class))
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values();
+        }
+
+        return $classes;
+    }
+
+    /**
+     * Subject names this staff may enter marks or declare results for (Manage Subjects).
+     */
+    public function uploadableSubjectNamesForMarks(
+        ?string $campus = null,
+        ?string $class = null,
+        ?string $section = null
+    ): Collection {
+        if ($this->teacherIdentityKeys() === []) {
+            return collect();
+        }
+
+        $requestedCampus = trim((string) ($campus ?? ''));
+        $effectiveCampus = $requestedCampus !== ''
+            ? $requestedCampus
+            : $this->campusForTeachingAssignments(null);
+
+        $buildQuery = function (?string $campusFilter) use ($class, $section) {
+            $query = Subject::query();
+            $this->scopeQueryToTeacherAssignments($query);
+            $this->scopeQueryToFlexibleCampus($query, $campusFilter);
+
+            if ($class !== null && trim((string) $class) !== '') {
+                $className = trim((string) $class);
+                $classKey = self::normalizeClassKey($className);
+                $query->where(function (Builder $q) use ($className, $classKey) {
+                    $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                        ->orWhereRaw('LOWER(TRIM(class)) = ?', [$classKey])
+                        ->orWhereRaw("LOWER(TRIM(REPLACE(REPLACE(class, 'Class ', ''), 'class ', ''))) = ?", [$classKey]);
+                });
+            }
+
+            if ($section !== null && trim((string) $section) !== '') {
+                $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $section))]);
+            }
+
+            return $query;
+        };
+
+        $subjects = $buildQuery($effectiveCampus)
+            ->whereNotNull('subject_name')
+            ->pluck('subject_name')
+            ->map(fn ($name) => trim((string) $name))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($subjects->isEmpty() && $effectiveCampus !== null) {
+            $subjects = $buildQuery(null)
+                ->whereNotNull('subject_name')
+                ->pluck('subject_name')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values();
+        }
+
+        return $subjects;
+    }
+
+    /**
+     * Whether this staff member may declare/reset results for a test row.
+     */
+    public function canDeclareResultForTest(
+        ?string $campus,
+        ?string $class,
+        ?string $section,
+        ?string $subject
+    ): bool {
+        $subjectName = trim((string) $subject);
+        if ($subjectName === '') {
+            return false;
+        }
+
+        return $this->uploadableSubjectNamesForMarks($campus, $class, $section)
+            ->contains(fn ($name) => strcasecmp(trim((string) $name), $subjectName) === 0);
+    }
+
+    /**
+     * Whether this staff member may upload marks or enter exam remarks for a subject.
+     */
+    public function canUploadMarksForSubject(
+        ?string $campus,
+        ?string $class,
+        ?string $section,
+        ?string $subject
+    ): bool {
+        return $this->canDeclareResultForTest($campus, $class, $section, $subject);
+    }
+
+    /**
+     * Whether this staff member can edit final result remarks for a class/section.
+     * Only allowed for class teacher of that class/section (and campus when set).
+     */
+    public function canEditFinalResultRemarks(
+        ?string $campus,
+        ?string $class,
+        ?string $section = null
+    ): bool {
+        $className = trim((string) ($class ?? ''));
+        if ($className === '') {
+            return false;
+        }
+
+        $classKey = self::normalizeClassKey($className);
+        $campusFilter = $this->campusForTeachingAssignments($campus);
+
+        $sectionsQuery = Section::query();
+        $this->scopeQueryToTeacherAssignments($sectionsQuery);
+        $this->scopeQueryToFlexibleCampus($sectionsQuery, $campusFilter);
+
+        $sectionsQuery->where(function (Builder $q) use ($className, $classKey) {
+            $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
+                ->orWhereRaw('LOWER(TRIM(class)) = ?', [$classKey])
+                ->orWhereRaw("LOWER(TRIM(REPLACE(REPLACE(class, 'Class ', ''), 'class ', ''))) = ?", [$classKey]);
+        });
+
+        if ($section !== null && trim((string) $section) !== '') {
+            $sectionsQuery->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim((string) $section))]);
+        }
+
+        return $sectionsQuery->exists();
+    }
+
+    /**
+     * Sections in a class where this staff member teaches (Manage Subjects + Manage Section).
+     */
+    public function assignedTeachingSectionsForClass(string $class, ?string $selectedCampus = null): Collection
+    {
+        if ($this->teacherIdentityKeys() === []) {
+            return collect();
+        }
+
+        $classKey = self::normalizeClassKey($class);
+        if ($classKey === '') {
+            return collect();
+        }
+
+        $campus = $this->campusForTeachingAssignments($selectedCampus);
+
+        $applyClassFilter = function (Builder $query) use ($class, $classKey) {
+            $query->where(function (Builder $q) use ($class, $classKey) {
+                $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($class))])
+                    ->orWhereRaw('LOWER(TRIM(class)) = ?', [$classKey])
+                    ->orWhereRaw("LOWER(TRIM(REPLACE(REPLACE(class, 'Class ', ''), 'class ', ''))) = ?", [$classKey]);
+            });
+        };
+
+        $subjectsQuery = Subject::query();
+        $this->scopeQueryToTeacherAssignments($subjectsQuery);
+        $this->scopeQueryToFlexibleCampus($subjectsQuery, $campus);
+        $applyClassFilter($subjectsQuery);
+
+        $sectionsFromSubjects = $subjectsQuery
+            ->whereNotNull('section')
+            ->pluck('section')
+            ->map(fn ($section) => trim((string) $section))
+            ->filter();
+
+        $sectionsQuery = Section::query();
+        $this->scopeQueryToTeacherAssignments($sectionsQuery);
+        $this->scopeQueryToFlexibleCampus($sectionsQuery, $campus);
+        $applyClassFilter($sectionsQuery);
+
+        $sectionsFromClassTeacher = $sectionsQuery
+            ->whereNotNull('name')
+            ->pluck('name')
+            ->map(fn ($section) => trim((string) $section))
+            ->filter();
+
+        $sections = $sectionsFromSubjects
+            ->merge($sectionsFromClassTeacher)
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($sections->isEmpty() && $campus !== null) {
+            $fallbackSubjectsQuery = Subject::query();
+            $this->scopeQueryToTeacherAssignments($fallbackSubjectsQuery);
+            $applyClassFilter($fallbackSubjectsQuery);
+
+            $fallbackSectionsQuery = Section::query();
+            $this->scopeQueryToTeacherAssignments($fallbackSectionsQuery);
+            $applyClassFilter($fallbackSectionsQuery);
+
+            $sections = $fallbackSubjectsQuery
+                ->whereNotNull('section')
+                ->pluck('section')
+                ->merge(
+                    $fallbackSectionsQuery
+                        ->whereNotNull('name')
+                        ->pluck('name')
+                )
+                ->map(fn ($section) => trim((string) $section))
+                ->filter()
+                ->unique()
+                ->sort()
+                ->values();
+        }
+
+        return $sections;
+    }
+
+    /**
      * Classes where this staff member is class teacher (Manage Section).
      */
     public function assignedAttendanceClassNames(?string $selectedCampus = null): Collection

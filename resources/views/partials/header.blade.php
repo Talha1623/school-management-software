@@ -81,17 +81,12 @@
                                 if (Auth::guard('admin')->check()) {
                                     $admin = Auth::guard('admin')->user();
                                     if ($admin) {
-                                        $sourceTypes = ['teacher', 'student', 'parent'];
-                                        $mailUnreadCount = \App\Models\Message::whereIn('from_type', $sourceTypes)
-                                            ->where('to_type', 'admin')
-                                            ->where('to_id', $admin->id)
-                                            ->whereNull('read_at')
+                                        $mailUnreadCount = \App\Models\Message::query()
+                                            ->unreadChatToAdmin((int) $admin->id)
                                             ->count();
 
-                                        $mailMessages = \App\Models\Message::whereIn('from_type', $sourceTypes)
-                                            ->where('to_type', 'admin')
-                                            ->where('to_id', $admin->id)
-                                            ->whereNull('read_at')
+                                        $mailMessages = \App\Models\Message::query()
+                                            ->unreadChatToAdmin((int) $admin->id)
                                             ->orderBy('created_at', 'desc')
                                             ->limit(10)
                                             ->get()
@@ -115,17 +110,7 @@
                                                     'from_type' => $message->from_type,
                                                     'from_id' => $message->from_id,
                                                     'sender_name' => $name,
-                                                    'href' => $message->from_type === 'accountant'
-                                                        ? (str_contains(strtolower((string) $message->text), 'transport fee')
-                                                            ? route('accounting.generate-transport-fee')
-                                                            : (str_contains(strtolower((string) $message->text), 'fee payment')
-                                                                ? route('fee-payment')
-                                                                : (str_contains(strtolower((string) $message->text), 'task')
-                                                                    ? route('task-management')
-                                                                    : (str_contains(strtolower((string) $message->text), 'balance sheet settlement')
-                                                                        ? route('reports.balance-sheet')
-                                                                        : route('accounting.generate-custom-fee')))))
-                                                        : route('live-chat', ['recipient_type' => $message->from_type, 'recipient_id' => $message->from_id]),
+                                                    'href' => $message->liveChatUrl(),
                                                     'text' => $message->text
                                                         ? (strlen($message->text) > 50 ? substr($message->text, 0, 50) . '...' : $message->text)
                                                         : 'Attachment sent',
@@ -199,7 +184,7 @@
                                     $admin = Auth::guard('admin')->user();
                                     if ($admin) {
                                         $canMarkAdminNotifications = true;
-                                        $notificationSourceTypes = ['teacher', 'accountant', 'staff_notification'];
+                                        $notificationSourceTypes = ['teacher', 'accountant', 'accountant_notification', 'staff_notification'];
 
                                         $unreadChatCount = \App\Models\Message::whereIn('from_type', $notificationSourceTypes)
                                             ->where('to_type', 'admin')
@@ -215,7 +200,7 @@
                                             ->limit(10)
                                             ->get()
                                             ->map(function ($message) {
-                                                if ($message->from_type === 'accountant') {
+                                                if ($message->from_type === 'accountant' || $message->from_type === 'accountant_notification') {
                                                     $sender = \App\Models\Accountant::find($message->from_id);
                                                     $senderName = $sender?->name ?? 'Accountant';
                                                     $recipientType = 'accountant';
@@ -234,7 +219,7 @@
                                                     'recipient_type' => $recipientType,
                                                     'recipient_id' => $message->from_id,
                                                     'sender_name' => $senderName,
-                                                    'href' => $message->from_type === 'accountant'
+                                                    'href' => in_array($message->from_type, ['accountant', 'accountant_notification'], true)
                                                         ? (str_contains(strtolower((string) $message->text), 'transport fee')
                                                             ? route('accounting.generate-transport-fee')
                                                             : (str_contains(strtolower((string) $message->text), 'fee payment')

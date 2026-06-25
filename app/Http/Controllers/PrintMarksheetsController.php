@@ -11,6 +11,7 @@ use App\Models\StudentMark;
 use App\Models\CombinedResultGrade;
 use App\Models\ParticularTestGrade;
 use App\Models\Campus;
+use App\Models\GeneralSetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Http\JsonResponse;
@@ -183,6 +184,11 @@ class PrintMarksheetsController extends Controller
             }
         }
 
+        $settings = GeneralSetting::getSettings();
+        $schoolName = trim((string) ($settings->school_name ?? '')) ?: 'School';
+        $schoolPhone = trim((string) ($settings->school_phone ?? ''));
+        $schoolLogoUrl = $this->resolveSchoolLogoUrl($settings->logo ?? null);
+
         return view('test.print-marksheets.practical', compact(
             'campuses',
             'campusesList',
@@ -202,8 +208,29 @@ class PrintMarksheetsController extends Controller
             'filterSection',
             'filterSubject',
             'filterTest',
-            'isPrint'
+            'isPrint',
+            'schoolName',
+            'schoolPhone',
+            'schoolLogoUrl'
         ));
+    }
+
+    private function resolveSchoolLogoUrl(?string $logoPath): ?string
+    {
+        $logoPath = trim((string) $logoPath);
+        if ($logoPath === '') {
+            return null;
+        }
+
+        if (str_starts_with($logoPath, 'http://') || str_starts_with($logoPath, 'https://')) {
+            return $logoPath;
+        }
+
+        if (str_starts_with($logoPath, 'storage/')) {
+            return asset($logoPath);
+        }
+
+        return asset('storage/' . ltrim($logoPath, '/'));
     }
 
     /**

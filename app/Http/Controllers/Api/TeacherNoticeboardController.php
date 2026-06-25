@@ -29,13 +29,28 @@ class TeacherNoticeboardController extends Controller
                 ], 403);
             }
 
-            // Only show notices where show_on = 'Yes' to staff
-            $query = Noticeboard::where('show_on', 'Yes');
-
-            // Filter by campus
-            if ($request->filled('campus')) {
-                $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($request->campus))]);
+            $teacherCampus = strtolower(trim((string) ($teacher->campus ?? '')));
+            if ($teacherCampus === '') {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No campus is assigned to this teacher.',
+                    'data' => [
+                        'noticeboards' => [],
+                        'pagination' => [
+                            'current_page' => 1,
+                            'last_page' => 1,
+                            'per_page' => 30,
+                            'total' => 0,
+                            'from' => null,
+                            'to' => null,
+                        ],
+                    ],
+                ], 200);
             }
+
+            // Teachers can only view notices from their assigned campus.
+            $query = Noticeboard::where('show_on', 'Yes')
+                ->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$teacherCampus]);
 
             // Search functionality
             if ($request->filled('search')) {
@@ -126,7 +141,18 @@ class TeacherNoticeboardController extends Controller
                 ], 403);
             }
 
-            $noticeboard = Noticeboard::where('show_on', 'Yes')->findOrFail($id);
+            $teacherCampus = strtolower(trim((string) ($teacher->campus ?? '')));
+            if ($teacherCampus === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No campus is assigned to this teacher.',
+                ], 403);
+            }
+
+            // Protect direct notice access across campuses.
+            $noticeboard = Noticeboard::where('show_on', 'Yes')
+                ->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$teacherCampus])
+                ->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -178,19 +204,8 @@ class TeacherNoticeboardController extends Controller
                 ], 403);
             }
 
-            // Get campuses from noticeboards
-            $campuses = Noticeboard::whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
-
-            // If no campuses from noticeboards, get from Campus model
-            if ($campuses->isEmpty()) {
-                $campuses = Campus::orderBy('campus_name', 'asc')
-                    ->pluck('campus_name')
-                    ->values();
-            }
+            $teacherCampus = trim((string) ($teacher->campus ?? ''));
+            $campuses = $teacherCampus !== '' ? collect([$teacherCampus]) : collect();
 
             return response()->json([
                 'success' => true,

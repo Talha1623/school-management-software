@@ -29,6 +29,16 @@
                 </div>
             @endif
 
+            @if(!empty($isStaffMarksUser) && isset($campuses) && $campuses->isEmpty())
+                <div class="alert alert-warning py-2 mb-3" style="font-size: 13px;">
+                    No campus is assigned to your profile or Manage Subjects. Please contact the administrator.
+                </div>
+            @elseif(!empty($isStaffMarksUser))
+                <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                    Select <strong>Campus</strong>, then <strong>Class</strong>, <strong>Section</strong>, <strong>Exam</strong>, and <strong>Subject</strong>. You can save marks only for subjects marked <strong>(Edit)</strong>.
+                </div>
+            @endif
+
             <!-- Filter Form - Flow: Campus → Class → Section → Exam → Subject -->
             <form action="{{ route('exam.marks-entry') }}" method="GET" id="filterForm">
                 <div class="row g-2 mb-3 align-items-end">
@@ -354,9 +364,33 @@ document.addEventListener('DOMContentLoaded', function() {
     const sectionSelect = document.getElementById('filter_section');
     const subjectSelect = document.getElementById('filter_subject');
     const examSelect = document.getElementById('filter_exam');
+    const preservedClass = @json($filterClass ?? '');
+    const preservedSection = @json($filterSection ?? '');
+    const preservedSubject = @json($filterSubject ?? '');
+    const preservedExam = @json($filterExam ?? '');
+
+    function marksFetch(url) {
+        return fetch(url, {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        }).then(async response => {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                throw new Error('Invalid response from server');
+            }
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || ('Server returned ' + response.status));
+            }
+            return data;
+        });
+    }
 
     // Flow: Campus → Class → Section → Exam → Subject
-    function loadClasses() {
+    function loadClasses(selectedClassToKeep) {
         if (!classSelect) return;
         const campus = campusSelect ? campusSelect.value : '';
         if (!campus) {
@@ -378,25 +412,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         classSelect.disabled = false;
         classSelect.innerHTML = '<option value="">Loading...</option>';
-        fetch(`{{ route('exam.marks-entry.get-classes') }}?campus=${encodeURIComponent(campus)}`)
-            .then(response => response.json())
+        marksFetch(`{{ route('exam.marks-entry.get-classes') }}?campus=${encodeURIComponent(campus)}`)
             .then(data => {
                 classSelect.innerHTML = '<option value="">Select Class</option>';
-                if (data.classes && data.classes.length > 0) {
-                    data.classes.forEach(className => {
-                        const opt = document.createElement('option');
-                        opt.value = className;
-                        opt.textContent = className;
-                        if (className === '{{ $filterClass }}') opt.selected = true;
-                        classSelect.appendChild(opt);
-                    });
+                (data.classes || []).forEach(className => {
+                    const opt = document.createElement('option');
+                    opt.value = className;
+                    opt.textContent = className;
+                    if (selectedClassToKeep && className === selectedClassToKeep) {
+                        opt.selected = true;
+                    }
+                    classSelect.appendChild(opt);
+                });
+                classSelect.disabled = !(data.classes && data.classes.length > 0);
+                if (selectedClassToKeep && classSelect.value === selectedClassToKeep) {
+                    loadSections(selectedClassToKeep, preservedSection);
                 }
-                @if($filterClass)
-                if (classSelect.querySelector('option[value="{{ $filterClass }}"]')) {
-                    classSelect.value = '{{ $filterClass }}';
-                    loadSections(classSelect.value);
-                }
-                @endif
             })
             .catch(() => {
                 classSelect.innerHTML = '<option value="">Select Class</option>';
@@ -413,19 +444,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         examSelect.disabled = false;
         examSelect.innerHTML = '<option value="">Loading...</option>';
-        fetch(`{{ route('exam.marks-entry.get-exams') }}?campus=${encodeURIComponent(campus)}`)
-            .then(response => response.json())
+        marksFetch(`{{ route('exam.marks-entry.get-exams') }}?campus=${encodeURIComponent(campus)}`)
             .then(data => {
                 examSelect.innerHTML = '<option value="">Select Exam</option>';
-                if (data.exams && data.exams.length > 0) {
-                    data.exams.forEach(exam => {
-                        const option = document.createElement('option');
-                        option.value = exam;
-                        option.textContent = exam;
-                        if (exam === '{{ $filterExam }}') option.selected = true;
-                        examSelect.appendChild(option);
-                    });
-                }
+                (data.exams || []).forEach(exam => {
+                    const option = document.createElement('option');
+                    option.value = exam;
+                    option.textContent = exam;
+                    if (preservedExam && exam === preservedExam) {
+                        option.selected = true;
+                    }
+                    examSelect.appendChild(option);
+                });
             })
             .catch(() => {
                 examSelect.innerHTML = '<option value="">Select Exam</option>';
@@ -486,45 +516,51 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function loadSections(selectedClass) {
+    function loadSections(selectedClass, selectedSectionToKeep) {
         if (!sectionSelect) return;
-        
-        if (selectedClass) {
-            sectionSelect.innerHTML = '<option value="">Loading...</option>';
 
-            const params = new URLSearchParams();
-            params.append('class', selectedClass);
-            if (campusSelect && campusSelect.value) {
-                params.append('campus', campusSelect.value);
-            }
-
-            fetch(`{{ route('exam.marks-entry.get-sections') }}?${params.toString()}`)
-                .then(response => response.json())
-                .then(data => {
-                    sectionSelect.innerHTML = '<option value="">Select Section</option>';
-                    if (data.sections && data.sections.length > 0) {
-                        data.sections.forEach(section => {
-                            const option = document.createElement('option');
-                            option.value = section;
-                            option.textContent = section;
-                            // Preserve selected section if it exists
-                            if (section === '{{ $filterSection }}') {
-                                option.selected = true;
-                            }
-                            sectionSelect.appendChild(option);
-                        });
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading sections:', error);
-                    sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
-                });
-        } else {
+        if (!selectedClass) {
             sectionSelect.innerHTML = '<option value="">Select Section</option>';
+            sectionSelect.disabled = true;
+            return;
         }
+
+        const campus = campusSelect ? campusSelect.value : '';
+        if (!campus) {
+            sectionSelect.innerHTML = '<option value="">Select campus first</option>';
+            sectionSelect.disabled = true;
+            return;
+        }
+
+        sectionSelect.disabled = false;
+        sectionSelect.innerHTML = '<option value="">Loading...</option>';
+
+        const params = new URLSearchParams({ class: selectedClass, campus: campus });
+        marksFetch(`{{ route('exam.marks-entry.get-sections') }}?${params.toString()}`)
+            .then(data => {
+                sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                (data.sections || []).forEach(section => {
+                    const option = document.createElement('option');
+                    option.value = section;
+                    option.textContent = section;
+                    if (selectedSectionToKeep && section === selectedSectionToKeep) {
+                        option.selected = true;
+                    }
+                    sectionSelect.appendChild(option);
+                });
+                sectionSelect.disabled = !(data.sections && data.sections.length > 0);
+                if (selectedSectionToKeep && sectionSelect.value === selectedSectionToKeep) {
+                    loadSubjects(preservedSubject);
+                }
+            })
+                .catch(error => {
+                console.error('Error loading sections:', error);
+                sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                sectionSelect.disabled = true;
+            });
     }
 
-    function loadSubjects() {
+    function loadSubjects(selectedSubjectToKeep) {
         if (!subjectSelect) return;
         
         const classValue = classSelect ? classSelect.value : '';
@@ -543,12 +579,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (section) params.append('section', section);
         if (campusSelect && campusSelect.value) params.append('campus', campusSelect.value);
         if (exam) params.append('exam', exam);
-        
-        // Get the currently selected subject value before reloading
-        const currentSelectedSubject = subjectSelect ? subjectSelect.value : '';
-        
-        fetch(`{{ route('exam.marks-entry.get-subjects') }}?${params.toString()}`)
-            .then(response => response.json())
+
+        marksFetch(`{{ route('exam.marks-entry.get-subjects') }}?${params.toString()}`)
             .then(data => {
                 subjectSelect.innerHTML = '<option value="">Select Subject</option>';
                 if (data.subjects && data.subjects.length > 0) {
@@ -563,8 +595,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else {
                             option.textContent = subject;
                         }
-                        // Preserve selected subject - check both server-side value and current selected value
-                        if (subject === '{{ $filterSubject }}' || subject === currentSelectedSubject) {
+                        if (selectedSubjectToKeep && subject === selectedSubjectToKeep) {
                             option.selected = true;
                         }
                         subjectSelect.appendChild(option);
@@ -584,53 +615,22 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    // Initial load if filters are already set
-    const initialCampus = campusSelect ? campusSelect.value : '';
-    const initialClass = classSelect ? classSelect.value : '';
-    const initialSection = sectionSelect ? sectionSelect.value : '';
-    
-    if (initialCampus) {
-        loadClasses();
-        loadExams();
-    } else if (initialClass) {
-        if (sectionSelect) {
-            sectionSelect.disabled = false;
+    if (campusSelect && campusSelect.value) {
+        if (classSelect && classSelect.options.length <= 1) {
+            loadClasses(preservedClass);
         }
-        loadSections(initialClass);
+        if (examSelect && examSelect.options.length <= 1) {
+            loadExams();
+        }
+        if (preservedClass && sectionSelect && sectionSelect.options.length <= 1) {
+            loadSections(preservedClass, preservedSection);
+        } else if (preservedClass && preservedSection && subjectSelect && subjectSelect.options.length <= 1) {
+            loadSubjects(preservedSubject);
+        }
     } else {
-        // Disable dependent dropdowns if no class selected
-        if (sectionSelect) {
-            sectionSelect.disabled = true;
-        }
-        if (subjectSelect) {
-            subjectSelect.disabled = true;
-        }
-        if (examSelect) {
-            examSelect.disabled = true;
-        }
-    }
-    
-    if (initialClass && initialSection) {
-        // Enable exam and subject dropdowns if both class and section are selected
-        if (examSelect) {
-            examSelect.disabled = false;
-        }
-        if (subjectSelect) {
-            subjectSelect.disabled = false;
-        }
-        // Only load subjects via AJAX if dropdown is empty (not already loaded from server)
-        // Check if subject dropdown has more than just the default "Select Subject" option
-        if (subjectSelect && subjectSelect.options.length <= 1) {
-            loadSubjects();
-        }
-    } else if (initialSection) {
-        // If section is selected but class is not, disable subject
-        if (subjectSelect) {
-            subjectSelect.disabled = true;
-        }
-        if (examSelect) {
-            examSelect.disabled = true;
-        }
+        if (sectionSelect) sectionSelect.disabled = true;
+        if (subjectSelect) subjectSelect.disabled = true;
+        if (examSelect) examSelect.disabled = true;
     }
 
     // Search functionality

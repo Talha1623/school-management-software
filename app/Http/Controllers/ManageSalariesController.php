@@ -5,44 +5,41 @@ namespace App\Http\Controllers;
 use App\Models\Salary;
 use App\Models\Campus;
 use App\Models\Staff;
+use App\Services\StaffLoanRepaymentService;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class ManageSalariesController extends Controller
 {
+    private const MONTH_NAMES = [
+        'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+        'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+        'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12',
+    ];
+
+    public function __construct(
+        private readonly StaffLoanRepaymentService $loanRepaymentService,
+    ) {
+    }
     /**
      * Display a listing of salaries.
      */
     public function index(Request $request): View
     {
         $query = Salary::with('staff');
-        
-        // Campus filter
-        if ($request->filled('campus')) {
-            $campus = trim($request->campus);
-            if (!empty($campus)) {
-                $query->whereHas('staff', function($q) use ($campus) {
-                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-                });
-            }
-        }
-        
-        // Search functionality
-        if ($request->filled('search')) {
-            $search = trim($request->search);
-            if (!empty($search)) {
-                $searchLower = strtolower($search);
-                $query->whereHas('staff', function($q) use ($search, $searchLower) {
-                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"]);
-                })->orWhere('salary_month', 'like', "%{$search}%")
-                  ->orWhere('year', 'like', "%{$search}%");
-            }
-        }
+
+        $this->applyCampusFilter($query, $request->get('campus'));
+        $this->applySearchFilter($query, $request->get('search'));
         
         $perPage = $request->get('per_page', 10);
         $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
         
         $salaries = $query->orderBy('created_at', 'desc')->paginate($perPage)->withQueryString();
+
+        $this->syncLoanRepaymentsForSalaries($salaries->getCollection());
         
         // Calculate attendance summary for per hour teachers to show hours
         $generateController = app(\App\Http\Controllers\GenerateSalaryController::class);
@@ -50,19 +47,13 @@ class ManageSalariesController extends Controller
         $calculateAttendanceMethod = $reflection->getMethod('calculateAttendanceSummary');
         $calculateAttendanceMethod->setAccessible(true);
         
-        $monthNames = [
-            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
-            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
-            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
-        ];
-        
         // Add hours data to each salary for per hour teachers
         foreach ($salaries as $salary) {
             if ($salary->staff) {
                 $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
                 if ($salaryType === 'per hour') {
                     try {
-                        $monthNumber = (int) ($monthNames[$salary->salary_month] ?? date('m'));
+                        $monthNumber = (int) (self::MONTH_NAMES[$salary->salary_month] ?? date('m'));
                         $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
                         $totalMinutes = $attendanceSummary['total_minutes'] ?? 0;
                         $totalHours = round($totalMinutes / 60, 2);
@@ -79,24 +70,10 @@ class ManageSalariesController extends Controller
             }
         }
         
-        // Get campuses for filter dropdown
-        $campuses = Campus::orderBy('campus_name', 'asc')->get();
-        if ($campuses->isEmpty()) {
-            // Get campuses from staff table
-            $campusesFromStaff = Staff::whereNotNull('campus')
-                ->distinct()
-                ->pluck('campus')
-                ->sort()
-                ->values();
-            
-            // Convert to collection of objects with campus_name property
-            $campuses = collect();
-            foreach ($campusesFromStaff as $campusName) {
-                $campuses->push((object)['campus_name' => $campusName]);
-            }
-        }
-        
-        return view('salary-loan.manage-salaries', compact('salaries', 'campuses'));
+        $campuses = $this->campusOptionsForFilter();
+        $selectedCampus = $request->get('campus');
+
+        return view('salary-loan.manage-salaries', compact('salaries', 'campuses', 'selectedCampus'));
     }
 
     /**
@@ -107,6 +84,8 @@ class ManageSalariesController extends Controller
         // If request wants JSON (for modal), return JSON
         if ($request->wantsJson() || $request->ajax()) {
             $salary->load('staff');
+            $this->syncPendingSalaryLoan($salary);
+            $salary->refresh();
             
             // Calculate fees deductions
             $staff = $salary->staff;
@@ -114,8 +93,8 @@ class ManageSalariesController extends Controller
             $earlyExitCount = $salary->early_exit ?? 0;
             
             // Get staff individual fees or defaults
-            $lateFeePerLate = $staff->late_fees ?? 500;
-            $earlyExitFeePerExit = $staff->early_exit_fees ?? 1000;
+            $lateFeePerLate = $staff?->late_fees ?? 500;
+            $earlyExitFeePerExit = $staff?->early_exit_fees ?? 1000;
             
             // Calculate total fees
             $lateFeesTotal = $lateFeePerLate * $lateCount;
@@ -124,10 +103,10 @@ class ManageSalariesController extends Controller
             // For absent fees, we need to calculate from attendance summary
             // Since we don't have deductible absents count directly, we'll calculate it
             $absentCount = $salary->absent ?? 0;
-            $staffFreeAbsents = $staff->free_absent ?? 0;
+            $staffFreeAbsents = $staff?->free_absent ?? 0;
             $deductibleAbsents = max(0, $absentCount - $staffFreeAbsents);
             
-            $absentFeePerAbsent = $staff->absent_fees ?? null;
+            $absentFeePerAbsent = $staff?->absent_fees ?? null;
             if ($absentFeePerAbsent !== null && $absentFeePerAbsent >= 0) {
                 $absentFeesTotal = $absentFeePerAbsent * $deductibleAbsents;
             } else {
@@ -151,10 +130,11 @@ class ManageSalariesController extends Controller
                 'early_exit_fees' => $earlyExitFeesTotal,
             ];
 
-            $grossGenerated = (float) ($salary->salary_generated ?? 0);
             $loanRepayment = (float) ($salary->loan_repayment ?? 0);
+            $grossGenerated = $salary->grossSalaryGenerated();
+            $salaryData['loan_repayment'] = $loanRepayment;
             $salaryData['gross_salary_generated'] = $grossGenerated;
-            $salaryData['suggested_amount_paid'] = max(0, $grossGenerated - $loanRepayment);
+            $salaryData['suggested_amount_paid'] = $salary->netPayableAmount();
             
             return response()->json($salaryData);
         }
@@ -168,12 +148,7 @@ class ManageSalariesController extends Controller
      */
     private function getMonthNumber($monthName)
     {
-        $monthNames = [
-            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
-            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
-            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12'
-        ];
-        return $monthNames[$monthName] ?? date('m');
+        return self::MONTH_NAMES[$monthName] ?? date('m');
     }
 
     /**
@@ -202,14 +177,25 @@ class ManageSalariesController extends Controller
             'notify_employee' => ['nullable', 'string', 'in:0,1'],
         ]);
 
-        $loanRepayment = (float) ($validated['loan_repayment'] ?? $salary->loan_repayment ?? 0);
+        $validated['payment_date'] = Carbon::parse(
+            $validated['payment_date'],
+            config('app.timezone')
+        )->toDateString();
+
+        $this->syncPendingSalaryLoan($salary);
+        $salary->refresh();
+
+        $loanRepayment = $this->loanRepaymentService->calculate($salary->staff_id, $salary->id);
+        if ($loanRepayment <= 0 && isset($validated['loan_repayment'])) {
+            $loanRepayment = (float) $validated['loan_repayment'];
+        }
 
         $bonusAmount = (float) ($validated['bonus_amount'] ?? 0);
         $deductionAmount = (float) ($validated['deduction_amount'] ?? 0);
 
         $grossFromForm = max(0, (float) $validated['generated_salary']);
-        $generatedSalary = max(0, $grossFromForm + $bonusAmount - $deductionAmount);
-        $totalDue = max(0, $generatedSalary - $loanRepayment);
+        $netSalary = max(0, $grossFromForm - $loanRepayment + $bonusAmount - $deductionAmount);
+        $totalDue = $netSalary;
 
         $enteredAmountPaid = (float) ($validated['amount_paid'] ?? 0);
         $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
@@ -227,7 +213,7 @@ class ManageSalariesController extends Controller
         $updates = [
             'amount_paid' => $finalAmountPaid,
             'loan_repayment' => $loanRepayment,
-            'salary_generated' => $generatedSalary,
+            'salary_generated' => $netSalary,
             'discount' => 0,
             'bonus_amount' => $bonusAmount,
             'deduction_amount' => $deductionAmount,
@@ -242,7 +228,11 @@ class ManageSalariesController extends Controller
             $updates['payment_date'] = $validated['payment_date'] ?? ($updates['payment_date'] ?? null);
         }
 
+        $previousAmountPaid = (float) ($salary->amount_paid ?? 0);
         $salary->update($updates);
+        $salary->refresh();
+        $this->loanRepaymentService->applyRepaymentFromSalary($salary, $previousAmountPaid);
+        app(GenerateSalaryController::class)->syncPendingSalariesForStaff((int) $salary->staff_id);
 
         // TODO: Store bonus and deduction details if needed (may require additional table)
         // TODO: Send notification to employee if notify_employee is true
@@ -280,7 +270,11 @@ class ManageSalariesController extends Controller
                 $updates = array_merge($updates, Salary::metadataForPaidAction($salary));
             }
         }
+        $previousAmountPaid = (float) ($salary->amount_paid ?? 0);
         $salary->update($updates);
+        $salary->refresh();
+        $this->loanRepaymentService->applyRepaymentFromSalary($salary, $previousAmountPaid);
+        app(GenerateSalaryController::class)->syncPendingSalariesForStaff((int) $salary->staff_id);
 
         // Don't auto-print when status is changed manually - only print when actual payment is made
         return redirect()
@@ -331,30 +325,12 @@ class ManageSalariesController extends Controller
     public function export(Request $request, string $format)
     {
         $query = Salary::with('staff');
-        
-        // Apply campus filter if present
-        if ($request->has('campus') && $request->campus) {
-            $campus = trim($request->campus);
-            if (!empty($campus)) {
-                $query->whereHas('staff', function($q) use ($campus) {
-                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-                });
-            }
-        }
-        
-        // Apply search filter if present
-        if ($request->has('search') && $request->search) {
-            $search = trim($request->search);
-            if (!empty($search)) {
-                $searchLower = strtolower($search);
-                $query->whereHas('staff', function($q) use ($search, $searchLower) {
-                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"]);
-                })->orWhere('salary_month', 'like', "%{$search}%")
-                  ->orWhere('year', 'like', "%{$search}%");
-            }
-        }
+
+        $this->applyCampusFilter($query, $request->get('campus'));
+        $this->applySearchFilter($query, $request->get('search'));
         
         $salaries = $query->orderBy('created_at', 'desc')->get();
+        $this->syncLoanRepaymentsForSalaries($salaries);
         
         switch ($format) {
             case 'excel':
@@ -398,7 +374,7 @@ class ManageSalariesController extends Controller
                     $salary->absent,
                     $salary->late,
                     $salary->basic,
-                    $salary->salary_generated,
+                    $salary->grossSalaryGenerated(),
                     $salary->amount_paid,
                     $salary->loan_repayment,
                     $salary->status,
@@ -438,7 +414,7 @@ class ManageSalariesController extends Controller
                     $salary->absent,
                     $salary->late,
                     $salary->basic,
-                    $salary->salary_generated,
+                    $salary->grossSalaryGenerated(),
                     $salary->amount_paid,
                     $salary->loan_repayment,
                     $salary->status,
@@ -518,16 +494,114 @@ class ManageSalariesController extends Controller
     }
 
     /**
-     * Net amount payable after loan (and bonus/deduction already in salary_generated when set).
+     * Net amount payable (salary_generated is already net of loan repayment).
      */
     private function netPayableAmount(Salary $salary): float
     {
-        return max(0,
-            (float) ($salary->salary_generated ?? 0)
-            + (float) ($salary->bonus_amount ?? 0)
-            - (float) ($salary->deduction_amount ?? 0)
-            - (float) ($salary->loan_repayment ?? 0)
-        );
+        return $salary->netPayableAmount();
+    }
+
+    /**
+     * Sync loan repayment for pending salaries in chronological order per staff member.
+     */
+    private function syncLoanRepaymentsForSalaries($salaries): void
+    {
+        $pending = $salaries
+            ->filter(fn (Salary $salary) => $salary->staff && $salary->status === 'Pending' && (float) ($salary->amount_paid ?? 0) <= 0)
+            ->groupBy('staff_id');
+
+        foreach ($pending as $staffSalaries) {
+            $ordered = $staffSalaries->sortBy(function (Salary $salary) {
+                $month = self::MONTH_NAMES[$salary->salary_month] ?? '99';
+
+                return sprintf('%04d-%s', (int) $salary->year, $month);
+            });
+
+            foreach ($ordered as $salary) {
+                $this->syncPendingSalaryLoan($salary);
+            }
+        }
+    }
+
+    /**
+     * Apply approved loan installment to a pending salary and deduct from generated amount.
+     */
+    private function syncPendingSalaryLoan(Salary $salary): void
+    {
+        app(GenerateSalaryController::class)->syncGeneratedSalaryRecord($salary);
+    }
+
+    /**
+     * Campus options for filter dropdown (staff salary campuses + Campus model).
+     */
+    private function campusOptionsForFilter(): Collection
+    {
+        return Staff::query()
+            ->whereHas('salaries')
+            ->whereNotNull('campus')
+            ->whereRaw("TRIM(COALESCE(campus, '')) != ''")
+            ->distinct()
+            ->orderBy('campus')
+            ->pluck('campus')
+            ->map(fn ($campus) => trim((string) $campus))
+            ->filter()
+            ->unique(fn ($campus) => strtolower($campus))
+            ->sortBy(fn ($campus) => strtolower($campus))
+            ->values()
+            ->map(function (string $campus) {
+                $record = Campus::query()
+                    ->whereRaw('LOWER(TRIM(campus_name)) = ?', [strtolower($campus)])
+                    ->first();
+
+                return (object) [
+                    'campus_name' => $record?->campus_name ?? $campus,
+                    'filter_value' => $campus,
+                ];
+            });
+    }
+
+    /**
+     * Restrict salaries to staff on the selected campus.
+     */
+    private function applyCampusFilter(Builder $query, ?string $campus): void
+    {
+        $campus = $campus !== null ? trim($campus) : '';
+        if ($campus === '') {
+            return;
+        }
+
+        $campusKey = strtolower($campus);
+
+        $staffIds = Staff::query()
+            ->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$campusKey])
+            ->pluck('id');
+
+        if ($staffIds->isEmpty()) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn('staff_id', $staffIds);
+    }
+
+    /**
+     * Search by staff name, salary month, or year (keeps campus filter intact).
+     */
+    private function applySearchFilter(Builder $query, ?string $search): void
+    {
+        $search = $search !== null ? trim($search) : '';
+        if ($search === '') {
+            return;
+        }
+
+        $searchLower = strtolower($search);
+        $query->where(function (Builder $searchQuery) use ($search, $searchLower) {
+            $searchQuery->whereHas('staff', function (Builder $staffQuery) use ($searchLower) {
+                $staffQuery->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"]);
+            })->orWhere('salary_month', 'like', "%{$search}%")
+                ->orWhere('year', 'like', "%{$search}%");
+        });
     }
 }
 

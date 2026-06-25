@@ -223,7 +223,7 @@ class Salary extends Model
             $metadata['paid_by_name'] = $payer['name'];
         }
         if ($existing === null || empty($existing->payment_date)) {
-            $metadata['payment_date'] = now()->toDateString();
+            $metadata['payment_date'] = now(config('app.timezone', 'Asia/Karachi'))->toDateString();
         }
 
         return $metadata;
@@ -308,6 +308,32 @@ class Salary extends Model
     public function staff()
     {
         return $this->belongsTo(Staff::class);
+    }
+
+    /**
+     * Gross generated salary (attendance-based amount before loan deduction).
+     */
+    public function grossSalaryGenerated(): float
+    {
+        return round(max(0,
+            (float) ($this->salary_generated ?? 0)
+            + (float) ($this->loan_repayment ?? 0)
+            - (float) ($this->bonus_amount ?? 0)
+            + (float) ($this->deduction_amount ?? 0)
+        ), 2);
+    }
+
+    /**
+     * Net payable after loan, bonus, and deduction adjustments.
+     */
+    public function netPayableAmount(): float
+    {
+        return round(max(0,
+            $this->grossSalaryGenerated()
+            - (float) ($this->loan_repayment ?? 0)
+            + (float) ($this->bonus_amount ?? 0)
+            - (float) ($this->deduction_amount ?? 0)
+        ), 2);
     }
 }
 

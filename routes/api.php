@@ -152,15 +152,6 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         Route::get('/fee-vouchers', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'index'])->name('fee-vouchers.index');
         Route::get('/fee-vouchers/{student_id}', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'show'])->name('fee-vouchers.show');
         Route::get('/fee-vouchers/{student_id}/pdf', [App\Http\Controllers\Api\ParentFeeVoucherController::class, 'pdf'])->name('fee-vouchers.pdf');
-
-        // Live Chat (Parent ↔ Admin / Teachers)
-        Route::get('/chat/contacts', [App\Http\Controllers\Api\ParentChatController::class, 'contacts'])->name('chat.contacts');
-        Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\ParentChatController::class, 'contactShow'])
-            ->where(['type' => 'admin|teacher|student', 'id' => '[0-9]+'])
-            ->name('chat.contacts.show');
-        Route::get('/chat/messages', [App\Http\Controllers\Api\ParentChatController::class, 'index'])->name('chat.messages');
-        Route::post('/chat/messages', [App\Http\Controllers\Api\ParentChatController::class, 'store'])->name('chat.messages.store');
-        Route::post('/chat/messages/read', [App\Http\Controllers\Api\ParentChatController::class, 'markRead'])->name('chat.messages.read');
     });
 });
 
@@ -215,8 +206,10 @@ Route::prefix('student')->name('api.student.')->group(function () {
         // Quiz Routes (Student side)
         Route::match(['GET', 'POST'], '/quizzes', [App\Http\Controllers\Api\StudentQuizController::class, 'index'])->name('quizzes.index');
         Route::get('/quizzes/{id}', [App\Http\Controllers\Api\StudentQuizController::class, 'show'])->whereNumber('id')->name('quizzes.show');
+        Route::get('/quizzes/{id}/questions/full', [App\Http\Controllers\Api\StudentQuizController::class, 'questionsFull'])->whereNumber('id')->name('quizzes.questions.full');
         Route::get('/quizzes/{id}/questions', [App\Http\Controllers\Api\StudentQuizController::class, 'questions'])->whereNumber('id')->name('quizzes.questions');
         Route::get('/quizzes/{id}/marks', [App\Http\Controllers\Api\StudentQuizController::class, 'marks'])->whereNumber('id')->name('quizzes.marks');
+        Route::post('/quizzes/{id}/submit/full', [App\Http\Controllers\Api\StudentQuizController::class, 'submitFull'])->whereNumber('id')->name('quizzes.submit.full');
         Route::post('/quizzes/{id}/submit', [App\Http\Controllers\Api\StudentQuizController::class, 'submit'])->whereNumber('id')->name('quizzes.submit');
         Route::get('/quizzes/{id}/result', [App\Http\Controllers\Api\StudentQuizController::class, 'result'])->whereNumber('id')->name('quizzes.result');
         
@@ -247,15 +240,6 @@ Route::prefix('student')->name('api.student.')->group(function () {
         // In-app notifications (student-specific)
         Route::get('/notifications', [App\Http\Controllers\Api\StudentNotificationController::class, 'index'])->name('notifications.index');
         Route::post('/notifications/{id}/read', [App\Http\Controllers\Api\StudentNotificationController::class, 'markRead'])->name('notifications.read');
-
-        // Live Chat (Student — same endpoints as /api/teacher/chat/* but for student login)
-        Route::get('/chat/contacts', [App\Http\Controllers\Api\StudentChatController::class, 'contacts'])->name('chat.contacts');
-        Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\StudentChatController::class, 'contactShow'])
-            ->where(['type' => 'admin|teacher|parent', 'id' => '[0-9]+'])
-            ->name('chat.contacts.show');
-        Route::get('/chat/messages', [App\Http\Controllers\Api\StudentChatController::class, 'index'])->name('chat.messages');
-        Route::post('/chat/messages', [App\Http\Controllers\Api\StudentChatController::class, 'store'])->name('chat.messages.store');
-        Route::post('/chat/messages/read', [App\Http\Controllers\Api\StudentChatController::class, 'markRead'])->name('chat.messages.read');
     });
 });
 
@@ -281,7 +265,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/exam/marks/list', [App\Http\Controllers\Api\TeacherController::class, 'examMarksList'])->name('exam.marks.list');
         Route::post('/exam/marks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveExamMarks'])->name('exam.marks.save');
         Route::post('/exam/remarks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveExamRemarks'])->name('exam.remarks.save');
-        Route::match(['GET', 'POST'], '/exam/final-result/students', [App\Http\Controllers\Api\TeacherController::class, 'finalResultStudents'])->name('exam.final-result.students');
+        Route::get('/exam/final-result/students', [App\Http\Controllers\Api\TeacherController::class, 'finalResultStudents'])->name('exam.final-result.students');
         Route::post('/exam/final-result/remarks/save', [App\Http\Controllers\Api\TeacherController::class, 'saveFinalResultRemarks'])->name('exam.final-result.remarks.save');
         
         // Student List Routes
@@ -319,6 +303,8 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/attendance/student/{studentId}', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'studentHistory'])->name('attendance.student-history');
         Route::match(['GET', 'POST'], '/attendance/class-students', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'getClassStudents'])->name('attendance.class-students');
         Route::post('/attendance/class-students/mark', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'markClassAttendance'])->name('attendance.class-students.mark');
+        Route::get('/attendance/lectures-taken', [App\Http\Controllers\Api\StaffAttendanceController::class, 'lecturesTaken'])->name('attendance.lectures-taken');
+        Route::post('/attendance/lectures-taken', [App\Http\Controllers\Api\StaffAttendanceController::class, 'saveLecturesTaken'])->name('attendance.lectures-taken.save');
         
         // Attendance Report Routes
         Route::match(['GET', 'POST'], '/attendance-report/monthly', [App\Http\Controllers\Api\TeacherAttendanceController::class, 'monthlyReport'])->name('attendance-report.monthly');
@@ -362,8 +348,8 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/homework-diary/my-subjects', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getMySubjects'])->name('homework-diary.my-subjects');
         Route::get('/homework-diary/teacher-subjects', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getTeacherSubjects'])->name('homework-diary.teacher-subjects');
         Route::get('/homework-diary/subjects-by-class', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getSubjectsByClass'])->name('homework-diary.subjects-by-class');
-        Route::get('/homework-diary/all-assigned-subjects', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getAllAssignedSubjects'])->name('homework-diary.all-assigned-subjects');
         Route::get('/homework-diary/subjects-with-homework', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getSubjectsWithHomework'])->name('homework-diary.subjects-with-homework');
+        Route::get('/homework-diary/all-assigned-subjects', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getAllAssignedSubjects'])->name('homework-diary.all-assigned-subjects');
         Route::get('/homework-diary/entries', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getEntries'])->name('homework-diary.entries');
         Route::get('/homework-diary/students-list', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'getStudentsList'])->name('homework-diary.students-list');
         Route::post('/homework-diary/create', [App\Http\Controllers\Api\TeacherHomeworkDiaryController::class, 'create'])->name('homework-diary.create');
@@ -386,6 +372,8 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/test/tests', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntryTests'])->name('test.tests');
         // Quick API: class + section + subject + test => all students
         Route::get('/test/students', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntryStudents'])->name('test.students');
+        // Quick API: class + section + test_name => uploaded marks with student detail
+        Route::get('/test/uploaded-marks', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getUploadedTestMarksDetail'])->name('test.uploaded-marks');
         // Quick API: save test remarks (single student_id+remark or bulk remarks map)
         Route::post('/test/remarks/save', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'saveRemarksEntry'])->name('test.remarks.save');
         Route::get('/test-management/marks-entry/filter-options', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getMarksEntryFilterOptions'])->name('test-management.marks-entry.filter-options');
@@ -405,7 +393,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         
         // Test Management - Get Test List (Teacher's created tests) - Must be before {id} route
         Route::match(['GET', 'POST'], '/test-management/list', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getTestList'])->name('test-management.list');
-        Route::match(['GET', 'POST'], '/test-management/class-teacher/list', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getClassTeacherTestList'])->name('test-management.class-teacher.list');
+        Route::get('/test-management/class-teacher/list', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getClassTeacherTestList'])->name('test-management.class-teacher.list');
         
         // Test Management - Get Test by ID
         Route::get('/test-management/{id}', [App\Http\Controllers\Api\TeacherTestManagementController::class, 'getTest'])->name('test-management.get');
@@ -418,6 +406,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         // Timetable Management Routes
         Route::get('/timetable/filter-options', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getFilterOptions'])->name('timetable.filter-options');
         Route::match(['GET', 'POST'], '/timetable/sections', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getSectionsByClass'])->name('timetable.sections');
+        Route::get('/timetable/today', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getTeacherTodayTimetable'])->name('timetable.today');
         Route::get('/timetable/list/{day}/{month}/{year}', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getTimetable'])->name('timetable.list-by-date');
         Route::match(['GET', 'POST'], '/timetable/list', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getTimetable'])->name('timetable.list');
         Route::match(['GET', 'POST'], '/timetable/by-class', [App\Http\Controllers\Api\TeacherTimetableController::class, 'getTimetableByClass'])->name('timetable.by-class');

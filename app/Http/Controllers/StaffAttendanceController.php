@@ -97,16 +97,12 @@ class StaffAttendanceController extends Controller
                 if ($isPerHour) {
                     $timetableTime = $this->getTimeFromTimetable($staff, $date, $campus);
                     if ($timetableTime) {
-                        // Store timetable time for JavaScript use
+                        // Store timetable time for JavaScript (fill only when user marks Present)
                         $timetableTimesByStaff[$staff->id] = $timetableTime;
-                        
-                        if (empty($startTime)) {
-                            $startTime = $timetableTime['start_time'];
-                        }
-                        if (empty($endTime)) {
-                            $endTime = $timetableTime['end_time'];
-                        }
                     }
+
+                    // Only show saved attendance times — user enters arrival/exit manually
+                    $isPresentLike = $attendance && in_array($attendance->status, ['Present', 'Half Day'], true);
                 }
                 
                 // For per hour teacher, calculate late arrival/early exit using timetable time
@@ -417,7 +413,7 @@ class StaffAttendanceController extends Controller
             'attendance.*.auto_early_exit' => 'nullable|in:Auto,Yes,No',
         ]);
 
-        $date = $request->input('date');
+        $date = Carbon::parse($request->input('date'))->format('Y-m-d');
         $attendanceData = $request->input('attendance', []);
 
         // Detect subject attendance even if type is missing
@@ -472,16 +468,7 @@ class StaffAttendanceController extends Controller
                     continue;
                 }
 
-                // For per hour teachers, check if they have classes on this date
                 $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
-                if ($isPerHour) {
-                    $dayName = Carbon::parse($date)->format('l');
-                    $hasClassOnDate = $this->hasClassOnDate($staff, $dayName, $request->input('campus'));
-                    if (!$hasClassOnDate) {
-                        // Skip per hour teachers who don't have classes on this date
-                        continue;
-                    }
-                }
 
                 $conductedLectures = isset($data['conducted_lectures']) && $data['conducted_lectures'] !== ''
                     ? (int) $data['conducted_lectures']
@@ -495,23 +482,24 @@ class StaffAttendanceController extends Controller
                     }
                 }
 
-                // For per hour teacher, get time from timetable if not provided
+                // Per hour: only save for the selected date when staff has a class that day
+                if ($isPerHour) {
+                    $dayName = Carbon::parse($date)->format('l');
+                    $hasClassOnDate = $this->hasClassOnDate($staff, $dayName, $request->input('campus'));
+                    if (!$hasClassOnDate) {
+                        continue;
+                    }
+                }
+
                 $startTime = $data['start_time'] ?? null;
                 $endTime = $data['end_time'] ?? null;
-                $isPerHour = strtolower(trim($staff->salary_type ?? '')) === 'per hour';
                 $timetableTime = null;
-                
-                if ($isPerHour && $status === 'Present') {
-                    // Get time from timetable for per hour teacher
+
+                if ($isPerHour && in_array($status, ['Present', 'Half Day'], true)) {
                     $timetableTime = $this->getTimeFromTimetable($staff, $date, $request->input('campus'));
-                    if ($timetableTime) {
-                        if (empty($startTime)) {
-                            $startTime = $timetableTime['start_time'];
-                        }
-                        if (empty($endTime)) {
-                            $endTime = $timetableTime['end_time'];
-                        }
-                    }
+                } elseif ($isPerHour) {
+                    $startTime = null;
+                    $endTime = null;
                 }
 
                 // Calculate late arrival and early exit

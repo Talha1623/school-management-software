@@ -33,7 +33,7 @@ class StudentHomeworkController extends Controller
             }
 
             // Check if student has complete information
-            if (!$student->campus || !$student->class || !$student->section) {
+            if (!$student->class || !$student->section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Student information incomplete. Cannot fetch homework.',
@@ -42,13 +42,9 @@ class StudentHomeworkController extends Controller
             }
 
             // Get homework for this student's class, section, campus
-            // Only show homework where homework_content is not empty
-            $query = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', [''])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))]);
+            $query = HomeworkDiary::query()
+                ->withContent()
+                ->forStudent($student);
 
             // Filter by date (optional - specific date)
             if ($request->filled('date')) {
@@ -167,7 +163,7 @@ class StudentHomeworkController extends Controller
             }
 
             // Check if student has complete information
-            if (!$student->campus || !$student->class || !$student->section) {
+            if (!$student->class || !$student->section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Student information incomplete. Cannot fetch homework.',
@@ -178,13 +174,10 @@ class StudentHomeworkController extends Controller
             $today = now()->format('Y-m-d');
 
             // Get today's homework
-            $homeworkList = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', [''])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))])
-                ->whereDate('date', $today)
+            $homeworkList = HomeworkDiary::query()
+                ->withContent()
+                ->forStudent($student)
+                ->onDate($today)
                 ->with('subject')
                 ->orderBy('subject_id', 'asc')
                 ->get();
@@ -254,7 +247,7 @@ class StudentHomeworkController extends Controller
             }
 
             // Check if student has complete information
-            if (!$student->campus || !$student->class || !$student->section) {
+            if (!$student->class || !$student->section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Student information incomplete. Cannot fetch homework.',
@@ -274,13 +267,10 @@ class StudentHomeworkController extends Controller
             }
 
             // Get homework for specific date
-            $homeworkList = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', [''])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))])
-                ->whereDate('date', $date)
+            $homeworkList = HomeworkDiary::query()
+                ->withContent()
+                ->forStudent($student)
+                ->onDate($dateObj->toDateString())
                 ->with('subject')
                 ->orderBy('subject_id', 'asc')
                 ->get();
@@ -352,7 +342,7 @@ class StudentHomeworkController extends Controller
             }
 
             // Check if student has complete information
-            if (!$student->campus || !$student->class || !$student->section) {
+            if (!$student->class || !$student->section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Student information incomplete. Cannot fetch subjects.',
@@ -361,12 +351,9 @@ class StudentHomeworkController extends Controller
             }
 
             // Get subject IDs that have homework for this student
-            $subjectIds = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', [''])
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))])
+            $subjectIds = HomeworkDiary::query()
+                ->withContent()
+                ->forStudent($student)
                 ->distinct()
                 ->pluck('subject_id')
                 ->toArray();
@@ -432,7 +419,7 @@ class StudentHomeworkController extends Controller
             }
 
             // Check if student has complete information
-            if (!$student->campus || !$student->class || !$student->section) {
+            if (!$student->class || !$student->section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Student information incomplete. Cannot fetch homework.',
@@ -484,14 +471,11 @@ class StudentHomeworkController extends Controller
             }
 
             // Get homework for specific subject and date
-            $homework = HomeworkDiary::whereNotNull('homework_content')
-                ->where('homework_content', '!=', '')
-                ->whereRaw('TRIM(homework_content) != ?', [''])
+            $homework = HomeworkDiary::query()
+                ->withContent()
+                ->forStudent($student)
                 ->where('subject_id', $subject->id)
-                ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus))])
-                ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class))])
-                ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section))])
-                ->whereDate('date', $date)
+                ->onDate($dateObj->toDateString())
                 ->with('subject')
                 ->first();
 

@@ -11,7 +11,9 @@ use App\Services\MobilePushNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Builder;
 
 class NoticeboardController extends Controller
 {
@@ -26,7 +28,8 @@ class NoticeboardController extends Controller
     public function index(Request $request): View
     {
         $query = Noticeboard::query();
-        
+        $this->applyViewerScope($query);
+
         // Search functionality
         if ($request->filled('search')) {
             $search = trim($request->search);
@@ -60,10 +63,61 @@ class NoticeboardController extends Controller
     }
 
     /**
+     * Staff portal: only their campus. Admin: all notices.
+     */
+    private function applyViewerScope(Builder $query): void
+    {
+        if (! Auth::guard('staff')->check()) {
+            return;
+        }
+
+        $staff = Auth::guard('staff')->user();
+        $campusKey = strtolower(trim((string) ($staff->campus ?? '')));
+
+        $query->where('show_on', 'Yes');
+
+        if ($campusKey === '') {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [$campusKey]);
+    }
+
+    private function staffCanViewNoticeboard(Noticeboard $noticeboard): bool
+    {
+        if (! Auth::guard('staff')->check()) {
+            return true;
+        }
+
+        if (strcasecmp((string) ($noticeboard->show_on ?? ''), 'Yes') !== 0) {
+            return false;
+        }
+
+        $staff = Auth::guard('staff')->user();
+        $campusKey = strtolower(trim((string) ($staff->campus ?? '')));
+        if ($campusKey === '') {
+            return false;
+        }
+
+        return strtolower(trim((string) ($noticeboard->campus ?? ''))) === $campusKey;
+    }
+
+    private function denyStaffWriteAccess(): void
+    {
+        if (Auth::guard('staff')->check()) {
+            abort(403, 'You do not have permission to manage notices.');
+        }
+    }
+
+    /**
      * Store a newly created noticeboard.
      */
     public function store(Request $request): RedirectResponse
     {
+        $this->denyStaffWriteAccess();
+
         $validated = $request->validate([
             'campus' => ['nullable', 'string', 'max:255'],
             'title' => ['required', 'string', 'max:255'],
@@ -102,6 +156,8 @@ class NoticeboardController extends Controller
      */
     public function update(Request $request, Noticeboard $noticeboard): RedirectResponse
     {
+        $this->denyStaffWriteAccess();
+
         $validated = $request->validate([
             'campus' => ['nullable', 'string', 'max:255'],
             'title' => ['required', 'string', 'max:255'],
@@ -146,6 +202,8 @@ class NoticeboardController extends Controller
      */
     public function destroy(Noticeboard $noticeboard): RedirectResponse
     {
+        $this->denyStaffWriteAccess();
+
         // Delete image if exists
         if ($noticeboard->image && Storage::disk('public')->exists($noticeboard->image)) {
             Storage::disk('public')->delete($noticeboard->image);
@@ -164,7 +222,8 @@ class NoticeboardController extends Controller
     public function export(Request $request, string $format)
     {
         $query = Noticeboard::query();
-        
+        $this->applyViewerScope($query);
+
         // Apply search filter if present
         if ($request->has('search') && $request->search) {
             $search = trim($request->search);
@@ -247,6 +306,10 @@ class NoticeboardController extends Controller
      */
     public function print(Noticeboard $noticeboard): View
     {
+        if (! $this->staffCanViewNoticeboard($noticeboard)) {
+            abort(404);
+        }
+
         $settings = GeneralSetting::getSettings();
         return view('school.noticeboard-print', [
             'noticeboard' => $noticeboard,
@@ -261,6 +324,7 @@ class NoticeboardController extends Controller
     public function printAll(Request $request): View
     {
         $query = Noticeboard::query();
+        $this->applyViewerScope($query);
 
         if ($request->filled('search')) {
             $search = trim((string) $request->get('search'));

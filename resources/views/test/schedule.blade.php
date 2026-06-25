@@ -11,19 +11,29 @@
             <!-- Filter Form -->
             <form id="filterForm" class="mb-3">
                 <div class="row g-2 align-items-end">
-                    <!-- Class -->
-                    <div class="col-md-2">
-                        <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
-                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
-                            <option value="">All Classes</option>
-                            @foreach($classes as $className)
-                                <option value="{{ $className }}">{{ $className }}</option>
+                    <!-- Campus -->
+                    <div class="col-md-6 col-lg-2">
+                        <label for="filter_campus" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Campus</label>
+                        <select class="form-select form-select-sm" id="filter_campus" name="filter_campus" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
+                            <option value="">All Campuses</option>
+                            @foreach($campuses as $campus)
+                                <option value="{{ $campus->campus_name ?? $campus }}" {{ request('filter_campus') == ($campus->campus_name ?? $campus) ? 'selected' : '' }}>
+                                    {{ $campus->campus_name ?? $campus }}
+                                </option>
                             @endforeach
                         </select>
                     </div>
 
+                    <!-- Class -->
+                    <div class="col-md-6 col-lg-2">
+                        <label for="filter_class" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Class</label>
+                        <select class="form-select form-select-sm" id="filter_class" name="filter_class" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
+                            <option value="">All Classes</option>
+                        </select>
+                    </div>
+
                     <!-- Section -->
-                    <div class="col-md-2">
+                    <div class="col-md-6 col-lg-2">
                         <label for="filter_section" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Section</label>
                         <select class="form-select form-select-sm" id="filter_section" name="filter_section" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
                             <option value="">All Sections</option>
@@ -31,7 +41,7 @@
                     </div>
 
                     <!-- Test Type -->
-                    <div class="col-md-2">
+                    <div class="col-md-6 col-lg-2">
                         <label for="filter_test_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Test Type</label>
                         <select class="form-select form-select-sm" id="filter_test_type" name="filter_test_type" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
                             <option value="">All Test Types</option>
@@ -42,19 +52,19 @@
                     </div>
 
                     <!-- From Date -->
-                    <div class="col-md-2">
+                    <div class="col-md-6 col-lg-2">
                         <label for="filter_from_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">From Date</label>
                         <input type="date" class="form-control form-control-sm" id="filter_from_date" name="filter_from_date" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
                     </div>
 
                     <!-- To Date -->
-                    <div class="col-md-2">
+                    <div class="col-md-6 col-lg-2">
                         <label for="filter_to_date" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">To Date</label>
                         <input type="date" class="form-control form-control-sm" id="filter_to_date" name="filter_to_date" style="height: 36px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px;">
                     </div>
 
                     <!-- Filter Button -->
-                    <div class="col-md-2">
+                    <div class="col-md-6 col-lg-2">
                         <button type="button" id="filterBtn" class="btn btn-sm filter-btn w-100" style="height: 36px; border-radius: 6px;">
                             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">filter_alt</span>
                             <span style="font-size: 13px; vertical-align: middle; margin-left: 5px;">Filter</span>
@@ -162,6 +172,7 @@
     transform: translateY(0);
 }
 
+#filter_campus:focus,
 #filter_class:focus,
 #filter_section:focus,
 #filter_test_type:focus,
@@ -346,6 +357,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
     const filterBtn = document.getElementById('filterBtn');
@@ -354,10 +366,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const testsTableBody = document.getElementById('testsTableBody');
     const totalCount = document.getElementById('totalCount');
 
+    if (campusSelect && campusSelect.value) {
+        loadClasses(campusSelect.value);
+    }
+
+    if (campusSelect) {
+        campusSelect.addEventListener('change', function() {
+            loadClasses(this.value);
+            sectionSelect.innerHTML = '<option value="">All Sections</option>';
+            classSelect.value = '';
+        });
+    }
+
     // Load sections when class changes
     if (classSelect) {
         classSelect.addEventListener('change', function() {
-            loadSections(this.value);
+            loadSections(campusSelect?.value || '', this.value);
         });
     }
 
@@ -383,7 +407,38 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    function loadSections(selectedClass) {
+    function loadClasses(selectedCampus) {
+        if (!selectedCampus) {
+            classSelect.innerHTML = '<option value="">All Classes</option>';
+            classSelect.disabled = false;
+            return;
+        }
+
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        classSelect.disabled = true;
+
+        fetch(`{{ route('test.schedule.get-classes-by-campus') }}?campus=${encodeURIComponent(selectedCampus)}`)
+            .then(response => response.json())
+            .then(data => {
+                classSelect.innerHTML = '<option value="">All Classes</option>';
+                if (data.classes && data.classes.length > 0) {
+                    data.classes.forEach(className => {
+                        const option = document.createElement('option');
+                        option.value = className;
+                        option.textContent = className;
+                        classSelect.appendChild(option);
+                    });
+                }
+                classSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                classSelect.innerHTML = '<option value="">Error loading classes</option>';
+                classSelect.disabled = false;
+            });
+    }
+
+    function loadSections(selectedCampus, selectedClass) {
         if (!selectedClass) {
             sectionSelect.innerHTML = '<option value="">All Sections</option>';
             sectionSelect.disabled = false;
@@ -392,8 +447,15 @@ document.addEventListener('DOMContentLoaded', function() {
         
         sectionSelect.innerHTML = '<option value="">Loading...</option>';
         sectionSelect.disabled = true;
+
+        const params = new URLSearchParams({
+            class: selectedClass,
+        });
+        if (selectedCampus) {
+            params.append('campus', selectedCampus);
+        }
         
-        fetch(`{{ route('test.schedule.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+        fetch(`{{ route('test.schedule.get-sections') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -551,6 +613,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Print function - defined globally so onclick can access it
     function printSchedule() {
         // Get current filter values for print header
+        const filterCampus = document.getElementById('filter_campus')?.value || '';
         const filterClass = document.getElementById('filter_class')?.value || '';
         const filterSection = document.getElementById('filter_section')?.value || '';
         const filterTestType = document.getElementById('filter_test_type')?.value || '';
@@ -561,6 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let filterText = '';
         const filters = [];
         
+        if (filterCampus) filters.push(`Campus: ${filterCampus}`);
         if (filterClass) filters.push(`Class: ${filterClass}`);
         if (filterSection) filters.push(`Section: ${filterSection}`);
         if (filterTestType) filters.push(`Type: ${filterTestType}`);

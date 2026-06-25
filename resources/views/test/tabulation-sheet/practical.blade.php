@@ -77,7 +77,7 @@
                     <div class="col-md-2">
                         <label for="filter_test" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Test</label>
                         <select class="form-select form-select-sm" id="filter_test" name="filter_test" style="height: 32px;">
-                            <option value="">All Tests</option>
+                            <option value="">{{ $filterSubject ? 'Select Test' : 'Select Subject First' }}</option>
                             @foreach($tests as $testName)
                                 <option value="{{ $testName }}" {{ $filterTest == $testName ? 'selected' : '' }}>{{ $testName }}</option>
                             @endforeach
@@ -441,19 +441,24 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Load sections when class changes
     const campusSelect = document.getElementById('filter_campus');
     const classSelect = document.getElementById('filter_class');
     const sectionSelect = document.getElementById('filter_section');
     const subjectSelect = document.getElementById('filter_subject');
-    
-    // Function to load sections dynamically
+    const testSelect = document.getElementById('filter_test');
+    const selectedTest = @json($filterTest ?? '');
+
     function loadSections(selectedClass) {
         if (selectedClass) {
             sectionSelect.disabled = false;
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
-            
-            fetch(`{{ route('test.tabulation-sheet.practical.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+
+            const params = new URLSearchParams({ class: selectedClass });
+            if (campusSelect && campusSelect.value) {
+                params.append('campus', campusSelect.value);
+            }
+
+            fetch(`{{ route('test.tabulation-sheet.practical.get-sections') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -468,8 +473,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         @endif
                         sectionSelect.appendChild(option);
                     });
-                    
-                    // Load subjects after sections are loaded
+
                     loadSubjects();
                 })
                 .catch(error => {
@@ -483,32 +487,29 @@ document.addEventListener('DOMContentLoaded', function() {
             loadSubjects();
         }
     }
-    
-    // Function to load subjects dynamically
+
     function loadSubjects() {
         const campus = campusSelect ? campusSelect.value : '';
         const classValue = classSelect ? classSelect.value : '';
         const section = sectionSelect ? sectionSelect.value : '';
-        
+
         if (!classValue) {
-            // If no class selected, clear subjects
             if (subjectSelect) {
                 subjectSelect.innerHTML = '<option value="">All Subjects</option>';
             }
+            loadTests();
             return;
         }
-        
-        // Build query parameters
+
         const params = new URLSearchParams();
         if (campus) params.append('campus', campus);
         if (classValue) params.append('class', classValue);
         if (section) params.append('section', section);
-        
-        // Show loading state
+
         if (subjectSelect) {
             const currentValue = subjectSelect.value;
             subjectSelect.innerHTML = '<option value="">Loading...</option>';
-            
+
             fetch(`{{ route('test.tabulation-sheet.practical.get-subjects') }}?${params.toString()}`)
                 .then(response => response.json())
                 .then(data => {
@@ -518,51 +519,102 @@ document.addEventListener('DOMContentLoaded', function() {
                             const option = document.createElement('option');
                             option.value = subject;
                             option.textContent = subject;
-                            // Restore selected value if it still exists
                             if (subject === currentValue) {
                                 option.selected = true;
                             }
                             subjectSelect.appendChild(option);
                         });
                     }
+                    loadTests();
                 })
                 .catch(error => {
                     console.error('Error loading subjects:', error);
                     subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+                    loadTests();
                 });
         }
     }
-    
-    // Load sections when class changes
+
+    function loadTests() {
+        if (!testSelect) {
+            return;
+        }
+
+        const campus = campusSelect ? campusSelect.value : '';
+        const classValue = classSelect ? classSelect.value : '';
+        const section = sectionSelect ? sectionSelect.value : '';
+        const subject = subjectSelect ? subjectSelect.value : '';
+
+        if (!classValue || !subject) {
+            testSelect.innerHTML = '<option value="">Select Subject First</option>';
+            return;
+        }
+
+        const params = new URLSearchParams({
+            class: classValue,
+            subject: subject,
+        });
+        if (campus) params.append('campus', campus);
+        if (section) params.append('section', section);
+
+        testSelect.innerHTML = '<option value="">Loading...</option>';
+
+        fetch(`{{ route('test.tabulation-sheet.practical.get-tests') }}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                testSelect.innerHTML = '<option value="">Select Test</option>';
+                if (data.tests && data.tests.length > 0) {
+                    data.tests.forEach(function(testName) {
+                        const option = document.createElement('option');
+                        option.value = testName;
+                        option.textContent = testName;
+                        if (testName === selectedTest) {
+                            option.selected = true;
+                        }
+                        testSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading tests:', error);
+                testSelect.innerHTML = '<option value="">Error loading tests</option>';
+            });
+    }
+
     if (classSelect) {
         classSelect.addEventListener('change', function() {
             loadSections(this.value);
         });
     }
-    
-    // Load subjects when campus or section changes
+
     if (campusSelect) {
         campusSelect.addEventListener('change', function() {
             const classValue = classSelect ? classSelect.value : '';
             if (classValue) {
+                loadSections(classValue);
+            } else {
                 loadSubjects();
             }
         });
     }
-    
-    // Load subjects when section changes
+
     if (sectionSelect) {
         sectionSelect.addEventListener('change', function() {
             loadSubjects();
         });
     }
-    
-    // Load sections on page load if class is already selected
+
+    if (subjectSelect) {
+        subjectSelect.addEventListener('change', function() {
+            loadTests();
+        });
+    }
+
     @if($filterClass)
     loadSections('{{ $filterClass }}');
+    @elseif($filterSubject)
+    loadTests();
     @endif
-    
-    
     // Auto-calculate grade based on marks using grade definitions (only for editable mode)
     @if($filterType == 'editable')
     // Grade definitions from server

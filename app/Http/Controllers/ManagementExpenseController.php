@@ -137,6 +137,11 @@ class ManagementExpenseController extends Controller
             $validated['invoice_receipt'] = $path;
         }
 
+        $validated['date'] = Carbon::parse(
+            $validated['date'],
+            config('app.timezone')
+        )->toDateString();
+
         // Get logged-in user's name
         $createdBy = 'System';
         if (Auth::guard('admin')->check()) {
@@ -190,6 +195,11 @@ class ManagementExpenseController extends Controller
             // Keep existing file if no new file uploaded
             unset($validated['invoice_receipt']);
         }
+
+        $validated['date'] = Carbon::parse(
+            $validated['date'],
+            config('app.timezone')
+        )->toDateString();
 
         $managementExpense->update($validated);
 

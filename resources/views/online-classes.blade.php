@@ -251,11 +251,8 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">school</span>
                                 </span>
-                                <select class="form-select online-class-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;">
-                                    <option value="">Select Class</option>
-                                    @foreach($classes as $classItem)
-                                        <option value="{{ $classItem->class_name ?? $classItem }}">{{ $classItem->class_name ?? $classItem }}</option>
-                                    @endforeach
+                                <select class="form-select online-class-input" name="class" id="class" required style="border: none; border-left: 1px solid #e0e7ff;" disabled>
+                                    <option value="">Select Campus First</option>
                                 </select>
                             </div>
                         </div>
@@ -662,12 +659,59 @@
 </style>
 
 <script>
+    function resetClassAndSection() {
+        const classSelect = document.getElementById('class');
+        const sectionSelect = document.getElementById('section');
+        classSelect.innerHTML = '<option value="">Select Campus First</option>';
+        classSelect.disabled = true;
+        sectionSelect.innerHTML = '<option value="">Select Section</option>';
+        sectionSelect.disabled = true;
+    }
+
+    function populateClassOptions(classes, selectedClass = '') {
+        const classSelect = document.getElementById('class');
+        classSelect.innerHTML = '<option value="">Select Class</option>';
+        (classes || []).forEach(className => {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            if (selectedClass && selectedClass === className) {
+                option.selected = true;
+            }
+            classSelect.appendChild(option);
+        });
+        classSelect.disabled = false;
+    }
+
+    function loadClassesForCampus(campus, selectedClass = '', selectedSection = null) {
+        const classSelect = document.getElementById('class');
+        resetClassAndSection();
+
+        if (!campus) {
+            return Promise.resolve();
+        }
+
+        classSelect.innerHTML = '<option value="">Loading...</option>';
+        classSelect.disabled = true;
+
+        return fetch(`{{ route('online-classes.get-classes-by-campus') }}?campus=${encodeURIComponent(campus)}`)
+            .then(response => response.json())
+            .then(data => {
+                populateClassOptions(data.classes || [], selectedClass);
+                if (selectedClass) {
+                    return loadSections(selectedClass, selectedSection, campus);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading classes:', error);
+                populateClassOptions([], selectedClass);
+            });
+    }
+
     function resetForm() {
         document.getElementById('onlineClassForm').reset();
         document.getElementById('methodField').innerHTML = '';
-        const sectionSelect = document.getElementById('section');
-        sectionSelect.innerHTML = '<option value="">Select Section</option>';
-        sectionSelect.disabled = true;
+        resetClassAndSection();
         const modalLabel = document.getElementById('onlineClassModalLabel');
         modalLabel.innerHTML = `
             <span class="material-symbols-outlined" style="font-size: 20px; color: white;">video_library</span>
@@ -679,43 +723,47 @@
     function editClass(id, campus, classVal, section, classTopic, startDate, startTime, timing, password, link) {
         resetForm();
         document.getElementById('campus').value = campus;
-        document.getElementById('class').value = classVal;
-        
-        // Load sections for the selected class
-        if (classVal) {
-            loadSections(classVal, section);
-        }
-        
-        document.getElementById('class_topic').value = classTopic;
-        document.getElementById('start_date').value = startDate;
-        document.getElementById('start_time').value = startTime || '';
-        document.getElementById('timing').value = timing;
-        document.getElementById('password').value = password;
-        document.getElementById('link').value = link || '';
-        
-        const modalLabel = document.getElementById('onlineClassModalLabel');
-        modalLabel.innerHTML = `
-            <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
-            <span style="color: white;">Edit Online Class</span>
-        `;
-        document.getElementById('onlineClassForm').action = '{{ route("online-classes.update", ":id") }}'.replace(':id', id);
-        document.getElementById('methodField').innerHTML = '@method("PUT")';
-        
-        new bootstrap.Modal(document.getElementById('onlineClassModal')).show();
+
+        loadClassesForCampus(campus, classVal, section).then(() => {
+            document.getElementById('class_topic').value = classTopic;
+            document.getElementById('start_date').value = startDate;
+            document.getElementById('start_time').value = startTime || '';
+            document.getElementById('timing').value = timing;
+            document.getElementById('password').value = password;
+            document.getElementById('link').value = link || '';
+
+            const modalLabel = document.getElementById('onlineClassModalLabel');
+            modalLabel.innerHTML = `
+                <span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span>
+                <span style="color: white;">Edit Online Class</span>
+            `;
+            document.getElementById('onlineClassForm').action = '{{ route("online-classes.update", ":id") }}'.replace(':id', id);
+            document.getElementById('methodField').innerHTML = '@method("PUT")';
+
+            new bootstrap.Modal(document.getElementById('onlineClassModal')).show();
+        });
     }
     
-    function loadSections(selectedClass, selectedSection = null) {
+    function loadSections(selectedClass, selectedSection = null, campus = null) {
         const sectionSelect = document.getElementById('section');
+        const campusSelect = document.getElementById('campus');
+        const campusValue = campus || (campusSelect ? campusSelect.value : '');
+
         if (!selectedClass) {
             sectionSelect.innerHTML = '<option value="">Select Section</option>';
             sectionSelect.disabled = true;
-            return;
+            return Promise.resolve();
         }
         
         sectionSelect.innerHTML = '<option value="">Loading...</option>';
         sectionSelect.disabled = true;
+
+        const params = new URLSearchParams({ class: selectedClass });
+        if (campusValue) {
+            params.append('campus', campusValue);
+        }
         
-        fetch(`{{ route('online-classes.get-sections') }}?class=${encodeURIComponent(selectedClass)}`)
+        return fetch(`{{ route('online-classes.get-sections') }}?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 sectionSelect.innerHTML = '<option value="">Select Section</option>';
@@ -739,9 +787,16 @@
             });
     }
     
-    // Dynamic section loading when class changes
     document.addEventListener('DOMContentLoaded', function() {
+        const campusSelect = document.getElementById('campus');
         const classSelect = document.getElementById('class');
+
+        if (campusSelect) {
+            campusSelect.addEventListener('change', function() {
+                loadClassesForCampus(this.value);
+            });
+        }
+
         if (classSelect) {
             classSelect.addEventListener('change', function() {
                 loadSections(this.value);

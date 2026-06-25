@@ -18,6 +18,10 @@ class SendMarksController extends Controller
      */
     public function practical(Request $request): View
     {
+        if ($request->boolean('print')) {
+            return app(PrintMarksheetsController::class)->practical($request);
+        }
+
         $campuses = $this->getCampuses();
         $classes = $this->getClasses();
         $sections = $this->getSectionsData();

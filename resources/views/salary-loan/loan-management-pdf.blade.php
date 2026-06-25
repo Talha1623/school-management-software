@@ -45,9 +45,11 @@
             <th style="width:7%;">Emp ID</th>
             <th style="width:14%;">Staff name</th>
             <th style="width:9%;">Campus</th>
-            <th class="num" style="width:10%;">Requested</th>
-            <th class="num" style="width:10%;">Approved</th>
-            <th class="num" style="width:8%;">Instalments</th>
+            <th class="num" style="width:8%;">Requested</th>
+            <th class="num" style="width:8%;">Total Approved</th>
+            <th class="num" style="width:8%;">Paid</th>
+            <th class="num" style="width:8%;">Remaining</th>
+            <th class="num" style="width:7%;">Instalments</th>
             <th style="width:8%;">Status</th>
             <th style="width:11%;">Applied</th>
         </tr>
@@ -62,13 +64,9 @@
                 <td>{{ $s->name ?? 'N/A' }}</td>
                 <td>{{ $s->campus ?? 'N/A' }}</td>
                 <td class="num">{{ $currency }} {{ number_format((float) $loan->requested_amount, 2) }}</td>
-                <td class="num">
-                    @if($loan->approved_amount !== null)
-                        {{ $currency }} {{ number_format((float) $loan->approved_amount, 2) }}
-                    @else
-                        —
-                    @endif
-                </td>
+                <td class="num">{{ $currency }} {{ number_format($loan->totalApprovedAmount(), 2) }}</td>
+                <td class="num">{{ $currency }} {{ number_format($loan->amountPaid(), 2) }}</td>
+                <td class="num">{{ $currency }} {{ number_format($loan->remainingAmount(), 2) }}</td>
                 <td class="num">{{ $loan->repayment_instalments }}</td>
                 <td>{{ $loan->status }}</td>
                 <td>{{ $loan->created_at?->format('d M Y, h:i A') ?? '—' }}</td>

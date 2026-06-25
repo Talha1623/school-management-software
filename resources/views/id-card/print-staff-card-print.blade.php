@@ -437,9 +437,47 @@
             box-shadow: 0 4px 10px rgba(0, 52, 113, 0.3);
         }
 
+        .print-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .print-btn {
+            background: linear-gradient(135deg, #198754 0%, #157347 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 24px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 6px rgba(25, 135, 84, 0.25);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .print-btn:hover {
+            background: linear-gradient(135deg, #157347 0%, #198754 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(25, 135, 84, 0.35);
+        }
+
+        .print-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
         /* PRINT */
         @media print {
-            .design-panel {
+            .design-panel,
+            .print-toolbar,
+            .no-print {
                 display: none !important;
             }
             body {
@@ -494,6 +532,13 @@
             : asset('storage/' . ltrim((string) $settings->logo, '/')))
         : asset('assets/images/logo-icon.png');
 @endphp
+
+<div class="print-toolbar no-print">
+    <button type="button" class="print-btn" onclick="window.print()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8H5a3 3 0 0 0-3 3v6h4v4h12v-4h4v-6a3 3 0 0 0-3-3zm-1 9h-2v-4H8v4H6v-5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5zm1-10H5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2z"/></svg>
+        Print
+    </button>
+</div>
 
 <!-- Card Design Customization Panel -->
 <div class="design-panel no-print">
@@ -593,6 +638,12 @@
         params.set('footer_text_color', footerText);
         window.history.replaceState({}, '', '?' + params.toString());
     }
+
+    @if(request()->boolean('auto_print'))
+    window.addEventListener('load', function () {
+        setTimeout(function () { window.print(); }, 400);
+    });
+    @endif
 </script>
 
 <div class="cards-grid">

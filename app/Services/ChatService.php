@@ -350,12 +350,8 @@ class ChatService
     private function formatMessage(Message $message, ChatActor $actor): array
     {
         $actorId = (int) $actor->id;
-        $fromType = strtolower(trim((string) $message->from_type));
-        $actorType = strtolower(trim((string) $actor->messageType));
-        $isMine = ($fromType === $actorType && (int) $message->from_id === $actorId)
-            || ($fromType === 'teacher' && $actorType === 'staff' && (int) $message->from_id === $actorId)
-            || ($fromType === 'staff' && $actorType === 'teacher' && (int) $message->from_id === $actorId)
-            || ($actorType === 'super_admin' && $fromType === 'admin' && (int) $message->from_id === $actorId);
+        $isMine = ($message->from_type === $actor->messageType && (int) $message->from_id === $actorId)
+            || ($actor->messageType === 'super_admin' && $message->from_type === 'admin' && (int) $message->from_id === $actorId);
 
         return [
             'id' => $message->id,
@@ -373,9 +369,6 @@ class ChatService
             'display_as' => $isMine ? 'sent' : 'received',
             'align' => $isMine ? 'right' : 'left',
             'bubble_align' => $isMine ? 'end' : 'start',
-            'show_on_right' => $isMine,
-            'show_on_left' => !$isMine,
-            'viewer_staff_id' => $actorId,
             'sender' => [
                 'type' => $message->from_type,
                 'id' => (int) $message->from_id,

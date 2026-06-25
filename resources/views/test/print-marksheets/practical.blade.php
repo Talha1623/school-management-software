@@ -307,13 +307,19 @@
                         <div class="text-center mb-3">
                             <div class="d-flex align-items-center justify-content-center mb-2">
                                 <div class="school-logo me-3">
-                                    <div class="logo-circle bg-success rounded-circle d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
-                                        <span class="text-white fw-bold fs-20">DV</span>
-                                    </div>
+                                    @if(!empty($schoolLogoUrl))
+                                        <img src="{{ $schoolLogoUrl }}" alt="School Logo" style="max-height: 60px; max-width: 120px; object-fit: contain;">
+                                    @else
+                                        <div class="logo-circle bg-success rounded-circle d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                            <span class="text-white fw-bold fs-20">{{ strtoupper(substr($schoolName ?? 'S', 0, 1)) }}</span>
+                                        </div>
+                                    @endif
                                 </div>
                                 <div>
-                                    <div class="fw-semibold fs-18" style="color: #003471;">Defence View</div>
-                                    <div class="text-muted fs-12">+923316074246</div>
+                                    <div class="fw-semibold fs-18" style="color: #003471;">{{ $schoolName ?? 'School' }}</div>
+                                    @if(!empty($schoolPhone))
+                                        <div class="text-muted fs-12">{{ $schoolPhone }}</div>
+                                    @endif
                                 </div>
                             </div>
                             <div class="badge rounded-pill text-white mt-2 px-4 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); font-size: 14px;">

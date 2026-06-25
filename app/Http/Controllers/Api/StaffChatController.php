@@ -279,26 +279,14 @@ class StaffChatController extends Controller
         }
 
         if (!$request->filled('peer_id')) {
-            if ($request->filled('student_id')) {
-                $request->merge([
-                    'peer_id' => $request->input('student_id'),
-                    'peer_type' => $request->input('peer_type', 'student'),
-                ]);
-            } elseif ($request->filled('parent_id')) {
-                $request->merge([
-                    'peer_id' => $request->input('parent_id'),
-                    'peer_type' => $request->input('peer_type', 'parent'),
-                ]);
-            } else {
-                foreach (['admin_id', 'staff_id', 'teacher_id', 'to_staff_id', 'recipient_id', 'to_id', 'receiver_id'] as $alias) {
-                    if ($request->filled($alias)) {
-                        $defaultPeerType = $alias === 'admin_id' ? 'admin' : 'teacher';
-                        $request->merge([
-                            'peer_id' => $request->input($alias),
-                            'peer_type' => $request->input('peer_type', $defaultPeerType),
-                        ]);
-                        break;
-                    }
+            foreach (['admin_id', 'staff_id', 'teacher_id', 'to_staff_id', 'recipient_id', 'to_id', 'receiver_id'] as $alias) {
+                if ($request->filled($alias)) {
+                    $defaultPeerType = $alias === 'admin_id' ? 'admin' : 'teacher';
+                    $request->merge([
+                        'peer_id' => $request->input($alias),
+                        'peer_type' => $request->input('peer_type', $defaultPeerType),
+                    ]);
+                    break;
                 }
             }
         }

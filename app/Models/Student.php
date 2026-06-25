@@ -212,5 +212,64 @@ class Student extends Authenticatable
     {
         return $this->hasMany(StudentNotification::class);
     }
+
+    /**
+     * Resolve transport fare from student profile or campus route table.
+     */
+    public function resolvedTransportFare(): ?float
+    {
+        $fare = (float) ($this->transport_fare ?? 0);
+        if ($fare > 0.00001) {
+            return round($fare, 2);
+        }
+
+        $route = trim((string) ($this->transport_route ?? ''));
+        if ($route === '') {
+            return null;
+        }
+
+        $transportQuery = Transport::query()
+            ->whereRaw('LOWER(TRIM(route_name)) = ?', [strtolower($route)]);
+
+        $campus = trim((string) ($this->campus ?? ''));
+        if ($campus !== '') {
+            $transportQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
+        }
+
+        $transport = $transportQuery->orderBy('id')->first();
+        if ($transport && (float) $transport->route_fare > 0) {
+            return round((float) $transport->route_fare, 2);
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether transport route and fare are configured for fee generation.
+     */
+    public function hasTransportConfigured(): bool
+    {
+        return trim((string) ($this->transport_route ?? '')) !== ''
+            && $this->resolvedTransportFare() !== null;
+    }
+
+    /**
+     * Students eligible for transport fee generation.
+     */
+    public function scopeEligibleForTransportFee($query)
+    {
+        return $query
+            ->whereNotNull('transport_route')
+            ->whereRaw("TRIM(COALESCE(transport_route, '')) <> ''")
+            ->where(function ($q) {
+                $q->where('transport_fare', '>', 0)
+                    ->orWhereExists(function ($sub) {
+                        $sub->selectRaw('1')
+                            ->from('transports')
+                            ->whereRaw('LOWER(TRIM(transports.route_name)) = LOWER(TRIM(students.transport_route))')
+                            ->where('transports.route_fare', '>', 0);
+                    });
+            });
+    }
 }
 

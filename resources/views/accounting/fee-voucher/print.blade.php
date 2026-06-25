@@ -235,11 +235,19 @@
                         </div>
                         <p class="school-title">{{ $displaySchool }}</p>
 
-                        <p class="kv"><strong>NAME:</strong> {{ $student->student_name ?? '—' }}</p>
-                        <p class="kv"><strong>PARENT:</strong> {{ $student->father_name ?? '—' }}</p>
-                        <p class="kv"><strong>CLASS/SEC:</strong> {{ trim(($student->class ?? '') . '/' . ($student->section ?? ''), '/') }}</p>
-                        <p class="kv"><strong>ROLL NO:</strong> {{ $student->student_code ?? '—' }}</p>
-                        <p class="kv"><strong>CAMPUS:</strong> {{ $student->campus ?? '—' }}</p>
+                        @if(!empty($v['is_family']))
+                            <p class="kv"><strong>NAME:</strong> {{ $v['family_label']['names'] ?? '—' }}</p>
+                            <p class="kv"><strong>PARENT:</strong> {{ $v['family_label']['parent'] ?? '—' }}</p>
+                            <p class="kv"><strong>CLASS/SEC:</strong> {{ $v['family_label']['classes'] ?? '—' }}</p>
+                            <p class="kv"><strong>ROLL NO:</strong> {{ $v['family_label']['roll_nos'] ?? '—' }}</p>
+                            <p class="kv"><strong>CAMPUS:</strong> {{ $v['family_label']['campus'] ?? '—' }}</p>
+                        @else
+                            <p class="kv"><strong>NAME:</strong> {{ $student->student_name ?? '—' }}</p>
+                            <p class="kv"><strong>PARENT:</strong> {{ $student->father_name ?? '—' }}</p>
+                            <p class="kv"><strong>CLASS/SEC:</strong> {{ trim(($student->class ?? '') . '/' . ($student->section ?? ''), '/') }}</p>
+                            <p class="kv"><strong>ROLL NO:</strong> {{ $student->student_code ?? '—' }}</p>
+                            <p class="kv"><strong>CAMPUS:</strong> {{ $student->campus ?? '—' }}</p>
+                        @endif
                         <p class="kv"><strong>VOUCHER:</strong> {{ $v['voucher_number'] ?? '—' }}</p>
 
                         <div class="voucher-no-box">{{ $v['voucher_number'] ?? '—' }}</div>
@@ -309,7 +317,7 @@
                             @endif
                         </div>
 
-                        <div class="history-title">STUDENT FEE HISTORY — Year {{ $yearLabel }}</div>
+                        <div class="history-title">{{ !empty($v['is_family']) ? 'FAMILY FEE HISTORY' : 'STUDENT FEE HISTORY' }} — Year {{ $yearLabel }}</div>
                         <table class="history-table">
                             <thead>
                                 <tr>

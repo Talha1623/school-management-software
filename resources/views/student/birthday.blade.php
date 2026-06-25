@@ -57,10 +57,15 @@
 
             <!-- Table Header -->
             <div class="mb-2 p-2 rounded-8" style="background: linear-gradient(135deg, #003471 0%, #004a9f 100%);">
-                <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">cake</span>
-                    <span>Student Birthdays</span>
-                </h5>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="mb-0 text-white fs-15 fw-semibold d-flex align-items-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">cake</span>
+                        <span>Student Birthdays</span>
+                    </h5>
+                    <span class="text-white-50 fs-13">
+                        Showing birthdays for: <strong class="text-white">{{ $todayDate->format('d M Y') }}</strong>
+                    </span>
+                </div>
             </div>
 
             <div class="default-table-area" style="margin-top: 0;">
@@ -112,11 +117,7 @@
                                         </span>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
-                                        @if(($student['status'] ?? '') === 'Today')
-                                            <span class="status-pill status-pill-today">Today is their birthday</span>
-                                        @else
-                                            <span class="status-pill status-pill-muted">Today is their birthday</span>
-                                        @endif
+                                        <span class="status-pill status-pill-today">Today is their birthday</span>
                                     </td>
                                     <td style="padding: 8px 12px; font-size: 13px;">
                                         <a href="{{ route('student.birthday.card.print', ['student' => $student['id'], 'auto_print' => 1]) }}" target="_blank" class="action-pill action-pill-card">
@@ -134,8 +135,9 @@
                             @empty
                                 <tr>
                                     <td colspan="9" class="text-center text-muted py-5">
-                                        <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">inbox</span>
-                                        <p class="mt-2 mb-0">No student birthdays found.</p>
+                                        <span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.3;">cake</span>
+                                        <p class="mt-2 mb-1">No student birthdays today ({{ $todayDate->format('d M') }}).</p>
+                                        <p class="mb-0 fs-13">Students will appear here automatically on their saved birthday date.</p>
                                     </td>
                                 </tr>
                             @endforelse
@@ -306,6 +308,7 @@
     .action-pill-wish {
         background: #ff9800;
         border-color: #f57c00;
+        cursor: pointer;
     }
 
     .action-pill:hover,

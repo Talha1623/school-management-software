@@ -76,30 +76,30 @@ class BehaviorRecordingController extends Controller
             // Merge classes from both sources
             $classes = $assignedSubjects->pluck('class')
                 ->merge($assignedSections->pluck('class'))
-                ->map(function($class) {
-                    return trim($class);
+                ->map(function ($class) {
+                    return trim((string) $class);
                 })
-                ->filter(function($class) {
-                    return !empty($class);
+                ->filter(function ($class) {
+                    return $class !== '';
                 })
-                ->unique()
+                ->unique(fn ($class) => strtolower($class))
                 ->sort()
                 ->values();
         } else {
-            // For non-teachers, get all classes
-            $classesQuery = ClassModel::whereNotNull('class_name');
-            if ($filterCampus) {
-                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-            }
-            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
-            
+            $classes = $this->distinctClassNames($filterCampus);
+
             if ($classes->isEmpty()) {
                 $classesFromSubjects = Subject::whereNotNull('class');
                 if ($filterCampus) {
                     $classesFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
                 }
-                $classesFromSubjects = $classesFromSubjects->distinct()->pluck('class')->sort();
-                $classes = $classesFromSubjects->isEmpty() ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']) : $classesFromSubjects;
+                $classesFromSubjects = $classesFromSubjects->pluck('class')
+                    ->map(fn ($class) => trim((string) $class))
+                    ->filter(fn ($class) => $class !== '')
+                    ->unique(fn ($class) => strtolower($class))
+                    ->sort()
+                    ->values();
+                $classes = $classesFromSubjects;
             }
         }
 
@@ -201,28 +201,6 @@ class BehaviorRecordingController extends Controller
                 ->orderBy('student_name', 'asc')
                 ->get();
             
-            // Debug: Log query results for transferred students
-            \Log::info('Behavior Recording Query', [
-                'filter_campus' => $filterCampus,
-                'filter_class' => $filterClass,
-                'filter_section' => $filterSection,
-                'students_count' => $students->count(),
-                'query_sql' => $studentsQuery->toSql(),
-                'query_bindings' => $studentsQuery->getBindings(),
-                'sample_students' => $students->take(3)->map(function($s) {
-                    return [
-                        'id' => $s->id,
-                        'code' => $s->student_code,
-                        'name' => $s->student_name,
-                        'campus' => $s->campus,
-                        'class' => $s->class,
-                        'section' => $s->section,
-                        'parent_account_id' => $s->parent_account_id,
-                        'father_name' => $s->father_name,
-                    ];
-                })->toArray(),
-            ]);
-            
             // Get campus from first student or use default
             if ($filterCampus) {
                 $campusName = $filterCampus;
@@ -234,17 +212,31 @@ class BehaviorRecordingController extends Controller
         $types = collect(['daily behavior' => 'Daily Behavior']);
 
         // Get behavior categories for the selected campus
-        $categories = collect();
-        if ($filterCampus) {
-            $categories = BehaviorCategory::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
-                ->orderBy('category_name', 'asc')
-                ->pluck('category_name')
-                ->values();
-        } else {
-            // If no campus selected, get all categories
-            $categories = BehaviorCategory::orderBy('category_name', 'asc')
-                ->pluck('category_name')
-                ->unique()
+        $categories = $this->categoriesForCampus($filterCampus);
+        $usingDefaultCategory = false;
+        if ($categories->isEmpty()) {
+            $categories = collect(['General Behavior']);
+            $usingDefaultCategory = true;
+        }
+
+        $existingRecords = collect();
+        if ($filterType && $filterClass && $students->isNotEmpty()) {
+            $existingRecords = BehaviorRecord::whereIn('student_id', $students->pluck('id'))
+                ->whereRaw('LOWER(TRIM(type)) = ?', [strtolower(trim((string) $filterType))])
+                ->whereDate('date', $filterDate)
+                ->get()
+                ->map(function (BehaviorRecord $record) {
+                    return [
+                        'student_id' => $record->student_id,
+                        'category' => $record->category,
+                        'points' => (int) $record->points,
+                        'type' => $record->type,
+                        'class' => $record->class,
+                        'section' => $record->section,
+                        'campus' => $record->campus,
+                        'date' => $record->date?->format('Y-m-d'),
+                    ];
+                })
                 ->values();
         }
 
@@ -256,12 +248,61 @@ class BehaviorRecordingController extends Controller
             'students',
             'campusName',
             'categories',
+            'usingDefaultCategory',
+            'existingRecords',
             'filterType',
             'filterClass',
             'filterSection',
             'filterDate',
             'filterCampus'
         ));
+    }
+
+    private function distinctClassNames(?string $campus = null): \Illuminate\Support\Collection
+    {
+        $classesQuery = ClassModel::whereNotNull('class_name');
+        if ($campus) {
+            $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
+        }
+
+        return $classesQuery->pluck('class_name')
+            ->map(fn ($class) => trim((string) $class))
+            ->filter(fn ($class) => $class !== '')
+            ->unique(fn ($class) => strtolower($class))
+            ->sort()
+            ->values();
+    }
+
+    private function categoriesForCampus(?string $campus): \Illuminate\Support\Collection
+    {
+        if ($campus) {
+            return BehaviorCategory::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
+                ->orderBy('category_name', 'asc')
+                ->pluck('category_name')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter(fn ($name) => $name !== '')
+                ->unique(fn ($name) => strtolower($name))
+                ->values();
+        }
+
+        return BehaviorCategory::orderBy('category_name', 'asc')
+            ->pluck('category_name')
+            ->map(fn ($name) => trim((string) $name))
+            ->filter(fn ($name) => $name !== '')
+            ->unique(fn ($name) => strtolower($name))
+            ->values();
+    }
+
+    private function resolveRecordedByName(): string
+    {
+        foreach (['staff', 'admin', 'web'] as $guard) {
+            $user = Auth::guard($guard)->user();
+            if ($user) {
+                return trim((string) ($user->name ?? $user->email ?? 'System')) ?: 'System';
+            }
+        }
+
+        return 'System';
     }
 
     /**
@@ -365,41 +406,29 @@ class BehaviorRecordingController extends Controller
 
             $classes = $assignedSubjects->pluck('class')
                 ->merge($assignedSections->pluck('class'))
-                ->map(function($class) {
-                    return trim($class);
-                })
-                ->filter(function($class) {
-                    return !empty($class);
-                })
-                ->unique()
+                ->map(fn ($class) => trim((string) $class))
+                ->filter(fn ($class) => $class !== '')
+                ->unique(fn ($class) => strtolower($class))
                 ->sort()
                 ->values();
         } else {
-            $classesQuery = ClassModel::whereNotNull('class_name');
-            if ($campus) {
-                $classesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
-            }
-            $classes = $classesQuery->distinct()->pluck('class_name')->sort()->values();
+            $classes = $this->distinctClassNames($campus);
 
             if ($classes->isEmpty()) {
                 $classesFromSubjects = Subject::whereNotNull('class');
                 if ($campus) {
                     $classesFromSubjects->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))]);
                 }
-                $classesFromSubjects = $classesFromSubjects->distinct()->pluck('class')->sort();
-                $classes = $classesFromSubjects->isEmpty()
-                    ? collect(['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'])
-                    : $classesFromSubjects;
+                $classes = $classesFromSubjects->pluck('class')
+                    ->map(fn ($class) => trim((string) $class))
+                    ->filter(fn ($class) => $class !== '')
+                    ->unique(fn ($class) => strtolower($class))
+                    ->sort()
+                    ->values();
             }
         }
 
-        $classes = $classes->map(function($class) {
-            return trim((string) $class);
-        })->filter(function($class) {
-            return $class !== '';
-        })->unique()->sort()->values();
-
-        return response()->json(['classes' => $classes]);
+        return response()->json(['classes' => $classes->values()]);
     }
 
     /**
@@ -408,18 +437,10 @@ class BehaviorRecordingController extends Controller
     public function getCategoriesByCampus(Request $request): JsonResponse
     {
         $campus = $request->get('campus');
-        
-        if ($campus) {
-            $categories = BehaviorCategory::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campus))])
-                ->orderBy('category_name', 'asc')
-                ->pluck('category_name')
-                ->values();
-        } else {
-            // If no campus selected, get all categories
-            $categories = BehaviorCategory::orderBy('category_name', 'asc')
-                ->pluck('category_name')
-                ->unique()
-                ->values();
+        $categories = $this->categoriesForCampus($campus);
+
+        if ($categories->isEmpty()) {
+            $categories = collect(['General Behavior']);
         }
 
         return response()->json(['categories' => $categories]);
@@ -449,21 +470,24 @@ class BehaviorRecordingController extends Controller
             $section = !empty($validated['section']) ? $validated['section'] : null;
             $category = $validated['category'] ?? null;
 
-            // Always create new record - allows multiple records for same student/type/date
-            // This ensures all behavior records are saved separately
-            $newRecord = BehaviorRecord::create([
-                'student_id' => $validated['student_id'],
-                'student_name' => $student->student_name,
-                'type' => $validated['type'],
-                'category' => $category,
-                'points' => $validated['points'],
-                'class' => $validated['class'],
-                'section' => $section,
-                'campus' => $validated['campus'],
-                'date' => $validated['date'],
-                'description' => $validated['points'] > 0 ? '+' . $validated['points'] . ' Points' : $validated['points'] . ' Points',
-                'recorded_by' => auth()->user()->name ?? auth()->user()->email ?? 'System',
-            ]);
+            // Update existing record for same student/category/date, otherwise create one
+            $newRecord = BehaviorRecord::updateOrCreate(
+                [
+                    'student_id' => $validated['student_id'],
+                    'type' => $validated['type'],
+                    'category' => $category,
+                    'date' => $validated['date'],
+                ],
+                [
+                    'student_name' => $student->student_name,
+                    'points' => $validated['points'],
+                    'class' => $validated['class'],
+                    'section' => $section,
+                    'campus' => $validated['campus'],
+                    'description' => $validated['points'] > 0 ? '+' . $validated['points'] . ' Points' : $validated['points'] . ' Points',
+                    'recorded_by' => $this->resolveRecordedByName(),
+                ]
+            );
             
             $savedCategory = $newRecord->category;
 

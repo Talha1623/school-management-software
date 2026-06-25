@@ -36,7 +36,7 @@ class TaskManagementController extends Controller
             ->get()
             ->each(function (AdminRole $admin) use ($accountant, $text) {
                 Message::create([
-                    'from_type' => 'accountant',
+                    'from_type' => 'accountant_notification',
                     'from_id' => $accountant->id,
                     'to_type' => 'admin',
                     'to_id' => $admin->id,

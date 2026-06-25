@@ -14,28 +14,65 @@ use Illuminate\Http\Request;
 class StudentFeeController extends Controller
 {
     private function normalizedStudentCode(string $studentCode): string
-    {
+    { 
         return strtolower(trim($studentCode));
+    }
+            
+    /**
+     * Paid receipt totals — same rules as Fee Payment web "Latest Payments" table.
+     *
+     * @return array{total_paid: float, total_principal: float, total_discount: float, total_late_fee: float, rows: array<int, array<string, mixed>>}
+     */
+    private function latestPaymentsTotalsForStudent(Student $student, ?int $feeYear = null): array
+    {
+        $latest = FeePaymentWebTables::latestPaymentsForStudentCode((string) $student->student_code, $feeYear);
+        $rows = collect($latest['rows'] ?? []);
+
+        return [
+            'total_paid' => round((float) ($latest['total_amount_paid'] ?? 0), 2),
+            'total_principal' => round((float) ($latest['total_amount_principal'] ?? $rows->sum('amount_paid')), 2),
+            'total_net' => round((float) ($latest['total_amount_net'] ?? $rows->sum('fee_net')), 2),
+            'total_discount' => round((float) ($latest['total_discount'] ?? $rows->sum('discount')), 2),
+            'total_late_fee' => round((float) ($latest['total_late_fee'] ?? $rows->sum('late_fee')), 2),
+            'rows' => $rows->values()->all(),
+        ];
     }
 
     /**
-     * @param array{due: float, total_paid_display: float, generated_fee: float}|null $bal
+     * @param array{
+     *   due: float,
+     *   total_paid_display: float,
+     *   cash_paid?: float,
+     *   principal_due?: float,
+     *   remaining_late?: float,
+     *   is_installment?: bool,
+     *   generated_fee: float
+     * }|null $bal
      */
     private function feeBalanceStatusFromWeb(?array $bal): string
     {
         if ($bal === null) {
             return 'paid';
         }
+
         $due = (float) ($bal['due'] ?? 0);
-        $paidDisplay = (float) ($bal['total_paid_display'] ?? 0);
-        if ($due <= 0.00001) {
-            return 'paid';
-        }
-        if ($paidDisplay > 0.00001) {
-            return 'partial';
+        $isInstallment = (bool) ($bal['is_installment'] ?? false);
+        if ($isInstallment && $due > 0.00001) {
+            return 'installment';
         }
 
-        return 'unpaid';
+        $cashPaid = (float) ($bal['cash_paid'] ?? $bal['total_paid_display'] ?? 0);
+        $principalDue = (float) ($bal['principal_due'] ?? 0);
+        $remainingLate = (float) ($bal['remaining_late'] ?? 0);
+        $label = FeePaymentWebTables::displayStatusForFeeRow($cashPaid, $due, $principalDue, $remainingLate);
+
+        return match ($label) {
+            'Paid' => 'paid',
+            'Unpaid' => 'unpaid',
+            'Partial' => 'partial',
+            'Late Due' => 'late_due',
+            default => 'unpaid',
+        };
     }
 
     private function inferFeeTypeFromTitle(string $paymentTitle): string
@@ -57,7 +94,7 @@ class StudentFeeController extends Controller
     }
 
     /**
-     * Status fields aligned with Fee Payment web Status column (Partial / Unpaid / Installment / Paid).
+     * Status fields aligned with Fee Payment web Status column (Paid / Unpaid / Partial / Late Due / Installment).
      *
      * @return array{
      *   fee_balance_status: string,
@@ -67,10 +104,11 @@ class StudentFeeController extends Controller
      *   is_unpaid: bool,
      *   is_partial: bool,
      *   is_installment: bool,
-     *   is_outstanding: bool
+     *   is_outstanding: bool,
+     *   is_late_due: bool
      * }
      */
-    private function resolvePaymentStatus(bool $isInstallment, float $paid, float $due): array
+    private function statusFieldsFromWebLabel(string $statusLabel, bool $isInstallment, float $due): array
     {
         if ($isInstallment && $due > 0.00001) {
             return [
@@ -82,11 +120,12 @@ class StudentFeeController extends Controller
                 'is_partial' => false,
                 'is_installment' => true,
                 'is_outstanding' => true,
+                'is_late_due' => false,
             ];
         }
 
-        if ($due <= 0.00001) {
-            return [
+        return match (trim($statusLabel)) {
+            'Paid' => [
                 'fee_balance_status' => 'paid',
                 'status' => 'paid',
                 'payment_status' => 'Paid',
@@ -95,11 +134,20 @@ class StudentFeeController extends Controller
                 'is_partial' => false,
                 'is_installment' => false,
                 'is_outstanding' => false,
-            ];
-        }
-
-        if ($paid > 0.00001) {
-            return [
+                'is_late_due' => false,
+            ],
+            'Late Due' => [
+                'fee_balance_status' => 'late_due',
+                'status' => 'late_due',
+                'payment_status' => 'Late Due',
+                'is_paid' => false,
+                'is_unpaid' => false,
+                'is_partial' => false,
+                'is_installment' => false,
+                'is_outstanding' => true,
+                'is_late_due' => true,
+            ],
+            'Partial' => [
                 'fee_balance_status' => 'partial',
                 'status' => 'partial',
                 'payment_status' => 'Partial',
@@ -108,19 +156,31 @@ class StudentFeeController extends Controller
                 'is_partial' => true,
                 'is_installment' => false,
                 'is_outstanding' => true,
-            ];
-        }
-
-        return [
-            'fee_balance_status' => 'unpaid',
-            'status' => 'unpaid',
-            'payment_status' => 'Unpaid',
-            'is_paid' => false,
-            'is_unpaid' => true,
-            'is_partial' => false,
-            'is_installment' => false,
-            'is_outstanding' => true,
-        ];
+                'is_late_due' => false,
+            ],
+            'Unpaid' => [
+                'fee_balance_status' => 'unpaid',
+                'status' => 'unpaid',
+                'payment_status' => 'Unpaid',
+                'is_paid' => false,
+                'is_unpaid' => true,
+                'is_partial' => false,
+                'is_installment' => false,
+                'is_outstanding' => true,
+                'is_late_due' => false,
+            ],
+            default => [
+                'fee_balance_status' => 'unpaid',
+                'status' => 'unpaid',
+                'payment_status' => 'Unpaid',
+                'is_paid' => false,
+                'is_unpaid' => true,
+                'is_partial' => false,
+                'is_installment' => false,
+                'is_outstanding' => $due > 0.00001,
+                'is_late_due' => false,
+            ],
+        };
     }
 
     /**
@@ -139,12 +199,21 @@ class StudentFeeController extends Controller
         $cashPaid = (float) ($row['cash_paid'] ?? $paid);
         $paidWithDiscount = (float) ($row['paid_with_discount'] ?? $paid);
         $due = (float) ($row['due'] ?? 0);
+        $principalDue = (float) ($row['amount'] ?? 0);
+        $remainingLate = (float) ($row['remaining_late'] ?? 0);
         $generatedFee = (float) ($row['generated_fee'] ?? 0);
         $isInstallment = (bool) ($row['is_installment'] ?? false);
-        $statusFields = $this->resolvePaymentStatus($isInstallment, $paid, $due);
+        $statusLabel = trim((string) ($row['status'] ?? ''));
+        if ($statusLabel === '') {
+            $statusLabel = FeePaymentWebTables::displayStatusForFeeRow($cashPaid, $due, $principalDue, $remainingLate);
+        }
+        if ($statusLabel === 'Unpaid' && $due > 0.00001 && ($cashPaid > 0.00001 || $paid > 0.00001 || $paidWithDiscount > 0.00001)) {
+            $statusLabel = 'Partial';
+        }
+        $statusFields = $this->statusFieldsFromWebLabel($statusLabel, $isInstallment, $due);
         $paymentTransactions = collect($row['payment_transactions'] ?? [])->values();
 
-        return array_merge([
+        $mapped = array_merge([
             'id' => $row['generated_id'] ?? $row['payment_id'] ?? null,
             'payment_title' => $title,
             'payment_amount' => round($total, 2),
@@ -183,6 +252,193 @@ class StudentFeeController extends Controller
             'student_name' => $student->student_name,
             'parent_name' => $student->father_name,
         ], $statusFields);
+
+        return $this->normalizePaymentHistoryRow($mapped);
+    }
+
+    /**
+     * Ensure every payment row exposes the fields expected by the student app FeeHistory model.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function normalizePaymentHistoryRow(array $row): array
+    {
+        $due = round((float) ($row['due_amount'] ?? $row['due'] ?? $row['net_amount'] ?? 0), 2);
+        $generatedAmount = round((float) ($row['generated_amount'] ?? $row['generated_fee'] ?? 0), 2);
+        if ($generatedAmount <= 0.00001 && isset($row['payment_amount']) && ($row['is_paid'] ?? null) !== true) {
+            $generatedAmount = round((float) $row['payment_amount'], 2);
+        }
+        $paidAmount = round((float) ($row['paid_amount'] ?? $row['paid_with_discount'] ?? 0), 2);
+        $cashPaid = round((float) ($row['cash_paid_amount'] ?? $row['cash_paid'] ?? $paidAmount), 2);
+        $principalDue = round((float) ($row['amount'] ?? $row['principal_due'] ?? 0), 2);
+        $remainingLate = round((float) ($row['remaining_late'] ?? 0), 2);
+        $isInstallment = (bool) ($row['is_installment'] ?? false);
+
+        $existingLabel = trim((string) ($row['payment_status'] ?? ''));
+        $statusLabel = $existingLabel !== ''
+            ? $existingLabel
+            : $this->resolvePaymentStatusLabel(
+                $row,
+                $cashPaid,
+                $paidAmount,
+                $due,
+                $principalDue,
+                $remainingLate,
+                $isInstallment
+            );
+        $statusFields = $this->statusFieldsFromWebLabel($statusLabel, $isInstallment, $due);
+
+        $lastPaymentDate = $row['last_payment_date'] ?? $row['payment_date'] ?? null;
+        if ($lastPaymentDate instanceof \DateTimeInterface) {
+            $lastPaymentDate = Carbon::parse($lastPaymentDate)->format('Y-m-d');
+        } elseif (is_string($lastPaymentDate) && strlen($lastPaymentDate) > 10) {
+            try {
+                $lastPaymentDate = Carbon::parse($lastPaymentDate)->format('Y-m-d');
+            } catch (\Throwable) {
+                // keep raw value
+            }
+        }
+
+        $lastPaymentFormatted = $row['last_payment_date_formatted'] ?? $row['payment_date_formatted'] ?? null;
+        if (!$lastPaymentFormatted && $lastPaymentDate) {
+            try {
+                $lastPaymentFormatted = Carbon::parse($lastPaymentDate)->format('d M Y');
+            } catch (\Throwable) {
+                $lastPaymentFormatted = null;
+            }
+        }
+
+        $paymentDate = $row['payment_date'] ?? $lastPaymentDate;
+        $paymentDateFormatted = $row['payment_date_formatted'] ?? $lastPaymentFormatted;
+
+        return array_merge($row, [
+            'payment_amount' => round((float) ($row['payment_amount'] ?? $generatedAmount), 2),
+            'discount' => round((float) ($row['discount'] ?? 0), 2),
+            'late_fee' => round((float) ($row['late_fee'] ?? 0), 2),
+            'net_amount' => round((float) ($row['net_amount'] ?? $due), 2),
+            'due_amount' => $due,
+            'due' => $due,
+            'generated_amount' => $generatedAmount,
+            'generated_fee' => $generatedAmount,
+            'paid_amount' => $paidAmount,
+            'payment_date' => $paymentDate,
+            'payment_date_formatted' => $paymentDateFormatted,
+            'last_payment_date' => $lastPaymentDate,
+            'last_payment_date_formatted' => $lastPaymentFormatted,
+            'fee_type' => $row['fee_type'] ?? $this->inferFeeTypeFromTitle((string) ($row['payment_title'] ?? '')),
+            'sms_notification' => $row['sms_notification'] ?? null,
+        ], $statusFields);
+    }
+
+    /**
+     * Paid / Unpaid / Partial / Late Due — same rules as Fee Payment web, with partial fallback.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function resolvePaymentStatusLabel(
+        array $row,
+        float $cashPaid,
+        float $paidAmount,
+        float $due,
+        float $principalDue,
+        float $remainingLate,
+        bool $isInstallment
+    ): string {
+        if ($isInstallment && $due > 0.00001) {
+            return 'Installment';
+        }
+
+        if ($due <= 0.00001) {
+            $existingStatus = strtolower(trim((string) ($row['fee_balance_status'] ?? $row['status'] ?? '')));
+            if ($existingStatus === 'partial') {
+                return 'Partial';
+            }
+
+            return 'Paid';
+        }
+
+        $label = FeePaymentWebTables::displayStatusForFeeRow($cashPaid, $due, $principalDue, $remainingLate);
+
+        // Kuch pay ho chuka ho aur abhi due baki ho → Partial.
+        if ($due > 0.00001 && ($cashPaid > 0.00001 || $paidAmount > 0.00001)) {
+            if ($label === 'Unpaid' || $label === 'Partial') {
+                return 'Partial';
+            }
+
+            return $label;
+        }
+
+        $existingStatus = strtolower(trim((string) ($row['payment_status'] ?? $row['status'] ?? $row['fee_balance_status'] ?? '')));
+
+        return match ($existingStatus) {
+            'paid' => 'Paid',
+            'partial' => 'Partial',
+            'late due', 'late_due' => 'Late Due',
+            'installment' => 'Installment',
+            'unpaid', 'generated' => 'Unpaid',
+            default => $label !== '' ? $label : 'Unpaid',
+        };
+    }
+
+    /**
+     * Footer totals for fee_rows — same keys as Fee Payment web table_totals.
+     *
+     * @param  iterable<int, array<string, mixed>>  $feeRows
+     * @return array{total: float, discount: float, late_fee: float, paid: float, due: float, generated_fee: float}
+     */
+    private function sumWebFeeRowTotals(iterable $feeRows): array
+    {
+        $rows = collect($feeRows);
+
+        return [
+            'total' => round((float) $rows->sum(fn ($row) => (float) ($row['total'] ?? 0)), 2),
+            'discount' => round((float) $rows->sum(fn ($row) => (float) ($row['discount'] ?? 0)), 2),
+            'late_fee' => round((float) $rows->sum(fn ($row) => (float) ($row['late_fee'] ?? 0)), 2),
+            'paid' => round((float) $rows->sum(fn ($row) => (float) ($row['paid'] ?? $row['cash_paid'] ?? 0)), 2),
+            'due' => round((float) $rows->sum(fn ($row) => (float) ($row['due'] ?? 0)), 2),
+            'generated_fee' => round((float) $rows->sum(fn ($row) => (float) ($row['generated_fee'] ?? 0)), 2),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     * @return array<string, mixed>
+     */
+    private function normalizeFeeSummaryForApi(array $summary): array
+    {
+        $dueAmount = round((float) ($summary['due_amount'] ?? $summary['unpaid_amount'] ?? 0), 2);
+        $outstandingTotals = is_array($summary['outstanding_table_totals'] ?? null)
+            ? $summary['outstanding_table_totals']
+            : (is_array($summary['table_totals'] ?? null) ? $summary['table_totals'] : []);
+        $clearedTotals = is_array($summary['cleared_table_totals'] ?? null) ? $summary['cleared_table_totals'] : [];
+
+        return array_merge($summary, [
+            'monthly_fee' => round((float) ($summary['monthly_fee'] ?? 0), 2),
+            'annual_fee' => round((float) ($summary['annual_fee'] ?? 0), 2),
+            'unpaid_amount' => round((float) ($summary['unpaid_amount'] ?? $dueAmount), 2),
+            // Live receipt totals (student_payments) — not cleared-bucket snapshot.
+            'total_paid' => round((float) ($summary['total_paid'] ?? $summary['paid_gross'] ?? $summary['latest_payments_total'] ?? 0), 2),
+            'total_discount' => round((float) ($summary['total_discount'] ?? $summary['latest_payments_discount'] ?? 0), 2),
+            'total_late_fee' => round((float) ($summary['total_late_fee'] ?? $summary['latest_payments_late_fee'] ?? 0), 2),
+            'due_amount' => $dueAmount,
+            'table_total' => round((float) ($summary['table_total'] ?? $outstandingTotals['total'] ?? 0), 2),
+            'total' => round((float) ($summary['total'] ?? $dueAmount), 2),
+            'yearly_due_amount' => array_key_exists('yearly_due_amount', $summary) && $summary['yearly_due_amount'] !== null
+                ? round((float) $summary['yearly_due_amount'], 2)
+                : null,
+        ]);
+    }
+
+    /**
+     * @param  iterable<int, array<string, mixed>>  $rows
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function normalizePaymentHistoryCollection(iterable $rows): \Illuminate\Support\Collection
+    {
+        return collect($rows)
+            ->map(fn (array $row) => $this->normalizePaymentHistoryRow($row))
+            ->values();
     }
 
     /**
@@ -192,26 +448,29 @@ class StudentFeeController extends Controller
      */
     private function buildWebSearchResultsPaymentHistory(Student $student, ?int $feeYear, int $perPage, int $page): array
     {
+        // Same source as GET /fee-payment/search-student (web Search Results table + footer).
+        $webPayload = FeePaymentWebTables::feeSearchPayloadForStudent($student);
+        $webFeeRows = collect($webPayload['fee_rows'] ?? []);
+
         $split = FeePaymentWebTables::feeResultsSplitForStudent($student);
         $rows = collect($split['outstanding']['rows']);
         $paidRows = collect($split['paid']['rows']);
 
         if ($feeYear !== null) {
             $yearStr = (string) $feeYear;
+            $webFeeRows = $webFeeRows
+                ->filter(fn ($row) => str_contains((string) ($row['title'] ?? ''), $yearStr))
+                ->values();
             $rows = $rows->filter(fn ($row) => str_contains((string) ($row['fee_type'] ?? ''), $yearStr))->values();
             $paidRows = $paidRows->filter(fn ($row) => str_contains((string) ($row['fee_type'] ?? ''), $yearStr))->values();
         }
 
-        $totals = $feeYear === null
-            ? ($split['outstanding']['totals'] ?? [])
-            : [
-                'total' => round((float) $rows->sum('total'), 2),
-                'discount' => round((float) $rows->sum('discount'), 2),
-                'late_fee' => round((float) $rows->sum('late_fee'), 2),
-                'paid' => round((float) $rows->sum('paid'), 2),
-                'due' => round((float) $rows->sum('due'), 2),
-                'generated_fee' => round((float) $rows->sum('generated_fee'), 2),
-            ];
+        $webFooter = $feeYear === null
+            ? ($webPayload['table_totals'] ?? [])
+            : $this->sumWebFeeRowTotals($webFeeRows);
+        $unpaidAmount = $feeYear === null
+            ? round((float) ($webPayload['unpaid_amount'] ?? $webFooter['due'] ?? 0), 2)
+            : round((float) ($webFooter['due'] ?? 0), 2);
 
         $paidTotals = $feeYear === null
             ? ($split['paid']['totals'] ?? [])
@@ -224,7 +483,7 @@ class StudentFeeController extends Controller
                 'generated_fee' => round((float) $paidRows->sum('generated_fee'), 2),
             ];
 
-        $paymentHistory = $rows->map(fn ($row) => $this->mapSearchResultRowToPaymentHistory($row, $student))->values();
+        $paymentHistoryAll = $rows->map(fn ($row) => $this->mapSearchResultRowToPaymentHistory($row, $student))->values();
 
         $paidFees = $paidRows
             ->sortByDesc(fn ($row) => $row['last_payment_date'] ?? '')
@@ -237,23 +496,24 @@ class StudentFeeController extends Controller
             'unpaid' => 0,
             'partial' => 0,
             'installment' => 0,
+            'late_due' => 0,
         ];
-        foreach ($paymentHistory as $item) {
+        foreach ($paymentHistoryAll as $item) {
             $key = (string) ($item['fee_balance_status'] ?? '');
             if (isset($statusCounts[$key])) {
                 $statusCounts[$key]++;
             }
         }
 
-        $total = $paymentHistory->count();
+        $total = $paymentHistoryAll->count();
         $lastPage = max(1, (int) ceil($total / $perPage));
         $page = max(1, min($page, $lastPage));
         $offset = ($page - 1) * $perPage;
-        $slice = $paymentHistory->slice($offset, $perPage)->values();
+        $slice = $paymentHistoryAll->slice($offset, $perPage)->values();
 
         $monthlyFee = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
 
-        $paidStatusCounts = ['paid' => 0, 'unpaid' => 0, 'partial' => 0, 'installment' => 0];
+        $paidStatusCounts = ['paid' => 0, 'unpaid' => 0, 'partial' => 0, 'installment' => 0, 'late_due' => 0];
         foreach ($paidFees as $item) {
             $key = (string) ($item['fee_balance_status'] ?? '');
             if (isset($paidStatusCounts[$key])) {
@@ -261,73 +521,69 @@ class StudentFeeController extends Controller
             }
         }
 
-        // Web Search Results footer (fee-payment.blade.php grandTotals) — outstanding fee_rows only.
-        $webFooter = $feeYear === null
-            ? FeePaymentWebTables::webSearchFooterTotalsForStudent($student)
-            : [
-                'total' => round((float) $rows->sum('total'), 2),
-                'discount' => round((float) $rows->sum('discount'), 2),
-                'late_fee' => round((float) $rows->sum('late_fee'), 2),
-                'paid' => round((float) $rows->sum('paid'), 2),
-                'due' => round((float) $rows->sum('due'), 2),
-                'generated_fee' => round((float) $rows->sum('generated_fee'), 2),
-            ];
-
         $outstandingPaid = (float) ($webFooter['paid'] ?? 0);
         $clearedPaid = (float) ($paidTotals['paid'] ?? 0);
-        $totalPaidAll = round($outstandingPaid + $clearedPaid, 2);
         $totalDiscountOutstanding = round((float) ($webFooter['discount'] ?? 0), 2);
         $totalDiscountCleared = round((float) ($paidTotals['discount'] ?? 0), 2);
-        $totalDiscountAll = round($totalDiscountOutstanding + $totalDiscountCleared, 2);
         $totalLateFeeOutstanding = round((float) ($webFooter['late_fee'] ?? 0), 2);
         $totalLateFeeCleared = round((float) ($paidTotals['late_fee'] ?? 0), 2);
-        $totalLateFeeAll = round($totalLateFeeOutstanding + $totalLateFeeCleared, 2);
         $tableTotalOutstanding = round((float) ($webFooter['total'] ?? 0), 2);
         $tableTotalCleared = round((float) ($paidTotals['total'] ?? 0), 2);
-        $tableTotalAll = round($tableTotalOutstanding + $tableTotalCleared, 2);
         $generatedFeeOutstanding = round((float) ($webFooter['generated_fee'] ?? 0), 2);
         $generatedFeeCleared = round((float) ($paidTotals['generated_fee'] ?? 0), 2);
-        $generatedFeeAll = round($generatedFeeOutstanding + $generatedFeeCleared, 2);
+
+        // Web Latest Payments / Cleared footer: Fee | Late | Dis (e.g. 7250 | 1750 | 1200).
+        $clearedFeeNet = round(max(0, $clearedPaid - $totalLateFeeCleared - $totalDiscountCleared), 2);
+        $latestPaymentsTotals = $this->latestPaymentsTotalsForStudent($student, $feeYear);
+        // Live totals from student_payments receipts (updates on every new payment).
+        $receiptPaidGross = round((float) ($latestPaymentsTotals['total_paid'] ?? 0), 2);
+        $receiptLateFee = round((float) ($latestPaymentsTotals['total_late_fee'] ?? 0), 2);
+        $receiptDiscount = round((float) ($latestPaymentsTotals['total_discount'] ?? 0), 2);
 
         $statusCountsAll = [
             'paid' => $paidFees->count() + (int) ($statusCounts['paid'] ?? 0),
             'unpaid' => (int) ($statusCounts['unpaid'] ?? 0),
             'partial' => (int) ($statusCounts['partial'] ?? 0),
             'installment' => (int) ($statusCounts['installment'] ?? 0),
+            'late_due' => (int) ($statusCounts['late_due'] ?? 0),
         ];
 
         return [
             'payment_history' => $slice,
-            'outstanding_fees' => $slice,
+            'outstanding_fees' => $paymentHistoryAll,
             'paid_fees' => $paidFees,
             'fee_summary' => [
                 'monthly_fee' => $monthlyFee,
                 'annual_fee' => $monthlyFee * 12,
-                // Web Search Results footer (outstanding rows only — matches fee-payment.blade.php).
+                // Kitna abhi dena hai (Search Results Due column).
+                'due_amount' => $unpaidAmount,
+                'unpaid_amount' => $unpaidAmount,
+                'total' => $unpaidAmount,
+                'has_unpaid' => $unpaidAmount > 0.00001,
+                // Live from DB receipts (Latest Payments) — har nayi payment par update.
+                'total_paid' => $receiptPaidGross,
+                'total_late_fee' => $receiptLateFee,
+                'total_discount' => $receiptDiscount,
+                'paid_gross' => $receiptPaidGross,
+                'latest_payments_total' => $receiptPaidGross,
+                'latest_payments_principal' => (float) ($latestPaymentsTotals['total_principal'] ?? $receiptPaidGross),
+                'latest_payments_net' => (float) ($latestPaymentsTotals['total_net'] ?? 0),
+                'latest_payments_late_fee' => $receiptLateFee,
+                'latest_payments_discount' => $receiptDiscount,
+                // Outstanding Search Results footer (pending fees only).
+                'outstanding_table_totals' => $webFooter,
+                'outstanding_paid' => $outstandingPaid,
+                'outstanding_discount' => $totalDiscountOutstanding,
+                'outstanding_late_fee' => $totalLateFeeOutstanding,
+                'outstanding_generated_fee' => $generatedFeeOutstanding,
                 'table_total' => $tableTotalOutstanding,
-                'table_total_all' => $tableTotalAll,
-                'total_paid' => $outstandingPaid,
-                'total_paid_outstanding' => $outstandingPaid,
-                'total_paid_cleared' => $clearedPaid,
-                'total_paid_all' => $totalPaidAll,
-                'total_discount' => $totalDiscountAll,
-                'total_discount_outstanding' => $totalDiscountOutstanding,
-                'total_discount_cleared' => $totalDiscountCleared,
-                'total_late_fee' => $totalLateFeeAll,
-                'total_late_fee_outstanding' => $totalLateFeeOutstanding,
-                'total_late_fee_cleared' => $totalLateFeeCleared,
-                'generated_fee_total' => $generatedFeeAll,
-                'generated_fee_total_outstanding' => $generatedFeeOutstanding,
-                'generated_fee_total_cleared' => $generatedFeeCleared,
-                'due_amount' => (float) ($webFooter['due'] ?? 0),
-                'total' => (float) ($webFooter['due'] ?? 0),
-                'yearly_due_amount' => null,
-                'table_totals' => $webFooter,
-                'table_totals_cleared' => [
+                // Cleared/paid fee titles (fully settled).
+                'cleared_table_totals' => [
                     'total' => $tableTotalCleared,
                     'discount' => $totalDiscountCleared,
-                    'late_fee' => round((float) ($paidTotals['late_fee'] ?? 0), 2),
+                    'late_fee' => $totalLateFeeCleared,
                     'paid' => $clearedPaid,
+                    'fee_net' => $clearedFeeNet,
                     'due' => 0.0,
                     'generated_fee' => $generatedFeeCleared,
                 ],
@@ -336,8 +592,6 @@ class StudentFeeController extends Controller
                 'outstanding_fees_count' => $total,
                 'paid_fees_count' => $paidFees->count(),
                 'paid_status_counts' => $paidStatusCounts,
-                'paid_totals' => $paidTotals,
-                'outstanding_totals' => $totals,
             ],
             'pagination' => [
                 'current_page' => $page,
@@ -363,6 +617,12 @@ class StudentFeeController extends Controller
         bool $latestOnly,
         ?int $feeYear,
     ): array {
+        $paymentHistory = $this->normalizePaymentHistoryCollection($result['payment_history'] ?? []);
+        $outstandingFees = isset($result['outstanding_fees'])
+            ? $this->normalizePaymentHistoryCollection($result['outstanding_fees'])
+            : $paymentHistory;
+        $paidFees = $this->normalizePaymentHistoryCollection($result['paid_fees'] ?? []);
+
         return [
             'student' => [
                 'id' => $student->id,
@@ -372,18 +632,18 @@ class StudentFeeController extends Controller
                 'section' => $student->section,
                 'campus' => $student->campus,
                 'transport_route' => $student->transport_route ?? null,
-                'transport_fare' => round((float) ($student->transport_fare ?? 0), 2),
+                'transport_fare' => (int) round((float) ($student->transport_fare ?? 0)),
             ],
-            'monthly_fee' => $monthlyFee,
-            'fee_summary' => $result['fee_summary'],
+            'monthly_fee' => (int) round($monthlyFee),
+            'fee_summary' => $this->normalizeFeeSummaryForApi($result['fee_summary'] ?? []),
             'include_all_records' => $includeAllRecords,
             'latest_only' => $latestOnly,
             'fee_year' => $feeYear,
             'view' => $result['view'] ?? null,
-            'payment_history' => $result['payment_history'],
-            'outstanding_fees' => $result['outstanding_fees'] ?? $result['payment_history'],
-            'paid_fees' => $result['paid_fees'] ?? [],
-            'pagination' => $result['pagination'],
+            'payment_history' => $paymentHistory->values()->all(),
+            'outstanding_fees' => $outstandingFees->values()->all(),
+            'paid_fees' => $paidFees->values()->all(),
+            'pagination' => $result['pagination'] ?? null,
         ];
     }
 
@@ -395,47 +655,66 @@ class StudentFeeController extends Controller
     private function buildLatestPaymentsPaymentHistory(Student $student, ?int $feeYear, int $perPage, int $page): array
     {
         $latest = FeePaymentWebTables::latestPaymentsForStudentCode((string) $student->student_code, $feeYear);
-        $paymentHistory = collect($latest['rows'])->map(function (array $row) {
+        $paidFeesAll = collect($latest['rows'])->map(function (array $row) {
             $title = (string) ($row['title'] ?? '');
             $amountPaid = (float) ($row['amount_paid'] ?? 0);
             $discount = (float) ($row['discount'] ?? 0);
             $lateFee = (float) ($row['late_fee'] ?? 0);
+            $paymentDate = null;
+            $paymentDateFormatted = $row['payment_datetime'] ?? null;
+            if (!empty($row['payment_date'])) {
+                try {
+                    $paymentDate = Carbon::createFromFormat('d-m-Y', (string) $row['payment_date'])->format('Y-m-d');
+                } catch (\Throwable) {
+                    $paymentDate = null;
+                }
+            }
 
-            return [
+            return $this->normalizePaymentHistoryRow([
                 'id' => $row['id'] ?? null,
                 'payment_title' => $title,
                 'payment_amount' => round($amountPaid, 2),
                 'discount' => round($discount, 2),
                 'late_fee' => round($lateFee, 2),
-                'net_amount' => round($amountPaid + $lateFee, 2),
-                'method' => 'Paid',
+                'net_amount' => 0.0,
+                'method' => $row['method'] ?? 'Paid',
                 'status' => 'paid',
                 'fee_type' => $this->inferFeeTypeFromTitle($title),
-                'generated_amount' => 0.0,
+                'generated_amount' => round($amountPaid + $discount, 2),
                 'paid_amount' => round($amountPaid, 2),
                 'due_amount' => 0.0,
                 'fee_balance_status' => 'paid',
-                'payment_date' => $row['payment_date'] ?? null,
-                'payment_date_formatted' => $row['payment_datetime'] ?? null,
+                'payment_status' => 'Paid',
+                'is_paid' => true,
+                'is_unpaid' => false,
+                'is_partial' => false,
+                'is_installment' => false,
+                'is_outstanding' => false,
+                'payment_date' => $paymentDate,
+                'payment_date_formatted' => $paymentDateFormatted,
+                'last_payment_date' => $paymentDate,
+                'last_payment_date_formatted' => $paymentDateFormatted,
                 'accountant' => $row['received_by'] ?? null,
                 'student_code' => $row['student_code'] ?? null,
                 'student_name' => $row['student_name'] ?? null,
                 'parent_name' => $row['parent_name'] ?? null,
-            ];
+            ]);
         })->values();
 
-        $total = $paymentHistory->count();
+        $total = $paidFeesAll->count();
         $lastPage = max(1, (int) ceil($total / $perPage));
         $page = max(1, min($page, $lastPage));
         $offset = ($page - 1) * $perPage;
-        $slice = $paymentHistory->slice($offset, $perPage)->values();
+        $paidSlice = $paidFeesAll->slice($offset, $perPage)->values();
 
         $monthlyFee = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
         $annualFee = $monthlyFee * 12;
         $totalPaid = (float) ($latest['total_amount_paid'] ?? 0);
 
         return [
-            'payment_history' => $slice,
+            'payment_history' => collect(),
+            'outstanding_fees' => collect(),
+            'paid_fees' => $paidSlice,
             'fee_summary' => [
                 'monthly_fee' => $monthlyFee,
                 'annual_fee' => $annualFee,
@@ -594,23 +873,10 @@ class StudentFeeController extends Controller
                 ], 400);
             }
 
-            $norm = $this->normalizedStudentCode($studentCode);
-
-            // Get payments for this student in the selected year (same matching as payment-history / web-aligned due)
-            $payments = StudentPayment::query()
-                ->whereRaw('LOWER(TRIM(student_code)) = ?', [$norm])
-                ->whereYear('payment_date', $feeYear)
-                ->orderBy('payment_date', 'desc')
-                ->get();
-
-            // Receipt totals only — exclude Generated / Installment (same as payment-history summary)
-            $actualPaidPayments = $payments->filter(function ($payment) {
-                $method = strtolower(trim((string) ($payment->method ?? '')));
-                return !in_array($method, ['generated', 'installment'], true);
-            });
-            $paid = (float) $actualPaidPayments->sum('payment_amount');
-            $discount = (float) $actualPaidPayments->sum('discount');
-            $lateFee = (float) $actualPaidPayments->sum('late_fee');
+            $latestTotals = $this->latestPaymentsTotalsForStudent($student, $feeYear);
+            $paid = $latestTotals['total_paid'];
+            $discount = $latestTotals['total_discount'];
+            $lateFee = $latestTotals['total_late_fee'];
 
             // Initial amount is the monthly_fee from student record
             $initialAmount = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
@@ -621,18 +887,27 @@ class StudentFeeController extends Controller
             // Receipt lines only when embedding history from /fees (no Generated stubs)
             $paymentHistory = null;
             if ($includeHistory) {
-                $paymentHistory = $actualPaidPayments->map(function ($payment) {
+                $paymentHistory = collect($latestTotals['rows'])->map(function (array $row) {
+                    $paymentDate = null;
+                    if (!empty($row['payment_date'])) {
+                        try {
+                            $paymentDate = Carbon::createFromFormat('d-m-Y', (string) $row['payment_date'])->format('Y-m-d');
+                        } catch (\Throwable $e) {
+                            $paymentDate = null;
+                        }
+                    }
+
                     return [
-                        'id' => $payment->id,
-                        'payment_title' => $payment->payment_title,
-                        'payment_amount' => (float) $payment->payment_amount,
-                        'discount' => (float) $payment->discount,
-                        'late_fee' => (float) $payment->late_fee,
-                        'method' => $payment->method,
-                        'payment_date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
-                        'payment_date_formatted' => $payment->payment_date ? $payment->payment_date->format('d M Y') : null,
-                        'accountant' => $payment->accountant,
-                        'created_at' => $payment->created_at ? $payment->created_at->format('Y-m-d H:i:s') : null,
+                        'id' => $row['id'] ?? null,
+                        'payment_title' => $row['title'] ?? null,
+                        'payment_amount' => (float) ($row['amount_paid'] ?? 0),
+                        'discount' => (float) ($row['discount'] ?? 0),
+                        'late_fee' => (float) ($row['late_fee'] ?? 0),
+                        'method' => $row['method'] ?? null,
+                        'payment_date' => $paymentDate,
+                        'payment_date_formatted' => $row['payment_datetime'] ?? null,
+                        'accountant' => $row['received_by'] ?? null,
+                        'created_at' => null,
                     ];
                 })->values();
             }
@@ -658,7 +933,7 @@ class StudentFeeController extends Controller
                         'due_amount' => $dueAmount,
                     ],
                     'payment_history' => $paymentHistory,
-                    'total_payments' => $actualPaidPayments->count(),
+                    'total_payments' => count($latestTotals['rows']),
                 ],
                 'token' => $request->user()->currentAccessToken()->token ?? null,
             ], 200);
@@ -733,7 +1008,13 @@ class StudentFeeController extends Controller
 
             $normalizedStudentCode = $this->normalizedStudentCode($studentCode);
 
-            $includeAllRecords = filter_var($request->get('include_all_records', false), FILTER_VALIDATE_BOOLEAN);
+            // Default: fee-type rows like Fee Payment web Search Results (one row per fee title).
+            $includeAllRecordsRaw = $request->get('include_all_records');
+            if ($includeAllRecordsRaw === null || $includeAllRecordsRaw === '') {
+                $includeAllRecords = false;
+            } else {
+                $includeAllRecords = filter_var($includeAllRecordsRaw, FILTER_VALIDATE_BOOLEAN);
+            }
 
             // latest_only=1 → same as GET /fee-payment/history (receipts only). Otherwise default = receipts + unpaid Generated/Installment titles (outstanding balance).
             $latestOnlyRaw = $request->get('latest_only');
@@ -797,13 +1078,14 @@ class StudentFeeController extends Controller
                 ->orderBy('id', 'desc')
                 ->paginate($perPage);
 
-            $injectSynthTransport = !$latestOnly && $this->shouldInjectSyntheticTransport($student, $feeYear);
+            // Raw ledger mode should not inject virtual/synthetic rows.
+            $injectSynthTransport = !$includeAllRecords && !$latestOnly && $this->shouldInjectSyntheticTransport($student, $feeYear);
             $syntheticTransportRow = $injectSynthTransport ? $this->buildSyntheticTransportHistoryRow($student) : null;
 
             $feeTitleBalances = $feeMath['balances'];
 
             // Format payment history
-            $paymentHistory = $payments->map(function ($payment) use ($student, $feeTitleBalances) {
+            $paymentHistory = $payments->map(function ($payment) use ($student, $feeTitleBalances, $includeAllRecords) {
                 // Treat both Generated and Installment as unpaid/generated entries
                 $method = strtolower(trim((string) $payment->method));
                 $status = in_array($method, ['generated', 'installment'], true) ? 'generated' : 'paid';
@@ -814,7 +1096,8 @@ class StudentFeeController extends Controller
                 $displayPaymentDate = $payment->payment_date ? Carbon::parse($payment->payment_date) : null;
                 $isMonthlyTitle = stripos((string) $paymentTitleRaw, 'Monthly Fee') !== false;
                 if (
-                    $displayPaymentDate
+                    !$includeAllRecords
+                    && $displayPaymentDate
                     && !$isMonthlyTitle
                     && $student->created_at
                     && in_array($method, ['generated', 'installment'], true)
@@ -859,14 +1142,12 @@ class StudentFeeController extends Controller
                 $dueForTitle = round($bal !== null ? (float) $bal['due'] : 0.0, 2);
                 $feeBalanceStatus = $this->feeBalanceStatusFromWeb($bal);
 
-                // Split "partial" like installments: receipt lines show paid + zero due; generated/installment
-                // stub carries the remaining bill as unpaid (so apps do not see two identical partial rows).
-                if ($feeBalanceStatus === 'partial') {
+                // Split partial / late-due like web: receipt lines show paid + zero due;
+                // generated/installment stub carries the remaining bill.
+                if (in_array($feeBalanceStatus, ['partial', 'late_due'], true)) {
                     if ($status === 'paid') {
                         $dueForTitle = 0.0;
                         $feeBalanceStatus = 'paid';
-                    } elseif (in_array($method, ['generated', 'installment'], true)) {
-                        $feeBalanceStatus = 'partial';
                     }
                 }
 
@@ -875,12 +1156,23 @@ class StudentFeeController extends Controller
                     : (float) $payment->payment_amount + (float) $payment->late_fee;
 
                 // Generated stub on a partially paid title: show outstanding net (matches due_amount), not full bill.
-                if ($status === 'generated' && $feeBalanceStatus === 'partial') {
+                if ($status === 'generated' && in_array($feeBalanceStatus, ['partial', 'late_due'], true)) {
                     $netAmount = (float) $dueForTitle;
                     $generatedAmount = (float) $dueForTitle;
                 }
 
-                return [
+                $statusLabel = match ($feeBalanceStatus) {
+                    'paid' => 'Paid',
+                    'unpaid' => 'Unpaid',
+                    'partial' => 'Partial',
+                    'late_due' => 'Late Due',
+                    'installment' => 'Installment',
+                    default => 'Unpaid',
+                };
+                $rowIsInstallment = strtolower(trim((string) $payment->method)) === 'installment';
+                $statusFields = $this->statusFieldsFromWebLabel($statusLabel, $rowIsInstallment, $dueForTitle);
+
+                $mapped = array_merge([
                     'id' => $payment->id,
                     'payment_title' => $payment->payment_title,
                     'payment_amount' => (float) $payment->payment_amount,
@@ -900,36 +1192,30 @@ class StudentFeeController extends Controller
                     'sms_notification' => $payment->sms_notification,
                     'created_at' => $payment->created_at ? $payment->created_at->format('Y-m-d H:i:s') : null,
                     'created_at_formatted' => $payment->created_at ? $payment->created_at->format('d M Y, h:i A') : null,
-                ];
+                ], $statusFields);
+
+                return $this->normalizePaymentHistoryRow($mapped);
             });
 
             $paymentHistory = $paymentHistory->values();
             if ($syntheticTransportRow !== null && $payments->currentPage() === 1) {
-                $paymentHistory = collect([$syntheticTransportRow])->concat($paymentHistory)->values();
+                $paymentHistory = collect([
+                    $this->normalizePaymentHistoryRow(array_merge($syntheticTransportRow, $this->statusFieldsFromWebLabel('Unpaid', false, (float) ($syntheticTransportRow['due_amount'] ?? 0)))),
+                ])->concat($paymentHistory)->values();
             }
+
+            $outstandingLedger = $paymentHistory->filter(fn (array $row) => (bool) ($row['is_outstanding'] ?? false) || ((float) ($row['due_amount'] ?? 0) > 0.00001))->values();
+            $paidLedger = $paymentHistory->filter(fn (array $row) => (bool) ($row['is_paid'] ?? false))->values();
 
             // Calculate fee summary
             $monthlyFee = $student->monthly_fee !== null ? (float) $student->monthly_fee : 0.0;
             $annualFee = $monthlyFee * 12;
 
-            // Totals over the same scope as the list (all time if no fee_year)
-            $allPaymentsQuery = StudentPayment::query()
-                ->whereRaw('LOWER(TRIM(student_code)) = ?', [$normalizedStudentCode]);
-            if ($feeYear !== null) {
-                $allPaymentsQuery->whereYear('payment_date', $feeYear);
-            }
-            $allPayments = $allPaymentsQuery->get();
-            
-            // Calculate yearly totals from actually paid records only
-            // (Generated/Installment are due entries, not paid payments)
-            $actualPaidPayments = $allPayments->filter(function ($payment) {
-                $method = strtolower(trim((string) ($payment->method ?? '')));
-                return !in_array($method, ['generated', 'installment'], true);
-            });
-
-            $totalPaid = (float) $actualPaidPayments->sum('payment_amount');
-            $totalDiscount = (float) $actualPaidPayments->sum('discount');
-            $totalLateFee = (float) $actualPaidPayments->sum('late_fee');
+            // Paid totals must match Fee Payment web "Latest Payments" (ledgerActive + receipts only).
+            $latestTotals = $this->latestPaymentsTotalsForStudent($student, $feeYear);
+            $totalPaid = $latestTotals['total_paid'];
+            $totalDiscount = $latestTotals['total_discount'];
+            $totalLateFee = $latestTotals['total_late_fee'];
             
             // Only meaningful when viewing a single year (monthly_fee * 12 is not valid for all-time totals)
             $yearlyDueAmount = null;
@@ -945,11 +1231,14 @@ class StudentFeeController extends Controller
             $paginationBonus = ($syntheticTransportRow !== null ? 1 : 0);
 
             $ledgerResult = [
-                'payment_history' => $paymentHistory,
+                'payment_history' => $outstandingLedger,
+                'outstanding_fees' => $outstandingLedger,
+                'paid_fees' => $paidLedger,
                 'fee_summary' => [
                     'monthly_fee' => $monthlyFee,
                     'annual_fee' => $annualFee,
                     'total_paid' => $totalPaid,
+                    'latest_payments_total' => $totalPaid,
                     'total_discount' => $totalDiscount,
                     'total_late_fee' => $totalLateFee,
                     'due_amount' => $feePaymentDue,

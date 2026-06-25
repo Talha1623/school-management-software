@@ -176,7 +176,7 @@ class BalanceSheetController extends Controller
                     $title .= ' (' . $period . ')';
                 }
 
-                $paidAt = $salary->updated_at;
+                $paidAt = $salary->payment_date ?? $salary->updated_at;
 
                 return [
                     'id' => 'SAL-' . $salary->id,
@@ -457,7 +457,7 @@ class BalanceSheetController extends Controller
             ->get()
             ->each(function (AdminRole $admin) use ($accountant, $text) {
                 Message::create([
-                    'from_type' => 'accountant',
+                    'from_type' => 'accountant_notification',
                     'from_id' => $accountant->id,
                     'to_type' => 'admin',
                     'to_id' => $admin->id,
@@ -641,7 +641,8 @@ class BalanceSheetController extends Controller
 
     private function resolveDayRange(string $filterDay): array
     {
-        $today = Carbon::today();
+        $timezone = config('app.timezone', 'Asia/Karachi');
+        $today = Carbon::now($timezone)->startOfDay();
         $dayMap = [
             'current_day' => 0,
             'yesterday' => 1,
@@ -657,21 +658,40 @@ class BalanceSheetController extends Controller
         }
 
         $date = $today->copy()->subDays($dayMap[$filterDay]);
+
         return [$date->copy()->startOfDay(), $date->copy()->endOfDay()];
     }
 
     private function applyDateRangeFilter($query, string $column, Carbon $startDate, Carbon $endDate): void
     {
-        $query->whereBetween($column, [$startDate, $endDate]);
+        $start = $startDate->toDateString();
+        $end = $endDate->toDateString();
+
+        $query->whereDate($column, '>=', $start)
+            ->whereDate($column, '<=', $end);
     }
 
     private function applyStudentPaymentDateRangeFilter($query, Carbon $startDate, Carbon $endDate, string $table = ''): void
     {
         $qualifiedTable = trim($table) !== '' ? trim($table) : 'student_payments';
-        $query->whereBetween(
-            DB::raw("COALESCE({$qualifiedTable}.payment_date, {$qualifiedTable}.created_at)"),
-            [$startDate, $endDate]
-        );
+        $start = $startDate->toDateString();
+        $end = $endDate->toDateString();
+
+        $query->where(function ($dateQuery) use ($qualifiedTable, $start, $end) {
+            $dateQuery->where(function ($datedPaymentQuery) use ($qualifiedTable, $start, $end) {
+                $datedPaymentQuery
+                    ->whereNotNull("{$qualifiedTable}.payment_date")
+                    ->whereDate("{$qualifiedTable}.payment_date", '>=', $start)
+                    ->whereDate("{$qualifiedTable}.payment_date", '<=', $end);
+            })->orWhere(function ($createdAtQuery) use ($qualifiedTable, $start, $end) {
+                $createdAtQuery
+                    ->whereNull("{$qualifiedTable}.payment_date")
+                    ->whereBetween("{$qualifiedTable}.created_at", [
+                        Carbon::parse($start)->startOfDay(),
+                        Carbon::parse($end)->endOfDay(),
+                    ]);
+            });
+        });
     }
 
     private function computeIncomeForRange(
@@ -975,10 +995,31 @@ class BalanceSheetController extends Controller
 
     private function applySalaryDateRangeFilter($query, Carbon $startDate, Carbon $endDate): void
     {
-        $query->whereBetween(
-            DB::raw(Salary::effectivePaymentDateExpression()),
-            [$startDate, $endDate]
-        );
+        $start = $startDate->toDateString();
+        $end = $endDate->toDateString();
+
+        if (! Schema::hasColumn('salaries', 'payment_date')) {
+            $query->whereBetween('updated_at', [$startDate, $endDate]);
+
+            return;
+        }
+
+        $query->where(function ($dateQuery) use ($start, $end, $startDate, $endDate) {
+            $dateQuery->where(function ($datedPaymentQuery) use ($start, $end) {
+                $datedPaymentQuery
+                    ->whereNotNull('payment_date')
+                    ->where('payment_date', '!=', '0000-00-00')
+                    ->whereDate('payment_date', '>=', $start)
+                    ->whereDate('payment_date', '<=', $end);
+            })->orWhere(function ($updatedAtQuery) use ($start, $end, $startDate, $endDate) {
+                $updatedAtQuery->where(function ($missingDateQuery) {
+                    $missingDateQuery
+                        ->whereNull('payment_date')
+                        ->orWhere('payment_date', '=', '0000-00-00');
+                })->whereDate('updated_at', '>=', $start)
+                    ->whereDate('updated_at', '<=', $end);
+            });
+        });
     }
 
     private function applyExpenseUserScopeFilter(

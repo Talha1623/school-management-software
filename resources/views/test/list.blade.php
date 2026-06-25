@@ -36,7 +36,13 @@
 
             @if(!empty($isStaffTestUser))
                 <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
-                    <strong>Declare Result</strong> button works only for tests whose <strong>Subject</strong> matches your assignment in Manage Subjects (e.g. Urdu). Other subjects show status only — you cannot declare them.
+                    @if(isset($campuses) && $campuses->isNotEmpty())
+                        Tests and <strong>Add New Test</strong> are limited to your assigned campus(es). Select campus, then class, section, and subject will load automatically.
+                    @else
+                        No campus is assigned to your staff profile. Please contact the administrator.
+                    @endif
+                    <br>
+                    <strong>Declare Result</strong> works only for tests whose <strong>Subject</strong> matches your assignment in Manage Subjects.
                 </div>
             @endif
 
@@ -292,9 +298,10 @@
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 15px;">groups</span>
                                 </span>
-                                <select class="form-control test-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
+                                <select class="form-control test-input" name="section" id="section" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;" disabled>
                                     <option value="">Select Section</option>
                                 </select>
+                                <small class="text-muted d-block mt-1">Select class to load sections</small>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -305,9 +312,11 @@
                                 </span>
                                 <select class="form-control test-input" name="subject" id="subject" required style="border: none; border-left: 1px solid #e0e7ff; border-radius: 0 8px 8px 0;">
                                     <option value="">Select Subject</option>
-                                    @foreach($subjects as $subjectName)
-                                        <option value="{{ $subjectName }}">{{ $subjectName }}</option>
-                                    @endforeach
+                                    @if(empty($isStaffTestUser))
+                                        @foreach($subjects as $subjectName)
+                                            <option value="{{ $subjectName }}">{{ $subjectName }}</option>
+                                        @endforeach
+                                    @endif
                                 </select>
                             </div>
                         </div>
@@ -765,6 +774,29 @@
 </style>
 
 <script>
+const isStaffTestUser = @json(!empty($isStaffTestUser));
+
+function populateClassOptions(classNames, selectedClass = '') {
+    const classSelect = document.getElementById('for_class');
+    if (!classSelect) return;
+
+    classSelect.innerHTML = '<option value="">Select Class</option>';
+    (classNames || []).forEach(className => {
+        const option = document.createElement('option');
+        option.value = className;
+        option.textContent = className;
+        if (selectedClass && selectedClass === className) {
+            option.selected = true;
+        }
+        classSelect.appendChild(option);
+    });
+}
+
+function getSelectedCampusValue() {
+    const campusSelect = document.getElementById('campus');
+    return campusSelect ? campusSelect.value : '';
+}
+
 // Reset form when opening modal for new test
 function resetForm() {
     document.getElementById('testForm').reset();
@@ -778,9 +810,16 @@ function resetForm() {
         <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">save</span>
         Save Test
     `;
-    // Clear class and section dropdowns (classes load when campus is selected)
     document.getElementById('for_class').innerHTML = '<option value="">Select Class</option>';
     document.getElementById('section').innerHTML = '<option value="">Select Section</option>';
+    const subjectSelect = document.getElementById('subject');
+    if (subjectSelect) {
+        subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+    }
+    const sectionSelect = document.getElementById('section');
+    if (sectionSelect) {
+        sectionSelect.disabled = true;
+    }
 }
 
 // Edit test function
@@ -811,11 +850,13 @@ function editTest(id, campus, testName, forClass, section, subject, testType, de
         document.getElementById('for_class').value = forClass || '';
         if (forClass) {
             sectionSelect.innerHTML = '<option value="">Loading...</option>';
-            fetch(`{{ route('test.list.get-sections') }}?class=${encodeURIComponent(forClass)}`)
+            const sectionParams = new URLSearchParams({ class: forClass });
+            if (campus) sectionParams.append('campus', campus);
+            fetch(`{{ route('test.list.get-sections') }}?${sectionParams.toString()}`)
                 .then(response => response.json())
                 .then(data => {
                     sectionSelect.innerHTML = '<option value="">Select Section</option>';
-                    data.sections.forEach(sec => {
+                    (data.sections || []).forEach(sec => {
                         const option = document.createElement('option');
                         option.value = sec;
                         option.textContent = sec;
@@ -824,6 +865,7 @@ function editTest(id, campus, testName, forClass, section, subject, testType, de
                         }
                         sectionSelect.appendChild(option);
                     });
+                    sectionSelect.disabled = !(data.sections && data.sections.length > 0);
                 })
                 .catch(error => {
                     console.error('Error loading sections:', error);
@@ -947,9 +989,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (campusSelect && classSelect) {
         campusSelect.addEventListener('change', function() {
-            const campus = this.value;
+            const campus = getSelectedCampusValue();
             document.getElementById('for_class').value = '';
             document.getElementById('section').innerHTML = '<option value="">Select Section</option>';
+            document.getElementById('section').disabled = true;
+            const subjectSelectEl = document.getElementById('subject');
+            if (subjectSelectEl) {
+                subjectSelectEl.innerHTML = '<option value="">Select Subject</option>';
+            }
             loadClassesForCampus(campus);
         });
     }
@@ -957,28 +1004,38 @@ document.addEventListener('DOMContentLoaded', function() {
     if (classSelect && sectionSelect) {
         function loadSections(selectedClass) {
             if (selectedClass) {
+                const campusForSection = getSelectedCampusValue();
+                if (!campusForSection) {
+                    sectionSelect.innerHTML = '<option value="">Select campus first</option>';
+                    sectionSelect.disabled = true;
+                    return;
+                }
+
                 sectionSelect.innerHTML = '<option value="">Loading...</option>';
+                sectionSelect.disabled = true;
                 
-                const campusForSection = campusSelect ? campusSelect.value : '';
                 const sectionParams = new URLSearchParams({ class: selectedClass });
-                if (campusForSection) sectionParams.append('campus', campusForSection);
+                sectionParams.append('campus', campusForSection);
                 fetch(`{{ route('test.list.get-sections') }}?${sectionParams.toString()}`)
                     .then(response => response.json())
                     .then(data => {
                         sectionSelect.innerHTML = '<option value="">Select Section</option>';
-                        data.sections.forEach(section => {
+                        (data.sections || []).forEach(section => {
                             const option = document.createElement('option');
                             option.value = section;
                             option.textContent = section;
                             sectionSelect.appendChild(option);
                         });
+                        sectionSelect.disabled = !(data.sections && data.sections.length > 0);
                     })
                     .catch(error => {
                         console.error('Error loading sections:', error);
                         sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                        sectionSelect.disabled = true;
                     });
             } else {
                 sectionSelect.innerHTML = '<option value="">Select Section</option>';
+                sectionSelect.disabled = true;
             }
         }
 
@@ -988,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const selectedSection = sectionSelect ? sectionSelect.value : '';
-            const selectedCampus = campusSelect ? campusSelect.value : '';
+            const selectedCampus = getSelectedCampusValue();
             
             subjectSelect.innerHTML = '<option value="">Loading...</option>';
             subjectSelect.disabled = true;

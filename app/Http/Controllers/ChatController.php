@@ -11,6 +11,7 @@ use App\Models\ParentAccount;
 use App\Models\Section;
 use App\Models\Staff;
 use App\Models\Student;
+use App\Services\ChatSmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -22,6 +23,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ChatController extends Controller
 {
+    public function __construct(
+        private readonly ChatSmsService $chatSmsService,
+    ) {
+    }
+
     /**
      * Show live chat page for Admin/Super Admin with teacher/student/parent conversations.
      */
@@ -140,18 +146,20 @@ class ChatController extends Controller
 
             if ($selectedRecipient) {
                 $messages = Message::query()
-                    ->where(function ($q) use ($admin, $selectedType, $selectedRecipient) {
-                        $q->where('from_type', 'admin')
-                            ->where('from_id', $admin->id)
-                            ->where('to_type', $selectedType)
-                            ->where('to_id', $selectedRecipient->id);
+                    ->where(function ($outer) use ($admin, $selectedType, $selectedRecipient) {
+                        $outer->where(function ($q) use ($admin, $selectedType, $selectedRecipient) {
+                            $q->where('from_type', 'admin')
+                                ->where('from_id', $admin->id)
+                                ->where('to_type', $selectedType)
+                                ->where('to_id', $selectedRecipient->id);
+                        })->orWhere(function ($q) use ($admin, $selectedType, $selectedRecipient) {
+                            $q->where('from_type', $selectedType)
+                                ->where('from_id', $selectedRecipient->id)
+                                ->where('to_type', 'admin')
+                                ->where('to_id', $admin->id);
+                        });
                     })
-                    ->orWhere(function ($q) use ($admin, $selectedType, $selectedRecipient) {
-                        $q->where('from_type', $selectedType)
-                            ->where('from_id', $selectedRecipient->id)
-                            ->where('to_type', 'admin')
-                            ->where('to_id', $admin->id);
-                    })
+                    ->forLiveChat()
                     ->orderBy('created_at', 'asc')
                     ->get()
                     ->map(function (Message $message) {
@@ -272,7 +280,7 @@ class ChatController extends Controller
             }
         }
 
-        Message::create([
+        $message = Message::create([
             'from_type' => 'admin',
             'from_id' => $admin->id,
             'to_type' => 'teacher',
@@ -282,6 +290,8 @@ class ChatController extends Controller
             'attachment_type' => $attachmentType,
             'read_at' => null,
         ]);
+
+        $this->chatSmsService->notifyForChatMessage($message);
 
         return redirect()
             ->route('live-chat', ['teacher_id' => $teacher->id])
@@ -399,6 +409,8 @@ class ChatController extends Controller
             'read_at' => null,
         ]);
 
+        $this->chatSmsService->notifyForChatMessage($message);
+
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
@@ -444,7 +456,7 @@ class ChatController extends Controller
         }
 
         // Mark all unread messages from teachers to this admin as read
-        Message::whereIn('from_type', ['teacher', 'student', 'parent', 'accountant', 'staff_notification'])
+        Message::whereIn('from_type', ['teacher', 'student', 'parent', 'accountant', 'accountant_notification', 'staff_notification'])
             ->where('to_type', 'admin')
             ->where('to_id', $admin->id)
             ->whereNull('read_at')

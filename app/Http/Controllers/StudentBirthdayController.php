@@ -19,9 +19,10 @@ class StudentBirthdayController extends Controller
      */
     public function index(): View
     {
-        $students = $this->getStudentsData();
+        $todayDate = Carbon::today();
+        $students = $this->getStudentsData($todayDate);
 
-        return view('student.birthday', compact('students'));
+        return view('student.birthday', compact('students', 'todayDate'));
     }
 
     /**
@@ -188,37 +189,21 @@ class StudentBirthdayController extends Controller
     }
 
     /**
-     * Get students data (empty for now)
+     * Get students whose birthday is today only (month + day match, year ignored).
      */
-    private function getStudentsData()
+    private function getStudentsData(?Carbon $today = null)
     {
-        $today = Carbon::today();
+        $today = $today ?? Carbon::today();
 
         $students = Student::whereNotNull('date_of_birth')
             ->whereNotNull('class')
             ->where('class', '!=', '')
-            ->orderByRaw("DATE_FORMAT(date_of_birth, '%m-%d') asc")
+            ->whereMonth('date_of_birth', $today->month)
+            ->whereDay('date_of_birth', $today->day)
+            ->orderBy('student_name')
             ->get();
 
-        return $students->map(function (Student $student) use ($today) {
-            $birthday = $student->date_of_birth ? Carbon::parse($student->date_of_birth) : null;
-            $status = 'N/A';
-            $wish = 'Pending';
-            $birthdayCard = 'Pending';
-
-            if ($birthday) {
-                $birthdayThisYear = $birthday->copy()->year($today->year);
-                if ($birthdayThisYear->isSameDay($today)) {
-                    $status = 'Today';
-                    $wish = 'Sent';
-                    $birthdayCard = 'Sent';
-                } elseif ($birthdayThisYear->isAfter($today)) {
-                    $status = 'Upcoming';
-                } else {
-                    $status = 'Past';
-                }
-            }
-
+        return $students->map(function (Student $student) {
             return [
                 'id' => $student->id,
                 'roll' => $student->student_code ?? $student->gr_number ?? 'N/A',
@@ -227,9 +212,9 @@ class StudentBirthdayController extends Controller
                 'class' => $student->class ?? 'N/A',
                 'section' => $student->section ?? 'N/A',
                 'birthday' => $student->date_of_birth ? $student->date_of_birth->format('Y-m-d') : null,
-                'status' => $status,
-                'birthday_card' => $birthdayCard,
-                'wish' => $wish,
+                'status' => 'Today',
+                'birthday_card' => 'Sent',
+                'wish' => 'Sent',
                 'picture' => $student->photo ? Storage::url($student->photo) : null,
                 'parent_phone' => $student->whatsapp_number ?: $student->father_phone,
             ];

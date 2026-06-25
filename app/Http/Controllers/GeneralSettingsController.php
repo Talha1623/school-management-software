@@ -36,34 +36,41 @@ class GeneralSettingsController extends Controller
         return view('settings.general', compact('settings', 'currencies', 'timezones'));
     }
 
+    public function payment(): View
+    {
+        $settings = GeneralSetting::getSettings();
+
+        return view('settings.payment', compact('settings'));
+    }
+
+    public function updatePayment(Request $request): RedirectResponse
+    {
+        $this->ensureFeeVoucherColumns();
+
+        $validated = $request->validate([
+            'bank_name' => ['nullable', 'string', 'max:255'],
+            'account_number' => ['nullable', 'string', 'max:255'],
+            'account_holder' => ['nullable', 'string', 'max:255'],
+            'iban' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $settings = GeneralSetting::getSettings();
+        $settings->update([
+            'fee_voucher_bank_name' => $validated['bank_name'] ?? null,
+            'fee_voucher_account_number' => $validated['account_number'] ?? null,
+            'fee_voucher_account_title' => $validated['account_holder'] ?? null,
+            'fee_voucher_iban' => $validated['iban'] ?? null,
+        ]);
+
+        return redirect()
+            ->route('settings.payment')
+            ->with('success', 'Bank account details saved. They will appear on fee voucher print.');
+    }
+
     public function update(Request $request): RedirectResponse
     {
         $settings = GeneralSetting::getSettings();
-        $missingColumns = [];
-        $voucherColumns = [
-            'fee_voucher_notice' => 'text',
-            'accounts_settlement_print_note' => 'text',
-            'fee_voucher_bank_name' => 'string',
-            'fee_voucher_account_title' => 'string',
-            'fee_voucher_account_number' => 'string',
-            'fee_voucher_iban' => 'string',
-        ];
-        foreach ($voucherColumns as $column => $type) {
-            if (!Schema::hasColumn('general_settings', $column)) {
-                $missingColumns[$column] = $type;
-            }
-        }
-        if (!empty($missingColumns)) {
-            Schema::table('general_settings', function (Blueprint $table) use ($missingColumns) {
-                foreach ($missingColumns as $column => $type) {
-                    if ($type === 'text') {
-                        $table->text($column)->nullable();
-                    } else {
-                        $table->string($column)->nullable();
-                    }
-                }
-            });
-        }
+        $this->ensureFeeVoucherColumns();
         $validated = $request->validate([
             'school_name' => ['nullable', 'string', 'max:255'],
             'sms_signature' => ['nullable', 'string', 'max:255'],
@@ -75,10 +82,6 @@ class GeneralSettingsController extends Controller
             'running_session' => ['nullable', 'string', 'max:50'],
             'fee_voucher_notice' => ['nullable', 'string', 'max:1000'],
             'accounts_settlement_print_note' => ['nullable', 'string', 'max:1000'],
-            'fee_voucher_bank_name' => ['nullable', 'string', 'max:255'],
-            'fee_voucher_account_title' => ['nullable', 'string', 'max:255'],
-            'fee_voucher_account_number' => ['nullable', 'string', 'max:255'],
-            'fee_voucher_iban' => ['nullable', 'string', 'max:255'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,svg', 'max:2048'],
             'system_name' => ['nullable', 'string', 'max:100'],
         ]);
@@ -100,5 +103,36 @@ class GeneralSettingsController extends Controller
         return redirect()
             ->route('settings.general')
             ->with('success', 'Settings saved successfully!');
+    }
+
+    private function ensureFeeVoucherColumns(): void
+    {
+        $missingColumns = [];
+        $voucherColumns = [
+            'fee_voucher_notice' => 'text',
+            'accounts_settlement_print_note' => 'text',
+            'fee_voucher_bank_name' => 'string',
+            'fee_voucher_account_title' => 'string',
+            'fee_voucher_account_number' => 'string',
+            'fee_voucher_iban' => 'string',
+        ];
+        foreach ($voucherColumns as $column => $type) {
+            if (!Schema::hasColumn('general_settings', $column)) {
+                $missingColumns[$column] = $type;
+            }
+        }
+        if (empty($missingColumns)) {
+            return;
+        }
+
+        Schema::table('general_settings', function (Blueprint $table) use ($missingColumns) {
+            foreach ($missingColumns as $column => $type) {
+                if ($type === 'text') {
+                    $table->text($column)->nullable();
+                } else {
+                    $table->string($column)->nullable();
+                }
+            }
+        });
     }
 }

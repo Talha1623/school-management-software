@@ -5,6 +5,8 @@
 @section('content')
 @php
     $isSuperAdmin = false;
+    $isStaffViewer = Auth::guard('staff')->check();
+    $staffViewerCampus = $isStaffViewer ? trim((string) (Auth::guard('staff')->user()->campus ?? '')) : '';
     if (Auth::guard('admin')->check()) {
         $admin = Auth::guard('admin')->user();
         $isSuperAdmin = $admin && $admin->isSuperAdmin();
@@ -22,6 +24,16 @@
                     </button>
                 @endif
             </div>
+
+            @if($isStaffViewer)
+                <div class="alert alert-info py-2 mb-3" style="font-size: 13px;">
+                    @if($staffViewerCampus !== '')
+                        Showing notices for your campus: <strong>{{ $staffViewerCampus }}</strong>
+                    @else
+                        No campus is assigned to your staff profile. Please contact the administrator.
+                    @endif
+                </div>
+            @endif
 
             @if(session('success'))
                 <div class="alert alert-success alert-dismissible fade show success-toast" role="alert" id="successAlert">

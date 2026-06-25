@@ -113,6 +113,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
         Route::get('/get-classes-by-campus', [App\Http\Controllers\MonthlyFeeController::class, 'getClassesByCampus'])->name('get-classes-by-campus');
         Route::get('/get-sections-by-class', [App\Http\Controllers\MonthlyFeeController::class, 'getSectionsByClass'])->name('get-sections-by-class');
         Route::get('/fee-voucher/student', [App\Http\Controllers\AccountantController::class, 'studentVouchers'])->name('fee-voucher.student');
+        Route::get('/fee-voucher/get-classes-by-campus', [App\Http\Controllers\StudentVoucherController::class, 'getClassesByCampus'])->name('fee-voucher.get-classes-by-campus');
         Route::get('/fee-voucher/get-sections-by-class', [App\Http\Controllers\StudentVoucherController::class, 'getSectionsByClass'])->name('fee-voucher.get-sections-by-class');
         Route::get('/fee-voucher/print', [App\Http\Controllers\StudentVoucherController::class, 'print'])->name('fee-voucher.print');
         Route::get('/fee-voucher/family', [App\Http\Controllers\AccountantController::class, 'familyVouchers'])->name('fee-voucher.family');
@@ -333,8 +334,6 @@ Route::get('/student/{student}/print', [App\Http\Controllers\StudentController::
 
 // Student Reactivate Route (for passout students)
 Route::post('/student/{student}/reactivate', [App\Http\Controllers\StudentController::class, 'reactivate'])->name('student.reactivate');
-Route::post('/student/{student}/activate', [App\Http\Controllers\StudentController::class, 'activate'])->name('student.activate');
-Route::post('/student/{student}/deactivate', [App\Http\Controllers\StudentController::class, 'deactivate'])->name('student.deactivate');
 
 // Student Delete Route (must be before /student/{student} route)
 Route::delete('/student/{student}', [App\Http\Controllers\StudentController::class, 'destroy'])->name('student.delete');
@@ -350,8 +349,6 @@ Route::post('/parent/manage-access/repair-placeholders', [App\Http\Controllers\P
     ->name('parent.manage-access.repair-placeholders');
 Route::get('/parent/manage-access/print', [App\Http\Controllers\ParentAccountController::class, 'print'])
     ->name('parent.manage-access.print');
-Route::get('/parent/manage-access/{parent_account}/dues-report/print', [App\Http\Controllers\ParentAccountController::class, 'printDuesReport'])
-    ->name('parent.dues-report.print');
 Route::post('/parent/manage-access', [App\Http\Controllers\ParentAccountController::class, 'store'])->name('parent.manage-access.store');
 Route::delete('/parent/manage-access/delete-all', [App\Http\Controllers\ParentAccountController::class, 'deleteAll'])->name('parent.manage-access.delete-all');
 Route::put('/parent/manage-access/{parent_account}', [App\Http\Controllers\ParentAccountController::class, 'update'])->name('parent.manage-access.update');
@@ -369,6 +366,8 @@ Route::get('/parent/account-request/print', [App\Http\Controllers\ParentAccountR
 Route::get('/parent/print-gate-passes', [App\Http\Controllers\PrintGatePassesController::class, 'index'])->name('parent.print-gate-passes');
 Route::post('/parent/print-gate-passes', [App\Http\Controllers\PrintGatePassesController::class, 'index'])->name('parent.print-gate-passes.filter');
 Route::get('/parent/print-gate-passes/print', [App\Http\Controllers\PrintGatePassesController::class, 'print'])->name('parent.print-gate-passes.print');
+Route::get('/parent/{parent_account}/dues-report/print', [App\Http\Controllers\ParentAccountController::class, 'printDuesReport'])->name('parent.dues-report.print');
+
 Route::get('/parent/info-request', [App\Http\Controllers\ParentInfoRequestController::class, 'index'])->name('parent.info-request');
 Route::post('/parent/info-request/filter', [App\Http\Controllers\ParentInfoRequestController::class, 'filter'])->name('parent.info-request.filter');
 Route::get('/parent/info-request/all-parents/print', [App\Http\Controllers\ParentInfoRequestController::class, 'allParentsReport'])->name('parent.info-request.all-parents.print');
@@ -385,11 +384,11 @@ Route::get('/staff/management/print', [App\Http\Controllers\StaffManagementContr
 Route::get('/staff/management/next-emp-id', [App\Http\Controllers\StaffManagementController::class, 'getNextEmployeeId'])->name('staff.management.next-emp-id');
 Route::post('/staff/management', [App\Http\Controllers\StaffManagementController::class, 'store'])->name('staff.management.store');
 Route::delete('/staff/management/delete-all', [App\Http\Controllers\StaffManagementController::class, 'deleteAll'])->name('staff.management.delete-all');
-Route::get('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'show'])->name('staff.management.show');
-Route::put('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'update'])->name('staff.management.update');
-Route::post('/staff/management/{staff}/toggle-status', [App\Http\Controllers\StaffManagementController::class, 'toggleStatus'])->name('staff.management.toggle-status');
-Route::delete('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'destroy'])->name('staff.management.destroy');
 Route::get('/staff/management/export/{format}', [App\Http\Controllers\StaffManagementController::class, 'export'])->name('staff.management.export');
+Route::get('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'show'])->name('staff.management.show')->whereNumber('staff');
+Route::put('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'update'])->name('staff.management.update')->whereNumber('staff');
+Route::post('/staff/management/{staff}/toggle-status', [App\Http\Controllers\StaffManagementController::class, 'toggleStatus'])->name('staff.management.toggle-status')->whereNumber('staff');
+Route::delete('/staff/management/{staff}', [App\Http\Controllers\StaffManagementController::class, 'destroy'])->name('staff.management.destroy')->whereNumber('staff');
 
 Route::get('/staff/birthday', [App\Http\Controllers\StaffBirthdayController::class, 'index'])->name('staff.birthday');
 Route::get('/staff/birthday/export/{format}', [App\Http\Controllers\StaffBirthdayController::class, 'export'])->name('staff.birthday.export');
@@ -1336,6 +1335,7 @@ Route::get('/accounting/fee-document/decrement-amount/get-students', [App\Http\C
 
 // Fee Voucher Routes
 Route::get('/accounting/fee-voucher/student', [App\Http\Controllers\StudentVoucherController::class, 'index'])->name('accounting.fee-voucher.student');
+Route::get('/accounting/fee-voucher/get-classes-by-campus', [App\Http\Controllers\StudentVoucherController::class, 'getClassesByCampus'])->name('accounting.fee-voucher.get-classes-by-campus');
 Route::get('/accounting/fee-voucher/get-sections-by-class', [App\Http\Controllers\StudentVoucherController::class, 'getSectionsByClass'])->name('accounting.fee-voucher.get-sections-by-class');
 Route::get('/accounting/fee-voucher/print', [App\Http\Controllers\StudentVoucherController::class, 'print'])->name('accounting.fee-voucher.print');
 Route::get('/accounting/fee-voucher/family', [App\Http\Controllers\FamilyVoucherController::class, 'index'])->name('accounting.fee-voucher.family');
@@ -1445,6 +1445,7 @@ Route::put('/online-classes/{online_class}', [App\Http\Controllers\OnlineClasses
 Route::delete('/online-classes/{online_class}', [App\Http\Controllers\OnlineClassesController::class, 'destroy'])->name('online-classes.destroy');
 Route::get('/online-classes/export/{format}', [App\Http\Controllers\OnlineClassesController::class, 'export'])->name('online-classes.export');
 Route::get('/online-classes/print', [App\Http\Controllers\OnlineClassesController::class, 'print'])->name('online-classes.print');
+Route::get('/online-classes/get-classes-by-campus', [App\Http\Controllers\OnlineClassesController::class, 'getClassesByCampus'])->name('online-classes.get-classes-by-campus');
 Route::get('/online-classes/get-sections', [App\Http\Controllers\OnlineClassesController::class, 'getSections'])->name('online-classes.get-sections');
 
 // Timetable Management Routes
@@ -1609,19 +1610,206 @@ Route::get('/fee-payment/search-by-cnic', function (\Illuminate\Http\Request $re
         return response()->json([
             'success' => true,
             'students' => $students->map(function ($student) {
-                return array_merge([
-                    'id' => $student->id,
-                    'student_name' => $student->student_name,
-                    'student_code' => $student->student_code,
-                    'father_name' => $student->father_name,
-                    'class' => $student->class,
-                    'section' => $student->section,
-                    'campus' => $student->campus,
-                    'monthly_fee' => $student->monthly_fee,
-                    'transport_fare' => $student->transport_fare,
-                ], \App\Services\FeePaymentWebTables::feeSearchPayloadCnicRoute($student));
-            })
-        ]);
+            // Include both "Generated" and "Installment" methods as unpaid fees
+            // Installments should be treated as unpaid (new) fees, not paid
+            $generatedFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                ->whereIn('method', ['Generated', 'Installment'])
+                ->get();
+            // Exclude "Installment" method from paid fees - installments are unpaid fees
+            $paidFees = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                ->where('method', '!=', 'Generated')
+                ->where('method', '!=', 'Installment')
+                ->get();
+
+            // Get StudentDiscount records for this student
+            $studentDiscounts = \App\Models\StudentDiscount::where('student_code', $student->student_code)
+                ->get();
+            $totalStudentDiscount = $studentDiscounts->sum(function($discount) {
+                return (float) ($discount->discount_amount ?? 0);
+            });
+
+            $pendingFees = [];
+            $feeRows = [];
+            $totalDue = 0;
+            $generatedByTitle = $generatedFees->groupBy('payment_title');
+            $paidByTitle = $paidFees->groupBy('payment_title');
+
+            // Collect all installment titles and their base fee titles
+            // Also count installments per base title for proportional discount calculation
+            // If installments exist for a fee, exclude the original fee title
+            $installmentBaseTitles = [];
+            $installmentCounts = []; // Track number of installments per base title
+            foreach ($generatedByTitle as $title => $items) {
+                if (preg_match('/^(.+)\/\d+$/', $title, $matches)) {
+                    $baseTitle = $matches[1];
+                    $installmentBaseTitles[$baseTitle] = true;
+                    if (!isset($installmentCounts[$baseTitle])) {
+                        $installmentCounts[$baseTitle] = 0;
+                    }
+                    $installmentCounts[$baseTitle]++;
+                }
+            }
+
+            foreach ($generatedByTitle as $title => $items) {
+                $latestGenerated = $items->sortByDesc('id')->first();
+                // Check if this is an installment (title ends with /number)
+                $isInstallment = preg_match('/\/\d+$/', $title);
+                
+                // Skip original fee title if installments exist for it
+                if (!$isInstallment && isset($installmentBaseTitles[$title])) {
+                    continue;
+                }
+                
+                // Check if this is a monthly fee (title starts with "Monthly Fee - ")
+                $isMonthlyFee = str_starts_with($title, 'Monthly Fee - ');
+
+                $paidForTitle = \App\Models\StudentPayment::paidLedgerRowsForLatestGeneratedTitle(
+                    $paidByTitle->get($title, collect()),
+                    $latestGenerated
+                );
+                
+                // Calculate original amount (before discount) from generated records
+                $originalAmount = $items->sum(function ($item) {
+                    return (float) ($item->payment_amount ?? 0);
+                });
+                
+                // For installments, use the individual installment amount (should be single record)
+                // For regular fees, sum all records
+                $generatedAmount = $items->sum(function ($item) {
+                    return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
+                });
+                $generatedLate = $items->sum(function ($item) {
+                    return (float) ($item->late_fee ?? 0);
+                });
+                
+                // For installments, discount is stored in the generated record itself
+                // For regular fees, discount comes from payment records
+                $generatedDiscount = 0;
+                if ($isInstallment) {
+                    // Get discount from generated records for installments
+                    $generatedDiscount = $items->sum(function ($item) {
+                        return (float) ($item->discount ?? 0);
+                    });
+                }
+                
+                // Discount from payment records (for regular fees or additional discounts on installments)
+                $paidDiscount = $paidForTitle->sum(function ($item) {
+                    return (float) ($item->discount ?? 0);
+                });
+                
+                // Apply StudentDiscount to monthly fees
+                // Student discount should NOT be applied to installments - only to full (non-installment) fees
+                // For regular fees, apply full student discount
+                $appliedStudentDiscount = 0;
+                if ($isMonthlyFee && $totalStudentDiscount > 0 && !$isInstallment) {
+                    // Only apply student discount to regular (non-installment) monthly fees
+                    $appliedStudentDiscount = round($totalStudentDiscount, 2);
+                }
+                
+                // Total discount = generated discount (for installments) + payment discount + student discount (only for non-installment fees)
+                $totalDiscount = $generatedDiscount + $paidDiscount + $appliedStudentDiscount;
+                
+                // Generated Fee = Original Amount - Total Discount + Late Fee
+                // Late fees are part of the generated fee that needs to be paid
+                $generatedFee = max(0, $originalAmount - $totalDiscount) + $generatedLate;
+                
+                $paidAmount = $paidForTitle->sum(function ($item) {
+                    $amount = (float) ($item->payment_amount ?? 0);
+                    $late = (float) ($item->late_fee ?? 0);
+                $principal = max(0, $amount - $late);
+                    return $principal + (float) ($item->discount ?? 0);
+                });
+                $paidLate = $paidForTitle->sum(function ($item) {
+                    return (float) ($item->late_fee ?? 0);
+                });
+
+                // For installments, total should be the per-installment amount (already calculated above)
+                // Use generatedFee (which is originalAmount - totalDiscount + lateFee) instead of generatedAmount
+                // This ensures discount is properly accounted for in due calculation
+                $totalGenerated = $generatedFee; // Use generatedFee (after discount + late fee) instead of generatedAmount
+                $totalPaid = $paidAmount + $paidLate;
+                // Due = Generated Fee (after discount + late fee) - Paid Amount (payment_amount only, discount already accounted in generatedFee)
+                // paidAmount includes discount, so we need to subtract only payment_amount from paid records
+                $paidAmountOnly = $paidForTitle->sum(function ($item) {
+                    $amount = (float) ($item->payment_amount ?? 0);
+                    $late = (float) ($item->late_fee ?? 0);
+                return max(0, $amount - $late);
+                });
+                $remainingAmount = max(0, ($originalAmount - $totalDiscount) - $paidAmountOnly);
+                $remainingLate = max(0, $generatedLate - $paidLate);
+                $remainingTotal = $remainingAmount + $remainingLate;
+
+                if ($remainingTotal > 0) {
+                    // For installments, show only the per-installment fee discount in display
+                    // For regular fees, show total discount
+                    $displayDiscount = $isInstallment ? $generatedDiscount : $totalDiscount;
+                    
+                    $feeRows[] = [
+                        'title' => $title,
+                        'total' => round($originalAmount, 2), // Original amount before discount (full fee amount)
+                        'discount' => round($displayDiscount, 2), // Per-installment discount for installments, total discount for regular fees
+                        'late_fee' => round($remainingLate, 2),
+                        'paid' => round($totalPaid, 2),
+                        'due' => round($remainingTotal, 2),
+                        'amount' => round($remainingAmount, 2),
+                        'remaining_late' => round($remainingLate, 2),
+                        'generated_fee' => round($generatedFee, 2), // Generated fee after discount + late fee (Total - Discount + Late Fee)
+                        'generated_id' => $latestGenerated ? $latestGenerated->id : null,
+                        'is_installment' => $isInstallment,
+                    ];
+                    $pendingFees[] = [
+                        'title' => $title,
+                        'amount' => round($remainingAmount, 2),
+                        'late_fee' => round($remainingLate, 2),
+                        'total' => round($remainingTotal, 2),
+                    ];
+                    $totalDue += $remainingTotal;
+                }
+            }
+
+            // Add payment IDs to fee_rows for paid fees (scoped to payments on/after this generated charge row)
+            foreach ($feeRows as &$feeRow) {
+                if (!empty($feeRow['title']) && $feeRow['paid'] > 0) {
+                    $anchor = null;
+                    if (! empty($feeRow['generated_id'])) {
+                        $genRow = \App\Models\StudentPayment::find($feeRow['generated_id']);
+                        $anchor = $genRow?->created_at;
+                    }
+                    $latestPayment = \App\Models\StudentPayment::where('student_code', $student->student_code)
+                        ->where('payment_title', $feeRow['title'])
+                        ->where('method', '!=', 'Generated')
+                        ->where('method', '!=', 'Installment')
+                        ->when($anchor, function ($q) use ($anchor) {
+                            $q->where('created_at', '>=', $anchor);
+                        })
+                        ->orderBy('payment_date', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+
+                    if ($latestPayment) {
+                        $feeRow['payment_id'] = $latestPayment->id;
+                    }
+                }
+            }
+            unset($feeRow);
+
+            return [
+                'id' => $student->id,
+                'student_name' => $student->student_name,
+                'student_code' => $student->student_code,
+                'father_name' => $student->father_name,
+                'class' => $student->class,
+                'section' => $student->section,
+                'campus' => $student->campus,
+                'monthly_fee' => $student->monthly_fee,
+                'transport_fare' => $student->transport_fare,
+                'has_unpaid' => $totalDue > 0,
+                'unpaid_amount' => round($totalDue, 2),
+                'pending_fees' => $pendingFees,
+                'fee_rows' => $feeRows,
+            ];
+        })
+    ]);
     } catch (\Exception $e) {
         \Log::error('Error in search-by-cnic route: ' . $e->getMessage(), [
             'trace' => $e->getTraceAsString(),
@@ -1795,6 +1983,7 @@ Route::get('/expense-management/categories/export/{format}', [App\Http\Controlle
 // Salary and Loan Management Routes
 Route::get('/salary-loan/generate-salary', [App\Http\Controllers\GenerateSalaryController::class, 'index'])->name('salary-loan.generate-salary');
 Route::get('/salary-loan/generate-salary/get-staff', [App\Http\Controllers\GenerateSalaryController::class, 'getStaffList'])->name('salary-loan.generate-salary.get-staff');
+Route::get('/salary-loan/generate-salary/get-generated-salaries', [App\Http\Controllers\GenerateSalaryController::class, 'getGeneratedSalaries'])->name('salary-loan.generate-salary.get-generated-salaries');
 Route::post('/salary-loan/generate-salary', [App\Http\Controllers\GenerateSalaryController::class, 'store'])->name('salary-loan.generate-salary.store');
 Route::get('/salary-loan/generate-salary/{salary}/net-payable-preview', [App\Http\Controllers\GenerateSalaryController::class, 'netPayablePreview'])->name('salary-loan.generate-salary.net-payable-preview');
 Route::put('/salary-loan/generate-salary/{salary}/payment', [App\Http\Controllers\GenerateSalaryController::class, 'updatePayment'])->name('salary-loan.generate-salary.payment');
@@ -2007,12 +2196,14 @@ Route::middleware([App\Http\Middleware\AdminOrStaffMiddleware::class])->group(fu
 Route::middleware([App\Http\Middleware\AdminOrStaffMiddleware::class])->group(function () {
     Route::get('/test/marks-entry', [App\Http\Controllers\MarksEntryController::class, 'index'])->name('test.marks-entry');
     Route::post('/test/marks-entry/save', [App\Http\Controllers\MarksEntryController::class, 'save'])->name('test.marks-entry.save');
+    Route::get('/test/marks-entry/get-classes-by-campus', [App\Http\Controllers\MarksEntryController::class, 'getClassesByCampus'])->name('test.marks-entry.get-classes-by-campus');
     Route::get('/test/marks-entry/get-sections', [App\Http\Controllers\MarksEntryController::class, 'getSections'])->name('test.marks-entry.get-sections');
     Route::get('/test/marks-entry/get-tests', [App\Http\Controllers\MarksEntryController::class, 'getTests'])->name('test.marks-entry.get-tests');
     Route::get('/test/marks-entry/get-subjects', [App\Http\Controllers\MarksEntryController::class, 'getSubjects'])->name('test.marks-entry.get-subjects');
 });
 
 Route::get('/test/schedule', [App\Http\Controllers\TestScheduleController::class, 'index'])->name('test.schedule');
+Route::get('/test/schedule/get-classes-by-campus', [App\Http\Controllers\TestScheduleController::class, 'getClassesByCampus'])->name('test.schedule.get-classes-by-campus');
 Route::get('/test/schedule/get-sections', [App\Http\Controllers\TestScheduleController::class, 'getSectionsByClass'])->name('test.schedule.get-sections');
 Route::get('/test/schedule/get-filtered-tests', [App\Http\Controllers\TestScheduleController::class, 'getFilteredTests'])->name('test.schedule.get-filtered-tests');
 
@@ -2036,6 +2227,7 @@ Route::get('/test/assign-grades/combined/export/{format}', [App\Http\Controllers
 // Test Reports - Teacher Remarks
 Route::get('/test/teacher-remarks/practical', [App\Http\Controllers\TeacherRemarksController::class, 'practical'])->name('test.teacher-remarks.practical')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 Route::post('/test/teacher-remarks/practical/save', [App\Http\Controllers\TeacherRemarksController::class, 'saveRemarks'])->name('test.teacher-remarks.practical.save')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
+Route::get('/test/teacher-remarks/practical/get-classes-by-campus', [App\Http\Controllers\TeacherRemarksController::class, 'getClassesByCampus'])->name('test.teacher-remarks.practical.get-classes-by-campus')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 Route::get('/test/teacher-remarks/practical/get-sections', [App\Http\Controllers\TeacherRemarksController::class, 'getSections'])->name('test.teacher-remarks.practical.get-sections')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 Route::get('/test/teacher-remarks/practical/get-subjects', [App\Http\Controllers\TeacherRemarksController::class, 'getSubjects'])->name('test.teacher-remarks.practical.get-subjects')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
 Route::get('/test/teacher-remarks/practical/get-tests', [App\Http\Controllers\TeacherRemarksController::class, 'getTests'])->name('test.teacher-remarks.practical.get-tests')->middleware([App\Http\Middleware\AdminOrStaffMiddleware::class]);
@@ -2049,6 +2241,7 @@ Route::get('/test/tabulation-sheet/practical', [App\Http\Controllers\TabulationS
 Route::post('/test/tabulation-sheet/practical/save', [App\Http\Controllers\TabulationSheetController::class, 'saveMarks'])->name('test.tabulation-sheet.practical.save');
 Route::get('/test/tabulation-sheet/practical/get-sections', [App\Http\Controllers\TabulationSheetController::class, 'getSectionsByClass'])->name('test.tabulation-sheet.practical.get-sections');
 Route::get('/test/tabulation-sheet/practical/get-subjects', [App\Http\Controllers\TabulationSheetController::class, 'getSubjectsByClass'])->name('test.tabulation-sheet.practical.get-subjects');
+Route::get('/test/tabulation-sheet/practical/get-tests', [App\Http\Controllers\TabulationSheetController::class, 'getTestsByFilters'])->name('test.tabulation-sheet.practical.get-tests');
 Route::get('/test/tabulation-sheet/practical/get-grades', [App\Http\Controllers\TabulationSheetController::class, 'getGrades'])->name('test.tabulation-sheet.practical.get-grades');
 
 Route::get('/test/tabulation-sheet/combine', [App\Http\Controllers\TabulationSheetController::class, 'combine'])->name('test.tabulation-sheet.combine');

@@ -87,6 +87,13 @@
                 </div>
             </form>
 
+            @if(!empty($usingDefaultCategory) && $filterType && $filterClass)
+                <div class="alert alert-warning py-2 px-3 mb-3" role="alert" style="font-size: 13px;">
+                    No behavior categories found for this campus. Using <strong>General Behavior</strong>.
+                    <a href="{{ route('student-behavior.categories') }}" class="alert-link">Add categories</a> for detailed tracking.
+                </div>
+            @endif
+
             <!-- Behavior Recording Interface - Only show when filters are applied -->
             @if($filterType && $filterClass)
             <div class="mt-4">
@@ -167,11 +174,12 @@
                                                 $parentName = $student->father_name ?? 'N/A';
                                                 // Get existing behavior record for this student and category
                                                 $existingRecord = \App\Models\BehaviorRecord::where('student_id', $student->id)
-                                                    ->where('type', $filterType)
+                                                    ->whereRaw('LOWER(TRIM(type)) = ?', [strtolower(trim((string) $filterType))])
                                                     ->where('category', $category)
                                                     ->whereDate('date', $filterDate)
                                                     ->first();
-                                                $isCategorySelected = $existingRecord && $existingRecord->category == $category;
+                                                $existingPoints = $existingRecord ? (int) $existingRecord->points : null;
+                                                $resolvedCampus = $filterCampus ?: ($campusName ?? 'Main Campus');
                                             @endphp
                                             <tr class="student-item category-row" 
                                                 data-student-id="{{ $student->id }}" 
@@ -184,50 +192,50 @@
                                                 <td>{{ $parentName }}</td>
                                                 <td>
                                                     <div class="d-flex gap-2 justify-content-center align-items-center">
-                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-2" 
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-2{{ $existingPoints === -2 ? ' behavior-btn-selected' : '' }}" 
                                                                 data-student-id="{{ $student->id }}" 
                                                                 data-category="{{ $category }}"
                                                                 data-points="-2" 
                                                                 data-type="{{ $filterType }}" 
                                                                 data-class="{{ $filterClass }}" 
                                                                 data-section="{{ $filterSection ?? '' }}" 
-                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-campus="{{ $resolvedCampus }}" 
                                                                 data-date="{{ $filterDate }}">&minus;2</button>
-                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-1" 
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-minus-1{{ $existingPoints === -1 ? ' behavior-btn-selected' : '' }}" 
                                                                 data-student-id="{{ $student->id }}" 
                                                                 data-category="{{ $category }}"
                                                                 data-points="-1" 
                                                                 data-type="{{ $filterType }}" 
                                                                 data-class="{{ $filterClass }}" 
                                                                 data-section="{{ $filterSection ?? '' }}" 
-                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-campus="{{ $resolvedCampus }}" 
                                                                 data-date="{{ $filterDate }}">&minus;1</button>
-                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-zero" 
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-zero{{ $existingPoints === 0 ? ' behavior-btn-selected' : '' }}" 
                                                                 data-student-id="{{ $student->id }}" 
                                                                 data-category="{{ $category }}"
                                                                 data-points="0" 
                                                                 data-type="{{ $filterType }}" 
                                                                 data-class="{{ $filterClass }}" 
                                                                 data-section="{{ $filterSection ?? '' }}" 
-                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-campus="{{ $resolvedCampus }}" 
                                                                 data-date="{{ $filterDate }}">0</button>
-                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-1" 
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-1{{ $existingPoints === 1 ? ' behavior-btn-selected' : '' }}" 
                                                                 data-student-id="{{ $student->id }}" 
                                                                 data-category="{{ $category }}"
                                                                 data-points="1" 
                                                                 data-type="{{ $filterType }}" 
                                                                 data-class="{{ $filterClass }}" 
                                                                 data-section="{{ $filterSection ?? '' }}" 
-                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-campus="{{ $resolvedCampus }}" 
                                                                 data-date="{{ $filterDate }}">&plus;1</button>
-                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-2" 
+                                                        <button type="button" class="btn btn-sm behavior-btn behavior-btn-plus-2{{ $existingPoints === 2 ? ' behavior-btn-selected' : '' }}" 
                                                                 data-student-id="{{ $student->id }}" 
                                                                 data-category="{{ $category }}"
                                                                 data-points="2" 
                                                                 data-type="{{ $filterType }}" 
                                                                 data-class="{{ $filterClass }}" 
                                                                 data-section="{{ $filterSection ?? '' }}" 
-                                                                data-campus="{{ $campusName ?? 'Main Campus' }}" 
+                                                                data-campus="{{ $resolvedCampus }}" 
                                                                 data-date="{{ $filterDate }}">&plus;2</button>
                                                     </div>
                                                 </td>
@@ -427,6 +435,12 @@
     transform: scale(0.98);
 }
 
+.behavior-btn-selected {
+    opacity: 1 !important;
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
 /* Table Styling */
 .behavior-table {
     background-color: white;
@@ -552,6 +566,17 @@
 </style>
 
 <script>
+const existingBehaviorRecords = @json($existingRecords ?? []);
+
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) {
+        return meta.content;
+    }
+    const input = document.querySelector('input[name="_token"]');
+    return input ? input.value : '';
+}
+
 // Load sections dynamically when class changes
 const campusSelect = document.getElementById('filter_campus');
 const classSelect = document.getElementById('filter_class');
@@ -669,6 +694,8 @@ document.addEventListener('DOMContentLoaded', function() {
         loadClassesByCampus(selectedCampus, selectedClass);
         updateCategoriesDisplay(selectedCampus);
     }
+
+    initializeExistingBehaviorRecords();
     
     // Initialize behavior buttons
     document.querySelectorAll('.behavior-btn').forEach(btn => {
@@ -738,6 +765,36 @@ document.getElementById('searchInput')?.addEventListener('input', filterStudents
 
 // Store behavior data temporarily - use array to allow multiple records per student
 let behaviorData = [];
+
+function initializeExistingBehaviorRecords() {
+    behaviorData = Array.isArray(existingBehaviorRecords) ? [...existingBehaviorRecords] : [];
+    behaviorData.forEach(record => {
+        const selector = `.behavior-btn[data-student-id="${record.student_id}"][data-category="${CSS.escape(record.category || '')}"][data-points="${record.points}"]`;
+        const button = document.querySelector(selector);
+        if (button) {
+            highlightBehaviorButton(button);
+        }
+    });
+}
+
+function highlightBehaviorButton(button) {
+    const studentItem = button.closest('.student-item');
+    if (!studentItem) {
+        return;
+    }
+
+    studentItem.querySelectorAll('.behavior-btn').forEach(btn => {
+        btn.classList.remove('behavior-btn-selected');
+        btn.style.opacity = '0.5';
+        btn.style.transform = 'scale(1)';
+        btn.style.boxShadow = 'none';
+    });
+
+    button.classList.add('behavior-btn-selected');
+    button.style.opacity = '1';
+    button.style.transform = 'scale(1.1)';
+    button.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+}
 
 // Get category for student from table row or button
 function getCategoryForStudent(studentId, button) {
@@ -809,18 +866,7 @@ function markBehavior(button) {
     }
     
     // Visual feedback - highlight selected button
-    const studentItem = button.closest('.student-item');
-    if (studentItem) {
-        const allButtons = studentItem.querySelectorAll('.behavior-btn');
-        allButtons.forEach(btn => {
-            btn.style.opacity = '0.5';
-            btn.style.transform = 'scale(1)';
-            btn.style.boxShadow = 'none';
-        });
-        button.style.opacity = '1';
-        button.style.transform = 'scale(1.1)';
-        button.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
-    }
+    highlightBehaviorButton(button);
 }
 
 // Save all behavior records
@@ -838,11 +884,12 @@ function saveAllBehaviorRecords() {
     saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" style="margin-right: 8px;"></span><span>Saving...</span>';
     
     // Get CSRF token
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const csrfToken = getCsrfToken();
     
     // Save all records
     let savedCount = 0;
     let errorCount = 0;
+    let lastErrorMessage = '';
     
     Promise.all(behaviorData.map((record, index) => {
         console.log('Saving record:', index + 1, record);
@@ -851,18 +898,20 @@ function saveAllBehaviorRecords() {
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json'
             },
+            credentials: 'same-origin',
             body: JSON.stringify(record)
         })
-        .then(response => {
+        .then(async response => {
+            const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                return response.json().then(err => {
-                    console.error('Server error response:', err);
-                    throw new Error(err.message || 'Failed to save');
-                });
+                console.error('Server error response:', data);
+                lastErrorMessage = data.message || `Failed to save (${response.status})`;
+                throw new Error(lastErrorMessage);
             }
-            return response.json();
+            return data;
         })
         .then(data => {
             console.log('Save response:', data);
@@ -897,16 +946,16 @@ function saveAllBehaviorRecords() {
             saveBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">check_circle</span><span style="font-size: 16px; font-weight: 600; margin-left: 8px;">Saved Successfully!</span>';
             saveBtn.style.background = 'linear-gradient(135deg, #198754 0%, #20c997 100%)';
             
-            // Clear behavior data
-            behaviorData = [];
-            
-            // Reset button styles
             setTimeout(() => {
                 saveBtn.innerHTML = originalText;
                 saveBtn.disabled = false;
+                saveBtn.style.background = '';
             }, 2000);
         } else {
-            alert(`Saved ${savedCount} records. ${errorCount} records failed to save.`);
+            const message = lastErrorMessage
+                ? `Saved ${savedCount} records. ${errorCount} failed.\n\n${lastErrorMessage}`
+                : `Saved ${savedCount} records. ${errorCount} records failed to save.`;
+            alert(message);
             saveBtn.innerHTML = originalText;
             saveBtn.disabled = false;
         }

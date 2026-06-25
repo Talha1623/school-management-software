@@ -572,13 +572,31 @@ class StudentController extends Controller
             // Don't return default sections - only return actual sections from database
         }
 
-        // Get transport routes
-        $transportRoutes = Transport::orderBy('route_name', 'asc')->pluck('route_name')->unique()->values();
+        $campusKey = strtolower(trim((string) ($student->campus ?? '')));
 
-        // Get fee types
-        $feeTypes = FeeType::orderBy('fee_name', 'asc')->pluck('fee_name')->unique()->values();
+        $transportQuery = Transport::query();
+        if ($campusKey !== '') {
+            $transportQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusKey]);
+        }
+        $transportRoutes = $transportQuery->orderBy('route_name', 'asc')->pluck('route_name')->unique()->values();
+        if (!empty($student->transport_route) && !$transportRoutes->contains($student->transport_route)) {
+            $transportRoutes = $transportRoutes->prepend($student->transport_route)->values();
+        }
 
-        return view('student.edit', compact('student', 'campuses', 'classes', 'sections', 'transportRoutes', 'feeTypes'));
+        $feeTypesQuery = FeeType::query();
+        if ($campusKey !== '') {
+            $feeTypesQuery->whereRaw('LOWER(TRIM(campus)) = ?', [$campusKey]);
+        }
+        $feeTypes = $feeTypesQuery->orderBy('fee_name', 'asc')->pluck('fee_name')->unique()->values();
+        if (!empty($student->fee_type) && !$feeTypes->contains($student->fee_type)) {
+            $feeTypes = $feeTypes->prepend($student->fee_type)->values();
+        }
+
+        $studentDiscount = !empty($student->student_code)
+            ? \App\Models\StudentDiscount::where('student_code', $student->student_code)->orderByDesc('id')->first()
+            : null;
+
+        return view('student.edit', compact('student', 'campuses', 'classes', 'sections', 'transportRoutes', 'feeTypes', 'studentDiscount'));
     }
 
     /**
@@ -603,12 +621,15 @@ class StudentController extends Controller
             'home_address' => ['nullable', 'string'],
             'b_form_number' => ['nullable', 'string', 'max:255'],
             'monthly_fee' => ['nullable', 'numeric', 'min:0'],
-            'discounted_student' => ['nullable', 'boolean'],
+            'discounted_student' => ['nullable', 'in:0,1'],
+            'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'discount_reason' => ['nullable', 'string', 'max:255'],
             'transport_route' => ['nullable', 'string', 'max:255'],
             'transport_fare' => ['nullable', 'numeric', 'min:0'],
-            'generate_admission_fee' => ['nullable', 'string', 'max:255'],
+            'admission_notification' => ['nullable', 'string', 'max:255'],
+            'generate_admission_fee' => ['nullable', 'in:0,1'],
             'admission_fee_amount' => ['nullable', 'numeric', 'min:0'],
-            'generate_other_fee' => ['nullable', 'string', 'max:255'],
+            'generate_other_fee' => ['nullable', 'in:0,1'],
             'fee_type' => ['nullable', 'string', 'max:255'],
             'other_fee_amount' => ['nullable', 'numeric', 'min:0'],
             'student_code' => ['nullable', 'string', 'max:255'],
@@ -633,10 +654,44 @@ class StudentController extends Controller
             $validated['photo'] = $photoPath;
         }
 
-        // Handle discounted_student checkbox
-        $validated['discounted_student'] = $request->has('discounted_student');
+        // Handle discounted_student select (0/1)
+        $validated['discounted_student'] = ($request->input('discounted_student') === '1');
+
+        if (!empty($validated['transport_route']) && empty($validated['transport_fare'])) {
+            $transportQuery = Transport::where('route_name', $validated['transport_route']);
+            if (!empty($validated['campus'])) {
+                $transportQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($validated['campus']))]);
+            }
+            $transport = $transportQuery->first();
+            if ($transport && $transport->route_fare !== null) {
+                $validated['transport_fare'] = $transport->route_fare;
+            }
+        }
+
+        if (empty($validated['transport_route'])) {
+            $validated['transport_fare'] = null;
+        }
 
         $student->update($validated);
+
+        if (!empty($student->student_code)) {
+            $discountAmount = (float) ($request->input('discount_amount') ?? 0);
+            $discountReason = trim((string) ($request->input('discount_reason') ?? ''));
+            if ($validated['discounted_student'] && $discountAmount > 0) {
+                $discountTitle = $discountReason !== '' ? $discountReason : 'Admission Discount';
+                \App\Models\StudentDiscount::updateOrCreate(
+                    [
+                        'student_code' => $student->student_code,
+                        'discount_title' => $discountTitle,
+                    ],
+                    [
+                        'discount_amount' => $discountAmount,
+                        'created_by' => auth()->check() ? (auth()->user()->name ?? null) : null,
+                    ]
+                );
+                $student->update(['discount_reason' => $discountTitle]);
+            }
+        }
 
         return redirect()
             ->route('student.information')
