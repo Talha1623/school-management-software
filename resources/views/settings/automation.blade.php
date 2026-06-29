@@ -3,6 +3,11 @@
 @section('title', 'Automation Settings')
 
 @section('content')
+@php
+    $automation = $automation ?? [];
+    $checked = fn (string $key) => !empty($automation[$key]) ? 'checked' : '';
+    $value = fn (string $key, $default = '') => old($key, $automation[$key] ?? $default);
+@endphp
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-4 mb-4">
@@ -18,7 +23,18 @@
                 </div>
             @endif
 
-            <form method="POST" action="#">
+            @if($errors->any())
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <ul class="mb-0">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            @endif
+
+            <form method="POST" action="{{ route('settings.automation.store') }}">
                 @csrf
                 <div class="row">
                     <div class="col-md-6 mb-4">
@@ -29,14 +45,14 @@
                             </h5>
                             
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_attendance" name="auto_attendance">
+                                <input class="form-check-input" type="checkbox" id="auto_attendance" name="auto_attendance" value="1" {{ $checked('auto_attendance') }}>
                                 <label class="form-check-label" for="auto_attendance">
                                     Enable Automatic Attendance Marking
                                 </label>
                             </div>
                             
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_absent" name="auto_absent">
+                                <input class="form-check-input" type="checkbox" id="auto_absent" name="auto_absent" value="1" {{ $checked('auto_absent') }}>
                                 <label class="form-check-label" for="auto_absent">
                                     Auto-mark Absent After Time Limit
                                 </label>
@@ -44,7 +60,7 @@
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Attendance Time Limit (minutes)</label>
-                                <input type="number" class="form-control" name="attendance_time_limit" placeholder="30" min="0">
+                                <input type="number" class="form-control" name="attendance_time_limit" value="{{ $value('attendance_time_limit') }}" placeholder="30" min="0">
                             </div>
                         </div>
                     </div>
@@ -57,14 +73,14 @@
                             </h5>
                             
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_notify_absent" name="auto_notify_absent">
+                                <input class="form-check-input" type="checkbox" id="auto_notify_absent" name="auto_notify_absent" value="1" {{ $checked('auto_notify_absent') }}>
                                 <label class="form-check-label" for="auto_notify_absent">
                                     Auto-notify Parents for Absence
                                 </label>
                             </div>
                             
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_notify_fee" name="auto_notify_fee">
+                                <input class="form-check-input" type="checkbox" id="auto_notify_fee" name="auto_notify_fee" value="1" {{ $checked('auto_notify_fee') }}>
                                 <label class="form-check-label" for="auto_notify_fee">
                                     Auto-notify Fee Due Reminders
                                 </label>
@@ -72,7 +88,7 @@
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Fee Reminder Days Before Due</label>
-                                <input type="number" class="form-control" name="fee_reminder_days" placeholder="7" min="0">
+                                <input type="number" class="form-control" name="fee_reminder_days" value="{{ $value('fee_reminder_days') }}" placeholder="7" min="0">
                             </div>
                         </div>
                     </div>
@@ -85,14 +101,14 @@
                             </h5>
                             
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_generate_fee" name="auto_generate_fee">
+                                <input class="form-check-input" type="checkbox" id="auto_generate_fee" name="auto_generate_fee" value="1" {{ $checked('auto_generate_fee') }}>
                                 <label class="form-check-label" for="auto_generate_fee">
                                     Auto-generate Monthly Fees
                                 </label>
                             </div>
                             
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_late_fee" name="auto_late_fee">
+                                <input class="form-check-input" type="checkbox" id="auto_late_fee" name="auto_late_fee" value="1" {{ $checked('auto_late_fee') }}>
                                 <label class="form-check-label" for="auto_late_fee">
                                     Auto-apply Late Fee
                                 </label>
@@ -100,7 +116,7 @@
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Late Fee Amount (%)</label>
-                                <input type="number" class="form-control" name="late_fee_percentage" placeholder="5" min="0" step="0.1">
+                                <input type="number" class="form-control" name="late_fee_percentage" value="{{ $value('late_fee_percentage') }}" placeholder="5" min="0" step="0.1">
                             </div>
                         </div>
                     </div>
@@ -113,7 +129,7 @@
                             </h5>
                             
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_backup" name="auto_backup">
+                                <input class="form-check-input" type="checkbox" id="auto_backup" name="auto_backup" value="1" {{ $checked('auto_backup') }}>
                                 <label class="form-check-label" for="auto_backup">
                                     Enable Automatic Backup
                                 </label>
@@ -122,22 +138,22 @@
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Backup Frequency</label>
                                 <select class="form-select" name="backup_frequency">
-                                    <option value="daily">Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="monthly">Monthly</option>
+                                    <option value="daily" {{ $value('backup_frequency', 'daily') === 'daily' ? 'selected' : '' }}>Daily</option>
+                                    <option value="weekly" {{ $value('backup_frequency') === 'weekly' ? 'selected' : '' }}>Weekly</option>
+                                    <option value="monthly" {{ $value('backup_frequency') === 'monthly' ? 'selected' : '' }}>Monthly</option>
                                 </select>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label fw-medium">Backup Time</label>
-                                <input type="time" class="form-control" name="backup_time" value="02:00">
+                                <input type="time" class="form-control" name="backup_time" value="{{ $value('backup_time', '02:00') }}">
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="d-flex justify-content-end gap-2 mt-4">
-                    <button type="button" class="btn btn-outline-secondary">Cancel</button>
+                    <a href="{{ route('settings.automation') }}" class="btn btn-outline-secondary">Cancel</a>
                     <button type="submit" class="btn btn-primary" style="background: #003471; border-color: #003471; color: white;">
                         <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: white;">save</span>
                         <span style="color: white;">Save Settings</span>
@@ -149,26 +165,21 @@
 </div>
 
 <script>
-// Ensure sidebar stays open on Automation Settings page
 document.addEventListener('DOMContentLoaded', function() {
-    // Force sidebar to show state
-    document.body.setAttribute("sidebar-data-theme", "sidebar-show");
-    
-    // Ensure sidebar is visible
+    document.body.setAttribute('sidebar-data-theme', 'sidebar-show');
+
     const sidebarArea = document.getElementById('sidebar-area');
     if (sidebarArea) {
         sidebarArea.style.display = '';
         sidebarArea.classList.remove('sidebar-hide');
         sidebarArea.classList.add('sidebar-show');
     }
-    
-    // Prevent auto-close on window resize
+
     window.addEventListener('resize', function() {
-        if (window.innerWidth > 992) { // Only on desktop
-            document.body.setAttribute("sidebar-data-theme", "sidebar-show");
+        if (window.innerWidth > 992) {
+            document.body.setAttribute('sidebar-data-theme', 'sidebar-show');
         }
     });
 });
 </script>
 @endsection
-

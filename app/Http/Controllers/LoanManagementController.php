@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Loan;
 use App\Models\Staff;
 use App\Models\GeneralSetting;
+use App\Services\StaffLoanRepaymentService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,14 @@ class LoanManagementController extends Controller
      */
     public function index(Request $request): View
     {
+        Loan::ensureBalanceColumns();
+
+        $staffIds = Loan::query()->distinct()->pluck('staff_id')->filter();
+        $loanRepaymentService = app(StaffLoanRepaymentService::class);
+        foreach ($staffIds as $staffId) {
+            $loanRepaymentService->syncStaffLoanBalances((int) $staffId);
+        }
+
         $query = Loan::with('staff');
         
         // Search functionality
@@ -100,6 +109,7 @@ class LoanManagementController extends Controller
 
         Loan::create($validated);
 
+        app(StaffLoanRepaymentService::class)->syncStaffLoanBalances((int) $validated['staff_id']);
         app(GenerateSalaryController::class)->syncPendingSalariesForStaff((int) $validated['staff_id']);
 
         return redirect()

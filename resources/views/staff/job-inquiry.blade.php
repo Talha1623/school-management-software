@@ -357,9 +357,20 @@ use Illuminate\Support\Facades\Storage;
                                 <select class="form-control inquiry-input" name="campus" id="campus" style="font-size: 12px;">
                                     <option value="">Select Campus</option>
                                     @foreach($campuses as $campus)
-                                        <option value="{{ $campus->campus_name }}">{{ $campus->campus_name }}</option>
+                                        <option value="{{ $campus->campus_name }}" data-code-prefix="{{ $campus->code_prefix ?? '' }}">{{ $campus->campus_name }}</option>
                                     @endforeach
                                 </select>
+                            </div>
+                        </div>
+
+                        <!-- Emp. ID (preview — same rules as Staff Management) -->
+                        <div class="col-md-6">
+                            <label class="form-label mb-1 fw-semibold" style="color: #003471; font-size: 11px;">Emp. ID <span class="text-muted" style="font-size: 10px;">(Auto-generated on appoint)</span></label>
+                            <div class="input-group input-group-sm inquiry-input-group">
+                                <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
+                                    <span class="material-symbols-outlined" style="font-size: 14px;">badge</span>
+                                </span>
+                                <input type="text" class="form-control inquiry-input" id="emp_id" placeholder="Select campus first" readonly style="background-color: #f8f9fa; cursor: not-allowed; font-size: 12px;">
                             </div>
                         </div>
 
@@ -860,6 +871,8 @@ function resetForm() {
     modalLabel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; color: white;">work</span><span style="color: white;">Add New Inquiry</span>';
     document.getElementById('cv_resume').value = '';
     document.getElementById('campus').value = '';
+    document.getElementById('emp_id').value = '';
+    document.getElementById('emp_id').placeholder = 'Select campus first';
     document.getElementById('absent_fees').value = '';
     document.getElementById('late_fees').value = '';
     document.getElementById('early_exit_fees').value = '';
@@ -892,6 +905,7 @@ function editInquiry(id) {
             document.getElementById('name').value = data.name || '';
             document.getElementById('father_husband_name').value = data.father_husband_name || '';
             document.getElementById('campus').value = data.campus || '';
+            updateEmployeeId();
             document.getElementById('gender').value = data.gender || '';
             document.getElementById('phone').value = data.phone || '';
             document.getElementById('qualification').value = data.qualification || '';
@@ -939,6 +953,66 @@ function editInquiry(id) {
         .catch(error => {
             console.error('Error:', error);
             alert('Error loading inquiry data');
+        });
+}
+
+// Preview next Employee ID when campus is selected (same API as Staff Management)
+function updateEmployeeId() {
+    const campusField = document.getElementById('campus');
+    const empIdField = document.getElementById('emp_id');
+    const campus = campusField ? campusField.value.trim() : '';
+
+    if (!empIdField) {
+        return;
+    }
+
+    if (!campus) {
+        empIdField.value = '';
+        empIdField.placeholder = 'Select campus first';
+        return;
+    }
+
+    const url = '{{ route('staff.management.next-emp-id') }}?campus=' + encodeURIComponent(campus);
+
+    empIdField.value = '';
+    empIdField.placeholder = 'Loading...';
+
+    fetch(url, {
+        credentials: 'same-origin',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(async (response) => {
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (e) {
+                data = {};
+            }
+
+            if (!response.ok) {
+                throw new Error(data.error || data.message || ('HTTP ' + response.status));
+            }
+
+            return data;
+        })
+        .then(data => {
+            if (data.emp_id) {
+                empIdField.value = data.emp_id;
+                empIdField.placeholder = 'Auto-generated Employee ID';
+            } else if (data.error) {
+                empIdField.value = '';
+                empIdField.placeholder = data.error;
+            } else if (data.message) {
+                empIdField.value = '';
+                empIdField.placeholder = data.message;
+            }
+        })
+        .catch((error) => {
+            empIdField.value = '';
+            empIdField.placeholder = error.message || 'Could not load Employee ID';
         });
 }
 
@@ -995,40 +1069,57 @@ function printTable() {
 // Function to toggle fees fields based on salary type
 function toggleFeesFields() {
     const salaryType = document.getElementById('salary_type').value;
+    const absentFees = document.getElementById('absent_fees');
+    const lateFees = document.getElementById('late_fees');
+    const earlyExitFees = document.getElementById('early_exit_fees');
     const absentFeesContainer = document.getElementById('absent_fees_container');
     const lateFeesContainer = document.getElementById('late_fees_container');
     const earlyExitFeesContainer = document.getElementById('early_exit_fees_container');
-    
-    // Hide fields for per lecture and per hour
+
+    if (absentFeesContainer) absentFeesContainer.style.display = 'block';
+    if (lateFeesContainer) lateFeesContainer.style.display = 'block';
+    if (earlyExitFeesContainer) earlyExitFeesContainer.style.display = 'block';
+
     if (salaryType === 'lecture' || salaryType === 'per hour') {
-        if (absentFeesContainer) {
-            absentFeesContainer.style.display = 'none';
-        }
-        if (lateFeesContainer) {
-            lateFeesContainer.style.display = 'none';
-        }
-        if (earlyExitFeesContainer) {
-            earlyExitFeesContainer.style.display = 'none';
-        }
-        
-        // Clear values when hidden
-        const absentFees = document.getElementById('absent_fees');
-        const lateFees = document.getElementById('late_fees');
-        const earlyExitFees = document.getElementById('early_exit_fees');
-        if (absentFees) absentFees.value = '';
-        if (lateFees) lateFees.value = '';
-        if (earlyExitFees) earlyExitFees.value = '';
+        absentFees.disabled = true;
+        absentFees.style.backgroundColor = '#f8f9fa';
+        absentFees.style.cursor = 'not-allowed';
+        absentFees.value = '';
+
+        lateFees.disabled = true;
+        lateFees.style.backgroundColor = '#f8f9fa';
+        lateFees.style.cursor = 'not-allowed';
+        lateFees.value = '';
+
+        earlyExitFees.disabled = true;
+        earlyExitFees.style.backgroundColor = '#f8f9fa';
+        earlyExitFees.style.cursor = 'not-allowed';
+        earlyExitFees.value = '';
+    } else if (salaryType === 'full time') {
+        absentFees.disabled = true;
+        absentFees.style.backgroundColor = '#f8f9fa';
+        absentFees.style.cursor = 'not-allowed';
+        absentFees.value = '';
+
+        lateFees.disabled = false;
+        lateFees.style.backgroundColor = '';
+        lateFees.style.cursor = '';
+
+        earlyExitFees.disabled = false;
+        earlyExitFees.style.backgroundColor = '';
+        earlyExitFees.style.cursor = '';
     } else {
-        // Show fields for full time or empty
-        if (absentFeesContainer) {
-            absentFeesContainer.style.display = 'block';
-        }
-        if (lateFeesContainer) {
-            lateFeesContainer.style.display = 'block';
-        }
-        if (earlyExitFeesContainer) {
-            earlyExitFeesContainer.style.display = 'block';
-        }
+        absentFees.disabled = false;
+        absentFees.style.backgroundColor = '';
+        absentFees.style.cursor = '';
+
+        lateFees.disabled = false;
+        lateFees.style.backgroundColor = '';
+        lateFees.style.cursor = '';
+
+        earlyExitFees.disabled = false;
+        earlyExitFees.style.backgroundColor = '';
+        earlyExitFees.style.cursor = '';
     }
 }
 
@@ -1039,6 +1130,30 @@ document.addEventListener('DOMContentLoaded', function() {
         salaryTypeSelect.addEventListener('change', toggleFeesFields);
         // Initialize on page load
         toggleFeesFields();
+    }
+
+    const campusField = document.getElementById('campus');
+    if (campusField) {
+        campusField.addEventListener('change', function() {
+            const methodField = document.getElementById('methodField');
+            const isEditMode = methodField && methodField.innerHTML.includes('PUT');
+            if (!isEditMode) {
+                updateEmployeeId();
+            }
+        });
+    }
+
+    const inquiryModal = document.getElementById('inquiryModal');
+    if (inquiryModal) {
+        inquiryModal.addEventListener('shown.bs.modal', function() {
+            setTimeout(function() {
+                const methodField = document.getElementById('methodField');
+                const isEditMode = methodField && methodField.innerHTML.includes('PUT');
+                if (!isEditMode && campusField && campusField.value) {
+                    updateEmployeeId();
+                }
+            }, 100);
+        });
     }
 });
 </script>

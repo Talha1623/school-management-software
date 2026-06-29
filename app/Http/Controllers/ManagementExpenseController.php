@@ -8,6 +8,7 @@ use App\Models\GeneralSetting;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Services\MobilePushNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -17,6 +18,11 @@ use Carbon\Carbon;
 
 class ManagementExpenseController extends Controller
 {
+    public function __construct(
+        private readonly MobilePushNotificationService $pushNotifications,
+    ) {
+    }
+
     /**
      * Display a listing of management expenses.
      */
@@ -127,6 +133,7 @@ class ManagementExpenseController extends Controller
             'method' => ['required', 'string', 'max:255'],
             'invoice_receipt' => ['nullable', 'image', 'mimes:jpeg,jpg,png,gif,webp', 'max:5120'], // 5MB max
             'date' => ['required', 'date'],
+            'notify_admin' => ['nullable', 'boolean'],
         ]);
 
         // Handle file upload
@@ -142,18 +149,34 @@ class ManagementExpenseController extends Controller
             config('app.timezone')
         )->toDateString();
 
+        $validated['notify_admin'] = $request->boolean('notify_admin');
+
         // Get logged-in user's name
         $createdBy = 'System';
+        $actorType = 'admin';
+        $actorId = null;
         if (Auth::guard('admin')->check()) {
             $admin = Auth::guard('admin')->user();
             $createdBy = $admin->name ?? $admin->email ?? 'Admin';
+            $actorId = (int) $admin->id;
         } elseif (Auth::guard('accountant')->check()) {
             $accountant = Auth::guard('accountant')->user();
             $createdBy = $accountant->name ?? $accountant->email ?? 'Accountant';
+            $actorType = 'accountant';
+            $actorId = (int) $accountant->id;
         }
         
         $validated['created_by'] = $createdBy;
-        ManagementExpense::create($validated);
+        $expense = ManagementExpense::create($validated);
+
+        if ($validated['notify_admin']) {
+            $this->pushNotifications->notifyAdminsManagementExpense(
+                $expense,
+                $createdBy,
+                $actorId,
+                $actorType
+            );
+        }
 
         // Redirect based on which route was used (accountant or expense-management)
         $redirectRoute = request()->route()->getName() === 'accountant.add-manage-expense.store' 

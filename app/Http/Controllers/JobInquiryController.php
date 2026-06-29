@@ -6,6 +6,7 @@ use App\Models\JobInquiry;
 use App\Models\Campus;
 use App\Models\Staff;
 use App\Models\GeneralSetting;
+use App\Services\CampusCodeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -335,48 +336,9 @@ class JobInquiryController extends Controller
                     ->with('info', $inquiryName . ' is already in Staff Management. The inquiry has been removed from Job Inquiry/CV Bank.');
             }
 
-            // Generate Employee ID based on campus
+            // Generate Employee ID using same campus rules as Staff Management (ST3 → EMP3-001)
             $campus = $job_inquiry->campus ?? null;
-            
-            // Extract campus number from campus name
-            $campusNumber = '1'; // Default to 1 if no campus
-            if ($campus) {
-                if (preg_match('/(\d+)/', $campus, $matches)) {
-                    $campusNumber = $matches[1];
-                } else {
-                    $campusLower = strtolower(trim($campus));
-                    if (strpos($campusLower, 'main') !== false || strpos($campusLower, 'primary') !== false) {
-                        $campusNumber = '1';
-                    } elseif (strpos($campusLower, 'secondary') !== false || strpos($campusLower, 'branch') !== false) {
-                        $campusNumber = '2';
-                    } else {
-                        $firstChar = strtoupper(substr($campus, 0, 1));
-                        if (is_numeric($firstChar)) {
-                            $campusNumber = $firstChar;
-                        } else {
-                            $campusNumber = ord($firstChar) - ord('A') + 1;
-                            if ($campusNumber < 1 || $campusNumber > 9) {
-                                $campusNumber = '1';
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Get the last employee ID for this campus
-            $prefix = 'EMP' . $campusNumber . '-';
-            $lastStaff = Staff::whereNotNull('emp_id')
-                ->where('emp_id', 'like', $prefix . '%')
-                ->orderByRaw('CAST(SUBSTRING(emp_id, ' . (strlen($prefix) + 1) . ') AS UNSIGNED) DESC')
-                ->first();
-
-            if ($lastStaff && $lastStaff->emp_id) {
-                $lastNumber = (int) substr($lastStaff->emp_id, strlen($prefix));
-                $newNumber = $lastNumber + 1;
-            } else {
-                $newNumber = 1;
-            }
-            $empId = 'EMP' . $campusNumber . '-' . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
+            $empId = app(CampusCodeService::class)->generateNextEmployeeId($campus);
 
             // Auto-generate email if not provided
             $email = $job_inquiry->email;

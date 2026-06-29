@@ -77,6 +77,7 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         Route::get('/personal-details', [App\Http\Controllers\Api\ParentAuthController::class, 'personalDetails'])->name('personal-details');
         Route::get('/students', [App\Http\Controllers\Api\ParentAuthController::class, 'students'])->name('students');
         Route::post('/change-password', [App\Http\Controllers\Api\ParentAuthController::class, 'changePassword'])->name('change-password');
+        Route::post('/device-token', [App\Http\Controllers\Api\ParentDeviceTokenController::class, 'store'])->name('device-token.store');
         
         // Behavior Routes (Parent side)
         Route::get('/behavior/summary', [App\Http\Controllers\Api\ParentBehaviorController::class, 'summary'])->name('behavior.summary');
@@ -166,6 +167,7 @@ Route::prefix('student')->name('api.student.')->group(function () {
         Route::get('/profile', [App\Http\Controllers\Api\StudentAuthController::class, 'profile'])->name('profile');
         Route::get('/personal-details', [App\Http\Controllers\Api\StudentAuthController::class, 'personalDetails'])->name('personal-details');
         Route::post('/change-password', [App\Http\Controllers\Api\StudentAuthController::class, 'changePassword'])->name('change-password');
+        Route::post('/device-token', [App\Http\Controllers\Api\StudentDeviceTokenController::class, 'store'])->name('device-token.store');
         
         // Behavior Routes
         Route::get('/behavior/summary', [App\Http\Controllers\Api\StudentBehaviorController::class, 'summary'])->name('behavior.summary');
@@ -254,6 +256,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         Route::get('/profile', [App\Http\Controllers\Api\TeacherAuthController::class, 'profile'])->name('profile');
         Route::get('/personal-details', [App\Http\Controllers\Api\TeacherAuthController::class, 'personalDetails'])->name('personal-details');
         Route::post('/change-password', [App\Http\Controllers\Api\TeacherAuthController::class, 'changePassword'])->name('change-password');
+        Route::post('/device-token', [App\Http\Controllers\Api\TeacherDeviceTokenController::class, 'store'])->name('device-token.store');
         Route::get('/dashboard', [App\Http\Controllers\Api\TeacherController::class, 'dashboard'])->name('dashboard');
         Route::get('/assigned-classes', [App\Http\Controllers\Api\TeacherController::class, 'assignedClasses'])->name('assigned-classes');
         

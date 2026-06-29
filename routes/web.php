@@ -332,7 +332,9 @@ Route::get('/student/{student}/edit', [App\Http\Controllers\StudentController::c
 Route::put('/student/{student}', [App\Http\Controllers\StudentController::class, 'update'])->name('student.update');
 Route::get('/student/{student}/print', [App\Http\Controllers\StudentController::class, 'print'])->name('student.print');
 
-// Student Reactivate Route (for passout students)
+// Student Activate / Deactivate / Reactivate (must be before /student/{student} route)
+Route::post('/student/{student}/activate', [App\Http\Controllers\StudentController::class, 'activate'])->name('student.activate');
+Route::post('/student/{student}/deactivate', [App\Http\Controllers\StudentController::class, 'deactivate'])->name('student.deactivate');
 Route::post('/student/{student}/reactivate', [App\Http\Controllers\StudentController::class, 'reactivate'])->name('student.reactivate');
 
 // Student Delete Route (must be before /student/{student} route)
@@ -3274,9 +3276,8 @@ Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(func
     Route::get('/settings/general', [App\Http\Controllers\GeneralSettingsController::class, 'edit'])->name('settings.general');
     Route::post('/settings/general', [App\Http\Controllers\GeneralSettingsController::class, 'update'])->name('settings.general.store');
     
-    Route::get('/settings/automation', function () {
-        return view('settings.automation');
-    })->name('settings.automation');
+    Route::get('/settings/automation', [App\Http\Controllers\AutomationSettingsController::class, 'index'])->name('settings.automation');
+    Route::post('/settings/automation', [App\Http\Controllers\AutomationSettingsController::class, 'update'])->name('settings.automation.store');
     
     Route::get('/settings/sms', function () {
         return view('settings.sms');

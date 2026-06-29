@@ -1163,7 +1163,12 @@ class GenerateSalaryController extends Controller
      */
     public function destroy(Salary $salary): RedirectResponse
     {
+        $staffId = (int) $salary->staff_id;
+
         $salary->delete();
+
+        $this->loanRepaymentService->syncStaffLoanBalances($staffId);
+        $this->syncPendingSalariesForStaff($staffId);
 
         return redirect()
             ->route('salary-loan.generate-salary')

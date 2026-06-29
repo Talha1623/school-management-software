@@ -91,7 +91,7 @@
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <div class="fw-semibold">Loan Applications Report</div>
-                                        <small class="text-muted">List of all active loan applications.</small>
+                                        <small class="text-muted">Complete loan history with paid, remaining, and status.</small>
                                     </div>
                                     <a href="{{ route('salary-loan.report.loan-applications') }}?auto_print=1" target="_blank" class="btn btn-outline-primary btn-sm px-3" style="border-color: #003471; color: #003471;">Print</a>
                                 </div>
@@ -100,7 +100,7 @@
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <div class="fw-semibold">Loan Defaulter Teachers</div>
-                                        <small class="text-muted">List of teachers having loan due amount.</small>
+                                        <small class="text-muted">Teachers with outstanding loan balance ({{ $loanDefaulters->count() }} active).</small>
                                     </div>
                                     <a href="{{ route('salary-loan.report.loan-defaulters') }}?auto_print=1" target="_blank" class="btn btn-outline-primary btn-sm px-3" style="border-color: #003471; color: #003471;">Print</a>
                                 </div>

@@ -25,6 +25,20 @@
 
         <div class="col-md-6">
             <div class="right-header-content mt-3 mt-md-0">
+                @php
+                    $headerProfileImage = asset('assets/images/admin.png');
+                    $headerProfileAlt = 'Profile';
+
+                    if (Auth::guard('staff')->check()) {
+                        $headerUser = Auth::guard('staff')->user();
+                        $headerProfileImage = $headerUser->profilePhotoUrl();
+                        $headerProfileAlt = $headerUser->name ?? 'Staff';
+                    } elseif (Auth::guard('admin')->check()) {
+                        $headerUser = Auth::guard('admin')->user();
+                        $headerProfileImage = $headerUser->profilePhotoUrl();
+                        $headerProfileAlt = $headerUser->name ?? 'Admin';
+                    }
+                @endphp
                 <ul class="d-flex align-items-center justify-content-center justify-content-md-end ps-0 mb-0 list-unstyled">
                     <li class="header-right-item language-item">
                         <div class="dropdown notifications language">
@@ -202,7 +216,9 @@
                                             ->map(function ($message) {
                                                 if ($message->from_type === 'accountant' || $message->from_type === 'accountant_notification') {
                                                     $sender = \App\Models\Accountant::find($message->from_id);
-                                                    $senderName = $sender?->name ?? 'Accountant';
+                                                    $senderName = $sender?->name
+                                                        ?? \App\Models\AdminRole::find($message->from_id)?->name
+                                                        ?? 'Accountant';
                                                     $recipientType = 'accountant';
                                                 } elseif ($message->from_type === 'staff_notification') {
                                                     $sender = \App\Models\Staff::find($message->from_id);
@@ -214,22 +230,34 @@
                                                     $recipientType = 'teacher';
                                                 }
 
+                                                $messageText = strtolower((string) $message->text);
+                                                if (in_array($message->from_type, ['accountant', 'accountant_notification'], true)) {
+                                                    if (str_contains($messageText, 'management expense')) {
+                                                        $notificationHref = route('expense-management.add');
+                                                    } elseif (str_contains($messageText, 'transport fee')) {
+                                                        $notificationHref = route('accounting.generate-transport-fee');
+                                                    } elseif (str_contains($messageText, 'fee payment')) {
+                                                        $notificationHref = route('fee-payment');
+                                                    } elseif (str_contains($messageText, 'task')) {
+                                                        $notificationHref = route('task-management');
+                                                    } elseif (str_contains($messageText, 'balance sheet settlement')) {
+                                                        $notificationHref = route('reports.balance-sheet');
+                                                    } else {
+                                                        $notificationHref = route('accounting.generate-custom-fee');
+                                                    }
+                                                } else {
+                                                    $notificationHref = route('live-chat', [
+                                                        'recipient_type' => $recipientType,
+                                                        'recipient_id' => $message->from_id,
+                                                    ]);
+                                                }
+
                                                 return [
                                                     'id' => $message->id,
                                                     'recipient_type' => $recipientType,
                                                     'recipient_id' => $message->from_id,
                                                     'sender_name' => $senderName,
-                                                    'href' => in_array($message->from_type, ['accountant', 'accountant_notification'], true)
-                                                        ? (str_contains(strtolower((string) $message->text), 'transport fee')
-                                                            ? route('accounting.generate-transport-fee')
-                                                            : (str_contains(strtolower((string) $message->text), 'fee payment')
-                                                                ? route('fee-payment')
-                                                                : (str_contains(strtolower((string) $message->text), 'task')
-                                                                    ? route('task-management')
-                                                                    : (str_contains(strtolower((string) $message->text), 'balance sheet settlement')
-                                                                        ? route('reports.balance-sheet')
-                                                                        : route('accounting.generate-custom-fee')))))
-                                                        : route('live-chat', ['recipient_type' => $recipientType, 'recipient_id' => $message->from_id]),
+                                                    'href' => $notificationHref,
                                                     'full_text' => $message->text ?: 'Attachment sent',
                                                     'text' => $message->text
                                                         ? (strlen($message->text) > 80 ? substr($message->text, 0, 80) . '...' : $message->text)
@@ -241,13 +269,9 @@
                                 } elseif (Auth::guard('staff')->check()) {
                                     $staffUser = Auth::guard('staff')->user();
                                     if ($staffUser) {
-                                        $unreadChatCount = \App\Models\Message::whereIn('from_type', ['admin', 'super_admin'])
-                                            ->where('to_type', 'teacher')
-                                            ->where('to_id', $staffUser->id)
-                                            ->whereNull('read_at')
-                                            ->count();
+                                        $staffNotificationFromTypes = ['admin', 'super_admin', 'staff_notification'];
 
-                                        $recentChatMessages = \App\Models\Message::whereIn('from_type', ['admin', 'super_admin'])
+                                        $messageItems = \App\Models\Message::whereIn('from_type', $staffNotificationFromTypes)
                                             ->where('to_type', 'teacher')
                                             ->where('to_id', $staffUser->id)
                                             ->whereNull('read_at')
@@ -255,20 +279,78 @@
                                             ->limit(10)
                                             ->get()
                                             ->map(function ($message) {
-                                                $admin = \App\Models\AdminRole::find($message->from_id);
+                                                if ($message->from_type === 'staff_notification') {
+                                                    $senderName = 'School Admin';
+                                                } else {
+                                                    $admin = \App\Models\AdminRole::find($message->from_id);
+                                                    $senderName = $admin?->name ?? 'Admin';
+                                                }
 
                                                 return [
-                                                    'id' => $message->id,
+                                                    'id' => 'message-' . $message->id,
                                                     'recipient_type' => 'admin',
                                                     'recipient_id' => $message->from_id,
-                                                    'sender_name' => $admin?->name ?? 'Admin',
+                                                    'sender_name' => $senderName,
                                                     'href' => '#',
                                                     'full_text' => $message->text ?: 'Attachment sent',
                                                     'text' => $message->text
                                                         ? (strlen($message->text) > 80 ? substr($message->text, 0, 80) . '...' : $message->text)
                                                         : 'Attachment sent',
                                                     'time_ago' => $message->created_at->diffForHumans(),
+                                                    'sort_at' => $message->created_at,
                                                 ];
+                                            });
+
+                                        $inAppItems = collect();
+                                        if (\Illuminate\Support\Facades\Schema::hasTable('staff_notifications')) {
+                                            $inAppItems = \App\Models\StaffNotification::where('staff_id', $staffUser->id)
+                                                ->whereNull('read_at')
+                                                ->orderBy('created_at', 'desc')
+                                                ->limit(10)
+                                                ->get()
+                                                ->map(function ($notification) {
+                                                    $body = (string) ($notification->message ?? '');
+
+                                                    return [
+                                                        'id' => 'staff-notification-' . $notification->id,
+                                                        'recipient_type' => 'admin',
+                                                        'recipient_id' => 0,
+                                                        'sender_name' => (string) ($notification->title ?: 'School Admin'),
+                                                        'href' => '#',
+                                                        'full_text' => $body !== '' ? $body : 'Notification',
+                                                        'text' => $body !== ''
+                                                            ? (strlen($body) > 80 ? substr($body, 0, 80) . '...' : $body)
+                                                            : 'Notification',
+                                                        'time_ago' => $notification->created_at?->diffForHumans() ?? '',
+                                                        'sort_at' => $notification->created_at,
+                                                    ];
+                                                });
+                                        }
+
+                                        $messageUnread = \App\Models\Message::whereIn('from_type', $staffNotificationFromTypes)
+                                            ->where('to_type', 'teacher')
+                                            ->where('to_id', $staffUser->id)
+                                            ->whereNull('read_at')
+                                            ->count();
+
+                                        $inAppUnread = 0;
+                                        if (\Illuminate\Support\Facades\Schema::hasTable('staff_notifications')) {
+                                            $inAppUnread = \App\Models\StaffNotification::where('staff_id', $staffUser->id)
+                                                ->whereNull('read_at')
+                                                ->count();
+                                        }
+
+                                        $unreadChatCount = $messageUnread + $inAppUnread;
+
+                                        $recentChatMessages = $inAppItems
+                                            ->concat($messageItems)
+                                            ->sortByDesc(fn ($item) => $item['sort_at'] ?? now())
+                                            ->take(10)
+                                            ->values()
+                                            ->map(function ($item) {
+                                                unset($item['sort_at']);
+
+                                                return $item;
                                             });
                                     }
                                 }
@@ -323,7 +405,7 @@
                         <div class="dropdown admin-profile">
                             <div class="d-xxl-flex align-items-center bg-transparent border-0 text-start p-0 cursor dropdown-toggle" data-bs-toggle="dropdown">
                                 <div class="flex-shrink-0 position-relative">
-                                    <img class="rounded-circle admin-img-width-for-mobile" style="width: 40px; height: 40px;" src="{{ asset('assets/images/admin.png') }}" alt="admin">
+                                    <img class="rounded-circle admin-img-width-for-mobile" style="width: 40px; height: 40px; object-fit: cover;" src="{{ $headerProfileImage }}" alt="{{ $headerProfileAlt }}">
                                     <span class="d-block bg-success-60 border border-2 border-white rounded-circle position-absolute end-0 bottom-0" style="width: 11px; height: 11px;"></span>
                                 </div>
                             </div>
@@ -331,7 +413,7 @@
                             <div class="dropdown-menu border-0 bg-white dropdown-menu-end">
                                 <div class="d-flex align-items-center info">
                                     <div class="flex-shrink-0">
-                                        <img class="rounded-circle admin-img-width-for-mobile" style="width: 40px; height: 40px;" src="{{ asset('assets/images/admin.png') }}" alt="admin">
+                                        <img class="rounded-circle admin-img-width-for-mobile" style="width: 40px; height: 40px; object-fit: cover;" src="{{ $headerProfileImage }}" alt="{{ $headerProfileAlt }}">
                                     </div>
                                     <div class="flex-grow-1 ms-10">
                                         @if(Auth::guard('admin')->check())

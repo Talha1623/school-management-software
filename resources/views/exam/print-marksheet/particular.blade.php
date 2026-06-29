@@ -109,9 +109,13 @@
                     @endphp
                     <div class="marksheet-card page-break">
                         <div class="text-center mb-2">
-                            <div class="fw-semibold fs-16" style="color: #003471;">{{ config('app.name') }}</div>
-                            <div class="text-muted fs-12">{{ $filterCampus }}</div>
-                            <div class="badge rounded-pill text-dark mt-2" style="background-color: #d9f0f0;">Result Card: {{ $student->student_name }} {{ $student->session ?? '' }}</div>
+                            <div class="fw-semibold fs-18" style="color: #003471;">{{ $schoolName ?? 'School' }}</div>
+                            @if(!empty($schoolPhone))
+                                <div class="text-muted fs-12">{{ $schoolPhone }}</div>
+                            @endif
+                            <div class="badge rounded-pill text-white mt-2 px-4 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); font-size: 14px;">
+                                Result Card {{ $filterExam }} - Dated: {{ date('d-M-Y') }}
+                            </div>
                         </div>
 
                         <div class="row g-2 align-items-center mb-2">
@@ -120,7 +124,7 @@
                                     <div><strong>Student / Roll:</strong> {{ $student->student_name }} ({{ $student->student_code ?? 'N/A' }})</div>
                                     <div><strong>Parent / CNIC:</strong> {{ $student->father_name ?? 'N/A' }} {{ $student->father_cnic ?? '' }}</div>
                                     <div><strong>Class / Section:</strong> {{ $student->class ?? 'N/A' }} / {{ $student->section ?? 'N/A' }}</div>
-                                    <div><strong>Campus / Session:</strong> {{ $student->campus ?? 'N/A' }} {{ $filterSession ?: ($student->session ?? '') }}</div>
+                                    <div><strong>Campus / Session:</strong> {{ $student->campus ?? 'N/A' }} / {{ $filterSession ?: ($student->session ?? $runningSession ?? 'N/A') }}</div>
                                 </div>
                             </div>
                             <div class="col-md-4 text-end">
@@ -192,12 +196,57 @@
                         <div class="row mt-3">
                             <div class="col-md-6">
                                 <div class="section-title">Progress Overview</div>
-                                <div class="progress-placeholder">
-                                    <div><strong>Total Marks:</strong> {{ number_format($totalMarks, 0) }}</div>
-                                    <div><strong>Obtained:</strong> {{ number_format($totalObtained, 0) }}</div>
-                                    <div><strong>Percentage:</strong> {{ number_format($percentage, 2) }}%</div>
-                                    <div><strong>Rank:</strong> {{ $rank }}</div>
-                                    <div><strong>Status:</strong> {{ $status }}</div>
+                                <div class="progress-overview-panel">
+                                    @if($studentMarks->isNotEmpty())
+                                        <div class="mb-3">
+                                            <div class="d-flex justify-content-between align-items-center small mb-1">
+                                                <strong>Overall Performance</strong>
+                                                <span>{{ $totalObtained }} / {{ $totalMarks }} ({{ $percentage }}%)</span>
+                                            </div>
+                                            <div class="progress" style="height: 22px;">
+                                                <div
+                                                    class="progress-bar {{ $status == 'PASS' ? 'bg-success' : 'bg-danger' }}"
+                                                    role="progressbar"
+                                                    style="width: {{ min(100, max(0, $percentage)) }}%;"
+                                                    aria-valuenow="{{ $percentage }}"
+                                                    aria-valuemin="0"
+                                                    aria-valuemax="100"
+                                                >
+                                                    {{ $percentage }}%
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        @foreach($studentMarks as $mark)
+                                            @php
+                                                $progressSubjectTotal = (float) ($mark->total_marks ?? 0);
+                                                $progressSubjectObtained = (float) ($mark->marks_obtained ?? 0);
+                                                $progressSubjectPassing = (float) ($mark->passing_marks ?? 0);
+                                                $progressSubjectPercent = $progressSubjectTotal > 0 ? round(($progressSubjectObtained / $progressSubjectTotal) * 100, 2) : 0;
+                                                $progressSubjectPassed = $progressSubjectObtained >= $progressSubjectPassing;
+                                            @endphp
+                                            <div class="mb-2">
+                                                <div class="d-flex justify-content-between align-items-center small mb-1">
+                                                    <span><strong>{{ $mark->subject ?? 'N/A' }}</strong></span>
+                                                    <span>{{ $progressSubjectObtained }} / {{ $progressSubjectTotal }} ({{ $progressSubjectPercent }}%)</span>
+                                                </div>
+                                                <div class="progress" style="height: 18px;">
+                                                    <div
+                                                        class="progress-bar {{ $progressSubjectPassed ? 'bg-success' : 'bg-danger' }}"
+                                                        role="progressbar"
+                                                        style="width: {{ min(100, max(0, $progressSubjectPercent)) }}%;"
+                                                        aria-valuenow="{{ $progressSubjectPercent }}"
+                                                        aria-valuemin="0"
+                                                        aria-valuemax="100"
+                                                    >
+                                                        {{ $progressSubjectPercent }}%
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    @else
+                                        <div class="text-muted small">No subject performance data available.</div>
+                                    @endif
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -279,13 +328,29 @@
     font-size: 12px;
 }
 
-.progress-placeholder,
+.progress-overview-panel,
 .remarks-box {
     border: 1px solid #cfeeed;
     border-top: none;
-    height: 120px;
+    min-height: 120px;
     border-radius: 0 0 8px 8px;
     background: #f3fffe;
+    padding: 12px;
+}
+
+.progress-overview-panel .progress {
+    background-color: #e9ecef;
+    border: 1px solid #dee2e6;
+}
+
+.progress-overview-panel .progress-bar {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+}
+
+.remarks-box {
+    height: auto;
 }
 
 .page-break {

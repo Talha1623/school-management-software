@@ -162,7 +162,6 @@
                                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Exit Timing</th>
                                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Late Arrival</th>
                                                 <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Early Exit</th>
-                                                <th style="padding: 8px 12px; font-size: 13px; font-weight: 600;">Leave Deduction</th>
                                             @endif
                                         </tr>
                                     </thead>
@@ -348,12 +347,6 @@
                                                                 @endif
                                                             </div>
                                                         </div>
-                                                    </td>
-                                                    <td style="padding: 8px 12px; font-size: 13px; height: 60px; vertical-align: middle;">
-                                                        <select name="attendance[{{ $staff->id }}][leave_deduction]" class="form-select form-select-sm" style="min-width: 100px;">
-                                                            <option value="No" {{ (isset($attendance['leave_deduction']) && $attendance['leave_deduction'] == 'No') ? 'selected' : '' }}>No</option>
-                                                            <option value="Yes" {{ (isset($attendance['leave_deduction']) && $attendance['leave_deduction'] == 'Yes') ? 'selected' : '' }}>Yes</option>
-                                                        </select>
                                                     </td>
                                                 @endif
                                             </tr>

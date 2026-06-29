@@ -37,7 +37,7 @@ class SalaryLoanReportController extends Controller
             ->get();
 
         $loanApplications = Loan::with('staff')
-            ->whereIn('status', ['Pending', 'Approved'])
+            ->orderBy('created_at', 'desc')
             ->get();
 
         $loanDefaulters = $this->getLoanDefaulters();
@@ -114,13 +114,16 @@ class SalaryLoanReportController extends Controller
      */
     public function printLoanApplications(): View
     {
+        Loan::ensureBalanceColumns();
+
         $loanApplications = Loan::with('staff')
-            ->whereIn('status', ['Pending', 'Approved'])
             ->orderBy('created_at', 'desc')
             ->get();
 
         $totalRequested = (float) $loanApplications->sum(fn ($l) => (float) ($l->requested_amount ?? 0));
-        $totalApproved = (float) $loanApplications->whereNotNull('approved_amount')->sum('approved_amount');
+        $totalApproved = (float) $loanApplications->sum(fn ($l) => $l->totalApprovedAmount());
+        $totalPaid = (float) $loanApplications->sum(fn ($l) => $l->amountPaid());
+        $totalRemaining = (float) $loanApplications->sum(fn ($l) => $l->remainingAmount());
 
         return view('salary-loan.report-loan-applications', [
             'loanApplications' => $loanApplications,
@@ -128,6 +131,8 @@ class SalaryLoanReportController extends Controller
             'printedAt' => Carbon::now()->format('d M Y, h:i A'),
             'totalRequested' => $totalRequested,
             'totalApproved' => $totalApproved,
+            'totalPaid' => $totalPaid,
+            'totalRemaining' => $totalRemaining,
         ]);
     }
 
@@ -138,7 +143,7 @@ class SalaryLoanReportController extends Controller
     {
         $loanDefaulters = $this->getLoanDefaulters();
 
-        $totalApproved = (float) $loanDefaulters->sum(fn ($row) => (float) ($row['loan']->approved_amount ?? 0));
+        $totalApproved = (float) $loanDefaulters->sum(fn ($row) => (float) ($row['approved'] ?? 0));
         $totalRepaid = (float) $loanDefaulters->sum(fn ($row) => (float) ($row['repaid'] ?? 0));
         $totalDue = (float) $loanDefaulters->sum(fn ($row) => (float) ($row['due'] ?? 0));
 
@@ -154,22 +159,24 @@ class SalaryLoanReportController extends Controller
 
     private function getLoanDefaulters()
     {
-        $loans = Loan::with('staff')
-            ->whereIn('status', ['Pending', 'Approved'])
-            ->get();
+        Loan::ensureBalanceColumns();
 
-        return $loans->map(function ($loan) {
-            $repaid = Salary::where('staff_id', $loan->staff_id)->sum('loan_repayment');
-            $approved = $loan->approved_amount ?? 0;
-            $due = max(0, $approved - $repaid);
+        return Loan::with('staff')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($loan) {
+                $due = $loan->remainingAmount();
 
-            return [
-                'loan' => $loan,
-                'repaid' => $repaid,
-                'due' => $due,
-            ];
-        })->filter(function ($item) {
-            return $item['due'] > 0;
-        })->values();
+                return [
+                    'loan' => $loan,
+                    'approved' => $loan->totalApprovedAmount(),
+                    'repaid' => $loan->amountPaid(),
+                    'due' => $due,
+                ];
+            })
+            ->filter(function ($item) {
+                return $item['due'] > 0;
+            })
+            ->values();
     }
 }

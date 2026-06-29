@@ -7,6 +7,8 @@ use App\Models\Campus;
 use App\Models\GeneralSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class AdminRoleController extends Controller
@@ -48,16 +50,25 @@ class AdminRoleController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        AdminRole::ensurePhotoColumn();
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:admin_roles,email'],
             'password' => ['required', 'string', 'min:6'],
+            'photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
             'admin_of' => ['nullable', 'string', 'max:255'],
             'super_admin' => ['nullable', 'boolean'],
         ]);
 
         $validated['super_admin'] = $request->has('super_admin') ? 1 : 0;
+
+        if ($request->hasFile('photo')) {
+            $validated['photo'] = $request->file('photo')->store('admin/photos', 'public');
+        } else {
+            unset($validated['photo']);
+        }
 
         AdminRole::create($validated);
 
@@ -71,11 +82,14 @@ class AdminRoleController extends Controller
      */
     public function update(Request $request, AdminRole $adminRole): RedirectResponse
     {
+        AdminRole::ensurePhotoColumn();
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:admin_roles,email,' . $adminRole->id],
             'password' => ['nullable', 'string', 'min:6'],
+            'photo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
             'admin_of' => ['nullable', 'string', 'max:255'],
             'super_admin' => ['nullable', 'boolean'],
         ]);
@@ -86,6 +100,15 @@ class AdminRoleController extends Controller
         }
 
         $validated['super_admin'] = $request->has('super_admin') ? 1 : 0;
+
+        if ($request->hasFile('photo')) {
+            if (! empty($adminRole->photo)) {
+                Storage::disk('public')->delete($adminRole->photo);
+            }
+            $validated['photo'] = $request->file('photo')->store('admin/photos', 'public');
+        } else {
+            unset($validated['photo']);
+        }
 
         $adminRole->update($validated);
 
@@ -99,6 +122,10 @@ class AdminRoleController extends Controller
      */
     public function destroy(AdminRole $adminRole): RedirectResponse
     {
+        if (Schema::hasColumn($adminRole->getTable(), 'photo') && ! empty($adminRole->photo)) {
+            Storage::disk('public')->delete($adminRole->photo);
+        }
+
         $adminRole->delete();
 
         return redirect()

@@ -8,6 +8,7 @@ use App\Models\Campus;
 use App\Models\Subject;
 use App\Models\Timetable;
 use App\Models\SalarySetting;
+use App\Services\MobilePushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,6 +17,11 @@ use Carbon\Carbon;
 
 class StaffAttendanceController extends Controller
 {
+    public function __construct(
+        private readonly MobilePushNotificationService $pushNotifications,
+    ) {
+    }
+
     /**
      * Display staff attendance page with filters.
      */
@@ -401,12 +407,12 @@ class StaffAttendanceController extends Controller
     {
         $request->validate([
             'date' => 'required|date',
+            'notify_late_absent' => 'nullable|in:Yes,No',
             'attendance' => 'required|array',
             'attendance.*.staff_id' => 'required|exists:staff,id',
             'attendance.*.status' => 'nullable|in:Present,Absent,Holiday,Sunday,Leave,Half Day',
             'attendance.*.start_time' => 'nullable|date_format:H:i',
             'attendance.*.end_time' => 'nullable|date_format:H:i',
-            'attendance.*.leave_deduction' => 'nullable|in:Yes,No',
             'attendance.*.conducted_lectures' => 'nullable|integer|min:0',
             'attendance.*.late_arrival' => 'nullable|in:Auto,Yes,No',
             'attendance.*.auto_late_arrival' => 'nullable|in:Auto,Yes,No',
@@ -455,6 +461,13 @@ class StaffAttendanceController extends Controller
             }
             return redirect()->back()->with('error', 'Please select at least one attendance status before saving.')->withInput();
         }
+
+        $shouldNotify = in_array(
+            strtolower(trim((string) $request->input('notify_late_absent', 'No'))),
+            ['yes', '1', 'true'],
+            true
+        );
+        $staffToNotify = [];
 
         DB::beginTransaction();
         try {
@@ -529,7 +542,7 @@ class StaffAttendanceController extends Controller
                     $lateArrival = $data['late_arrival'];
                 }
 
-                $remarks = $data['remarks'] ?? (isset($data['leave_deduction']) ? 'Leave Deduction: ' . $data['leave_deduction'] : null);
+                $remarks = $data['remarks'] ?? null;
                 if ($isSubjectAttendance && $lateArrival) {
                     $remarks = trim(($remarks ? $remarks . ' | ' : '') . 'Late Arrival: ' . $lateArrival);
                 }
@@ -556,9 +569,29 @@ class StaffAttendanceController extends Controller
                         'remarks' => $remarks,
                     ]
                 );
+
+                if ($shouldNotify && $status) {
+                    $isLate = $this->isStaffLateForNotification($data, $lateArrival, $isSubjectAttendance);
+                    $staffToNotify[] = [
+                        'staff' => $staff,
+                        'status' => $status,
+                        'late_arrival' => $isLate ? $lateArrival : null,
+                        'early_exit' => $earlyExit,
+                    ];
+                }
             }
 
             DB::commit();
+
+            foreach ($staffToNotify as $item) {
+                $this->pushNotifications->notifyStaffAttendanceMarked(
+                    $item['staff'],
+                    $date,
+                    (string) $item['status'],
+                    $item['late_arrival'],
+                    $item['early_exit']
+                );
+            }
             return redirect()->route('attendance.staff', [
                 'campus' => $request->input('campus'),
                 'staff_category' => $request->input('staff_category'),
@@ -569,6 +602,36 @@ class StaffAttendanceController extends Controller
             DB::rollBack();
             return redirect()->back()->with('error', 'Error saving attendance: ' . $e->getMessage())->withInput();
         }
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function isStaffLateForNotification(array $data, ?string $calculatedLateArrival, bool $isSubjectAttendance): bool
+    {
+        if ($isSubjectAttendance) {
+            $manualLate = $data['late_arrival'] ?? 'Auto';
+
+            if ($manualLate === 'Yes') {
+                return true;
+            }
+            if ($manualLate === 'No') {
+                return false;
+            }
+
+            return $calculatedLateArrival !== null && $calculatedLateArrival !== '';
+        }
+
+        $autoLate = $data['auto_late_arrival'] ?? 'Auto';
+
+        if ($autoLate === 'Yes') {
+            return true;
+        }
+        if ($autoLate === 'No') {
+            return false;
+        }
+
+        return $calculatedLateArrival !== null && $calculatedLateArrival !== '';
     }
 
     /**

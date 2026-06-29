@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\StaffLoanRepaymentService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
@@ -69,18 +70,11 @@ class Loan extends Model
     }
 
     /**
-     * Original approved loan amount (before repayments).
+     * Amount already recovered via salary deductions.
      */
-    public function totalApprovedAmount(): float
+    public function amountPaid(): float
     {
-        if (static::hasInitialApprovedColumn()) {
-            $initial = (float) ($this->initial_approved_amount ?? 0);
-            if ($initial > 0) {
-                return round($initial, 2);
-            }
-        }
-
-        return round(max(0, (float) ($this->approved_amount ?? $this->requested_amount ?? 0)), 2);
+        return app(StaffLoanRepaymentService::class)->paidAmountForLoan($this);
     }
 
     /**
@@ -88,15 +82,43 @@ class Loan extends Model
      */
     public function remainingAmount(): float
     {
-        return round(max(0, (float) ($this->approved_amount ?? 0)), 2);
+        return round(max(0, $this->totalApprovedAmount() - $this->amountPaid()), 2);
     }
 
     /**
-     * Amount already recovered via salary deductions.
+     * Original approved loan amount (before repayments).
      */
-    public function amountPaid(): float
+    public function totalApprovedAmount(): float
     {
-        return round(max(0, $this->totalApprovedAmount() - $this->remainingAmount()), 2);
+        $requested = max(0, (float) ($this->requested_amount ?? 0));
+
+        if (static::hasInitialApprovedColumn()) {
+            $initial = (float) ($this->initial_approved_amount ?? 0);
+
+            return round(max($requested, $initial), 2);
+        }
+
+        return round(max($requested, (float) ($this->approved_amount ?? 0)), 2);
+    }
+
+    public function effectiveStatus(): string
+    {
+        if ($this->status === 'Rejected') {
+            return 'Rejected';
+        }
+
+        if ($this->status === 'Pending') {
+            return 'Pending';
+        }
+
+        $paid = $this->amountPaid();
+        $remaining = $this->remainingAmount();
+
+        if ($paid > 0 && $remaining <= 0.009) {
+            return 'Completed';
+        }
+
+        return 'Approved';
     }
 
     public static function hasInitialApprovedColumn(): bool

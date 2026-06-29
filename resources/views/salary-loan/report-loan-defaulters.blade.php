@@ -74,7 +74,7 @@
                     <td>{{ $s->emp_id ?? 'N/A' }}</td>
                     <td>{{ $s->name ?? 'N/A' }}</td>
                     <td>{{ $s->campus ?? 'N/A' }}</td>
-                    <td class="num">{{ $currency }} {{ number_format((float) ($loan->approved_amount ?? 0), 2) }}</td>
+                    <td class="num">{{ $currency }} {{ number_format((float) ($row['approved'] ?? $loan->totalApprovedAmount()), 2) }}</td>
                     <td class="num">{{ $currency }} {{ number_format((float) ($row['repaid'] ?? 0), 2) }}</td>
                     <td class="num">{{ $currency }} {{ number_format((float) ($row['due'] ?? 0), 2) }}</td>
                     <td>{{ $loan->status ?? 'N/A' }}</td>

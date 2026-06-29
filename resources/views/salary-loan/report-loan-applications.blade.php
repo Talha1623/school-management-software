@@ -18,8 +18,8 @@
         .top-bar { display: flex; justify-content: flex-end; margin: 8px 0; }
         .print-btn { border: 1px solid var(--theme-blue); background: var(--theme-blue); color: #fff; padding: 6px 12px; cursor: pointer; }
         .table-wrap { overflow-x: auto; margin-top: 8px; }
-        table { width: 100%; border-collapse: collapse; font-size: 8.5px; table-layout: fixed; }
-        th, td { border: 1px solid var(--theme-blue); padding: 4px 3px; vertical-align: top; word-wrap: break-word; }
+        table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
+        th, td { border: 1px solid var(--theme-blue); padding: 5px 4px; vertical-align: top; word-wrap: break-word; }
         th { background: var(--theme-blue); color: #fff; text-align: left; font-weight: 700; }
         .num { text-align: right; }
         .footer-section { border-top: 2px solid var(--theme-blue); margin-top: 10px; padding-top: 8px; display: flex; justify-content: space-between; font-size: 11px; flex-wrap: wrap; gap: 8px; }
@@ -43,7 +43,7 @@
             @if(!empty($settings->school_email)) | {{ $settings->school_email }} @endif
         </div>
         <div class="report-title">Loan Applications Report</div>
-        <div class="meta">Pending &amp; approved applications &nbsp;|&nbsp; Generated: {{ $printedAt }} &nbsp;|&nbsp; Records: {{ $loanApplications->count() }}</div>
+        <div class="meta">Complete loan history (all statuses) &nbsp;|&nbsp; Generated: {{ $printedAt }} &nbsp;|&nbsp; Records: {{ $loanApplications->count() }}</div>
     </div>
 
     <div class="top-bar no-print">
@@ -54,50 +54,41 @@
         <table>
             <thead>
             <tr>
-                <th style="width:3%;">#</th>
-                <th style="width:5%;">ID</th>
-                <th style="width:7%;">Emp ID</th>
-                <th style="width:14%;">Staff</th>
-                <th style="width:10%;">Campus</th>
-                <th class="num" style="width:11%;">Requested</th>
-                <th class="num" style="width:11%;">Approved</th>
-                <th class="num" style="width:8%;">Instalments</th>
-                <th style="width:9%;">Status</th>
-                <th style="width:12%;">Applied</th>
+                <th style="width:4%;">#</th>
+                <th style="width:20%;">For Teacher</th>
+                <th class="num" style="width:13%;">Requested Amount</th>
+                <th class="num" style="width:13%;">Total Approved</th>
+                <th class="num" style="width:13%;">Paid Amount</th>
+                <th class="num" style="width:13%;">Remaining</th>
+                <th class="num" style="width:12%;">Repayment Instalments</th>
+                <th style="width:12%;">Status</th>
             </tr>
             </thead>
             <tbody>
             @forelse($loanApplications as $index => $loan)
-                @php $s = $loan->staff; @endphp
                 <tr>
                     <td>{{ $index + 1 }}</td>
-                    <td>{{ $loan->id }}</td>
-                    <td>{{ $s->emp_id ?? 'N/A' }}</td>
-                    <td>{{ $s->name ?? 'N/A' }}</td>
-                    <td>{{ $s->campus ?? 'N/A' }}</td>
+                    <td>{{ $loan->staff->name ?? 'N/A' }}</td>
                     <td class="num">{{ $currency }} {{ number_format((float) ($loan->requested_amount ?? 0), 2) }}</td>
-                    <td class="num">
-                        @if($loan->approved_amount !== null)
-                            {{ $currency }} {{ number_format((float) $loan->approved_amount, 2) }}
-                        @else
-                            —
-                        @endif
-                    </td>
+                    <td class="num">{{ $currency }} {{ number_format($loan->totalApprovedAmount(), 2) }}</td>
+                    <td class="num">{{ $currency }} {{ number_format($loan->amountPaid(), 2) }}</td>
+                    <td class="num">{{ $currency }} {{ number_format($loan->remainingAmount(), 2) }}</td>
                     <td class="num">{{ $loan->repayment_instalments ?? '—' }}</td>
                     <td>{{ $loan->status ?? 'N/A' }}</td>
-                    <td>{{ $loan->created_at?->format('d M Y, h:i A') ?? 'N/A' }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="10" style="text-align:center;color:#6b7280;">No loan applications found.</td>
+                    <td colspan="8" style="text-align:center;color:#6b7280;">No loan applications found.</td>
                 </tr>
             @endforelse
             @if($loanApplications->count() > 0)
                 <tr>
-                    <td colspan="5" class="num" style="font-weight:700;background:#f3f4f6;">Totals</td>
+                    <td colspan="2" class="num" style="font-weight:700;background:#f3f4f6;">Totals</td>
                     <td class="num" style="font-weight:700;background:#f3f4f6;">{{ $currency }} {{ number_format($totalRequested, 2) }}</td>
                     <td class="num" style="font-weight:700;background:#f3f4f6;">{{ $currency }} {{ number_format($totalApproved, 2) }}</td>
-                    <td colspan="3" style="background:#f3f4f6;"></td>
+                    <td class="num" style="font-weight:700;background:#f3f4f6;">{{ $currency }} {{ number_format($totalPaid, 2) }}</td>
+                    <td class="num" style="font-weight:700;background:#f3f4f6;">{{ $currency }} {{ number_format($totalRemaining, 2) }}</td>
+                    <td colspan="2" style="background:#f3f4f6;"></td>
                 </tr>
             @endif
             </tbody>
@@ -106,9 +97,13 @@
 
     <div class="footer-section">
         <div>
-            <strong>Total requested:</strong> {{ $currency }} {{ number_format($totalRequested, 2) }}
+            <strong>Requested:</strong> {{ $currency }} {{ number_format($totalRequested, 2) }}
             &nbsp;|&nbsp;
-            <strong>Total approved:</strong> {{ $currency }} {{ number_format($totalApproved, 2) }}
+            <strong>Approved:</strong> {{ $currency }} {{ number_format($totalApproved, 2) }}
+            &nbsp;|&nbsp;
+            <strong>Paid:</strong> {{ $currency }} {{ number_format($totalPaid, 2) }}
+            &nbsp;|&nbsp;
+            <strong>Remaining:</strong> {{ $currency }} {{ number_format($totalRemaining, 2) }}
         </div>
         <div>System generated report</div>
     </div>

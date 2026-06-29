@@ -13,9 +13,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use App\Services\MobilePushNotificationService;
 
 class StudyMaterialController extends Controller
 {
+    public function __construct(
+        private readonly MobilePushNotificationService $pushNotifications
+    ) {
+    }
+
     /**
      * Display the study material LMS page.
      */
@@ -217,7 +223,7 @@ class StudyMaterialController extends Controller
             }
         }
 
-        StudyMaterial::create([
+        $studyMaterial = StudyMaterial::create([
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'campus' => $validated['campus'],
@@ -228,6 +234,12 @@ class StudyMaterialController extends Controller
             'file_path' => $filePath,
             'youtube_url' => $youtubeUrl,
         ]);
+
+        try {
+            $this->pushNotifications->notifyStudyMaterialPublished($studyMaterial);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return redirect()
             ->route('study-material.lms', [

@@ -160,6 +160,7 @@ class ParentInfoRequestController extends Controller
                 'parent' => $parent,
                 'student_count' => $students->count(),
                 'due_total' => $dueTotal,
+                'email' => $this->resolveParentEmail($parent, $students),
             ];
         })->filter(function ($row) {
             return ($row['due_total'] ?? 0) > 0.00001;
@@ -171,5 +172,27 @@ class ParentInfoRequestController extends Controller
             'printedAt' => now()->format('d M Y, h:i A'),
             'grandTotal' => round((float) $rows->sum('due_total'), 2),
         ]);
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, Student>|\Illuminate\Database\Eloquent\Collection<int, Student> $students
+     */
+    private function resolveParentEmail(ParentAccount $parent, $students): string
+    {
+        foreach ($students as $student) {
+            $fatherEmail = trim((string) ($student->father_email ?? ''));
+            if ($fatherEmail !== '') {
+                return $fatherEmail;
+            }
+        }
+
+        if (! $parent->hasPlaceholderEmail()) {
+            $parentEmail = trim((string) ($parent->email ?? ''));
+            if ($parentEmail !== '') {
+                return $parentEmail;
+            }
+        }
+
+        return 'N/A';
     }
 }

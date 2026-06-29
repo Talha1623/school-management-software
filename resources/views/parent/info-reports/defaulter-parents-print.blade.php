@@ -46,9 +46,10 @@
         <thead>
         <tr>
             <th style="width:4%;">#</th>
-            <th style="width:46%;">Parent</th>
-            <th style="width:12%;">Students</th>
-            <th class="text-right" style="width:18%;">Total Due</th>
+            <th style="width:28%;">Parent</th>
+            <th style="width:24%;">Email</th>
+            <th style="width:10%;">Students</th>
+            <th class="text-right" style="width:14%;">Total Due</th>
         </tr>
         </thead>
         <tbody>
@@ -56,12 +57,13 @@
             <tr>
                 <td>{{ $index + 1 }}</td>
                 <td>{{ $row['parent']->name ?? 'N/A' }}</td>
+                <td>{{ $row['email'] ?? 'N/A' }}</td>
                 <td>{{ $row['student_count'] ?? 0 }}</td>
                 <td class="text-right">{{ number_format($row['due_total'] ?? 0, 2) }}</td>
             </tr>
         @empty
             <tr>
-                <td colspan="4" style="text-align:center;color:#6b7280;">No defaulter parents found.</td>
+                <td colspan="5" style="text-align:center;color:#6b7280;">No defaulter parents found.</td>
             </tr>
         @endforelse
         </tbody>

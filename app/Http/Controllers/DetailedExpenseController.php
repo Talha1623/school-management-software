@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Campus;
 use App\Models\ExpenseCategory;
 use App\Models\GeneralSetting;
+use App\Models\AdminRole;
 use App\Models\ManagementExpense;
 use App\Models\Salary;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -197,6 +198,9 @@ class DetailedExpenseController extends Controller
         foreach ($expenses as $expense) {
             $expenseRecords->push([
                 'id' => $expense->id,
+                'record_type' => 'expense',
+                'expense_id' => $expense->id,
+                'salary_id' => null,
                 'campus' => $expense->campus,
                 'category' => $expense->category,
                 'title' => $expense->title,
@@ -206,7 +210,7 @@ class DetailedExpenseController extends Controller
                 'date' => $expense->date,
                 'invoice_receipt' => $expense->invoice_receipt,
                 'notify_admin' => $expense->notify_admin,
-                'accountant' => $expense->accountant ?? 'N/A',
+                'accountant' => $this->resolveExpensePayerName($expense),
             ]);
         }
 
@@ -253,6 +257,9 @@ class DetailedExpenseController extends Controller
             $title = 'Salary - ' . $staffName . ($period !== '' ? " ({$period})" : '');
             $expenseRecords->push([
                 'id' => 'SAL-' . $salary->id,
+                'record_type' => 'salary',
+                'expense_id' => null,
+                'salary_id' => $salary->id,
                 'campus' => $staff?->campus ?? ($filterCampus ?: 'N/A'),
                 'category' => 'Salary',
                 'title' => $title,
@@ -265,7 +272,7 @@ class DetailedExpenseController extends Controller
                 'date' => $salary->{$salaryDateColumn} ?? $salary->updated_at ?? $salary->created_at,
                 'invoice_receipt' => null,
                 'notify_admin' => null,
-                'accountant' => 'N/A',
+                'accountant' => $this->resolveSalaryPayerName($salary),
             ]);
             }
         }
@@ -391,5 +398,69 @@ class DetailedExpenseController extends Controller
         }
 
         $query->whereRaw('LOWER(TRIM(' . $column . ')) = ?', [$filterKey]);
+    }
+
+    private function resolveExpensePayerName(ManagementExpense $expense): string
+    {
+        $createdBy = trim((string) ($expense->created_by ?? ''));
+        if ($createdBy !== '') {
+            return $createdBy;
+        }
+
+        $legacyAccountant = trim((string) ($expense->getAttribute('accountant') ?? ''));
+        if ($legacyAccountant !== '') {
+            return $legacyAccountant;
+        }
+
+        return 'N/A';
+    }
+
+    private function resolveSalaryPayerName(Salary $salary): string
+    {
+        Salary::ensurePaidByColumns();
+
+        $paidByName = trim((string) ($salary->paid_by_name ?? ''));
+        if ($paidByName !== '') {
+            return $paidByName;
+        }
+
+        $paidByType = strtolower(trim((string) ($salary->paid_by_type ?? '')));
+        if ($paidByType !== '') {
+            return match ($paidByType) {
+                'super_admin' => $this->defaultSuperAdminName(),
+                'accountant' => 'Accountant',
+                'admin' => 'Admin',
+                default => ucwords(str_replace('_', ' ', $paidByType)),
+            };
+        }
+
+        if ((float) ($salary->amount_paid ?? 0) > 0) {
+            return $this->defaultSuperAdminName();
+        }
+
+        return 'N/A';
+    }
+
+    private function defaultSuperAdminName(): string
+    {
+        static $cachedName = null;
+
+        if ($cachedName !== null) {
+            return $cachedName;
+        }
+
+        $admin = AdminRole::query()
+            ->where('super_admin', true)
+            ->orderBy('id')
+            ->first();
+
+        if ($admin) {
+            $name = trim((string) ($admin->name ?? $admin->email ?? ''));
+            if ($name !== '') {
+                return $cachedName = $name;
+            }
+        }
+
+        return $cachedName = 'Super Admin';
     }
 }

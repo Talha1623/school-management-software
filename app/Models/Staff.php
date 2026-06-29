@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class Staff extends Authenticatable
@@ -79,6 +80,28 @@ class Staff extends Authenticatable
         $isActive = $status === '' || $status === 'active';
 
         return $isActive && !empty($this->email) && !empty($this->password);
+    }
+
+    public function profilePhotoUrl(?string $default = null): string
+    {
+        $default ??= asset('assets/images/admin.png');
+        $photo = trim((string) ($this->photo ?? ''));
+
+        if ($photo === '') {
+            return $default;
+        }
+
+        if (filter_var($photo, FILTER_VALIDATE_URL)) {
+            return $photo;
+        }
+
+        if (str_starts_with($photo, 'storage/')) {
+            return asset($photo);
+        }
+
+        return Storage::disk('public')->exists($photo)
+            ? Storage::url($photo)
+            : $default;
     }
 
     /**
@@ -358,6 +381,17 @@ class Staff extends Authenticatable
         }
 
         return $sectionsQuery->exists();
+    }
+
+    /**
+     * Whether this staff member can edit combined result remarks (class teacher only).
+     */
+    public function canEditCombinedResultRemarks(
+        ?string $campus,
+        ?string $class,
+        ?string $section = null
+    ): bool {
+        return $this->canEditFinalResultRemarks($campus, $class, $section);
     }
 
     /**

@@ -2,20 +2,27 @@
 
 namespace App\Services;
 
+use App\Models\HomeworkDiary;
 use App\Models\GeneralSetting;
+use App\Models\ManagementExpense;
 use App\Models\MobileDeviceToken;
 use App\Models\ParentAccount;
 use App\Models\ParentDeviceToken;
 use App\Models\Staff;
 use App\Models\StaffDeviceToken;
 use App\Models\StaffNotification;
+use App\Models\AdminRole;
+use App\Models\Message;
 use App\Models\Noticeboard;
 use App\Models\Salary;
 use App\Models\Student;
+use App\Models\StudyMaterial;
 use App\Models\Timetable;
 use App\Models\StudentDeviceToken;
 use App\Models\StudentNotification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -177,6 +184,236 @@ class MobilePushNotificationService
     }
 
     /**
+     * Notify students and parents in a class when homework diary is saved.
+     *
+     * @param  array<string, string>  $filters
+     * @param  list<string>  $subjectNames
+     * @return array<string, mixed>
+     */
+    public function notifyHomeworkDiaryPublished(array $filters, string $date, array $subjectNames): array
+    {
+        $class = trim((string) ($filters['class'] ?? ''));
+        $section = trim((string) ($filters['section'] ?? ''));
+        $dateFormatted = $this->formatHomeworkDate($date);
+        $subjects = implode(', ', array_values(array_filter(array_map('trim', $subjectNames))));
+        $classLabel = trim($class.($section !== '' ? ' - '.$section : ''));
+
+        $title = 'New Homework';
+        $body = $subjects !== ''
+            ? sprintf('Homework posted for Class %s (%s) on %s.', $classLabel, $subjects, $dateFormatted)
+            : sprintf('Homework posted for Class %s on %s.', $classLabel, $dateFormatted);
+
+        $eventData = [
+            'screen' => 'homework',
+            'type' => 'homework_diary',
+            'date' => $date,
+            'campus' => trim((string) ($filters['campus'] ?? '')),
+            'class' => $class,
+            'section' => $section,
+        ];
+
+        $students = $this->studentsForHomeworkDiary($filters);
+
+        return [
+            'students' => $this->notifyStudentsCollection($students, $title, $body, $eventData),
+            'parents' => $this->notifyParentsCollection($students, $title, $body, $eventData),
+            'matched_student_ids' => $students->pluck('id')->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{count: int, student_ids: list<int>}
+     */
+    public function countStudentsForFilters(array $filters): array
+    {
+        $students = $this->studentsForHomeworkDiary($filters);
+
+        return [
+            'count' => $students->count(),
+            'student_ids' => $students->pluck('id')->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $filters
+     * @return Collection<int, Student>
+     */
+    public function studentsForHomeworkDiary(array $filters): Collection
+    {
+        $campus = trim((string) ($filters['campus'] ?? ''));
+        $class = trim((string) ($filters['class'] ?? ''));
+        $section = trim((string) ($filters['section'] ?? ''));
+
+        if ($class === '' || $section === '') {
+            return collect();
+        }
+
+        $diaryClassKeys = HomeworkDiary::classLookupKeys($class);
+        if ($diaryClassKeys === []) {
+            $diaryClassKeys = [strtolower($class)];
+        }
+
+        $diarySection = $this->normalizeSectionKey($section);
+
+        $query = Student::query();
+        if ($campus !== '') {
+            $query->where(function (Builder $campusQuery) use ($campus) {
+                $campusQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)])
+                    ->orWhereNull('campus')
+                    ->orWhereRaw('TRIM(COALESCE(campus, "")) = ?', ['']);
+            });
+        }
+
+        return $query->get()->filter(function (Student $student) use ($diaryClassKeys, $diarySection) {
+            if (! $this->studentSectionMatches($student->section, $diarySection)) {
+                return false;
+            }
+
+            $studentClassKeys = HomeworkDiary::classLookupKeys($student->class);
+            if ($studentClassKeys === []) {
+                $studentClassKeys = [strtolower(trim((string) ($student->class ?? '')))];
+            }
+
+            return count(array_intersect($studentClassKeys, $diaryClassKeys)) > 0;
+        })->values();
+    }
+
+    /**
+     * @return array{recipients: int, in_app: int, push_sent: int, push_failed: int, no_tokens: int}
+     */
+    private function notifyStudentsCollection(Collection $students, string $title, string $body, array $eventData): array
+    {
+        $stats = $this->emptyStats();
+
+        foreach ($students as $student) {
+            $stats['recipients']++;
+
+            if ($this->saveStudentInApp($student, $title, $body, 'system', $eventData)) {
+                $stats['in_app']++;
+            }
+
+            $tokens = $this->activeStudentTokens((int) $student->id);
+            if ($tokens === []) {
+                $stats['no_tokens']++;
+                continue;
+            }
+
+            $push = $this->firebase->sendToTokens($tokens, $title, $body, array_merge([
+                'audience' => 'student',
+                'student_id' => (string) $student->id,
+            ], $eventData));
+            $stats['push_sent'] += $push['sent'];
+            $stats['push_failed'] += $push['failed'];
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @return array{recipients: int, in_app: int, push_sent: int, push_failed: int, no_tokens: int}
+     */
+    private function notifyParentsCollection(Collection $students, string $title, string $body, array $eventData): array
+    {
+        $stats = $this->emptyStats();
+        $notifiedParentIds = [];
+
+        foreach ($students->load('parentAccount') as $student) {
+            $parent = $student->parentAccount;
+            if (! $parent || isset($notifiedParentIds[$parent->id])) {
+                continue;
+            }
+
+            $notifiedParentIds[$parent->id] = true;
+            $stats['recipients']++;
+
+            $tokens = $this->activeParentTokens((int) $parent->id);
+            if ($tokens === []) {
+                $stats['no_tokens']++;
+                continue;
+            }
+
+            $push = $this->firebase->sendToTokens($tokens, $title, $body, array_merge([
+                'audience' => 'parent',
+                'parent_id' => (string) $parent->id,
+            ], $eventData));
+            $stats['push_sent'] += $push['sent'];
+            $stats['push_failed'] += $push['failed'];
+        }
+
+        return $stats;
+    }
+
+    private function normalizeSectionKey(?string $section): string
+    {
+        $section = strtolower(trim((string) $section));
+        $section = preg_replace('/^section\s+/i', '', $section) ?? $section;
+
+        return $section;
+    }
+
+    private function studentSectionMatches(?string $studentSection, string $diarySection): bool
+    {
+        $studentKey = $this->normalizeSectionKey($studentSection);
+        if ($studentKey === '' || $diarySection === '') {
+            return false;
+        }
+
+        return $studentKey === $diarySection;
+    }
+
+    /**
+     * Notify students and parents when study material / homework file is uploaded.
+     *
+     * @return array<string, mixed>
+     */
+    public function notifyStudyMaterialPublished(StudyMaterial $material): array
+    {
+        $filters = array_filter([
+            'campus' => trim((string) ($material->campus ?? '')),
+            'class' => trim((string) ($material->class ?? '')),
+            'section' => trim((string) ($material->section ?? '')),
+        ], fn ($value) => $value !== '');
+
+        $class = trim((string) ($material->class ?? ''));
+        $section = trim((string) ($material->section ?? ''));
+        $subject = trim((string) ($material->subject ?? ''));
+        $classLabel = trim($class.($section !== '' ? ' - '.$section : ''));
+        $materialTitle = trim((string) ($material->title ?? 'Study Material'));
+
+        $title = 'New Homework / Study Material';
+        $body = $subject !== ''
+            ? sprintf('"%s" uploaded for Class %s (%s).', $materialTitle, $classLabel, $subject)
+            : sprintf('"%s" uploaded for Class %s.', $materialTitle, $classLabel);
+
+        $eventData = [
+            'screen' => 'study_material',
+            'type' => 'study_material',
+            'study_material_id' => (string) $material->id,
+            'campus' => trim((string) ($material->campus ?? '')),
+            'class' => $class,
+            'section' => $section,
+            'subject' => $subject,
+        ];
+
+        $students = $this->studentsForHomeworkDiary($filters);
+
+        return [
+            'students' => $this->notifyStudentsCollection($students, $title, $body, $eventData),
+            'parents' => $this->notifyParentsCollection($students, $title, $body, $eventData),
+        ];
+    }
+
+    private function formatHomeworkDate(string $date): string
+    {
+        try {
+            return \Carbon\Carbon::parse($date)->format('d M Y');
+        } catch (\Throwable) {
+            return $date;
+        }
+    }
+
+    /**
      * Notify staff/teacher when salary is generated (Pending).
      */
     public function notifyStaffSalaryGenerated(Staff $staff, Salary $salary): void
@@ -269,6 +506,102 @@ class MobilePushNotificationService
             'status' => (string) ($salary->status ?? 'Pending'),
             'screen' => 'salary',
         ]);
+
+        $this->saveStaffWebNotification($staff, $message);
+    }
+
+    /**
+     * Notify all admins when a management expense is recorded with "Notify Admin" enabled.
+     */
+    public function notifyAdminsManagementExpense(
+        ManagementExpense $expense,
+        string $actorName,
+        ?int $actorId = null,
+        string $actorType = 'admin'
+    ): void {
+        $dateLabel = $expense->date
+            ? Carbon::parse($expense->date)->format('d M Y')
+            : Carbon::now()->format('d M Y');
+
+        $message = sprintf(
+            '%s recorded a management expense of Rs %s. Campus: %s. Category: %s. Title: %s. Method: %s. Date: %s.',
+            $actorName,
+            number_format((float) ($expense->amount ?? 0), 2),
+            (string) ($expense->campus ?? 'N/A'),
+            (string) ($expense->category ?? 'N/A'),
+            (string) ($expense->title ?? 'N/A'),
+            (string) ($expense->method ?? 'N/A'),
+            $dateLabel
+        );
+
+        $fromType = 'accountant_notification';
+        $fromId = (int) ($actorId ?? 0);
+
+        try {
+            AdminRole::query()
+                ->orderBy('id')
+                ->get()
+                ->each(function (AdminRole $admin) use ($message, $fromType, $fromId) {
+                    Message::create([
+                        'from_type' => $fromType,
+                        'from_id' => $fromId,
+                        'to_type' => 'admin',
+                        'to_id' => (int) $admin->id,
+                        'text' => $message,
+                        'attachment_path' => null,
+                        'attachment_type' => null,
+                        'read_at' => null,
+                    ]);
+                });
+        } catch (\Throwable $e) {
+            Log::warning('Admin expense notification save failed', [
+                'expense_id' => $expense->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Notify staff when attendance is saved (Present, Absent, Leave, etc.).
+     */
+    public function notifyStaffAttendanceMarked(
+        Staff $staff,
+        string $date,
+        string $status,
+        ?string $lateArrival = null,
+        ?string $earlyExit = null
+    ): void {
+        $dateLabel = Carbon::parse($date)->format('d M Y');
+        $statusLabel = trim($status) !== '' ? trim($status) : 'Updated';
+
+        $details = [];
+        if ($lateArrival !== null && $lateArrival !== '' && $lateArrival !== 'No') {
+            if ($lateArrival === 'Yes' || preg_match('/^\d{2}:\d{2}$/', $lateArrival)) {
+                $details[] = 'Late arrival' . ($lateArrival !== 'Yes' ? ': ' . $lateArrival : '');
+            }
+        }
+        if ($earlyExit !== null && $earlyExit !== '') {
+            $details[] = 'Early exit: ' . $earlyExit;
+        }
+
+        $message = sprintf(
+            'Your attendance for %s has been marked as %s%s.',
+            $dateLabel,
+            $statusLabel,
+            $details !== [] ? ' (' . implode(', ', $details) . ')' : ''
+        );
+
+        $title = 'Attendance Notice';
+
+        $this->notifyStaffEvent($staff, $title, $message, 'staff_attendance', [
+            'attendance_date' => $date,
+            'status' => $statusLabel,
+            'late_arrival' => $lateArrival,
+            'early_exit' => $earlyExit,
+            'screen' => 'attendance',
+        ]);
+
+        $this->saveStaffWebNotification($staff, $message);
     }
 
     /**
@@ -410,6 +743,45 @@ class MobilePushNotificationService
         return $campus !== '' ? ['campus' => $campus] : [];
     }
 
+    private function saveStaffWebNotification(Staff $staff, string $text): void
+    {
+        $adminId = $this->adminActorId();
+        if (! $adminId) {
+            $adminId = AdminRole::query()
+                ->where('super_admin', true)
+                ->orderBy('id')
+                ->value('id');
+        }
+        if (! $adminId) {
+            $adminId = AdminRole::query()->orderBy('id')->value('id');
+        }
+        if (! $adminId) {
+            Log::warning('Staff web notification skipped: no admin actor found', [
+                'staff_id' => $staff->id,
+            ]);
+
+            return;
+        }
+
+        try {
+            Message::create([
+                'from_type' => 'admin',
+                'from_id' => (int) $adminId,
+                'to_type' => 'teacher',
+                'to_id' => $staff->id,
+                'text' => $text,
+                'attachment_path' => null,
+                'attachment_type' => null,
+                'read_at' => null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Staff web notification save failed', [
+                'staff_id' => $staff->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     private function notifyStaffEvent(Staff $staff, string $title, string $message, string $eventType, array $data): void
     {
         $saved = $this->saveStaffInApp($staff, $title, $message, 'system', array_merge(['type' => $eventType], $data));
@@ -452,7 +824,16 @@ class MobilePushNotificationService
             $query->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campus)]);
         }
         if ($class !== '') {
-            $query->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($class)]);
+            $classKeys = HomeworkDiary::classLookupKeys($class);
+            if ($classKeys === []) {
+                $classKeys = [strtolower($class)];
+            }
+
+            $query->where(function (Builder $classQuery) use ($classKeys) {
+                foreach ($classKeys as $key) {
+                    $classQuery->orWhereRaw('LOWER(TRIM(class)) = ?', [$key]);
+                }
+            });
         }
         if ($section !== '') {
             $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($section)]);
@@ -536,7 +917,7 @@ class MobilePushNotificationService
                 'student_id' => $student->id,
                 'title' => $title,
                 'message' => $message,
-                'data' => array_merge(['type' => 'broadcast'], $data),
+                'data' => array_merge(['type' => $data['type'] ?? 'broadcast'], $data),
                 'created_by_type' => $createdByType,
                 'created_by_id' => $this->adminActorId(),
             ]);

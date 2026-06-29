@@ -30,6 +30,11 @@ class GeneralSetting extends Model
         'fee_voucher_iban',
         'bio_token',
         'campus_id',
+        'automation_settings',
+    ];
+
+    protected $casts = [
+        'automation_settings' => 'array',
     ];
 
     public static function getSettings(): self

@@ -113,6 +113,15 @@
             margin-top: 20px;
             font-size: 12px;
         }
+        .progress-overview .progress {
+            background-color: #e9ecef;
+            border: 1px solid #dee2e6;
+        }
+        .progress-overview .progress-bar {
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 18px;
+        }
         @media print {
             @page {
                 margin: 0.5cm;
@@ -174,6 +183,11 @@
             .table th,
             .table td {
                 border: 1px solid #000 !important;
+            }
+            .progress-overview .progress,
+            .progress-overview .progress-bar {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
         }
     </style>
@@ -305,23 +319,10 @@
                     <div class="marksheet-card page-break">
                         <!-- Header -->
                         <div class="text-center mb-3">
-                            <div class="d-flex align-items-center justify-content-center mb-2">
-                                <div class="school-logo me-3">
-                                    @if(!empty($schoolLogoUrl))
-                                        <img src="{{ $schoolLogoUrl }}" alt="School Logo" style="max-height: 60px; max-width: 120px; object-fit: contain;">
-                                    @else
-                                        <div class="logo-circle bg-success rounded-circle d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
-                                            <span class="text-white fw-bold fs-20">{{ strtoupper(substr($schoolName ?? 'S', 0, 1)) }}</span>
-                                        </div>
-                                    @endif
-                                </div>
-                                <div>
-                                    <div class="fw-semibold fs-18" style="color: #003471;">{{ $schoolName ?? 'School' }}</div>
-                                    @if(!empty($schoolPhone))
-                                        <div class="text-muted fs-12">{{ $schoolPhone }}</div>
-                                    @endif
-                                </div>
-                            </div>
+                            <div class="fw-semibold fs-18" style="color: #003471;">{{ $schoolName ?? 'School' }}</div>
+                            @if(!empty($schoolPhone))
+                                <div class="text-muted fs-12">{{ $schoolPhone }}</div>
+                            @endif
                             <div class="badge rounded-pill text-white mt-2 px-4 py-2" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); font-size: 14px;">
                                 Result Card {{ $filterTest }} - Dated: {{ date('d-M-Y') }}
                             </div>
@@ -348,7 +349,7 @@
                                     </div>
                                     <div class="col-md-6">
                                         <div class="info-item">
-                                            <strong>Campus / Session:</strong> {{ $student->campus ?? 'N/A' }} / {{ $testSession ?? 'N/A' }}
+                                            <strong>Campus / Session:</strong> {{ $student->campus ?? 'N/A' }} / {{ $testSession ?? $runningSession ?? 'N/A' }}
                                         </div>
                                     </div>
                                 </div>
@@ -444,9 +445,58 @@
                         </div>
 
                         <!-- Progress Overview -->
-                        <div class="mb-3">
+                        <div class="mb-3 progress-overview">
                             <h6 class="fw-semibold mb-2" style="color: #003471;">Progress Overview</h6>
-                            <div id="progressChart{{ $student->id }}" style="height: 200px;"></div>
+                            @if($studentMarks->isNotEmpty())
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center small mb-1">
+                                        <strong>Overall Performance</strong>
+                                        <span>{{ $totalObtained }} / {{ $totalMarks }} ({{ $percentage }}%)</span>
+                                    </div>
+                                    <div class="progress" style="height: 22px;">
+                                        <div
+                                            class="progress-bar {{ $status == 'PASS' ? 'bg-success' : 'bg-danger' }}"
+                                            role="progressbar"
+                                            style="width: {{ min(100, max(0, $percentage)) }}%;"
+                                            aria-valuenow="{{ $percentage }}"
+                                            aria-valuemin="0"
+                                            aria-valuemax="100"
+                                        >
+                                            {{ $percentage }}%
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @foreach($studentMarks as $mark)
+                                    @php
+                                        $subjectTotal = (float) ($mark->total_marks ?? 0);
+                                        $subjectObtained = (float) ($mark->marks_obtained ?? 0);
+                                        $subjectPassing = (float) ($mark->passing_marks ?? 0);
+                                        $subjectPercent = $subjectTotal > 0 ? round(($subjectObtained / $subjectTotal) * 100, 2) : 0;
+                                        $subjectPassed = $subjectObtained >= $subjectPassing;
+                                    @endphp
+                                    <div class="mb-2">
+                                        <div class="d-flex justify-content-between align-items-center small mb-1">
+                                            <span><strong>{{ $mark->subject ?? 'N/A' }}</strong></span>
+                                            <span>{{ $subjectObtained }} / {{ $subjectTotal }} ({{ $subjectPercent }}%)</span>
+                                        </div>
+                                        <div class="progress" style="height: 18px;">
+                                            <div
+                                                class="progress-bar {{ $subjectPassed ? 'bg-success' : 'bg-danger' }}"
+                                                role="progressbar"
+                                                style="width: {{ min(100, max(0, $subjectPercent)) }}%;"
+                                                aria-valuenow="{{ $subjectPercent }}"
+                                                aria-valuemin="0"
+                                                aria-valuemax="100"
+                                            >
+                                                {{ $subjectPercent }}%
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            @else
+                                <div class="text-muted small">No subject performance data available.</div>
+                            @endif
                         </div>
 
                         <!-- Class Teacher Remarks -->
@@ -777,66 +827,6 @@ document.addEventListener('DOMContentLoaded', function() {
             selects.class.dispatchEvent(new Event('change'));
         }
     });
-
-    // Initialize progress charts if marksheets are displayed
-    @if($isPrint && $students->isNotEmpty())
-        @foreach($students as $student)
-            @php
-                $studentMarks = $marksByStudent->get($student->id, collect());
-                $summary = $studentSummaries->get($student->id, []);
-                $totalMarks = $summary['total_marks'] ?? 0;
-                $totalObtained = $summary['total_obtained'] ?? 0;
-            @endphp
-            @if($studentMarks->isNotEmpty())
-                // Chart data for student {{ $student->id }}
-                const chartData{{ $student->id }} = {
-                    labels: {!! json_encode($studentMarks->pluck('subject')->toArray()) !!},
-                    datasets: [{
-                        label: 'Obtained Marks',
-                        data: {!! json_encode($studentMarks->map(function($m) { return (float)($m->marks_obtained ?? 0); })->toArray()) !!},
-                        backgroundColor: 'rgba(40, 167, 69, 0.6)',
-                        borderColor: 'rgba(40, 167, 69, 1)',
-                        borderWidth: 1
-                    }, {
-                        label: 'Total Marks',
-                        data: {!! json_encode($studentMarks->map(function($m) { return (float)($m->total_marks ?? 0); })->toArray()) !!},
-                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 1
-                    }]
-                };
-                
-                // Simple bar chart using CSS (fallback if Chart.js not available)
-                const chartContainer{{ $student->id }} = document.getElementById('progressChart{{ $student->id }}');
-                if (chartContainer{{ $student->id }}) {
-                    chartContainer{{ $student->id }}.innerHTML = `
-                        <div style="display: flex; align-items: flex-end; height: 100%; gap: 10px; padding: 10px;">
-                            @foreach($studentMarks as $mark)
-                                @php
-                                    $subjectTotal = (float)($mark->total_marks ?? 0);
-                                    $subjectObtained = (float)($mark->marks_obtained ?? 0);
-                                    $maxHeight = $studentMarks->max(function($m) { return (float)($m->total_marks ?? 0); });
-                                    $obtainedHeight = $maxHeight > 0 ? ($subjectObtained / $maxHeight) * 100 : 0;
-                                    $totalHeight = $maxHeight > 0 ? ($subjectTotal / $maxHeight) * 100 : 0;
-                                @endphp
-                                <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-                                    <div style="width: 100%; height: 180px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;">
-                                        <div style="width: 100%; height: {{ $obtainedHeight }}%; background: rgba(40, 167, 69, 0.6); border: 1px solid rgba(40, 167, 69, 1); border-radius: 4px 4px 0 0;" title="Obtained: {{ $subjectObtained }}"></div>
-                                        <div style="width: 100%; height: {{ max(0, $totalHeight - $obtainedHeight) }}%; background: rgba(255, 99, 132, 0.6); border: 1px solid rgba(255, 99, 132, 1); border-radius: 0 0 4px 4px;" title="Total: {{ $subjectTotal }}"></div>
-                                    </div>
-                                    <div style="font-size: 10px; margin-top: 5px; text-align: center; word-break: break-word;">{{ $mark->subject }}</div>
-                                </div>
-                            @endforeach
-                        </div>
-                        <div style="display: flex; gap: 20px; margin-top: 10px; font-size: 11px;">
-                            <div><span style="display: inline-block; width: 15px; height: 15px; background: rgba(40, 167, 69, 0.6); border: 1px solid rgba(40, 167, 69, 1); margin-right: 5px;"></span> Obtained Marks</div>
-                            <div><span style="display: inline-block; width: 15px; height: 15px; background: rgba(255, 99, 132, 0.6); border: 1px solid rgba(255, 99, 132, 1); margin-right: 5px;"></span> Total Marks</div>
-                        </div>
-                    `;
-                }
-            @endif
-        @endforeach
-    @endif
 });
 </script>
 @endif

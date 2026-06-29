@@ -134,20 +134,34 @@
                                     <td>{{ $record['description'] ? (strlen($record['description']) > 50 ? substr($record['description'], 0, 50) . '...' : $record['description']) : 'N/A' }}</td>
                                     <td>{{ $record['method'] }}</td>
                                     <td class="no-print">
-                                        @if($record['invoice_receipt'])
-                                            <a href="{{ asset('storage/' . $record['invoice_receipt']) }}" target="_blank" class="text-primary me-2">
-                                                <span class="material-symbols-outlined" style="font-size: 18px;">description</span>
-                                            </a>
-                                        @else
-                                            <span class="text-muted me-2">N/A</span>
-                                        @endif
-                                        <form action="{{ route('expense-management.add.destroy', $record['id']) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this expense?');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
-                                                <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
-                                            </button>
-                                        </form>
+                                        <div class="d-inline-flex align-items-center gap-1 flex-wrap">
+                                            @if(($record['record_type'] ?? '') === 'expense' && !empty($record['expense_id']))
+                                                <a class="btn btn-sm btn-primary px-2 py-1 d-inline-flex align-items-center gap-1"
+                                                   href="{{ route('expense-management.add.print', $record['expense_id']) }}"
+                                                   target="_blank"
+                                                   title="Print expense slip">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px;">print</span>
+                                                    Slip
+                                                </a>
+                                                <form action="{{ route('expense-management.add.destroy', $record['expense_id']) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this expense?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-danger px-2 py-1" title="Delete">
+                                                        <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+                                                    </button>
+                                                </form>
+                                            @elseif(($record['record_type'] ?? '') === 'salary' && !empty($record['salary_id']))
+                                                <a class="btn btn-sm btn-primary px-2 py-1 d-inline-flex align-items-center gap-1"
+                                                   href="{{ route('salary-loan.manage-salaries.print-receipt-thermal', $record['salary_id']) }}"
+                                                   target="_blank"
+                                                   title="Print salary slip">
+                                                    <span class="material-symbols-outlined" style="font-size: 14px;">print</span>
+                                                    Slip
+                                                </a>
+                                            @else
+                                                <span class="text-muted">N/A</span>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                                 @empty

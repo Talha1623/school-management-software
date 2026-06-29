@@ -4,9 +4,13 @@ namespace App\Services;
 
 use App\Models\Loan;
 use App\Models\Salary;
+use Carbon\Carbon;
 
 class StaffLoanRepaymentService
 {
+    /** @var array<int, array<int, float>> */
+    private array $staffPaidAllocations = [];
+
     /**
      * Calculate total loan installment due for a staff member's next salary.
      * Each approved loan is calculated from its own balance and instalment plan.
@@ -56,42 +60,167 @@ class StaffLoanRepaymentService
     }
 
     /**
+     * Paid amount for one loan, derived from existing salary repayment records.
+     */
+    public function paidAmountForLoan(Loan $loan): float
+    {
+        $staffId = (int) $loan->staff_id;
+        if ($staffId <= 0) {
+            return 0.0;
+        }
+
+        if (! isset($this->staffPaidAllocations[$staffId])) {
+            $this->staffPaidAllocations[$staffId] = $this->buildStaffPaidAllocations($staffId);
+        }
+
+        return round((float) ($this->staffPaidAllocations[$staffId][$loan->id] ?? 0), 2);
+    }
+
+    /**
      * Rebuild remaining approved amounts from salary repayment history.
      */
     public function syncAllLoanBalances(): void
     {
         Loan::ensureBalanceColumns();
 
-        $loansByStaff = Loan::orderBy('created_at')->get()->groupBy('staff_id');
+        $staffIds = Loan::query()
+            ->distinct()
+            ->pluck('staff_id')
+            ->filter();
 
-        foreach ($loansByStaff as $staffId => $loans) {
-            $totalRepaid = (float) Salary::where('staff_id', $staffId)
-                ->where('loan_repayment', '>', 0)
-                ->where(function ($query) {
-                    $query->where('amount_paid', '>', 0)
-                        ->orWhereIn('status', ['Paid', 'Issued']);
-                })
-                ->sum('loan_repayment');
+        foreach ($staffIds as $staffId) {
+            $this->syncStaffLoanBalances((int) $staffId);
+        }
+    }
+
+    /**
+     * Rebuild loan balances for one staff member from their salary repayment history.
+     */
+    public function syncStaffLoanBalances(int $staffId): void
+    {
+        Loan::ensureBalanceColumns();
+
+        $loans = Loan::where('staff_id', $staffId)->orderBy('created_at')->get();
+        if ($loans->isEmpty()) {
+            return;
+        }
+
+        $allocations = $this->buildStaffPaidAllocations($staffId);
+        $this->staffPaidAllocations[$staffId] = $allocations;
+
+        foreach ($loans as $loan) {
+            $this->ensureInitialApprovedAmount($loan);
+            $this->repairInitialApprovedAmount($loan);
+
+            $principal = $this->principalForLoan($loan);
+            $paid = (float) ($allocations[$loan->id] ?? 0);
+            $remaining = max(0, round($principal - $paid, 2));
+
+            $loan->approved_amount = $remaining;
+
+            if ($loan->status === 'Rejected') {
+                $loan->saveQuietly();
+
+                continue;
+            }
+
+            if ($remaining <= 0.009 && $paid > 0) {
+                $loan->status = 'Completed';
+            } else {
+                $loan->status = 'Approved';
+            }
+
+            $loan->saveQuietly();
+        }
+    }
+
+    /**
+     * @return array<int, float>
+     */
+    private function buildStaffPaidAllocations(int $staffId): array
+    {
+        $loans = Loan::where('staff_id', $staffId)->orderBy('created_at')->get();
+        $allocations = [];
+
+        foreach ($loans as $loan) {
+            $this->ensureInitialApprovedAmount($loan);
+            $this->repairInitialApprovedAmount($loan);
+            $allocations[$loan->id] = 0.0;
+        }
+
+        $salaries = Salary::where('staff_id', $staffId)
+            ->where('loan_repayment', '>', 0)
+            ->where('amount_paid', '>', 0)
+            ->orderBy('payment_date')
+            ->orderBy('updated_at')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($salaries as $salary) {
+            $paymentAt = $this->salaryRepaymentTimestamp($salary);
+            $amountLeft = (float) $salary->loan_repayment;
 
             foreach ($loans as $loan) {
-                $this->ensureInitialApprovedAmount($loan);
-
-                $initial = Loan::hasInitialApprovedColumn()
-                    ? (float) $loan->initial_approved_amount
-                    : (float) ($loan->approved_amount ?? $loan->requested_amount ?? 0);
-                $allocated = min($totalRepaid, $initial);
-                $remaining = max(0, round($initial - $allocated, 2));
-
-                $loan->approved_amount = $remaining;
-                if ($remaining <= 0 && $loan->status === 'Approved') {
-                    $loan->status = 'Completed';
-                } elseif ($remaining > 0 && $loan->status === 'Completed') {
-                    $loan->status = 'Approved';
+                if ($amountLeft <= 0) {
+                    break;
                 }
 
-                $loan->saveQuietly();
-                $totalRepaid = max(0, $totalRepaid - $allocated);
+                if ($paymentAt->lt($loan->created_at)) {
+                    continue;
+                }
+
+                $principal = $this->principalForLoan($loan);
+                $alreadyPaid = (float) ($allocations[$loan->id] ?? 0);
+                $capacity = max(0, round($principal - $alreadyPaid, 2));
+
+                if ($capacity <= 0) {
+                    continue;
+                }
+
+                $applied = min($amountLeft, $capacity);
+                $allocations[$loan->id] = round($alreadyPaid + $applied, 2);
+                $amountLeft = round($amountLeft - $applied, 2);
             }
+        }
+
+        return $allocations;
+    }
+
+    private function salaryRepaymentTimestamp(Salary $salary): Carbon
+    {
+        if (! empty($salary->payment_date)) {
+            return Carbon::parse($salary->payment_date)->endOfDay();
+        }
+
+        return Carbon::parse($salary->updated_at ?? $salary->created_at ?? now());
+    }
+
+    private function principalForLoan(Loan $loan): float
+    {
+        $requested = max(0, (float) ($loan->requested_amount ?? 0));
+
+        if (Loan::hasInitialApprovedColumn()) {
+            $initial = (float) ($loan->initial_approved_amount ?? 0);
+
+            return round(max($requested, $initial), 2);
+        }
+
+        return round(max($requested, (float) ($loan->approved_amount ?? 0)), 2);
+    }
+
+    private function repairInitialApprovedAmount(Loan $loan): void
+    {
+        if (! Loan::hasInitialApprovedColumn()) {
+            return;
+        }
+
+        $requested = max(0, (float) ($loan->requested_amount ?? 0));
+        $current = (float) ($loan->initial_approved_amount ?? 0);
+        $approved = max(0, (float) ($loan->approved_amount ?? 0));
+        $repaired = round(max($requested, $current, $approved), 2);
+
+        if ($repaired > 0) {
+            $loan->initial_approved_amount = $repaired;
         }
     }
 
@@ -197,8 +326,8 @@ class StaffLoanRepaymentService
         }
 
         $loan->initial_approved_amount = max(
-            (float) ($loan->approved_amount ?? 0),
-            (float) ($loan->requested_amount ?? 0)
+            (float) ($loan->requested_amount ?? 0),
+            (float) ($loan->approved_amount ?? 0)
         );
     }
 }

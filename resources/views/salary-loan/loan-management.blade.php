@@ -149,16 +149,17 @@
                                             <span class="badge bg-secondary text-white">{{ $loan->repayment_instalments }}</span>
                                         </td>
                                         <td>
-                                            @if($loan->status == 'Pending')
-                                                <span class="badge bg-warning text-dark">{{ $loan->status }}</span>
-                                            @elseif($loan->status == 'Approved')
-                                                <span class="badge bg-success text-white">{{ $loan->status }}</span>
-                                            @elseif($loan->status == 'Rejected')
-                                                <span class="badge bg-danger text-white">{{ $loan->status }}</span>
-                                            @elseif($loan->status == 'Completed')
-                                                <span class="badge bg-info text-white">{{ $loan->status }}</span>
+                                            @php $displayStatus = $loan->effectiveStatus(); @endphp
+                                            @if($displayStatus == 'Pending')
+                                                <span class="badge bg-warning text-dark">{{ $displayStatus }}</span>
+                                            @elseif($displayStatus == 'Approved')
+                                                <span class="badge bg-success text-white">{{ $displayStatus }}</span>
+                                            @elseif($displayStatus == 'Rejected')
+                                                <span class="badge bg-danger text-white">{{ $displayStatus }}</span>
+                                            @elseif($displayStatus == 'Completed')
+                                                <span class="badge bg-info text-white">{{ $displayStatus }}</span>
                                             @else
-                                                <span class="badge bg-secondary text-white">{{ $loan->status }}</span>
+                                                <span class="badge bg-secondary text-white">{{ $displayStatus }}</span>
                                             @endif
                                         </td>
                                         <td class="text-end">

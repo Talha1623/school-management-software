@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@php
+    use Illuminate\Support\Facades\Storage;
+@endphp
+
 @section('title', 'Admin Roles Management')
 
 @section('content')
@@ -151,7 +155,7 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editAdminRole({{ $adminRole->id }}, '{{ addslashes($adminRole->name) }}', '{{ addslashes($adminRole->phone ?? '') }}', '{{ addslashes($adminRole->email) }}', '{{ addslashes($adminRole->admin_of ?? '') }}', {{ $adminRole->super_admin ? 'true' : 'false' }})">
+                                                <button type="button" class="btn btn-sm btn-primary px-2 py-1" title="Edit" onclick="editAdminRole({{ $adminRole->id }}, '{{ addslashes($adminRole->name) }}', '{{ addslashes($adminRole->phone ?? '') }}', '{{ addslashes($adminRole->email) }}', '{{ addslashes($adminRole->admin_of ?? '') }}', {{ $adminRole->super_admin ? 'true' : 'false' }}, '{{ $adminRole->photo ? Storage::url($adminRole->photo) : '' }}')">
                                                     <span class="material-symbols-outlined">edit</span>
                                                 </button>
                                                 <button type="button" class="btn btn-sm btn-danger px-2 py-1" title="Delete" onclick="if(confirm('Are you sure you want to delete this admin role?')) { document.getElementById('delete-form-{{ $adminRole->id }}').submit(); }">
@@ -205,7 +209,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="opacity: 0.8;"></button>
             </div>
-            <form id="adminRoleForm" method="POST" action="{{ route('admin.roles-management.store') }}">
+            <form id="adminRoleForm" method="POST" action="{{ route('admin.roles-management.store') }}" enctype="multipart/form-data">
                 @csrf
                 <div id="methodField"></div>
                 <div class="modal-body p-3">
@@ -270,6 +274,14 @@
                                         Super Admin
                                     </label>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Profile Photo</label>
+                            <input type="file" class="form-control form-control-sm" name="photo" id="photo" accept="image/*" onchange="previewAdminPhoto(this)">
+                            <small class="text-muted">JPG, PNG, WEBP. Max 2MB.</small>
+                            <div id="adminPhotoPreviewWrap" class="mt-2" style="display: none;">
+                                <img id="adminPhotoPreview" src="" alt="Profile preview" class="rounded-circle" style="width: 64px; height: 64px; object-fit: cover; border: 2px solid #e9ecef;">
                             </div>
                         </div>
                     </div>
@@ -640,11 +652,27 @@ function resetForm() {
     document.getElementById('password').required = true;
     document.getElementById('passwordRequired').style.display = 'inline';
     document.getElementById('passwordHelp').style.display = 'none';
+    document.getElementById('adminPhotoPreviewWrap').style.display = 'none';
+    document.getElementById('adminPhotoPreview').src = '';
     document.getElementById('adminRoleModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">person</span><span style="color: white;">Add New Admin</span>';
     document.getElementById('adminRoleForm').action = '{{ route("admin.roles-management.store") }}';
 }
 
-function editAdminRole(id, name, phone, email, adminOf, superAdmin) {
+function previewAdminPhoto(input) {
+    const previewWrap = document.getElementById('adminPhotoPreviewWrap');
+    const previewImg = document.getElementById('adminPhotoPreview');
+
+    if (input.files && input.files[0]) {
+        previewImg.src = URL.createObjectURL(input.files[0]);
+        previewWrap.style.display = 'block';
+        return;
+    }
+
+    previewWrap.style.display = 'none';
+    previewImg.src = '';
+}
+
+function editAdminRole(id, name, phone, email, adminOf, superAdmin, photoUrl) {
     resetForm();
     document.getElementById('methodField').innerHTML = '<input type="hidden" name="_method" value="PUT">';
     document.getElementById('adminRoleForm').action = '{{ route("admin.roles-management.update", ":id") }}'.replace(':id', id);
@@ -656,6 +684,10 @@ function editAdminRole(id, name, phone, email, adminOf, superAdmin) {
     document.getElementById('password').required = false;
     document.getElementById('passwordRequired').style.display = 'none';
     document.getElementById('passwordHelp').style.display = 'block';
+    if (photoUrl) {
+        document.getElementById('adminPhotoPreview').src = photoUrl;
+        document.getElementById('adminPhotoPreviewWrap').style.display = 'block';
+    }
     document.getElementById('adminRoleModalLabel').innerHTML = '<span class="material-symbols-outlined" style="font-size: 20px; color: white;">edit</span><span style="color: white;">Edit Admin</span>';
     new bootstrap.Modal(document.getElementById('adminRoleModal')).show();
 }

@@ -295,6 +295,8 @@ class DetailedIncomeController extends Controller
 
             $incomeRecords->push([
                 'type' => 'Student Payment',
+                'record_type' => 'student',
+                'payment_id' => $payment->id,
                 'student_code' => $payment->student_code,
                 'student_name' => $student ? $student->student_name : 'N/A',
                 'parent_name' => $student ? ($student->father_name ?? 'N/A') : 'N/A',
@@ -339,6 +341,8 @@ class DetailedIncomeController extends Controller
             }
             $incomeRecords->push([
                 'type' => 'Custom Payment',
+                'record_type' => 'custom',
+                'payment_id' => $payment->id,
                 'student_code' => 'N/A',
                 'student_name' => 'N/A',
                 'parent_name' => 'N/A',

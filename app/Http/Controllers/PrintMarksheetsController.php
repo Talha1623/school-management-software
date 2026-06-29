@@ -170,16 +170,27 @@ class PrintMarksheetsController extends Controller
                         ->get();
                 }
 
-                // Get class teacher remarks (from StudentMark with null subject or from student reference_remarks)
+                $combinedRemarksByStudent = StudentMark::where('test_name', 'COMBINED_RESULT')
+                    ->whereIn('student_id', $studentIds)
+                    ->when($filterCampus, fn ($q) => $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]))
+                    ->when($filterClass, fn ($q) => $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]))
+                    ->when($filterSection, fn ($q) => $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]))
+                    ->where(function ($q) {
+                        $q->whereNull('subject')
+                            ->orWhereRaw("TRIM(COALESCE(subject, '')) = ''");
+                    })
+                    ->get()
+                    ->keyBy('student_id');
+
                 foreach ($students as $student) {
-                    $studentMarkRemarks = StudentMark::where('student_id', $student->id)
-                        ->where('test_name', $filterTest)
-                        ->whereNull('subject')
-                        ->where('campus', $filterCampus)
-                        ->where('class', $filterClass)
-                        ->value('teacher_remarks');
-                    
-                    $classTeacherRemarks->put($student->id, $studentMarkRemarks ?? $student->reference_remarks ?? '-');
+                    $classTeacherRemarks->put(
+                        $student->id,
+                        $this->resolveClassTeacherRemark(
+                            $student,
+                            $marksByStudent->get($student->id, collect()),
+                            $combinedRemarksByStudent->get($student->id)
+                        )
+                    );
                 }
             }
         }
@@ -188,6 +199,7 @@ class PrintMarksheetsController extends Controller
         $schoolName = trim((string) ($settings->school_name ?? '')) ?: 'School';
         $schoolPhone = trim((string) ($settings->school_phone ?? ''));
         $schoolLogoUrl = $this->resolveSchoolLogoUrl($settings->logo ?? null);
+        $runningSession = trim((string) ($settings->running_session ?? ''));
 
         return view('test.print-marksheets.practical', compact(
             'campuses',
@@ -211,7 +223,8 @@ class PrintMarksheetsController extends Controller
             'isPrint',
             'schoolName',
             'schoolPhone',
-            'schoolLogoUrl'
+            'schoolLogoUrl',
+            'runningSession'
         ));
     }
 
@@ -340,6 +353,44 @@ class PrintMarksheetsController extends Controller
     {
         $tests = Test::whereNotNull('test_name')->distinct()->pluck('test_name')->sort()->values();
         return $tests->isEmpty() ? collect(['Quiz 1', 'Mid Term', 'Final Term', 'Assignment 1']) : $tests;
+    }
+
+    private function resolveClassTeacherRemark(Student $student, $studentMarks, ?StudentMark $combinedRemarkRow): string
+    {
+        $remark = null;
+
+        $overallMark = $studentMarks->first(function ($mark) {
+            $subject = trim((string) ($mark->subject ?? ''));
+
+            return $subject === '';
+        });
+
+        if ($overallMark) {
+            $remark = $overallMark->teacher_remarks ?? null;
+        }
+
+        if (! $this->hasRemarkText($remark) && $combinedRemarkRow) {
+            $remark = $combinedRemarkRow->teacher_remarks ?? null;
+        }
+
+        if (! $this->hasRemarkText($remark)) {
+            $remark = $studentMarks
+                ->pluck('teacher_remarks')
+                ->first(fn ($value) => $this->hasRemarkText($value));
+        }
+
+        if ($this->hasRemarkText($remark)) {
+            return trim((string) $remark);
+        }
+
+        $referenceRemark = trim((string) ($student->reference_remarks ?? ''));
+
+        return $referenceRemark !== '' ? $referenceRemark : '-';
+    }
+
+    private function hasRemarkText($value): bool
+    {
+        return trim((string) ($value ?? '')) !== '';
     }
 
     /**
@@ -498,26 +549,35 @@ class PrintMarksheetsController extends Controller
                     $gradeDefinitions = CombinedResultGrade::orderBy('from_percentage', 'desc')->get();
                 }
 
-                // Get class teacher remarks
+                $combinedRemarksByStudent = StudentMark::where('test_name', 'COMBINED_RESULT')
+                    ->whereIn('student_id', $studentIds)
+                    ->when($filterCampus, fn ($q) => $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]))
+                    ->when($filterClass, fn ($q) => $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]))
+                    ->when($filterSection, fn ($q) => $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]))
+                    ->where(function ($q) {
+                        $q->whereNull('subject')
+                            ->orWhereRaw("TRIM(COALESCE(subject, '')) = ''");
+                    })
+                    ->get()
+                    ->keyBy('student_id');
+
                 foreach ($students as $student) {
-                    $studentMarkRemarks = StudentMark::where('student_id', $student->id)
-                        ->where('test_name', 'COMBINED_RESULT')
-                        ->when($filterCampus, function($q) use ($filterCampus) {
-                            return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))]);
-                        })
-                        ->when($filterClass, function($q) use ($filterClass) {
-                            return $q->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))]);
-                        })
-                        ->when($filterSection, function($q) use ($filterSection) {
-                            return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
-                        })
-                        ->whereNull('subject')
-                        ->value('teacher_remarks');
-                    
-                    $classTeacherRemarks->put($student->id, $studentMarkRemarks ?? $student->reference_remarks ?? '-');
+                    $classTeacherRemarks->put(
+                        $student->id,
+                        $this->resolveClassTeacherRemark(
+                            $student,
+                            $marksByStudent->get($student->id, collect()),
+                            $combinedRemarksByStudent->get($student->id)
+                        )
+                    );
                 }
             }
         }
+
+        $settings = GeneralSetting::getSettings();
+        $schoolName = trim((string) ($settings->school_name ?? '')) ?: 'School';
+        $schoolPhone = trim((string) ($settings->school_phone ?? ''));
+        $runningSession = trim((string) ($settings->running_session ?? ''));
 
         return view('test.print-marksheets.combine', compact(
             'campuses',
@@ -538,7 +598,10 @@ class PrintMarksheetsController extends Controller
             'filterTestType',
             'filterFromDate',
             'filterToDate',
-            'isPrint'
+            'isPrint',
+            'schoolName',
+            'schoolPhone',
+            'runningSession'
         ));
     }
 }

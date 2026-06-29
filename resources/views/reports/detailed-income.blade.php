@@ -159,7 +159,19 @@
                                     <td>{{ $record['method'] }}</td>
                                     <td>{{ $record['received_by'] ?? 'N/A' }}</td>
                                     <td>{{ $record['payment_date'] ? \Carbon\Carbon::parse($record['payment_date'])->format('d M Y h:i A') : 'N/A' }}</td>
-                                    <td class="no-print"><span class="text-muted">N/A</span></td>
+                                    <td class="no-print">
+                                        @if(($record['record_type'] ?? '') === 'student' && !empty($record['student_code']) && ($record['student_code'] ?? '') !== 'N/A' && !empty($record['payment_id']))
+                                            <a class="btn btn-sm btn-primary px-2 py-1 d-inline-flex align-items-center gap-1"
+                                               href="{{ route('accounting.particular-receipt-thermal', ['student_code' => $record['student_code']]) }}?payment_id={{ $record['payment_id'] }}"
+                                               target="_blank"
+                                               title="Print payment slip">
+                                                <span class="material-symbols-outlined" style="font-size: 14px;">print</span>
+                                                Slip
+                                            </a>
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
                                 </tr>
                                 @empty
                                 <tr>

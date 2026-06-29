@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Salary;
 use App\Models\Campus;
 use App\Models\Staff;
+use App\Services\MobilePushNotificationService;
 use App\Services\StaffLoanRepaymentService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,6 +23,7 @@ class ManageSalariesController extends Controller
 
     public function __construct(
         private readonly StaffLoanRepaymentService $loanRepaymentService,
+        private readonly MobilePushNotificationService $pushNotifications,
     ) {
     }
     /**
@@ -231,11 +233,13 @@ class ManageSalariesController extends Controller
         $previousAmountPaid = (float) ($salary->amount_paid ?? 0);
         $salary->update($updates);
         $salary->refresh();
+        $salary->load('staff');
         $this->loanRepaymentService->applyRepaymentFromSalary($salary, $previousAmountPaid);
         app(GenerateSalaryController::class)->syncPendingSalariesForStaff((int) $salary->staff_id);
 
-        // TODO: Store bonus and deduction details if needed (may require additional table)
-        // TODO: Send notification to employee if notify_employee is true
+        if (($validated['notify_employee'] ?? '0') === '1' && $salary->staff) {
+            $this->pushNotifications->notifyStaffSalaryPaid($salary->staff, $salary);
+        }
 
         // If status is Paid and payment was actually made, redirect back to manage-salaries with print flag
         if ($status === 'Paid' && $finalAmountPaid > 0) {
@@ -312,7 +316,12 @@ class ManageSalariesController extends Controller
      */
     public function destroy(Salary $salary)
     {
+        $staffId = (int) $salary->staff_id;
+
         $salary->delete();
+
+        $this->loanRepaymentService->syncStaffLoanBalances($staffId);
+        app(GenerateSalaryController::class)->syncPendingSalariesForStaff($staffId);
 
         return redirect()
             ->route('salary-loan.manage-salaries')

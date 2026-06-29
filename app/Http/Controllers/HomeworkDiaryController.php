@@ -9,14 +9,21 @@ use App\Models\Message;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\HomeworkDiary;
+use App\Services\MobilePushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class HomeworkDiaryController extends Controller
 {
+    public function __construct(
+        private readonly MobilePushNotificationService $pushNotifications,
+    ) {
+    }
+
     private function notifyAdminsAboutStaffDiary(array $validated, int $savedCount, int $updatedCount): void
     {
         $staff = Auth::guard('staff')->user();
@@ -565,10 +572,10 @@ class HomeworkDiaryController extends Controller
 
         $savedCount = 0;
         $updatedCount = 0;
+        $subjectNames = [];
 
         foreach ($validated['diaries'] as $diaryData) {
-            if (empty($diaryData['homework_content'])) {
-                // Skip empty entries
+            if (trim((string) ($diaryData['homework_content'] ?? '')) === '') {
                 continue;
             }
 
@@ -590,6 +597,11 @@ class HomeworkDiaryController extends Controller
             } else {
                 $updatedCount++;
             }
+
+            $subject = Subject::find($diaryData['subject_id']);
+            if ($subject && ! empty($subject->subject_name)) {
+                $subjectNames[] = (string) $subject->subject_name;
+            }
         }
 
         $message = 'Homework diary saved successfully!';
@@ -601,6 +613,49 @@ class HomeworkDiaryController extends Controller
         }
 
         $this->notifyAdminsAboutStaffDiary($validated, $savedCount, $updatedCount);
+
+        if ($savedCount + $updatedCount > 0) {
+            try {
+                $stats = $this->pushNotifications->notifyHomeworkDiaryPublished(
+                    [
+                        'campus' => $validated['campus'],
+                        'class' => $validated['class'],
+                        'section' => $validated['section'],
+                    ],
+                    $validated['date'],
+                    array_values(array_unique($subjectNames))
+                );
+
+                $studentRecipients = (int) ($stats['students']['recipients'] ?? 0);
+                $inAppSaved = (int) ($stats['students']['in_app'] ?? 0);
+                $pushSent = (int) ($stats['students']['push_sent'] ?? 0);
+
+                if ($studentRecipients > 0) {
+                    $message .= " Notifications: {$studentRecipients} student(s)";
+                    if ($inAppSaved > 0) {
+                        $message .= ", in-app saved {$inAppSaved}";
+                    }
+                    if ($pushSent > 0) {
+                        $message .= ", push sent {$pushSent}";
+                    }
+                    $message .= '.';
+                } else {
+                    $message .= ' Warning: no students matched for notifications — verify campus/class/section on student profile.';
+                }
+
+                Log::info('Homework diary notifications dispatched', [
+                    'campus' => $validated['campus'],
+                    'class' => $validated['class'],
+                    'section' => $validated['section'],
+                    'date' => $validated['date'],
+                    'matched_student_ids' => $stats['matched_student_ids'] ?? [],
+                    'stats' => $stats,
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+                $message .= ' Notification error: '.$e->getMessage();
+            }
+        }
 
         return redirect()
             ->route('homework-diary.manage', [
@@ -624,8 +679,28 @@ class HomeworkDiaryController extends Controller
 
         $subject = Subject::findOrFail($validated['subject_id']);
 
-        // TODO: Implement diary sending logic (SMS/WhatsApp/Email)
-        // For now, just return success message
+        $diary = HomeworkDiary::where('subject_id', $validated['subject_id'])
+            ->where('date', $validated['date'])
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim((string) $subject->campus))])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim((string) $subject->class))])
+            ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim((string) $subject->section))])
+            ->first();
+
+        if ($diary && trim((string) $diary->homework_content) !== '') {
+            try {
+                $this->pushNotifications->notifyHomeworkDiaryPublished(
+                    [
+                        'campus' => (string) $subject->campus,
+                        'class' => (string) $subject->class,
+                        'section' => (string) $subject->section,
+                    ],
+                    $validated['date'],
+                    [(string) $subject->subject_name]
+                );
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         return redirect()
             ->route('homework-diary.manage', [

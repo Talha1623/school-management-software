@@ -3620,6 +3620,11 @@ class ExamController extends Controller
             });
         }
 
+        $settings = GeneralSetting::getSettings();
+        $schoolName = trim((string) ($settings->school_name ?? '')) ?: 'School';
+        $schoolPhone = trim((string) ($settings->school_phone ?? ''));
+        $runningSession = trim((string) ($settings->running_session ?? ''));
+
         return view('exam.print-marksheet.particular', compact(
             'campuses',
             'classes',
@@ -3637,7 +3642,10 @@ class ExamController extends Controller
             'filterClass',
             'filterSection',
             'filterSession',
-            'filterExam'
+            'filterExam',
+            'schoolName',
+            'schoolPhone',
+            'runningSession'
         ));
     }
 
@@ -3650,6 +3658,7 @@ class ExamController extends Controller
         $filterClass = $request->get('filter_class');
         $filterSection = $request->get('filter_section');
         $filterSession = $request->get('filter_session');
+        $isPrint = $request->boolean('print');
 
         // Campuses for dropdown
         $campuses = Campus::orderBy('campus_name', 'asc')->get();
@@ -3688,10 +3697,11 @@ class ExamController extends Controller
         }
 
         $marksByStudent = collect();
-        $teacherRemarksByStudent = collect();
         $students = collect();
         $highestBySubject = collect();
         $studentSummaries = collect();
+        $gradeDefinitions = collect();
+        $classTeacherRemarks = collect();
 
         if ($filterCampus && $filterClass && $filterSection && $filterSession) {
             // Get all exam names for this session (only exams, not tests)
@@ -3719,34 +3729,22 @@ class ExamController extends Controller
 
                 $marks = $marksQuery->get();
 
-                // Group marks by student and subject (to avoid duplicates)
-                $marksByStudentAndSubject = $marks->groupBy(function($mark) {
-                    return $mark->student_id . '_' . strtolower(trim($mark->subject ?? ''));
-                })->map(function($group) {
-                    // If multiple marks for same student-subject, take the latest
-                    return $group->sortByDesc('created_at')->first();
+                // Group marks by student and subject, summing totals when the same subject appears in multiple exams
+                $marksByStudentAndSubject = $marks->groupBy(function ($mark) {
+                    return $mark->student_id.'_'.strtolower(trim($mark->subject ?? ''));
+                })->map(function ($group) {
+                    return $this->aggregateSubjectMarks($group);
                 });
 
                 // Group by student_id
-                $marksByStudent = $marksByStudentAndSubject->groupBy('student_id');
-
-                // Get teacher remarks (latest for each student)
-                $teacherRemarksByStudent = $marks
-                    ->filter(function ($mark) {
-                        return $mark->teacher_remarks !== null && trim((string) $mark->teacher_remarks) !== '';
-                    })
-                    ->sortByDesc('created_at')
+                $marksByStudent = $marksByStudentAndSubject
                     ->groupBy('student_id')
-                    ->map(function ($items) {
-                        return trim((string) $items->first()->teacher_remarks);
-                    });
+                    ->map(fn ($items) => $items->values());
 
                 // Calculate highest marks by subject
-                $highestBySubject = $marksByStudentAndSubject->groupBy(function($mark) {
-                    return strtolower(trim($mark->subject ?? ''));
-                })->map(function($items) {
-                    return $items->max('marks_obtained') ?? 0;
-                });
+                $highestBySubject = $marksByStudentAndSubject
+                    ->groupBy(fn ($mark) => trim((string) ($mark->subject ?? '')))
+                    ->map(fn ($items) => (float) ($items->max('marks_obtained') ?? 0));
 
                 // Get students
                 $studentIds = $marksByStudent->keys();
@@ -3760,21 +3758,12 @@ class ExamController extends Controller
                 }
 
                 // Calculate summaries for each student
-                $studentSummaries = $marksByStudent->mapWithKeys(function($items, $studentId) {
-                    // Group by subject to avoid duplicate counting
-                    $marksBySubject = $items->groupBy(function($m) {
-                        return strtolower(trim($m->subject ?? ''));
-                    })->map(function($subjectMarks) {
-                        return $subjectMarks->first();
-                    });
-
-                    $totalMarks = $marksBySubject->sum(function($m) { return (float) ($m->total_marks ?? 0); });
-                    $totalPassing = $marksBySubject->sum(function($m) { return (float) ($m->passing_marks ?? 0); });
-                    $totalObtained = $marksBySubject->sum(function($m) { return (float) ($m->marks_obtained ?? 0); });
-                    $presentCount = $marksBySubject->filter(function($m) {
-                        return $m->marks_obtained !== null;
-                    })->count();
-                    $subjectCount = $marksBySubject->count();
+                $studentSummaries = $marksByStudent->mapWithKeys(function ($items, $studentId) {
+                    $totalMarks = $items->sum(fn ($m) => (float) ($m->total_marks ?? 0));
+                    $totalPassing = $items->sum(fn ($m) => (float) ($m->passing_marks ?? 0));
+                    $totalObtained = $items->sum(fn ($m) => (float) ($m->marks_obtained ?? 0));
+                    $presentCount = $items->filter(fn ($m) => $m->marks_obtained !== null)->count();
+                    $subjectCount = $items->count();
 
                     $percentage = $totalMarks > 0 ? round(($totalObtained / $totalMarks) * 100, 2) : 0;
                     $status = $totalObtained >= $totalPassing ? 'PASS' : 'FAIL';
@@ -3800,8 +3789,49 @@ class ExamController extends Controller
                     $summary['rank'] = $rankMap->get($studentId);
                     return $summary;
                 });
+
+                $gradeDefinitions = FinalExamGrade::whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                    ->when($filterSession, function ($query) use ($filterSession) {
+                        $sessionKey = strtolower(trim($filterSession));
+                        $query->where(function ($q) use ($sessionKey) {
+                            $q->whereNull('session')
+                                ->orWhereRaw("TRIM(COALESCE(session, '')) = ''")
+                                ->orWhereRaw('LOWER(TRIM(session)) = ?', [$sessionKey]);
+                        });
+                    })
+                    ->orderBy('from_percentage', 'desc')
+                    ->get();
+
+                if ($students->isNotEmpty()) {
+                    $combinedRemarksByStudent = StudentMark::where('test_name', 'COMBINED_RESULT')
+                        ->whereIn('student_id', $students->pluck('id'))
+                        ->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($filterCampus))])
+                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($filterClass))])
+                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))])
+                        ->where(function ($q) {
+                            $q->whereNull('subject')
+                                ->orWhereRaw("TRIM(COALESCE(subject, '')) = ''");
+                        })
+                        ->get()
+                        ->keyBy('student_id');
+
+                    foreach ($students as $student) {
+                        $classTeacherRemarks->put(
+                            $student->id,
+                            $this->resolveClassTeacherRemark(
+                                $student,
+                                $marksByStudent->get($student->id, collect()),
+                                $combinedRemarksByStudent->get($student->id)
+                            )
+                        );
+                    }
+                }
             }
         }
+
+        $schoolName = trim((string) ($settings->school_name ?? '')) ?: 'School';
+        $schoolPhone = trim((string) ($settings->school_phone ?? ''));
+        $runningSession = trim((string) ($settings->running_session ?? ''));
 
         return view('exam.print-marksheet.final', compact(
             'campuses',
@@ -3810,11 +3840,19 @@ class ExamController extends Controller
             'sections',
             'sessions',
             'students',
+            'marksByStudent',
+            'highestBySubject',
             'studentSummaries',
+            'gradeDefinitions',
+            'classTeacherRemarks',
+            'isPrint',
             'filterCampus',
             'filterClass',
             'filterSection',
-            'filterSession'
+            'filterSession',
+            'schoolName',
+            'schoolPhone',
+            'runningSession'
         ));
     }
 
@@ -4177,6 +4215,65 @@ class ExamController extends Controller
         }
 
         return $this->sectionsForClassAtCampus($class, $campus);
+    }
+
+    private function aggregateSubjectMarks(Collection $marks): object
+    {
+        $first = $marks->sortBy('created_at')->first();
+
+        return (object) [
+            'student_id' => $first->student_id,
+            'subject' => $first->subject,
+            'campus' => $first->campus,
+            'class' => $first->class,
+            'section' => $first->section,
+            'total_marks' => $marks->sum(fn ($mark) => (float) ($mark->total_marks ?? 0)),
+            'passing_marks' => $marks->sum(fn ($mark) => (float) ($mark->passing_marks ?? 0)),
+            'marks_obtained' => $marks->sum(fn ($mark) => (float) ($mark->marks_obtained ?? 0)),
+            'teacher_remarks' => $marks
+                ->sortByDesc('created_at')
+                ->pluck('teacher_remarks')
+                ->first(fn ($remark) => trim((string) ($remark ?? '')) !== ''),
+            'created_at' => $marks->max('created_at'),
+        ];
+    }
+
+    private function resolveClassTeacherRemark(Student $student, $studentMarks, ?StudentMark $combinedRemarkRow): string
+    {
+        $remark = null;
+
+        $overallMark = $studentMarks->first(function ($mark) {
+            $subject = trim((string) ($mark->subject ?? ''));
+
+            return $subject === '';
+        });
+
+        if ($overallMark) {
+            $remark = $overallMark->teacher_remarks ?? null;
+        }
+
+        if (! $this->hasRemarkText($remark) && $combinedRemarkRow) {
+            $remark = $combinedRemarkRow->teacher_remarks ?? null;
+        }
+
+        if (! $this->hasRemarkText($remark)) {
+            $remark = $studentMarks
+                ->pluck('teacher_remarks')
+                ->first(fn ($value) => $this->hasRemarkText($value));
+        }
+
+        if ($this->hasRemarkText($remark)) {
+            return trim((string) $remark);
+        }
+
+        $referenceRemark = trim((string) ($student->reference_remarks ?? ''));
+
+        return $referenceRemark !== '' ? $referenceRemark : '-';
+    }
+
+    private function hasRemarkText($value): bool
+    {
+        return trim((string) ($value ?? '')) !== '';
     }
 }
 
