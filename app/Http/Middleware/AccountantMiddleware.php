@@ -44,7 +44,7 @@ class AccountantMiddleware
                 return redirect()->route('accounting.family-fee-calculator');
             }
 
-            if (! $request->routeIs('accountant.login', 'accountant.logout')) {
+            if (! $request->routeIs('accountant.login', 'accountant.login.post', 'accountant.logout')) {
                 return redirect()->route('dashboard');
             }
         }

@@ -170,7 +170,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ route('accountant.login') }}">
+            <form method="POST" action="{{ route('accountant.login.post') }}">
                 @csrf
                 
                 <div class="form-group">

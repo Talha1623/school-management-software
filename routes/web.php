@@ -43,7 +43,7 @@ Route::prefix('staff')->name('staff.')->group(function () {
 // Accountant Authentication Routes
 Route::prefix('accountant')->name('accountant.')->group(function () {
     Route::get('/login', [App\Http\Controllers\AccountantAuthController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [App\Http\Controllers\AccountantAuthController::class, 'login'])->name('login');
+    Route::post('/login', [App\Http\Controllers\AccountantAuthController::class, 'login'])->name('login.post');
     Route::post('/logout', [App\Http\Controllers\AccountantAuthController::class, 'logout'])->name('logout');
     
     // Protected Accountant Routes
@@ -193,7 +193,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
 // Student Authentication Routes
 Route::prefix('student')->name('student.')->group(function () {
     Route::get('/login', [App\Http\Controllers\StudentAuthController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [App\Http\Controllers\StudentAuthController::class, 'login'])->name('login');
+    Route::post('/login', [App\Http\Controllers\StudentAuthController::class, 'login'])->name('login.post');
     Route::post('/logout', [App\Http\Controllers\StudentAuthController::class, 'logout'])->name('logout');
     
     // Protected Student Routes
@@ -207,7 +207,7 @@ Route::prefix('student')->name('student.')->group(function () {
 // Admin Authentication Routes
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/login', [App\Http\Controllers\AdminAuthController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [App\Http\Controllers\AdminAuthController::class, 'login'])->name('login');
+    Route::post('/login', [App\Http\Controllers\AdminAuthController::class, 'login'])->name('login.post');
     Route::post('/logout', [App\Http\Controllers\AdminAuthController::class, 'logout'])->name('logout');
     
     // Protected Admin Routes
@@ -219,7 +219,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 // Platform Super Admin Routes (separate from existing admin/super admin)
 Route::prefix('platform-admin')->name('platform-admin.')->group(function () {
     Route::get('/login', [App\Http\Controllers\PlatformSuperAdminAuthController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [App\Http\Controllers\PlatformSuperAdminAuthController::class, 'login'])->name('login');
+    Route::post('/login', [App\Http\Controllers\PlatformSuperAdminAuthController::class, 'login'])->name('login.post');
     Route::post('/logout', [App\Http\Controllers\PlatformSuperAdminAuthController::class, 'logout'])->name('logout');
 
     Route::middleware([App\Http\Middleware\PlatformSuperAdminMiddleware::class])->group(function () {

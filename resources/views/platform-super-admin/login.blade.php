@@ -26,7 +26,7 @@
             <div class="alert">{{ session('error') }}</div>
         @endif
 
-        <form method="POST" action="{{ route('platform-admin.login') }}">
+        <form method="POST" action="{{ route('platform-admin.login.post') }}">
             @csrf
             <label for="email">Email</label>
             <input type="email" id="email" name="email" value="{{ old('email') }}" required autofocus>
