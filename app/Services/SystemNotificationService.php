@@ -8,18 +8,14 @@ use App\Models\Message;
 class SystemNotificationService
 {
     /**
-     * Notify super admins (fallback: all admins) about an accountant action.
+     * Notify all admins about an accountant action (fee generate, etc.).
      */
     public function notifySuperAdminsFromAccountant(string $text, int $accountantId): void
     {
         $admins = AdminRole::query()
-            ->where('super_admin', true)
+            ->select('id')
             ->orderBy('id')
             ->get();
-
-        if ($admins->isEmpty()) {
-            $admins = AdminRole::query()->orderBy('id')->get();
-        }
 
         foreach ($admins as $admin) {
             Message::create([
@@ -28,6 +24,8 @@ class SystemNotificationService
                 'to_type' => 'admin',
                 'to_id' => (int) $admin->id,
                 'text' => $text,
+                'attachment_path' => null,
+                'attachment_type' => null,
                 'read_at' => null,
             ]);
         }

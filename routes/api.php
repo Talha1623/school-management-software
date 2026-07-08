@@ -40,6 +40,7 @@ Route::match(['GET', 'POST'], '/staff/login', function (Request $request) {
 Route::prefix('staff')->name('api.staff.')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/chat/contacts', [App\Http\Controllers\Api\TeacherChatController::class, 'contacts'])->name('chat.contacts');
     Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\TeacherChatController::class, 'contactShow'])->name('chat.contacts.show');
+    Route::get('/chat/unread-count', [App\Http\Controllers\Api\StaffChatController::class, 'unreadCount'])->name('chat.unread-count');
     Route::get('/chat/messages', [App\Http\Controllers\Api\StaffChatController::class, 'index'])->name('chat.messages');
     Route::post('/chat/messages', [App\Http\Controllers\Api\StaffChatController::class, 'store'])->name('chat.messages.store');
     Route::post('/chat/messages/read', [App\Http\Controllers\Api\StaffChatController::class, 'markRead'])->name('chat.messages.read');
@@ -141,7 +142,8 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
         // Quiz Routes
         Route::match(['GET', 'POST'], '/quizzes', [App\Http\Controllers\Api\ParentQuizController::class, 'index'])->name('quizzes.index');
         Route::get('/quizzes/all', [App\Http\Controllers\Api\ParentQuizController::class, 'allQuizzes'])->name('quizzes.all');
-        Route::get('/quizzes/{id}', [App\Http\Controllers\Api\ParentQuizController::class, 'show'])->name('quizzes.show');
+        Route::get('/quizzes/{id}/questions', [App\Http\Controllers\Api\ParentQuizController::class, 'questions'])->whereNumber('id')->name('quizzes.questions');
+        Route::get('/quizzes/{id}', [App\Http\Controllers\Api\ParentQuizController::class, 'show'])->whereNumber('id')->name('quizzes.show');
         
         // Wallet Routes
         Route::get('/wallet', [App\Http\Controllers\Api\ParentWalletController::class, 'balance'])->name('wallet.balance');
@@ -289,6 +291,7 @@ Route::prefix('teacher')->name('api.teacher.')->group(function () {
         // Chat with Super Admin/Admin (Teacher side)
         Route::get('/chat/contacts', [App\Http\Controllers\Api\TeacherChatController::class, 'contacts'])->name('chat.contacts');
         Route::get('/chat/contacts/{type}/{id}', [App\Http\Controllers\Api\TeacherChatController::class, 'contactShow'])->name('chat.contacts.show');
+        Route::get('/chat/unread-count', [App\Http\Controllers\Api\TeacherChatController::class, 'unreadCount'])->name('chat.unread-count');
         Route::get('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'index'])->name('chat.messages');
         Route::post('/chat/messages', [App\Http\Controllers\Api\TeacherChatController::class, 'store'])->name('chat.messages.store');
         Route::post('/chat/messages/read', [App\Http\Controllers\Api\TeacherChatController::class, 'markRead'])->name('chat.messages.read');

@@ -319,10 +319,14 @@ document.addEventListener('DOMContentLoaded', function() {
         fees.forEach(fee => {
             const option = document.createElement('option');
             const amount = Number(fee.payment_amount || 0).toFixed(2);
+            const late = Number(fee.late_fee || 0);
             option.value = fee.id;
-            option.textContent = `${fee.payment_title} - ${amount}`;
+            option.textContent = late > 0
+                ? `${fee.payment_title} - ${amount} (incl. late ${late.toFixed(2)})`
+                : `${fee.payment_title} - ${amount}`;
             option.dataset.title = fee.payment_title || '';
             option.dataset.amount = fee.payment_amount || 0;
+            option.dataset.lateFee = late;
             generatedFeeSelect.appendChild(option);
         });
         generatedFeeSelect.disabled = false;
@@ -424,11 +428,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!discountInput || !paymentAmountInput || selectedFeeDue <= 0) {
             return;
         }
-        const discount = parseFloat(discountInput.value || 0) || 0;
-        const maxPayment = Math.max(0, selectedFeeDue - discount);
+        let discount = Math.max(0, parseFloat(discountInput.value || 0) || 0);
+        if (discount > selectedFeeDue) {
+            discount = selectedFeeDue;
+            discountInput.value = discount.toFixed(2);
+        }
+        const cashDue = Math.max(0, selectedFeeDue - discount);
         const currentPayment = parseFloat(paymentAmountInput.value || 0) || 0;
-        if (currentPayment > maxPayment + 0.009) {
-            paymentAmountInput.value = maxPayment.toFixed(2);
+        if (currentPayment >= selectedFeeDue - 0.01 || currentPayment + discount > selectedFeeDue + 0.01) {
+            paymentAmountInput.value = cashDue.toFixed(2);
         }
     }
 

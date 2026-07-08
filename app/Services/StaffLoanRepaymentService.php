@@ -12,28 +12,148 @@ class StaffLoanRepaymentService
     private array $staffPaidAllocations = [];
 
     /**
-     * Calculate total loan installment due for a staff member's next salary.
-     * Each approved loan is calculated from its own balance and instalment plan.
+     * Full monthly loan installment due for a staff salary (not capped by salary amount).
+     * Example: loan 500, instalments 1 → repayment 500 (full loan cut on generate).
      */
     public function calculate(int $staffId, ?int $forSalaryId = null): float
     {
-        $approvedLoans = Loan::where('staff_id', $staffId)
-            ->where('status', 'Approved')
-            ->where('approved_amount', '>', 0)
+        Loan::ensureBalanceColumns();
+
+        // Any non-rejected loan with an unpaid balance.
+        $loans = Loan::query()
+            ->where('staff_id', $staffId)
+            ->where(function ($query) {
+                $query->whereNull('status')
+                    ->orWhereRaw('LOWER(TRIM(status)) NOT IN (?, ?)', ['rejected', 'pending']);
+            })
             ->orderBy('created_at')
+            ->orderBy('id')
             ->get();
 
-        if ($approvedLoans->isEmpty()) {
+        if ($loans->isEmpty()) {
             return 0.0;
         }
 
+        $reservedByLoan = $this->reservedPendingByLoan($staffId, $forSalaryId);
         $totalLoanRepayment = 0.0;
 
-        foreach ($approvedLoans as $loan) {
-            $totalLoanRepayment += $this->monthlyInstallment($loan);
+        foreach ($loans as $loan) {
+            $this->ensureInitialApprovedAmount($loan);
+
+            $remaining = $this->unpaidBalance($loan);
+            if ($remaining <= 0) {
+                continue;
+            }
+
+            // Keep approved_amount in sync when it was wiped but balance still exists.
+            if ((float) ($loan->approved_amount ?? 0) <= 0 && $remaining > 0) {
+                $loan->approved_amount = $remaining;
+                if (strtolower(trim((string) ($loan->status ?? ''))) === 'completed') {
+                    $loan->status = 'Approved';
+                }
+                $loan->saveQuietly();
+            }
+
+            $reserved = (float) ($reservedByLoan[$loan->id] ?? 0);
+            $available = max(0, round($remaining - $reserved, 2));
+            if ($available <= 0) {
+                continue;
+            }
+
+            $totalLoanRepayment += $this->monthlyInstallmentFromBalance($loan, $available);
         }
 
         return round($totalLoanRepayment, 2);
+    }
+
+    /**
+     * Unpaid loan balance (principal − already recovered via paid salaries).
+     */
+    private function unpaidBalance(Loan $loan): float
+    {
+        $fromColumn = max(0, (float) ($loan->approved_amount ?? 0));
+        $fromHistory = max(0, round($this->principalForLoan($loan) - $this->paidAmountForLoan($loan), 2));
+
+        // Use the higher positive balance so a wiped approved_amount still deducts.
+        return max($fromColumn, $fromHistory);
+    }
+
+    /**
+     * How much each loan already reserved on earlier pending salaries.
+     *
+     * @return array<int, float>
+     */
+    private function reservedPendingByLoan(int $staffId, ?int $forSalaryId): array
+    {
+        $pending = Salary::query()
+            ->where('staff_id', $staffId)
+            ->where('status', 'Pending')
+            ->where(function ($query) {
+                $query->whereNull('amount_paid')->orWhere('amount_paid', '<=', 0);
+            })
+            ->where('loan_repayment', '>', 0)
+            ->get()
+            ->sortBy(fn (Salary $s) => $this->salarySortKey($s))
+            ->values();
+
+        if ($forSalaryId !== null) {
+            $current = Salary::find($forSalaryId);
+            if ($current) {
+                $currentKey = $this->salarySortKey($current);
+                $pending = $pending->filter(
+                    fn (Salary $s) => (int) $s->id !== (int) $forSalaryId
+                        && $this->salarySortKey($s) < $currentKey
+                )->values();
+            }
+        } else {
+            // New salary: do not reserve against other pending rows.
+            return [];
+        }
+
+        $loans = Loan::query()
+            ->where('staff_id', $staffId)
+            ->where(function ($query) {
+                $query->whereNull('status')
+                    ->orWhereRaw('LOWER(TRIM(status)) NOT IN (?, ?)', ['rejected', 'pending']);
+            })
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $reserved = [];
+        foreach ($loans as $loan) {
+            $reserved[$loan->id] = 0.0;
+        }
+
+        foreach ($pending as $salary) {
+            $left = (float) ($salary->loan_repayment ?? 0);
+            foreach ($loans as $loan) {
+                if ($left <= 0) {
+                    break;
+                }
+                $balanceLeft = max(0, (float) ($loan->approved_amount ?? 0) - ($reserved[$loan->id] ?? 0));
+                if ($balanceLeft <= 0) {
+                    continue;
+                }
+                $take = min($left, $balanceLeft);
+                $reserved[$loan->id] = round(($reserved[$loan->id] ?? 0) + $take, 2);
+                $left = round($left - $take, 2);
+            }
+        }
+
+        return $reserved;
+    }
+
+    private function salarySortKey(Salary $salary): string
+    {
+        $months = [
+            'January' => '01', 'February' => '02', 'March' => '03', 'April' => '04',
+            'May' => '05', 'June' => '06', 'July' => '07', 'August' => '08',
+            'September' => '09', 'October' => '10', 'November' => '11', 'December' => '12',
+        ];
+        $month = $months[$salary->salary_month] ?? '99';
+
+        return sprintf('%04d-%s-%010d', (int) $salary->year, $month, (int) $salary->id);
     }
 
     /**
@@ -232,8 +352,12 @@ class StaffLoanRepaymentService
         }
 
         $loans = Loan::where('staff_id', $staffId)
-            ->where('status', 'Approved')
+            ->where(function ($query) {
+                $query->whereNull('status')
+                    ->orWhereRaw('LOWER(TRIM(status)) NOT IN (?, ?)', ['rejected', 'pending']);
+            })
             ->orderBy('created_at')
+            ->orderBy('id')
             ->get();
 
         foreach ($loans as $loan) {
@@ -262,41 +386,37 @@ class StaffLoanRepaymentService
     }
 
     /**
-     * Next instalment for one loan: initial / instalments, capped by remaining balance.
+     * Monthly installment = loan total ÷ instalments (full amount), never more than remaining.
+     * Example: 500 / 1 = 500, 500 / 2 = 250 per month.
      */
     private function monthlyInstallment(Loan $loan): float
     {
-        $remaining = max(0, (float) ($loan->approved_amount ?? 0));
+        return $this->monthlyInstallmentFromBalance(
+            $loan,
+            max(0, (float) ($loan->approved_amount ?? 0))
+        );
+    }
+
+    private function monthlyInstallmentFromBalance(Loan $loan, float $remainingBalance): float
+    {
+        $remaining = max(0, $remainingBalance);
         if ($remaining <= 0) {
             return 0.0;
         }
 
-        $totalInstalments = max(1, (int) $loan->repayment_instalments);
+        $totalInstalments = max(1, (int) ($loan->repayment_instalments ?? 1));
         $initial = $this->initialPrincipal($loan);
         if ($initial <= 0) {
-            return 0.0;
+            return round($remaining, 2);
         }
 
+        // Full monthly share of the original loan — not limited by this month's salary.
         $fixedInstallment = round($initial / $totalInstalments, 2);
         if ($fixedInstallment <= 0) {
             return round($remaining, 2);
         }
 
-        $repaid = round(max(0, $initial - $remaining), 2);
-        $installmentsPaid = min(
-            $totalInstalments,
-            (int) round($repaid / $fixedInstallment)
-        );
-
-        if ($installmentsPaid >= $totalInstalments) {
-            return 0.0;
-        }
-
-        // Last instalment takes whatever balance is left (handles rounding).
-        if ($installmentsPaid >= $totalInstalments - 1) {
-            return round($remaining, 2);
-        }
-
+        // Last month (or single instalment): take whatever balance is left.
         return round(min($remaining, $fixedInstallment), 2);
     }
 
@@ -329,5 +449,9 @@ class StaffLoanRepaymentService
             (float) ($loan->requested_amount ?? 0),
             (float) ($loan->approved_amount ?? 0)
         );
+
+        if ((float) $loan->initial_approved_amount > 0) {
+            $loan->saveQuietly();
+        }
     }
 }

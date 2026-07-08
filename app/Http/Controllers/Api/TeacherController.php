@@ -2332,6 +2332,7 @@ class TeacherController extends Controller
                 $marks = StudentMark::query()
                     ->whereIn('student_id', $students->pluck('id')->toArray())
                     ->whereIn(\DB::raw('LOWER(TRIM(test_name))'), $examNameKeys->toArray())
+                    ->whereRaw('LOWER(TRIM(test_name)) != ?', ['final_result'])
                     ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
                     ->when(!empty($sectionName), function ($q) use ($sectionName) {
                         return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
@@ -2342,51 +2343,38 @@ class TeacherController extends Controller
                     ->get();
             }
 
-            $studentsData = $students->map(function ($student) use ($marks, $sessionName, $className, $sectionName, $campusName) {
-                $studentMarks = $marks->where('student_id', $student->id);
+            // Final result remarks: only dedicated FINAL_RESULT rows (same as web).
+            $finalRemarkRows = collect();
+            if ($students->isNotEmpty()) {
+                $finalRemarkRows = StudentMark::query()
+                    ->whereIn('student_id', $students->pluck('id')->toArray())
+                    ->whereRaw('LOWER(TRIM(test_name)) = ?', ['final_result'])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower($className)])
+                    ->when(!empty($sectionName), function ($q) use ($sectionName) {
+                        return $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower($sectionName)]);
+                    })
+                    ->when(!empty($campusName), function ($q) use ($campusName) {
+                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower($campusName)]);
+                    })
+                    ->orderByDesc('updated_at')
+                    ->orderByDesc('id')
+                    ->get()
+                    ->groupBy('student_id')
+                    ->map(fn ($rows) => $rows->first());
+            }
+
+            $studentsData = $students->map(function ($student) use ($marks, $finalRemarkRows) {
+                $studentMarks = $marks
+                    ->where('student_id', $student->id)
+                    ->filter(fn ($mark) => strtolower(trim((string) ($mark->test_name ?? ''))) !== 'final_result');
 
                 $roll = $student->student_code ?? ($student->gr_number ?? null);
 
-                // Web-like robust final remark lookup.
-                $baseRemarkQuery = function() use ($student, $sessionName, $className, $sectionName) {
-                    $q = StudentMark::where('student_id', $student->id)
-                        ->where(function($sub) use ($sessionName) {
-                            $sub->whereRaw('LOWER(TRIM(test_name)) = ?', ['final_result'])
-                                ->orWhereRaw('LOWER(TRIM(test_name)) LIKE ?', ['%final%'])
-                                ->orWhereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($sessionName . '_FINAL'))]);
-                        })
-                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))]);
-                    if (!empty($sectionName)) {
-                        $q->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($sectionName))]);
-                    }
-                    return $q;
-                };
-
-                $finalRemarkRow = $baseRemarkQuery()
-                    ->when(!empty($campusName), function ($q) use ($campusName) {
-                        return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
-                    })
-                    ->orderByDesc('updated_at')
-                    ->first();
-
-                if (!$finalRemarkRow && !empty($campusName)) {
-                    $finalRemarkRow = $baseRemarkQuery()->orderByDesc('updated_at')->first();
-                }
-
-                if (!$finalRemarkRow && !empty($sectionName)) {
-                    $finalRemarkRow = StudentMark::where('student_id', $student->id)
-                        ->where(function($sub) use ($sessionName) {
-                            $sub->whereRaw('LOWER(TRIM(test_name)) = ?', ['final_result'])
-                                ->orWhereRaw('LOWER(TRIM(test_name)) LIKE ?', ['%final%'])
-                                ->orWhereRaw('LOWER(TRIM(test_name)) = ?', [strtolower(trim($sessionName . '_FINAL'))]);
-                        })
-                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($className))])
-                        ->when(!empty($campusName), function ($q) use ($campusName) {
-                            return $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($campusName))]);
-                        })
-                        ->orderByDesc('updated_at')
-                        ->first();
-                }
+                $finalRemarkRow = $finalRemarkRows->get($student->id);
+                $finalRemarkText = $finalRemarkRow
+                    ? trim((string) ($finalRemarkRow->teacher_remarks ?? ''))
+                    : '';
+                $finalRemarkText = $finalRemarkText !== '' ? $finalRemarkText : null;
 
                 return [
                     'student_id' => $student->id,
@@ -2396,7 +2384,10 @@ class TeacherController extends Controller
                     'roll_number' => $roll,
                     'name' => $student->student_name,
                     'parent' => $student->father_name ?? null,
-                    'final_remark' => $finalRemarkRow->teacher_remarks ?? null,
+                    'final_remark' => $finalRemarkText,
+                    'remark' => $finalRemarkText,
+                    'has_remark' => $finalRemarkText !== null,
+                    'remark_uploaded' => $finalRemarkText !== null,
                     'total' => (float) ($studentMarks->sum('total_marks') ?? 0),
                     'obtained' => (float) ($studentMarks->sum('marks_obtained') ?? 0),
                 ];

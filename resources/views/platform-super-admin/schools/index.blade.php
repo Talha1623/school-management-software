@@ -94,7 +94,16 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <div class="d-flex gap-2">
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-secondary"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#dbCredentialsModal{{ $school->id }}"
+                                        >
+                                            DB Fix
+                                        </button>
+
                                         <form method="POST" action="{{ route('platform-admin.schools.toggle-status', $school->id) }}">
                                             @csrf
                                             @method('PATCH')
@@ -126,6 +135,55 @@
     </div>
 </div>
 
+@foreach($schools as $school)
+<div class="modal fade" id="dbCredentialsModal{{ $school->id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Fix DB: {{ $school->name }} ({{ $school->subdomain }})</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ route('platform-admin.schools.update-database-credentials', $school->id) }}">
+                @csrf
+                @method('PATCH')
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Set the same values as cPanel MySQL for this school. Domain:
+                        <strong>{{ $school->domain }}</strong>
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">DB Host</label>
+                        <input type="text" name="db_host" class="form-control" value="{{ old('db_host', $school->db_host ?: 'localhost') }}" required>
+                        <small class="text-muted">On cPanel try <code>localhost</code> instead of <code>127.0.0.1</code>.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">DB Port</label>
+                        <input type="number" name="db_port" class="form-control" value="{{ old('db_port', $school->db_port ?: '3306') }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">DB Name</label>
+                        <input type="text" name="db_database" class="form-control" value="{{ old('db_database', $school->db_database) }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">DB Username</label>
+                        <input type="text" name="db_username" class="form-control" value="{{ old('db_username', $school->db_username) }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">DB Password</label>
+                        <input type="password" name="db_password" class="form-control" required>
+                        <small class="text-muted">Must match cPanel MySQL user password exactly.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Test &amp; Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endforeach
+
 <div class="modal fade" id="addSchoolModal" tabindex="-1" aria-labelledby="addSchoolModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -144,7 +202,7 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Subdomain</label>
-                            <input type="text" name="subdomain" class="form-control" placeholder="talha" value="{{ old('subdomain') }}" required>
+                            <input type="text" name="subdomain" id="schoolSubdomain" class="form-control" placeholder="talha" value="{{ old('subdomain') }}" required>
                             @error('subdomain') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
                         <div class="col-md-6 mb-3">
@@ -181,7 +239,7 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">DB Host</label>
-                            <input type="text" name="db_host" class="form-control" value="{{ old('db_host', '127.0.0.1') }}" required>
+                            <input type="text" name="db_host" class="form-control" value="{{ old('db_host', 'localhost') }}" required>
                             @error('db_host') <small class="text-danger">{{ $message }}</small> @enderror
                         </div>
                         <div class="col-md-6 mb-3">
@@ -191,13 +249,15 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">DB Name</label>
-                            <input type="text" name="db_database" class="form-control" placeholder="school_talha" value="{{ old('db_database') }}" required>
-                            @error('db_database') <small class="text-danger">{{ $message }}</small> @enderror
+                            <input type="text" name="db_database" id="schoolDbDatabase" class="form-control" placeholder="school_talha" value="{{ old('db_database') }}" required>
+                            <small class="text-muted">Use a unique name per school (not your main platform database).</small>
+                            @error('db_database') <small class="text-danger d-block">{{ $message }}</small> @enderror
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">DB Username</label>
-                            <input type="text" name="db_username" class="form-control" value="{{ old('db_username', 'root') }}" required>
-                            @error('db_username') <small class="text-danger">{{ $message }}</small> @enderror
+                            <input type="text" name="db_username" id="schoolDbUsername" class="form-control" placeholder="school_talha" value="{{ old('db_username') }}" required>
+                            <small class="text-muted">Must be different from your main .env DB_USERNAME.</small>
+                            @error('db_username') <small class="text-danger d-block">{{ $message }}</small> @enderror
                         </div>
                         <div class="col-md-12 mb-3">
                             <label class="form-label">DB Password</label>
@@ -219,6 +279,41 @@
 @push('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        const subdomainInput = document.getElementById('schoolSubdomain');
+        const dbNameInput = document.getElementById('schoolDbDatabase');
+        const dbUserInput = document.getElementById('schoolDbUsername');
+
+        function syncTenantDbFields() {
+            if (!subdomainInput || !dbNameInput || !dbUserInput) {
+                return;
+            }
+
+            const subdomain = subdomainInput.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+            if (!subdomain) {
+                return;
+            }
+
+            const suggested = 'school_' + subdomain.replace(/-/g, '_');
+            if (!dbNameInput.dataset.touched) {
+                dbNameInput.value = suggested;
+            }
+            if (!dbUserInput.dataset.touched) {
+                dbUserInput.value = suggested;
+            }
+        }
+
+        if (subdomainInput) {
+            subdomainInput.addEventListener('input', syncTenantDbFields);
+        }
+        [dbNameInput, dbUserInput].forEach(function (input) {
+            if (!input) {
+                return;
+            }
+            input.addEventListener('input', function () {
+                input.dataset.touched = '1';
+            });
+        });
+
         @if ($errors->any())
             const modalElement = document.getElementById('addSchoolModal');
             if (modalElement && window.bootstrap) {

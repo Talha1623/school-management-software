@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\CustomPayment;
 use App\Models\Accountant;
+use App\Models\AdminRole;
 use App\Models\Campus;
 use App\Models\ClassModel;
+use App\Models\Message;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\StudentDiscount;
 use App\Models\StudentPayment;
+use App\Services\FeePaymentWebTables;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -97,6 +100,13 @@ class CustomPaymentController extends Controller
 
         $this->recordOnStudentLedger($validated, $discountAmount, $smsNotification);
 
+        if (auth()->guard('accountant')->check()) {
+            $student = Student::where('student_code', $validated['student_code'])->first();
+            if ($student) {
+                $this->notifyAdminsAboutAccountantCustomPayment($validated, $student);
+            }
+        }
+
         return redirect()
             ->route($redirectRoute)
             ->with('success', 'Payment recorded successfully! Fee Payment ledger has been updated.');
@@ -181,32 +191,13 @@ class CustomPaymentController extends Controller
         $title = (string) $existingFee->payment_title;
         $method = (string) ($validated['method'] ?? 'Cash Payment');
 
-        $generatedLate = (float) StudentPayment::ledgerActive()
-            ->where('student_code', $studentCode)
-            ->where('payment_title', $title)
-            ->whereIn('method', ['Generated', 'Installment'])
-            ->sum('late_fee');
+        $student = Student::where('student_code', $studentCode)->first();
+        $dueParts = $student
+            ? FeePaymentWebTables::outstandingDuePartsForTitle($student, $title)
+            : ['late_fee' => 0.0, 'total' => 0.0];
 
-        $paidFeesForTitle = StudentPayment::ledgerActive()
-            ->where('student_code', $studentCode)
-            ->where('payment_title', $title)
-            ->whereNotIn('method', ['Generated', 'Installment'])
-            ->get();
-
-        $paidFeesForTitle = StudentPayment::paidLedgerRowsForLatestGeneratedTitle($paidFeesForTitle, $existingFee);
-
-        $paidLate = (float) $paidFeesForTitle->sum(fn ($item) => (float) ($item->late_fee ?? 0));
-        $lateFee = max(0, round($generatedLate - $paidLate, 2));
-
-        $totalStudentDiscount = (float) StudentDiscount::where('student_code', $studentCode)
-            ->get()
-            ->sum(fn ($discount) => (float) ($discount->discount_amount ?? 0));
-
-        $remainingDueBeforePayment = StudentPayment::remainingDueForTitle(
-            $studentCode,
-            $title,
-            $totalStudentDiscount
-        );
+        $lateFee = (float) ($dueParts['late_fee'] ?? 0);
+        $remainingDueBeforePayment = (float) ($dueParts['total'] ?? 0);
 
         if ($remainingDueBeforePayment <= 0.02) {
             return;
@@ -216,23 +207,20 @@ class CustomPaymentController extends Controller
         $paymentAmount = round((float) ($validated['payment_amount'] ?? 0), 2);
         $discountAmount = round($discountAmount, 2);
 
-        $maxDiscountAllowed = max(0, round($maxPayableWithThisRequest - $paymentAmount, 2));
-        $maxPaymentAllowed = max(0, round($maxPayableWithThisRequest - $discountAmount, 2));
-        $totalCredit = round($paymentAmount + $discountAmount, 2);
-
-        if ($discountAmount > $maxDiscountAllowed + 0.02) {
+        if ($discountAmount > $maxPayableWithThisRequest + 0.02) {
             throw ValidationException::withMessages([
-                'payment_amount' => $maxPayableWithThisRequest <= 0.02
+                'discount' => $maxPayableWithThisRequest <= 0.02
                     ? 'No due amount remains to apply a discount.'
-                    : 'Discount cannot be greater than ' . number_format($maxDiscountAllowed, 2) . '.',
+                    : 'Discount cannot be greater than ' . number_format($maxPayableWithThisRequest, 2) . '.',
             ]);
         }
 
-        // Custom Payment: cap to due instead of blocking (UI amount may differ from ledger slice).
-        if ($paymentAmount > $maxPaymentAllowed + 0.02) {
-            $paymentAmount = $maxPaymentAllowed;
+        $maxCashAfterDiscount = max(0, round($maxPayableWithThisRequest - $discountAmount, 2));
+        if ($paymentAmount > $maxCashAfterDiscount + 0.02) {
+            $paymentAmount = $maxCashAfterDiscount;
         }
 
+        $totalCredit = round($paymentAmount + $discountAmount, 2);
         if ($totalCredit > $maxPayableWithThisRequest + 0.02) {
             $paymentAmount = max(0, round($maxPayableWithThisRequest - $discountAmount, 2));
             $totalCredit = round($paymentAmount + $discountAmount, 2);
@@ -263,6 +251,7 @@ class CustomPaymentController extends Controller
 
         // Full payment: update the generated row so Fee Payment shows it as paid.
         $existingFee->update([
+            'campus' => $validated['campus'] ?? $existingFee->campus,
             'payment_amount' => $payload['payment_amount'],
             'discount' => $payload['discount'],
             'method' => $payload['method'],
@@ -271,6 +260,7 @@ class CustomPaymentController extends Controller
             'late_fee' => $payload['late_fee'],
             'accountant' => $payload['accountant'],
         ]);
+        $existingFee->touch();
     }
 
     /**
@@ -379,11 +369,15 @@ class CustomPaymentController extends Controller
 
     private function getRemainingDue(string $studentCode, string $paymentTitle): float
     {
-        $totalStudentDiscount = (float) StudentDiscount::where('student_code', $studentCode)
-            ->get()
-            ->sum(fn ($discount) => (float) ($discount->discount_amount ?? 0));
+        $student = Student::where('student_code', $studentCode)->first();
+        if (! $student) {
+            return 0.0;
+        }
 
-        return round(StudentPayment::remainingDueForTitle($studentCode, $paymentTitle, $totalStudentDiscount), 2);
+        return round(
+            FeePaymentWebTables::outstandingDuePartsForTitle($student, $paymentTitle)['total'],
+            2
+        );
     }
 
     private function hasRemainingDue(string $studentCode, string $paymentTitle): bool
@@ -402,5 +396,49 @@ class CustomPaymentController extends Controller
         }
 
         return auth()->user()->name ?? null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function notifyAdminsAboutAccountantCustomPayment(array $validated, Student $student): void
+    {
+        $accountant = auth()->guard('accountant')->user();
+        if (! $accountant) {
+            return;
+        }
+
+        $classSection = trim((string) ($student->class ?? '') . (($student->section ?? '') !== '' ? ' - ' . $student->section : ''));
+        $text = sprintf(
+            '%s recorded custom payment of %s for %s (%s). Fee: %s. Method: %s. Campus: %s.',
+            $accountant->name ?? 'Accountant',
+            number_format((float) ($validated['payment_amount'] ?? 0), 2),
+            $student->student_name ?? 'Student',
+            $validated['student_code'],
+            $validated['payment_title'],
+            $validated['method'],
+            $validated['campus'] ?? ($student->campus ?? 'N/A')
+        );
+
+        if ($classSection !== '') {
+            $text .= ' Class: ' . $classSection . '.';
+        }
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($accountant, $text) {
+                Message::create([
+                    'from_type' => 'accountant_notification',
+                    'from_id' => $accountant->id,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
     }
 }

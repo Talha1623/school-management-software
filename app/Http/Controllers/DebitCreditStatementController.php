@@ -6,6 +6,7 @@ use App\Models\Student;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\StudentPayment;
+use App\Models\CustomPayment;
 use App\Models\Campus;
 use App\Models\ManagementExpense;
 use App\Models\ExpenseCategory;
@@ -286,8 +287,16 @@ class DebitCreditStatementController extends Controller
 
         $payments = StudentPayment::query()
             ->ledgerActive()
-            ->whereIn('student_code', $studentCodes)
-            ->where('method', '!=', 'Generated')
+            ->whereNotIn('method', ['Generated', 'Installment'])
+            ->where(function ($query) use ($studentCodes) {
+                foreach ($studentCodes as $code) {
+                    $normalized = strtolower(trim((string) $code));
+                    if ($normalized === '') {
+                        continue;
+                    }
+                    $query->orWhereRaw('LOWER(TRIM(student_code)) = ?', [$normalized]);
+                }
+            })
             ->when($filterFromDate, fn ($q) => $q->whereDate('payment_date', '>=', $filterFromDate))
             ->when($filterToDate, fn ($q) => $q->whereDate('payment_date', '<=', $filterToDate))
             ->get();
@@ -295,33 +304,41 @@ class DebitCreditStatementController extends Controller
         $aggregates = [];
 
         foreach ($payments as $payment) {
-            $head = $this->normalizePaidFeeHead((string) ($payment->payment_title ?? ''));
-            if ($head === '') {
+            $this->accumulateFeeHeadRow(
+                $aggregates,
+                $this->normalizePaidFeeHead((string) ($payment->payment_title ?? '')),
+                round((float) ($payment->payment_amount ?? 0), 2),
+                round($this->effectivePaymentDiscount($payment), 2)
+            );
+        }
+
+        CustomPayment::ensureStudentCodeColumn();
+
+        $customPayments = CustomPayment::query()
+            ->where(function ($query) use ($studentCodes) {
+                foreach ($studentCodes as $code) {
+                    $normalized = strtolower(trim((string) $code));
+                    if ($normalized === '') {
+                        continue;
+                    }
+                    $query->orWhereRaw('LOWER(TRIM(student_code)) = ?', [$normalized]);
+                }
+            })
+            ->when($filterFromDate, fn ($q) => $q->whereDate('payment_date', '>=', $filterFromDate))
+            ->when($filterToDate, fn ($q) => $q->whereDate('payment_date', '<=', $filterToDate))
+            ->get();
+
+        foreach ($customPayments as $customPayment) {
+            if ($customPayment->isMirroredOnStudentLedger()) {
                 continue;
             }
 
-            $cash = round((float) ($payment->payment_amount ?? 0), 2);
-            $discount = round($this->effectivePaymentDiscount($payment), 2);
-
-            if ($cash <= 0 && $discount <= 0) {
-                continue;
-            }
-
-            if (!isset($aggregates[$head])) {
-                $aggregates[$head] = [
-                    'head' => $head,
-                    'transactions' => 0,
-                    'cash' => 0.0,
-                    'discount' => 0.0,
-                    'amount' => 0.0,
-                ];
-            }
-
-            $aggregates[$head]['transactions']++;
-            $aggregates[$head]['cash'] += $cash;
-            $aggregates[$head]['discount'] += $discount;
-            // Paid amount = cash received only (discount shown separately)
-            $aggregates[$head]['amount'] += $cash;
+            $this->accumulateFeeHeadRow(
+                $aggregates,
+                $this->normalizePaidFeeHead((string) ($customPayment->payment_title ?? '')),
+                round((float) ($customPayment->payment_amount ?? 0), 2),
+                0.0
+            );
         }
 
         return collect($aggregates)
@@ -334,6 +351,35 @@ class DebitCreditStatementController extends Controller
             ])
             ->sortBy('head', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
+    }
+
+    /**
+     * @param  array<string, array{head: string, transactions: int, cash: float, discount: float, amount: float}>  $aggregates
+     */
+    private function accumulateFeeHeadRow(array &$aggregates, string $head, float $cash, float $discount): void
+    {
+        if ($head === '') {
+            return;
+        }
+
+        if ($cash <= 0 && $discount <= 0) {
+            return;
+        }
+
+        if (! isset($aggregates[$head])) {
+            $aggregates[$head] = [
+                'head' => $head,
+                'transactions' => 0,
+                'cash' => 0.0,
+                'discount' => 0.0,
+                'amount' => 0.0,
+            ];
+        }
+
+        $aggregates[$head]['transactions']++;
+        $aggregates[$head]['cash'] += $cash;
+        $aggregates[$head]['discount'] += $discount;
+        $aggregates[$head]['amount'] += $cash;
     }
 
     /**

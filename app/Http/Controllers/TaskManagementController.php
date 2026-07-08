@@ -15,18 +15,19 @@ use Illuminate\Support\Facades\Auth;
 
 class TaskManagementController extends Controller
 {
-    private function notifyAdminsAboutAccountantTaskStatus(Task $task, string $status): void
+    private function notifyAdminsAboutTaskStatusChange(Task $task, string $status): void
     {
-        $accountant = Auth::guard('accountant')->user();
-        if (!$accountant) {
+        $actor = $this->resolveTaskStatusActor();
+        if (!$actor) {
             return;
         }
 
+        $statusLabel = $status === 'Returned' ? 'Returned (Rejected)' : $status;
         $text = sprintf(
             '%s updated task "%s" status to %s. Assigned to: %s.',
-            $accountant->name ?? 'Accountant',
+            $actor['name'],
             $task->task_title ?? 'Task',
-            $status,
+            $statusLabel,
             $task->assign_to ?? 'N/A'
         );
 
@@ -34,10 +35,10 @@ class TaskManagementController extends Controller
             ->select('id')
             ->orderBy('id')
             ->get()
-            ->each(function (AdminRole $admin) use ($accountant, $text) {
+            ->each(function (AdminRole $admin) use ($actor, $text) {
                 Message::create([
-                    'from_type' => 'accountant_notification',
-                    'from_id' => $accountant->id,
+                    'from_type' => $actor['from_type'],
+                    'from_id' => $actor['from_id'],
                     'to_type' => 'admin',
                     'to_id' => $admin->id,
                     'text' => $text,
@@ -46,6 +47,141 @@ class TaskManagementController extends Controller
                     'read_at' => null,
                 ]);
             });
+    }
+
+    /**
+     * @return array{name: string, from_type: string, from_id: int}|null
+     */
+    private function resolveTaskStatusActor(): ?array
+    {
+        $staff = Auth::guard('staff')->user();
+        if ($staff) {
+            return [
+                'name' => $staff->name ?? 'Staff',
+                'from_type' => 'staff_notification',
+                'from_id' => (int) $staff->id,
+            ];
+        }
+
+        $accountant = Auth::guard('accountant')->user();
+        if ($accountant) {
+            return [
+                'name' => $accountant->name ?? 'Accountant',
+                'from_type' => 'accountant_notification',
+                'from_id' => (int) $accountant->id,
+            ];
+        }
+
+        $admin = Auth::guard('admin')->user();
+        if ($admin) {
+            return [
+                'name' => $admin->name ?? 'Admin',
+                'from_type' => 'staff_notification',
+                'from_id' => (int) $admin->id,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{name: string, from_type: string, from_id: int}|null
+     */
+    private function resolveTaskAssigner(): ?array
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin) {
+            return null;
+        }
+
+        return [
+            'name' => $admin->name ?? 'Admin',
+            'from_type' => 'admin',
+            'from_id' => (int) $admin->id,
+        ];
+    }
+
+    /**
+     * @return array{to_type: string, to_id: int}|null
+     */
+    private function findTaskAssigneeByName(string $name): ?array
+    {
+        $nameKey = strtolower(trim($name));
+        if ($nameKey === '') {
+            return null;
+        }
+
+        $staff = Staff::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', [$nameKey])
+            ->first();
+        if ($staff) {
+            return ['to_type' => 'teacher', 'to_id' => (int) $staff->id];
+        }
+
+        $accountant = Accountant::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', [$nameKey])
+            ->first();
+        if ($accountant) {
+            return ['to_type' => 'accountant', 'to_id' => (int) $accountant->id];
+        }
+
+        $admin = AdminRole::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', [$nameKey])
+            ->first();
+        if ($admin) {
+            return ['to_type' => 'admin', 'to_id' => (int) $admin->id];
+        }
+
+        return null;
+    }
+
+    private function notifyAssigneeAboutNewTask(array $validated): void
+    {
+        $assignToName = trim((string) ($validated['assign_to'] ?? ''));
+        if ($assignToName === '') {
+            return;
+        }
+
+        $assigner = $this->resolveTaskAssigner();
+        if (!$assigner) {
+            return;
+        }
+
+        $assignee = $this->findTaskAssigneeByName($assignToName);
+        if (!$assignee) {
+            return;
+        }
+
+        if ($assignee['to_type'] === 'admin' && $assignee['to_id'] === $assigner['from_id']) {
+            return;
+        }
+
+        $text = sprintf(
+            '%s assigned you a new task "%s". Type: %s. Status: Pending.',
+            $assigner['name'],
+            $validated['task_title'],
+            $validated['type'] ?? 'Normal'
+        );
+
+        if (!empty($validated['description'])) {
+            $description = trim((string) $validated['description']);
+            if ($description !== '') {
+                $text .= ' Description: ' . (strlen($description) > 120 ? substr($description, 0, 120) . '...' : $description);
+            }
+        }
+
+        $fromType = $assignee['to_type'] === 'admin' ? 'staff_notification' : $assigner['from_type'];
+
+        Message::create([
+            'from_type' => $fromType,
+            'from_id' => $assigner['from_id'],
+            'to_type' => $assignee['to_type'],
+            'to_id' => $assignee['to_id'],
+            'text' => $text,
+            'attachment_path' => null,
+            'attachment_type' => null,
+            'read_at' => null,
+        ]);
     }
 
     /**
@@ -171,12 +307,16 @@ class TaskManagementController extends Controller
         $validated['status'] = 'Pending';
         
         // Set assign_by to current admin if not provided
-        if (empty($validated['assign_by']) && Auth::check()) {
-            $admin = Auth::user();
+        if (empty($validated['assign_by']) && Auth::guard('admin')->check()) {
+            $admin = Auth::guard('admin')->user();
             $validated['assign_by'] = $admin->name ?? 'Admin';
         }
 
         Task::create($validated);
+
+        if (Auth::guard('admin')->check()) {
+            $this->notifyAssigneeAboutNewTask($validated);
+        }
 
         return redirect()
             ->route('task-management')
@@ -246,6 +386,7 @@ class TaskManagementController extends Controller
 
             // Ensure status value is properly formatted and matches enum
             $status = ucfirst(trim($request->status));
+            $previousStatus = (string) ($task->status ?? 'Pending');
             
             // Validate against allowed enum values
             $allowedStatuses = ['Pending', 'Accepted', 'Returned', 'Completed'];
@@ -259,7 +400,9 @@ class TaskManagementController extends Controller
             
             // Refresh the task to get updated status
             $task->refresh();
-            $this->notifyAdminsAboutAccountantTaskStatus($task, $status);
+            if ($previousStatus !== $status) {
+                $this->notifyAdminsAboutTaskStatusChange($task, $status);
+            }
 
             return response()->json([
                 'success' => true,

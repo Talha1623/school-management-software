@@ -7,6 +7,10 @@
     $automation = $automation ?? [];
     $checked = fn (string $key) => !empty($automation[$key]) ? 'checked' : '';
     $value = fn (string $key, $default = '') => old($key, $automation[$key] ?? $default);
+    $attendanceMode = old(
+        'attendance_automation_mode',
+        !empty($automation['auto_attendance']) ? 'enabled' : 'manual'
+    );
 @endphp
 <div class="row">
     <div class="col-12">
@@ -44,23 +48,62 @@
                                 Attendance Automation
                             </h5>
                             
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_attendance" name="auto_attendance" value="1" {{ $checked('auto_attendance') }}>
-                                <label class="form-check-label" for="auto_attendance">
-                                    Enable Automatic Attendance Marking
-                                </label>
-                            </div>
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="auto_absent" name="auto_absent" value="1" {{ $checked('auto_absent') }}>
-                                <label class="form-check-label" for="auto_absent">
-                                    Auto-mark Absent After Time Limit
-                                </label>
-                            </div>
-                            
                             <div class="mb-3">
+                                <label class="form-label fw-medium d-block mb-2">Attendance Automation</label>
+
+                                <div class="form-check mb-2">
+                                    <input
+                                        class="form-check-input"
+                                        type="radio"
+                                        name="attendance_automation_mode"
+                                        id="attendance_mode_yes"
+                                        value="enabled"
+                                        {{ $attendanceMode === 'enabled' ? 'checked' : '' }}
+                                    >
+                                    <label class="form-check-label" for="attendance_mode_yes">
+                                        <strong>Yes</strong>
+                                        <span class="text-muted d-block" style="font-size: 13px;">
+                                            Auto-mark <strong>Absent</strong> for students &amp; <strong>full-time staff only</strong> if attendance is not added after school start time + limit.
+                                            Per hour and lecture staff are not included.
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div class="form-check mb-3">
+                                    <input
+                                        class="form-check-input"
+                                        type="radio"
+                                        name="attendance_automation_mode"
+                                        id="attendance_mode_no"
+                                        value="manual"
+                                        {{ $attendanceMode === 'manual' ? 'checked' : '' }}
+                                    >
+                                    <label class="form-check-label" for="attendance_mode_no">
+                                        <strong>No</strong>
+                                        <span class="text-muted d-block" style="font-size: 13px;">Manual attendance only (no automatic absent)</span>
+                                    </label>
+                                </div>
+
+                                @if(!empty($schoolStartTime))
+                                    <div class="alert alert-info py-2 px-3 mb-3" style="font-size: 13px;">
+                                        <strong>Salary Setting school time:</strong> {{ $schoolStartTime }}
+                                        @if(!empty($attendanceCutoffTime) && !empty($automation['attendance_time_limit']))
+                                            <br>
+                                            <strong>Auto absent after:</strong> {{ $attendanceCutoffTime }}
+                                            ({{ (int) $automation['attendance_time_limit'] }} min after school time)
+                                        @endif
+                                    </div>
+                                @else
+                                    <div class="alert alert-warning py-2 px-3 mb-3" style="font-size: 13px;">
+                                        Set <strong>Late Arrival Time</strong> in Salary Setting first (e.g. 08:00 AM).
+                                    </div>
+                                @endif
+                            </div>
+                            
+                            <div class="mb-3" id="attendance_time_limit_wrap">
                                 <label class="form-label fw-medium">Attendance Time Limit (minutes)</label>
-                                <input type="number" class="form-control" name="attendance_time_limit" value="{{ $value('attendance_time_limit') }}" placeholder="30" min="0">
+                                <input type="number" class="form-control" name="attendance_time_limit" id="attendance_time_limit" value="{{ $value('attendance_time_limit') }}" placeholder="5" min="0">
+                                <small class="text-muted">Example: school time 08:00 + 5 minutes = students &amp; staff absent at 08:05 if attendance not marked (late / no scan).</small>
                             </div>
                         </div>
                     </div>
@@ -174,6 +217,28 @@ document.addEventListener('DOMContentLoaded', function() {
         sidebarArea.classList.remove('sidebar-hide');
         sidebarArea.classList.add('sidebar-show');
     }
+
+    const yesRadio = document.getElementById('attendance_mode_yes');
+    const noRadio = document.getElementById('attendance_mode_no');
+    const limitWrap = document.getElementById('attendance_time_limit_wrap');
+    const limitInput = document.getElementById('attendance_time_limit');
+
+    function syncAttendanceLimitField() {
+        const enabled = yesRadio && yesRadio.checked;
+        if (limitWrap) {
+            limitWrap.style.display = enabled ? '' : 'none';
+        }
+        if (limitInput) {
+            limitInput.disabled = !enabled;
+            if (!enabled) {
+                limitInput.removeAttribute('required');
+            }
+        }
+    }
+
+    yesRadio?.addEventListener('change', syncAttendanceLimitField);
+    noRadio?.addEventListener('change', syncAttendanceLimitField);
+    syncAttendanceLimitField();
 
     window.addEventListener('resize', function() {
         if (window.innerWidth > 992) {

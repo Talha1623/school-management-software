@@ -331,11 +331,11 @@ class GenerateSalaryController extends Controller
                     continue;
                 }
 
-                // Calculate loan repayment from approved loans
-                $loanRepayment = $this->loanRepaymentService->calculate($staff->id);
+                // Resolve calendar month number (1–12) so days-in-month is correct (28/29/30/31).
+                $monthNumber = $this->resolveMonthNumber($month);
 
                 // Calculate attendance counts for selected month/year
-                $attendanceSummary = $this->calculateAttendanceSummary($staff->id, $year, $month);
+                $attendanceSummary = $this->calculateAttendanceSummary($staff->id, (int) $year, $monthNumber);
                 $presentCount = $attendanceSummary['present'];
                 $basicRate = (float) ($staff->salary ?? 0);
                 $salaryType = strtolower(trim($staff->salary_type ?? ''));
@@ -351,29 +351,47 @@ class GenerateSalaryController extends Controller
                     $earlyExitCount = $attendanceSummary['early_exit'] ?? 0;
                 }
                 
-                $salaryGenerated = $this->calculateSalaryGenerated($staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, (int) $month);
+                // salary_generated = attendance amount only (not reduced by loan).
+                $grossSalary = $this->calculateSalaryGenerated($staff, $attendanceSummary, (float) $deductionPerLateArrival, (int) $year, $monthNumber);
 
-                // Subtract loan repayment from salary generated (no discount)
-                $finalSalaryGenerated = max(0, $salaryGenerated - $loanRepayment);
+                // loan_repayment = full monthly installment (separate column).
+                $loanRepayment = $this->loanRepaymentService->calculate((int) $staff->id);
 
                 // Create salary record
                 $salary = Salary::create([
                     'staff_id' => $staff->id,
                     'salary_month' => $monthName,
-                    'year' => (string)$year,
+                    'year' => (string) $year,
                     'present' => $presentCount,
                     'absent' => $absentCount,
                     'late' => $lateCount,
                     'early_exit' => $earlyExitCount,
                     'basic' => $basicRate,
-                    'salary_generated' => $finalSalaryGenerated,
+                    'salary_generated' => $grossSalary,
                     'amount_paid' => 0,
                     'loan_repayment' => $loanRepayment,
                     'discount' => 0,
                     'status' => 'Pending',
                 ]);
 
-                $this->pushNotifications->notifyStaffSalaryGenerated($staff, $salary);
+                // Re-apply loan after insert (uses salary id for pending allocation order).
+                if ($loanRepayment <= 0) {
+                    $loanRepayment = $this->loanRepaymentService->calculate((int) $staff->id, (int) $salary->id);
+                    if ($loanRepayment > 0) {
+                        $salary->update(['loan_repayment' => $loanRepayment]);
+                    }
+                }
+
+                try {
+                    $this->pushNotifications->notifyStaffSalaryGenerated($staff, $salary);
+                } catch (\Throwable $e) {
+                    // Push/device-token issues must not block salary generation.
+                    \Illuminate\Support\Facades\Log::warning('Salary push notification failed', [
+                        'staff_id' => $staff->id,
+                        'salary_id' => $salary->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
 
                 $generatedCount++;
             }
@@ -440,43 +458,37 @@ class GenerateSalaryController extends Controller
             config('app.timezone')
         )->toDateString();
 
-        // Recalculate loan from approved staff loans before payment
-        $loanRepayment = $this->loanRepaymentService->calculate($salary->staff_id, $salary->id);
+        // salary_generated stays as attendance gross; loan is only in loan_repayment.
+        $grossSalary = max(0, (float) ($salary->salary_generated ?? 0));
+        $loanRepayment = (float) ($salary->loan_repayment ?? 0);
+        if ($loanRepayment <= 0) {
+            $loanRepayment = $this->loanRepaymentService->calculate((int) $salary->staff_id, (int) $salary->id);
+        }
         if ($loanRepayment <= 0 && isset($validated['loan_repayment'])) {
             $loanRepayment = (float) $validated['loan_repayment'];
         }
 
-        // salary_generated is already net of loan; only add bonus and subtract deduction
         $bonusAmount = (float) ($validated['bonus_amount'] ?? 0);
         $deductionAmount = (float) ($validated['deduction_amount'] ?? 0);
-        
-        $newSalaryGenerated = max(0, $salary->salary_generated + $bonusAmount - $deductionAmount);
+        $netPayable = max(0, $grossSalary - $loanRepayment + $bonusAmount - $deductionAmount);
 
-        // Get amount paid from user input (use exactly as entered, don't modify)
         $amountPaid = (float) ($validated['amount_paid'] ?? 0);
-        
-        // Determine status based on fully_paid or amount_paid
         $fullyPaid = isset($validated['fully_paid']) && ($validated['fully_paid'] == '1' || $validated['fully_paid'] === true);
-        
+
         $status = 'Pending';
-        if ($fullyPaid || $amountPaid >= $newSalaryGenerated) {
+        if ($fullyPaid || $amountPaid >= $netPayable) {
             $status = 'Paid';
         } elseif ($amountPaid > 0) {
             $status = 'Issued';
         }
-        
-        // If amount_paid is greater than 0, status should not be Pending
         if ($amountPaid > 0 && $status == 'Pending') {
             $status = 'Issued';
         }
 
-        // Update salary with all calculated values
-        // amount_paid is used as entered by user
-        // salary_generated includes bonus (added) and deduction/loan (subtracted)
         $updates = [
             'amount_paid' => $amountPaid,
             'loan_repayment' => $loanRepayment,
-            'salary_generated' => $newSalaryGenerated,
+            'salary_generated' => $grossSalary,
             'discount' => 0,
             'bonus_amount' => $bonusAmount,
             'deduction_amount' => $deductionAmount,
@@ -535,11 +547,16 @@ class GenerateSalaryController extends Controller
             ->with('generated_year', $salary->year);
     }
     
-    private function calculateAttendanceSummary(int $staffId, int $year, string $month): array
+    private function calculateAttendanceSummary(int $staffId, int $year, int|string $month): array
     {
+        $monthNumber = $this->resolveMonthNumber($month);
+        if ($monthNumber < 1) {
+            $monthNumber = (int) date('n');
+        }
+
         $records = StaffAttendance::where('staff_id', $staffId)
             ->whereYear('attendance_date', $year)
-            ->whereMonth('attendance_date', $month)
+            ->whereMonth('attendance_date', $monthNumber)
             ->get();
 
         $settings = SalarySetting::getSettings();
@@ -827,11 +844,12 @@ class GenerateSalaryController extends Controller
         }
 
         $settings = SalarySetting::getSettings();
-        
-        // Use staff's individual free_absent if set, otherwise use SalarySetting's free_absents
-        $staffFreeAbsents = (int) ($staff->free_absent ?? null);
-        $freeAbsents = $staffFreeAbsents !== null && $staffFreeAbsents >= 0 ? $staffFreeAbsents : (int) ($settings->free_absents ?? 0);
-        
+
+        // Staff free_absent when set; otherwise Salary Setting. Do not cast null→0 before check.
+        $freeAbsents = $staff->free_absent !== null && $staff->free_absent !== ''
+            ? max(0, (int) $staff->free_absent)
+            : max(0, (int) ($settings->free_absents ?? 0));
+
         $leaveDeduction = strtolower(trim($settings->leave_deduction ?? 'no')) === 'yes';
         $presentCount = (int) ($attendanceSummary['present'] ?? 0);
         $absentCount = (int) ($attendanceSummary['absent'] ?? 0);
@@ -839,60 +857,35 @@ class GenerateSalaryController extends Controller
         $lateCount = (int) ($attendanceSummary['late'] ?? 0);
         $earlyExitCount = (int) ($attendanceSummary['early_exit'] ?? 0);
 
-        // Calculate deductible absents (absents beyond free limit)
-        // Example: free_absent = 2, absent = 3
-        //   - deductibleAbsents = 3 - 2 = 1 (only 1 absent will be deducted, 2 are free)
         $totalAbsents = $absentCount + ($leaveDeduction ? $leaveCount : 0);
         $deductibleAbsents = max(0, $totalAbsents - $freeAbsents);
-        
-        // Calculate how many free absents are actually used (up to actual absent count)
-        // Example: free_absent = 2, absent = 3 -> freeAbsentsUsed = 2
-        // Example: free_absent = 2, absent = 1 -> freeAbsentsUsed = 1
         $freeAbsentsUsed = min($freeAbsents, $absentCount);
 
-        // Calculate total days in month
-        $daysInMonth = 30;
-        if (!empty($year) && !empty($month)) {
-            try {
-                $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
-            } catch (\Exception $e) {
-                $daysInMonth = 30;
-            }
-        }
-        
-        // Calculate per day salary: Basic Salary / Total Days in Month
+        // Real calendar days: Feb 28/29, Apr/Jun/Sep/Nov 30, others 31.
+        $daysInMonth = $this->daysInSalaryMonth($year, $month);
         $dailyRate = $daysInMonth > 0 ? ($rate / $daysInMonth) : 0;
-        
-        // Calculate base salary: present days + free absent days + leave days (all treated as present)
-        // Example: present = 20, absent = 3, leave = 2, free_absent = 2
-        //   - freeAbsentsUsed = min(2, 3) = 2
-        //   - baseSalary = dailyRate * (20 + 2 + 2) = dailyRate * 24
-        //     (2 free absents + 2 leaves treated as present)
-        //   - deductibleAbsents = 3 - 2 = 1 (only 1 absent deducted)
+
+        // Pay present + free absents used + leave. Extra absents are unpaid (not in base).
+        // July (31): present=5, free_absent=2, late=1, early=1, fees=500
+        //   daily=5000/31, paidDays=7, salary=7*daily-500-500=129.03
         $baseSalary = $dailyRate * ($presentCount + $freeAbsentsUsed + $leaveCount);
-        
-        // Late arrival deduction: Use staff's individual late_fees if set, otherwise default 500
-        $staffLateFees = (float) ($staff->late_fees ?? null);
-        $lateFeePerLate = $staffLateFees !== null && $staffLateFees >= 0 ? $staffLateFees : 500;
+
+        $lateFeePerLate = $staff->late_fees !== null && $staff->late_fees !== ''
+            ? max(0, (float) $staff->late_fees)
+            : 500.0;
         $lateDeduction = $lateFeePerLate * $lateCount;
-        
-        // Early exit deduction: Use staff's individual early_exit_fees if set, otherwise default 1000
-        $staffEarlyExitFees = (float) ($staff->early_exit_fees ?? null);
-        $earlyExitFeePerExit = $staffEarlyExitFees !== null && $staffEarlyExitFees >= 0 ? $staffEarlyExitFees : 1000;
+
+        $earlyExitFeePerExit = $staff->early_exit_fees !== null && $staff->early_exit_fees !== ''
+            ? max(0, (float) $staff->early_exit_fees)
+            : 500.0;
         $earlyExitDeduction = $earlyExitFeePerExit * $earlyExitCount;
-        
-        // Absent deduction: Use staff's individual absent_fees if set, otherwise use daily rate
-        $staffAbsentFees = (float) ($staff->absent_fees ?? null);
-        if ($staffAbsentFees !== null && $staffAbsentFees >= 0) {
-            // Use fixed absent fees per absent day
-            $absentDeduction = $staffAbsentFees * $deductibleAbsents;
-        } else {
-            // Use daily rate calculation
-            $absentDeduction = $dailyRate * $deductibleAbsents;
+
+        // Fixed absent fee only when staff has explicit absent_fees > 0.
+        $absentDeduction = 0.0;
+        if ($staff->absent_fees !== null && $staff->absent_fees !== '' && (float) $staff->absent_fees > 0) {
+            $absentDeduction = (float) $staff->absent_fees * $deductibleAbsents;
         }
 
-        // Final salary: (Per Day Salary × Present Days) - Deductions
-        // Note: deductibleAbsents already accounts for free_absent (only deducts absents beyond free limit)
         return round(max(0, $baseSalary - $absentDeduction - $lateDeduction - $earlyExitDeduction), 2);
     }
 
@@ -1010,11 +1003,11 @@ class GenerateSalaryController extends Controller
             return;
         }
 
-        $month = $monthNumeric ?? $this->getMonthNumber($salary->salary_month);
+        $monthNumber = $this->resolveMonthNumber($monthNumeric ?? $salary->salary_month);
         $yearValue = $year ?? (int) $salary->year;
         $deductionPerLateArrival = 0.0;
 
-        $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, $yearValue, $month);
+        $attendanceSummary = $this->calculateAttendanceSummary($salary->staff_id, $yearValue, $monthNumber);
         $presentCount = $attendanceSummary['present'];
         $basicRate = (float) ($salary->staff->salary ?? 0);
         $salaryType = strtolower(trim($salary->staff->salary_type ?? ''));
@@ -1047,22 +1040,22 @@ class GenerateSalaryController extends Controller
         }
 
         if (!$attendanceOnly && $salary->status === 'Pending' && (float) ($salary->amount_paid ?? 0) <= 0) {
-            $loanRepayment = $this->loanRepaymentService->calculate($salary->staff_id, $salary->id);
+            // Keep salary_generated as attendance gross; loan stays in loan_repayment only.
             $grossSalary = $this->calculateSalaryGenerated(
                 $salary->staff,
                 $attendanceSummary,
                 $deductionPerLateArrival,
                 $yearValue,
-                (int) $month
+                $monthNumber
             );
-            $netSalary = max(0, $grossSalary - $loanRepayment);
+            $loanRepayment = $this->loanRepaymentService->calculate((int) $salary->staff_id, (int) $salary->id);
 
             if (abs((float) ($salary->loan_repayment ?? 0) - $loanRepayment) > 0.01) {
                 $updates['loan_repayment'] = $loanRepayment;
             }
 
-            if (abs((float) ($salary->salary_generated ?? 0) - $netSalary) > 0.01) {
-                $updates['salary_generated'] = $netSalary;
+            if (abs((float) ($salary->salary_generated ?? 0) - $grossSalary) > 0.01) {
+                $updates['salary_generated'] = $grossSalary;
             }
         }
 
@@ -1073,11 +1066,54 @@ class GenerateSalaryController extends Controller
     }
 
     /**
-     * Get month number from month name
+     * Get month number from month name (zero-padded string, e.g. "07").
      */
     private function getMonthNumber($monthName)
     {
-        return self::MONTH_NAMES[$monthName] ?? date('m');
+        $resolved = $this->resolveMonthNumber($monthName);
+
+        return $resolved > 0 ? sprintf('%02d', $resolved) : date('m');
+    }
+
+    /**
+     * Resolve month to 1–12 from "07", 7, or "July".
+     */
+    private function resolveMonthNumber(int|string|null $month): int
+    {
+        if ($month === null || $month === '') {
+            return 0;
+        }
+
+        if (is_numeric($month)) {
+            $num = (int) $month;
+
+            return ($num >= 1 && $num <= 12) ? $num : 0;
+        }
+
+        $name = trim((string) $month);
+        foreach (self::MONTH_NAMES as $monthName => $num) {
+            if (strcasecmp($monthName, $name) === 0) {
+                return (int) $num;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Calendar days in the salary month (28/29/30/31, leap years included).
+     */
+    private function daysInSalaryMonth(int|string|null $year, int|string|null $month): int
+    {
+        $yearNum = (int) $year;
+        $monthNum = $this->resolveMonthNumber($month);
+
+        if ($yearNum >= 2000 && $yearNum <= 2100 && $monthNum >= 1 && $monthNum <= 12) {
+            return (int) Carbon::createFromDate($yearNum, $monthNum, 1)->daysInMonth;
+        }
+
+        // Last resort only — prefer real calendar length over a fixed 30.
+        return (int) Carbon::now(config('app.timezone'))->daysInMonth;
     }
 
     /**
@@ -1120,16 +1156,22 @@ class GenerateSalaryController extends Controller
         $updates = ['status' => $validated['status']];
         if ($validated['status'] === 'Paid') {
             if ((float) ($salary->amount_paid ?? 0) <= 0) {
-                $updates['amount_paid'] = max(0, (float) ($salary->salary_generated ?? 0));
+                $updates['amount_paid'] = $salary->netPayableAmount();
             }
 
             $finalAmount = (float) ($updates['amount_paid'] ?? $salary->amount_paid ?? 0);
-            if ($finalAmount > 0) {
+            if ($finalAmount > 0 || (float) ($salary->loan_repayment ?? 0) > 0) {
                 $updates = array_merge($updates, Salary::metadataForPaidAction($salary));
             }
         }
 
+        $previousAmountPaid = (float) ($salary->amount_paid ?? 0);
         $salary->update($updates);
+        $salary->refresh();
+        if ($validated['status'] === 'Paid') {
+            $this->loanRepaymentService->applyRepaymentFromSalary($salary, $previousAmountPaid);
+            $this->syncPendingSalariesForStaff((int) $salary->staff_id);
+        }
 
         // If status is changed to Paid, redirect to thermal receipt print page
         if ($validated['status'] === 'Paid') {

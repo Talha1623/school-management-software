@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AdminRole;
+use App\Models\Message;
 use App\Models\Staff;
 use App\Services\ChatService;
 use App\Support\ChatActor;
@@ -15,6 +16,30 @@ class StaffChatController extends Controller
     public function __construct(
         private readonly ChatService $chatService,
     ) {
+    }
+
+    /**
+     * GET /api/staff/chat/unread-count
+     */
+    public function unreadCount(Request $request): JsonResponse
+    {
+        $staff = $request->user();
+        if (!$staff instanceof Staff) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied. Staff authentication required.',
+                'token' => null,
+            ], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Unread chat count loaded successfully.',
+            'data' => [
+                'unread_count' => Message::unreadLiveChatCount('teacher', (int) $staff->id),
+            ],
+            'token' => $request->user()?->currentAccessToken()?->token ?? null,
+        ], 200);
     }
 
     /**
@@ -49,6 +74,8 @@ class StaffChatController extends Controller
         }
 
         $messages = $this->chatService->conversation($actor, $peerType, $peerId)->values()->all();
+        $this->chatService->markConversationRead($actor, $peerType, $peerId);
+        $totalUnread = Message::unreadLiveChatCount('teacher', (int) $staff->id);
 
         return response()->json([
             'success' => true,
@@ -68,6 +95,8 @@ class StaffChatController extends Controller
                     'check_field' => 'is_mine',
                 ],
                 'messages' => $messages,
+                'unread_count' => 0,
+                'total_unread_count' => $totalUnread,
             ],
             'token' => $request->user()?->currentAccessToken()?->token ?? null,
         ], 200);
@@ -104,6 +133,7 @@ class StaffChatController extends Controller
         }
 
         $this->chatService->markConversationRead($actor, $peerType, $peerId);
+        $totalUnread = Message::unreadLiveChatCount('teacher', (int) $staff->id);
 
         return response()->json([
             'success' => true,
@@ -111,6 +141,9 @@ class StaffChatController extends Controller
             'data' => [
                 'peer_type' => $peerType,
                 'peer_id' => $peerId,
+                'thread_unread_count' => 0,
+                'unread_count' => $totalUnread,
+                'total_unread_count' => $totalUnread,
             ],
             'token' => $request->user()?->currentAccessToken()?->token ?? null,
         ], 200);

@@ -602,6 +602,260 @@ class FeePaymentWebTables
     }
 
     /**
+     * Configured late fee amount from monthly fee settings (ignores whether due date has passed).
+     */
+    public static function rawMonthlyLateFeeAmount(Student $student, string $month, string $year): ?float
+    {
+        $monthlyFeeRecord = MonthlyFee::where('fee_month', $month)
+            ->where('fee_year', $year)
+            ->where(function ($q) use ($student) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus ?? ''))])
+                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class ?? ''))])
+                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section ?? ''))]);
+            })
+            ->first();
+
+        if (!$monthlyFeeRecord) {
+            return null;
+        }
+
+        $configuredLate = (float) ($monthlyFeeRecord->late_fee ?? 0);
+
+        return $configuredLate > 0.0001 ? round($configuredLate, 2) : null;
+    }
+
+    /**
+     * Late fee total for voucher "After Due Date" — applied late plus configured late on unpaid principal.
+     *
+     * @param array<int, array<string, mixed>> $outstandingRows
+     */
+    public static function projectedAfterDueLateTotal(Student $student, array $outstandingRows): float
+    {
+        $sum = 0.0;
+
+        foreach ($outstandingRows as $row) {
+            $title = (string) ($row['fee_type'] ?? $row['title'] ?? '');
+            $principalDue = (float) ($row['amount'] ?? 0);
+            if ($principalDue <= 0.0001) {
+                continue;
+            }
+
+            $appliedLate = (float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0);
+            if ($appliedLate > 0.0001) {
+                $sum += $appliedLate;
+                continue;
+            }
+
+            if (preg_match('/^Monthly Fee - (\w+) (\d{4})$/i', $title, $matches)) {
+                $rawLate = self::rawMonthlyLateFeeAmount($student, $matches[1], $matches[2]);
+                if ($rawLate !== null) {
+                    $sum += $rawLate;
+                }
+            }
+        }
+
+        return round($sum, 2);
+    }
+
+    /**
+     * Monthly fee history for voucher print (total invoice vs paid), same math as Fee Payment.
+     *
+     * @return array<string, array{total: float, paid: float}>
+     */
+    public static function monthlyFeeHistoryForStudent(Student $student, int $year): array
+    {
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ];
+
+        $history = [];
+        foreach ($months as $month) {
+            $history[$month] = ['total' => 0.0, 'paid' => 0.0];
+        }
+
+        if (empty($student->student_code)) {
+            return $history;
+        }
+
+        $split = self::feeResultsSplitForStudent($student);
+        $rowsByTitle = collect($split['outstanding']['rows'] ?? [])
+            ->merge($split['paid']['rows'] ?? [])
+            ->keyBy(fn ($row) => strtolower(trim((string) ($row['fee_type'] ?? ''))));
+
+        foreach ($months as $month) {
+            $titleKey = strtolower("Monthly Fee - {$month} {$year}");
+            $row = $rowsByTitle->get($titleKey);
+            if (!$row) {
+                continue;
+            }
+
+            $history[$month] = [
+                'total' => round((float) ($row['total'] ?? 0), 2),
+                'paid' => round((float) ($row['paid_with_discount'] ?? $row['paid'] ?? 0), 2),
+            ];
+        }
+
+        return $history;
+    }
+
+    /**
+     * Unpaid generated fees for Custom Payment / student-code lookup dropdowns.
+     * Uses the same due math as Fee Payment Search Results (includes overdue monthly late fee).
+     *
+     * @return array<int, array{id: int|null, payment_title: string, payment_amount: float, late_fee: float, payment_date: mixed, discount: float}>
+     */
+    public static function unpaidGeneratedFeesForDropdown(Student $student): array
+    {
+        if (empty($student->student_code)) {
+            return [];
+        }
+
+        $fees = [];
+
+        foreach (self::searchResultsForStudent($student)['rows'] as $row) {
+            $due = (float) ($row['due'] ?? 0);
+            if ($due <= 0.0001) {
+                continue;
+            }
+
+            $generatedId = $row['generated_id'] ?? null;
+            $paymentDate = null;
+
+            if ($generatedId) {
+                $genRow = StudentPayment::query()->find($generatedId);
+                $paymentDate = $genRow?->payment_date;
+            }
+
+            $fees[] = [
+                'id' => $generatedId ? (int) $generatedId : null,
+                'payment_title' => (string) ($row['fee_type'] ?? ''),
+                'payment_amount' => round($due, 2),
+                'late_fee' => round((float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0), 2),
+                'payment_date' => $paymentDate,
+                'discount' => round((float) ($row['discount'] ?? 0), 2),
+            ];
+        }
+
+        usort($fees, function (array $a, array $b): int {
+            return strtotime((string) ($a['payment_date'] ?? '1970-01-01'))
+                - strtotime((string) ($b['payment_date'] ?? '1970-01-01'));
+        });
+
+        return $fees;
+    }
+
+    /**
+     * Outstanding due for one fee title — includes auto late on overdue monthly fees.
+     *
+     * @return array{amount: float, late_fee: float, total: float, generated_id: int|null, payment_date: mixed}
+     */
+    public static function outstandingDuePartsForTitle(Student $student, string $title): array
+    {
+        $title = trim($title);
+        $empty = [
+            'amount' => 0.0,
+            'late_fee' => 0.0,
+            'total' => 0.0,
+            'generated_id' => null,
+            'payment_date' => null,
+        ];
+
+        if ($title === '' || empty($student->student_code)) {
+            return $empty;
+        }
+
+        foreach (self::searchResultsForStudent($student)['rows'] as $row) {
+            if (strcasecmp(trim((string) ($row['fee_type'] ?? '')), $title) !== 0) {
+                continue;
+            }
+
+            $generatedId = $row['generated_id'] ?? null;
+            $paymentDate = null;
+
+            if ($generatedId) {
+                $genRow = StudentPayment::query()->find($generatedId);
+                $paymentDate = $genRow?->payment_date;
+            }
+
+            return [
+                'amount' => round((float) ($row['amount'] ?? 0), 2),
+                'late_fee' => round((float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0), 2),
+                'total' => round((float) ($row['due'] ?? 0), 2),
+                'generated_id' => $generatedId ? (int) $generatedId : null,
+                'payment_date' => $paymentDate,
+            ];
+        }
+
+        $totalStudentDiscount = (float) StudentDiscount::query()
+            ->where('student_code', $student->student_code)
+            ->get()
+            ->sum(fn ($discount) => (float) ($discount->discount_amount ?? 0));
+
+        $parts = StudentPayment::remainingDuePartsForTitle(
+            $student->student_code,
+            $title,
+            $totalStudentDiscount
+        );
+
+        return array_merge($empty, [
+            'amount' => $parts['amount'],
+            'late_fee' => $parts['late_fee'],
+            'total' => $parts['total'],
+        ]);
+    }
+
+    /**
+     * Outstanding fee lines for Fee Payment "Full Payment" — includes auto late on overdue monthly fees.
+     *
+     * @return array<int, array{title: string, amount: float, late_fee: float, generated_id: int|null}>
+     */
+    public static function pendingFullPaymentLinesForStudent(
+        Student $student,
+        ?string $paymentTitle = null,
+        ?int $generatedId = null
+    ): array {
+        if (empty($student->student_code)) {
+            return [];
+        }
+
+        $paymentTitle = $paymentTitle !== null ? trim($paymentTitle) : '';
+        $generatedId = $generatedId !== null && $generatedId > 0 ? $generatedId : null;
+        $lines = [];
+
+        foreach (self::searchResultsForStudent($student)['rows'] as $row) {
+            $title = trim((string) ($row['fee_type'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+
+            if ($generatedId !== null) {
+                if ((int) ($row['generated_id'] ?? 0) !== $generatedId) {
+                    continue;
+                }
+            } elseif ($paymentTitle !== '') {
+                if (strcasecmp($title, $paymentTitle) !== 0) {
+                    continue;
+                }
+            }
+
+            $due = (float) ($row['due'] ?? 0);
+            if ($due <= 0.0001) {
+                continue;
+            }
+
+            $lines[] = [
+                'title' => $title,
+                'amount' => round((float) ($row['amount'] ?? 0), 2),
+                'late_fee' => round((float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0), 2),
+                'generated_id' => isset($row['generated_id']) ? (int) $row['generated_id'] : null,
+            ];
+        }
+
+        return $lines;
+    }
+
+    /**
      * Outstanding late for a fee title (includes auto late on overdue monthly fees).
      */
     public static function outstandingLateForTitle(Student $student, string $title): float
@@ -1512,7 +1766,9 @@ class FeePaymentWebTables
                 'students.father_name',
                 'students.student_code'
             )
-            ->orderBy('student_payments.payment_date', 'desc');
+            ->orderBy('student_payments.payment_date', 'desc')
+            ->orderBy('student_payments.updated_at', 'desc')
+            ->orderBy('student_payments.id', 'desc');
 
         if ($feeYear !== null) {
             $q->whereYear('student_payments.payment_date', $feeYear);
@@ -1569,6 +1825,129 @@ class FeePaymentWebTables
             'total_amount_net' => $totalFeeNet,
             'total_late_fee' => $totalLateFee,
             'total_discount' => $totalDiscount,
+        ];
+    }
+
+    /**
+     * Recent paid fee rows across all students (Fee Payment page load / Latest Payments).
+     * Uses payment_date (not created_at) so Student Payment full-pay updates still appear.
+     *
+     * @return array{rows: array<int, array<string, mixed>>, total_amount_paid: float, total_late_fee: float, total_discount: float}
+     */
+    public static function latestPaymentsGlobal(int $limit = 10, ?string $campus = null): array
+    {
+        $limit = max(1, $limit);
+
+        $q = StudentPayment::query()
+            ->ledgerActive()
+            ->join('students', function ($join) {
+                $join->on(DB::raw('LOWER(TRIM(student_payments.student_code))'), '=', DB::raw('LOWER(TRIM(students.student_code))'));
+            })
+            ->whereRaw('LOWER(TRIM(COALESCE(student_payments.method, ""))) <> ?', ['generated'])
+            ->whereNotNull('students.student_code');
+
+        if ($campus !== null && trim($campus) !== '') {
+            $campusNorm = strtolower(trim($campus));
+            $q->where(function ($inner) use ($campusNorm) {
+                $inner->whereRaw('LOWER(TRIM(students.campus)) = ?', [$campusNorm])
+                    ->orWhereRaw('LOWER(TRIM(student_payments.campus)) = ?', [$campusNorm]);
+            });
+        }
+
+        $payments = $q
+            ->select(
+                'student_payments.id',
+                'student_payments.payment_title',
+                'student_payments.payment_amount',
+                'student_payments.discount',
+                'student_payments.late_fee',
+                'student_payments.method',
+                'student_payments.payment_date',
+                'student_payments.accountant',
+                'students.student_name',
+                'students.father_name',
+                'students.student_code'
+            )
+            ->orderBy('student_payments.payment_date', 'desc')
+            ->orderBy('student_payments.updated_at', 'desc')
+            ->orderBy('student_payments.id', 'desc')
+            ->limit(max($limit * 5, $limit))
+            ->get()
+            ->filter(function ($payment) {
+                return ! self::isUnpaidInstallmentPaymentRow(
+                    (string) ($payment->payment_title ?? ''),
+                    (string) ($payment->method ?? '')
+                );
+            })
+            ->take($limit)
+            ->values();
+
+        $rows = $payments->map(function ($payment) {
+            $dt = $payment->payment_date ? Carbon::parse($payment->payment_date) : null;
+            $gross = (float) ($payment->payment_amount ?? 0);
+            $late = (float) ($payment->late_fee ?? 0);
+            $discount = (float) ($payment->discount ?? 0);
+            $principal = self::latestPaymentPrincipalAmount($gross, $late);
+            $feeNet = round(max(0, $principal - $discount), 2);
+
+            return [
+                'id' => $payment->id,
+                'student_code' => $payment->student_code,
+                'student_name' => $payment->student_name,
+                'parent_name' => $payment->father_name,
+                'title' => $payment->payment_title,
+                'amount_paid' => $principal,
+                'fee_net' => $feeNet,
+                'payment_amount_gross' => round($gross, 2),
+                'late_fee' => round($late, 2),
+                'discount' => round($discount, 2),
+                'payment_date' => $dt ? $dt->format('d-m-Y') : null,
+                'payment_time' => $dt ? $dt->format('h:i:s A') : null,
+                'payment_datetime' => $dt ? $dt->format('d-m-Y h:i:s A') : null,
+                'received_by' => $payment->accountant,
+                'method' => $payment->method,
+                'status' => 'paid',
+            ];
+        })->values()->all();
+
+        $totalLateFee = round(array_sum(array_column($rows, 'late_fee')), 2);
+        $totalDiscount = round(array_sum(array_column($rows, 'discount')), 2);
+        $totalPrincipal = round(array_sum(array_column($rows, 'amount_paid')), 2);
+
+        return [
+            'rows' => $rows,
+            'total_amount_paid' => $totalPrincipal,
+            'total_amount_principal' => $totalPrincipal,
+            'total_late_fee' => $totalLateFee,
+            'total_discount' => $totalDiscount,
+        ];
+    }
+
+    /**
+     * Map latestPayments* row for fee-payment.blade.php addLatestPaymentRow().
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public static function mapLatestPaymentRowForWeb(array $row): array
+    {
+        $gross = (float) ($row['payment_amount_gross'] ?? 0);
+        if ($gross <= 0.0001) {
+            $gross = round((float) ($row['amount_paid'] ?? 0) + (float) ($row['late_fee'] ?? 0), 2);
+        }
+
+        return [
+            'id' => $row['id'] ?? null,
+            'student_code' => $row['student_code'] ?? null,
+            'student_name' => $row['student_name'] ?? null,
+            'father_name' => $row['parent_name'] ?? null,
+            'payment_title' => $row['title'] ?? null,
+            'payment_amount' => $gross,
+            'discount' => (float) ($row['discount'] ?? 0),
+            'late_fee' => (float) ($row['late_fee'] ?? 0),
+            'method' => $row['method'] ?? 'Cash Payment',
+            'payment_date' => $row['payment_datetime'] ?? $row['payment_date'] ?? null,
+            'accountant' => $row['received_by'] ?? null,
         ];
     }
 }

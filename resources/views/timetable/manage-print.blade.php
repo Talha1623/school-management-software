@@ -27,11 +27,14 @@ tbody tr:nth-child(even){ background:#f2f2f2; }
 <body>
 <div class="print-container">
   <div class="header">
+    @if(!empty($settings->logo))
+      <img src="{{ asset('storage/' . ltrim($settings->logo, '/')) }}" alt="Logo" style="max-height:60px;max-width:120px;margin-bottom:6px;object-fit:contain;">
+    @endif
     <div class="school-name">{{ $settings->school_name ?? 'School Name' }}</div>
     <div class="school-info">
-      {{ $settings->address ?? '' }} |
-      {{ $settings->school_phone ?? '' }} |
-      {{ $settings->school_email ?? '' }}
+      {{ $settings->address ?? '' }}
+      @if(!empty($settings->school_phone)) | {{ $settings->school_phone }} @endif
+      @if(!empty($settings->school_email)) | {{ $settings->school_email }} @endif
     </div>
     <div class="report-title">Timetable Management</div>
   </div>

@@ -60,15 +60,80 @@ class Message extends Model
             });
     }
 
+    /**
+     * Messages delivered to an admin user (super admins may receive admin + super_admin rows).
+     */
+    public function scopeToAdminInbox(Builder $query, int $adminId, bool $isSuperAdmin = false): Builder
+    {
+        $query->where('to_id', $adminId);
+
+        if ($isSuperAdmin) {
+            return $query->whereIn('to_type', ['admin', 'super_admin']);
+        }
+
+        return $query->where('to_type', 'admin');
+    }
+
     /** Unread real chat messages in admin mail/envelope dropdown. */
-    public function scopeUnreadChatToAdmin(Builder $query, int $adminId): Builder
+    public function scopeUnreadChatToAdmin(Builder $query, int $adminId, bool $isSuperAdmin = false): Builder
     {
         return $query
-            ->where('to_type', 'admin')
-            ->where('to_id', $adminId)
+            ->toAdminInbox($adminId, $isSuperAdmin)
             ->whereNull('read_at')
             ->whereIn('from_type', ['teacher', 'student', 'parent', 'accountant'])
             ->forLiveChat();
+    }
+
+    public static function unreadLiveChatCountForAdminInbox(int $adminId, bool $isSuperAdmin = false): int
+    {
+        return (int) static::query()
+            ->toAdminInbox($adminId, $isSuperAdmin)
+            ->whereNull('read_at')
+            ->forLiveChat()
+            ->count();
+    }
+
+    /**
+     * @return array<string, int> Keys: "{from_type}:{from_id}"
+     */
+    public static function unreadCountsBySenderForAdminInbox(int $adminId, bool $isSuperAdmin = false): array
+    {
+        return static::query()
+            ->toAdminInbox($adminId, $isSuperAdmin)
+            ->whereNull('read_at')
+            ->forLiveChat()
+            ->selectRaw('from_type, from_id, COUNT(*) as unread_count')
+            ->groupBy('from_type', 'from_id')
+            ->get()
+            ->mapWithKeys(fn ($row) => ["{$row->from_type}:{$row->from_id}" => (int) $row->unread_count])
+            ->all();
+    }
+
+    public static function unreadLiveChatCount(string $toType, int $toId): int
+    {
+        return (int) static::query()
+            ->where('to_type', $toType)
+            ->where('to_id', $toId)
+            ->whereNull('read_at')
+            ->forLiveChat()
+            ->count();
+    }
+
+    /**
+     * @return array<string, int> Keys: "{from_type}:{from_id}"
+     */
+    public static function unreadCountsBySender(string $toType, int $toId): array
+    {
+        return static::query()
+            ->where('to_type', $toType)
+            ->where('to_id', $toId)
+            ->whereNull('read_at')
+            ->forLiveChat()
+            ->selectRaw('from_type, from_id, COUNT(*) as unread_count')
+            ->groupBy('from_type', 'from_id')
+            ->get()
+            ->mapWithKeys(fn ($row) => ["{$row->from_type}:{$row->from_id}" => (int) $row->unread_count])
+            ->all();
     }
 
     public function liveChatRecipientType(): string

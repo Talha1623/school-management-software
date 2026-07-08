@@ -17,3 +17,48 @@
 <script src="{{ asset('assets/js/custom/maps.js') }}"></script>
 <script src="{{ asset('assets/js/custom/custom.js') }}"></script>
 
+@php
+    $liveChatUnreadUrl = null;
+    if (Auth::guard('admin')->check()) {
+        $liveChatUnreadUrl = route('live-chat.unread-count');
+    } elseif (Auth::guard('staff')->check()) {
+        $liveChatUnreadUrl = route('staff.chat.unread-count');
+    } elseif (Auth::guard('accountant')->check()) {
+        $liveChatUnreadUrl = route('accountant.chat.unread-count');
+    }
+@endphp
+@if($liveChatUnreadUrl)
+<script>
+(function () {
+    const unreadUrl = @json($liveChatUnreadUrl);
+
+    function refreshLiveChatBadge() {
+        fetch(unreadUrl, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+        })
+            .then(function (response) {
+                return response.ok ? response.json() : { count: 0 };
+            })
+            .then(function (data) {
+                const count = parseInt(data.count, 10) || 0;
+                document.querySelectorAll('[data-live-chat-badge]').forEach(function (badge) {
+                    if (count > 0) {
+                        badge.textContent = count > 99 ? '99+' : String(count);
+                        badge.classList.remove('d-none');
+                    } else {
+                        badge.classList.add('d-none');
+                    }
+                });
+            })
+            .catch(function () {});
+    }
+
+    refreshLiveChatBadge();
+    setInterval(refreshLiveChatBadge, 30000);
+})();
+</script>
+@endif
+

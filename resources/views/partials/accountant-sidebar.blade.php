@@ -26,11 +26,7 @@
                 if (Auth::guard('accountant')->check()) {
                     $accountantUser = Auth::guard('accountant')->user();
                     if ($accountantUser) {
-                        $accountantUnreadChatCount = \App\Models\Message::where('from_type', 'accountant')
-                            ->where('to_type', 'accountant')
-                            ->where('to_id', $accountantUser->id)
-                            ->whereNull('read_at')
-                            ->count();
+                        $accountantUnreadChatCount = \App\Models\Message::unreadLiveChatCount('accountant', (int) $accountantUser->id);
                     }
                 }
             @endphp
@@ -285,7 +281,9 @@
                     <span class="material-symbols-outlined menu-icon">chat</span>
                     <span class="title">Chat</span>
                     @if($accountantUnreadChatCount > 0)
-                        <span class="badge bg-danger ms-auto" style="font-size: 11px; min-width: 20px;">{{ $accountantUnreadChatCount > 99 ? '99+' : $accountantUnreadChatCount }}</span>
+                        <span class="badge bg-danger ms-auto live-chat-unread-badge" data-live-chat-badge style="font-size: 11px; min-width: 20px;">{{ $accountantUnreadChatCount > 99 ? '99+' : $accountantUnreadChatCount }}</span>
+                    @else
+                        <span class="badge bg-danger ms-auto live-chat-unread-badge d-none" data-live-chat-badge style="font-size: 11px; min-width: 20px;">0</span>
                     @endif
                 </a>
             </li>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Campus;
 use App\Models\ClassModel;
+use App\Models\Message;
 use App\Models\Section;
 use App\Models\Student;
 use App\Services\ChatService;
@@ -88,6 +89,14 @@ class MessagingController extends Controller
         }
 
         $ajaxSend = $actor->guard === 'admin';
+        if (in_array($actor->messageType, ['admin', 'super_admin'], true)) {
+            $unreadBySender = Message::unreadCountsBySenderForAdminInbox(
+                $actor->id,
+                $actor->messageType === 'super_admin'
+            );
+        } else {
+            $unreadBySender = Message::unreadCountsBySender($actor->messageType, $actor->id);
+        }
 
         return view('chat.messenger', compact(
             'actor',
@@ -107,6 +116,7 @@ class MessagingController extends Controller
             'ajaxSend',
             'layout',
             'pageSubtitle',
+            'unreadBySender',
         ));
     }
 

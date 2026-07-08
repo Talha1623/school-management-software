@@ -21,6 +21,7 @@ use App\Models\Timetable;
 use App\Models\StudentDeviceToken;
 use App\Models\StudentNotification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -979,17 +980,21 @@ class MobilePushNotificationService
     /** @return list<string> */
     private function activeParentTokens(int $parentId): array
     {
-        if (!Schema::hasTable('parent_device_tokens')) {
+        try {
+            $this->ensureDeviceTokensTable('parent_device_tokens', 'parent_id', 'parent_device_unique', 'parent_device_active_idx');
+
+            return ParentDeviceToken::query()
+                ->where('parent_id', $parentId)
+                ->where('is_active', true)
+                ->pluck('fcm_token')
+                ->filter()
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            Log::warning('parent_device_tokens unavailable', ['error' => $e->getMessage()]);
+
             return [];
         }
-
-        return ParentDeviceToken::query()
-            ->where('parent_id', $parentId)
-            ->where('is_active', true)
-            ->pluck('fcm_token')
-            ->filter()
-            ->values()
-            ->all();
     }
 
     /** @return list<string> */
@@ -997,7 +1002,9 @@ class MobilePushNotificationService
     {
         $tokens = [];
 
-        if (Schema::hasTable('staff_device_tokens')) {
+        try {
+            $this->ensureDeviceTokensTable('staff_device_tokens', 'staff_id', 'staff_device_unique', 'staff_device_active_idx');
+
             $tokens = array_merge(
                 $tokens,
                 StaffDeviceToken::query()
@@ -1008,23 +1015,80 @@ class MobilePushNotificationService
                     ->values()
                     ->all()
             );
+        } catch (\Throwable $e) {
+            // Table missing/corrupt (MySQL 1932) must not break salary generation.
+            Log::warning('staff_device_tokens unavailable', ['error' => $e->getMessage()]);
         }
 
-        if (Schema::hasTable('mobile_device_tokens')) {
-            $tokens = array_merge(
-                $tokens,
-                MobileDeviceToken::query()
-                    ->where('user_type', 'teacher')
-                    ->where('user_id', $staffId)
-                    ->whereNotNull('fcm_token')
-                    ->pluck('fcm_token')
-                    ->filter()
-                    ->values()
-                    ->all()
-            );
+        try {
+            if (Schema::hasTable('mobile_device_tokens')) {
+                $tokens = array_merge(
+                    $tokens,
+                    MobileDeviceToken::query()
+                        ->where('user_type', 'teacher')
+                        ->where('user_id', $staffId)
+                        ->whereNotNull('fcm_token')
+                        ->pluck('fcm_token')
+                        ->filter()
+                        ->values()
+                        ->all()
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::warning('mobile_device_tokens unavailable', ['error' => $e->getMessage()]);
         }
 
         return array_values(array_unique(array_filter($tokens)));
+    }
+
+    /**
+     * Create device-token table when missing, or rebuild when MySQL reports "doesn't exist in engine".
+     */
+    private function ensureDeviceTokensTable(
+        string $table,
+        string $ownerColumn,
+        string $uniqueIndex,
+        string $activeIndex
+    ): void {
+        $needsCreate = ! Schema::hasTable($table);
+
+        if (! $needsCreate) {
+            try {
+                // Detect corrupt/orphan metadata (SQLSTATE 42S02 / MySQL 1932).
+                \Illuminate\Support\Facades\DB::table($table)->limit(1)->get();
+
+                return;
+            } catch (\Throwable) {
+                $needsCreate = true;
+                try {
+                    Schema::dropIfExists($table);
+                } catch (\Throwable) {
+                    // Force-drop broken table metadata.
+                    try {
+                        \Illuminate\Support\Facades\DB::statement("DROP TABLE IF EXISTS `{$table}`");
+                    } catch (\Throwable) {
+                        // ignore
+                    }
+                }
+            }
+        }
+
+        if (! $needsCreate) {
+            return;
+        }
+
+        Schema::create($table, function (Blueprint $blueprint) use ($ownerColumn, $uniqueIndex, $activeIndex) {
+            $blueprint->id();
+            $blueprint->unsignedBigInteger($ownerColumn);
+            $blueprint->text('fcm_token');
+            $blueprint->string('platform', 20)->default('android');
+            $blueprint->boolean('is_active')->default(true);
+            $blueprint->timestamp('last_used_at')->nullable();
+            $blueprint->timestamps();
+
+            $blueprint->unique([$ownerColumn, 'fcm_token'], $uniqueIndex);
+            $blueprint->index([$ownerColumn, 'is_active'], $activeIndex);
+        });
     }
 
     private function schoolName(): string

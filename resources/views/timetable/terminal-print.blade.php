@@ -1,204 +1,214 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terminal Print - Timetable</title>
-    <style>
-        @media print {
-            @page {
-                margin: 0;
-                size: 80mm auto;
-            }
-            body {
-                margin: 0;
-                padding: 5mm;
-            }
-            .no-print {
-                display: none !important;
-            }
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-            width: 80mm;
-            margin: 0 auto;
-            padding: 5mm;
-            background: white;
-        }
-        
-        .receipt {
-            width: 100%;
-        }
-        
-        .header {
-            text-align: center;
-            border-bottom: 1px dashed #000;
-            padding-bottom: 8px;
-            margin-bottom: 8px;
-        }
-        
-        .store-name {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 3px;
-            text-transform: uppercase;
-        }
-        
-        .store-address {
-            font-size: 9px;
-            margin-bottom: 2px;
-        }
-        
-        .receipt-title {
-            font-size: 12px;
-            font-weight: bold;
-            margin-top: 6px;
-            text-transform: uppercase;
-        }
-        
-        .divider {
-            border-top: 1px dashed #000;
-            margin: 6px 0;
-        }
-        
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 3px 0;
-            font-size: 10px;
-        }
-        
-        .info-label {
-            font-weight: bold;
-        }
-        
-        .info-value {
-            text-align: right;
-        }
-        
-        .timetable-table {
-            width: 100%;
-            margin: 8px 0;
-            border-collapse: collapse;
-            font-size: 9px;
-        }
-        
-        .timetable-table th,
-        .timetable-table td {
-            padding: 3px 2px;
-            text-align: left;
-            border-bottom: 1px dashed #000;
-        }
-        
-        .timetable-table th {
-            font-weight: bold;
-            text-transform: uppercase;
-            border-bottom: 2px solid #000;
-        }
-        
-        .timetable-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .footer {
-            text-align: center;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px dashed #000;
-            font-size: 9px;
-        }
-        
-        .btn-print {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            padding: 8px 16px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            z-index: 1000;
-        }
-        
-        .btn-print:hover {
-            background-color: #218838;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timetable Print</title>
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+:root{
+    --theme-blue: #003471;
+}
+
+body{
+    font-family: Arial, sans-serif;
+    background:#fff;
+    color:#000;
+}
+
+.print-container{
+    width:210mm;
+    min-height:297mm;
+    margin:auto;
+    padding:15mm;
+}
+
+.header{
+    text-align:center;
+    border-bottom:2px solid var(--theme-blue);
+    padding-bottom:10px;
+}
+
+.school-logo{
+    max-height:60px;
+    max-width:120px;
+    margin-bottom:6px;
+    object-fit:contain;
+}
+
+.school-name{
+    font-size:22px;
+    font-weight:bold;
+    color:var(--theme-blue);
+}
+
+.school-info{
+    font-size:12px;
+    margin-top:4px;
+}
+
+.report-title{
+    margin-top:8px;
+    font-size:16px;
+    font-weight:bold;
+    text-transform:uppercase;
+    color:var(--theme-blue);
+}
+
+.top-bar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin:10px 0;
+    font-size:12px;
+}
+
+.print-btn{
+    padding:5px 10px;
+    border:1px solid var(--theme-blue);
+    background:var(--theme-blue);
+    color:#fff;
+    cursor:pointer;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12px;
+}
+
+th, td{
+    border:1px solid var(--theme-blue);
+    padding:8px 10px;
+    vertical-align:top;
+}
+
+th{
+    background:var(--theme-blue);
+    color:#fff;
+    text-align:left;
+    width:30%;
+}
+
+td{
+    width:70%;
+}
+
+.footer{
+    margin-top:15px;
+    border-top:2px solid var(--theme-blue);
+    padding-top:8px;
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+}
+
+.signature{
+    margin-top:40px;
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+}
+
+.signature div{
+    text-align:center;
+    width:200px;
+    border-top:1px solid var(--theme-blue);
+    padding-top:5px;
+}
+
+@media print{
+    .no-print{ display:none; }
+
+    @page{
+        size:A4;
+        margin:10mm;
+    }
+}
+</style>
 </head>
 <body>
-    <button class="btn-print no-print" onclick="window.print()">Print</button>
-    
-    <div class="receipt">
-        <div class="header">
-            <div class="store-name">{{ config('app.name', 'ICMS') }}</div>
-            <div class="store-address">{{ config('app.address', 'Defence View') }}</div>
-            <div class="store-address">Phone: {{ config('app.phone', '+923316074246') }}</div>
-            <div class="receipt-title">Timetable</div>
-        </div>
-        
-        <div class="info-row">
-            <span class="info-label">Campus:</span>
-            <span class="info-value">{{ $timetable->campus }}</span>
-        </div>
-        
-        <div class="info-row">
-            <span class="info-label">Class:</span>
-            <span class="info-value">{{ $timetable->class }}</span>
-        </div>
-        
-        <div class="info-row">
-            <span class="info-label">Section:</span>
-            <span class="info-value">{{ $timetable->section }}</span>
-        </div>
-        
-        <div class="divider"></div>
-        
-        <table class="timetable-table">
-            <thead>
-                <tr>
-                    <th>Subject</th>
-                    <th>Day</th>
-                    <th>Time</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>{{ $timetable->subject }}</td>
-                    <td>{{ $timetable->day }}</td>
-                    <td>{{ date('H:i', strtotime($timetable->starting_time)) }} - {{ date('H:i', strtotime($timetable->ending_time)) }}</td>
-                </tr>
-            </tbody>
-        </table>
-        
-        @if(isset($timetable->assigned_teacher) && $timetable->assigned_teacher)
-        <div class="info-row" style="margin-top: 6px;">
-            <span class="info-label">Teacher:</span>
-            <span class="info-value">{{ $timetable->assigned_teacher }}</span>
-        </div>
-        @endif
-        
-        <div class="footer">
-            <div>Generated: {{ date('d-m-Y H:i:s') }}</div>
-        </div>
+<div class="print-container">
+
+<div class="header">
+    @if(!empty($settings->logo))
+        <img src="{{ asset('storage/' . ltrim($settings->logo, '/')) }}" alt="Logo" class="school-logo">
+    @endif
+    <div class="school-name">{{ $settings->school_name ?? 'School Name' }}</div>
+    <div class="school-info">
+        {{ $settings->address ?? '' }}
+        @if(!empty($settings->school_phone)) | {{ $settings->school_phone }} @endif
+        @if(!empty($settings->school_email)) | {{ $settings->school_email }} @endif
     </div>
-    
-    <script>
-        // Auto print when page loads
-        window.onload = function() {
-            setTimeout(function() {
-                window.print();
-            }, 500);
-        };
-    </script>
+    <div class="report-title">Timetable Details</div>
+</div>
+
+<div class="top-bar">
+    <div>Generated: {{ $printedAt ?? date('d M Y, h:i A') }}</div>
+    <button type="button" onclick="window.print()" class="print-btn no-print">Print</button>
+</div>
+
+<table>
+<tbody>
+<tr>
+    <th>Campus</th>
+    <td>{{ $timetable->campus ?? 'N/A' }}</td>
+</tr>
+<tr>
+    <th>Class</th>
+    <td>{{ $timetable->class ?? 'N/A' }}</td>
+</tr>
+<tr>
+    <th>Section</th>
+    <td>{{ $timetable->section ?? 'N/A' }}</td>
+</tr>
+<tr>
+    <th>Subject</th>
+    <td>{{ $timetable->subject ?? 'N/A' }}</td>
+</tr>
+<tr>
+    <th>Teacher</th>
+    <td>{{ $timetable->assigned_teacher ?? 'N/A' }}</td>
+</tr>
+<tr>
+    <th>Day</th>
+    <td>{{ $timetable->day ?? 'N/A' }}</td>
+</tr>
+<tr>
+    <th>Starting Time</th>
+    <td>{{ $timetable->starting_time ? date('H:i', strtotime($timetable->starting_time)) : 'N/A' }}</td>
+</tr>
+<tr>
+    <th>Ending Time</th>
+    <td>{{ $timetable->ending_time ? date('H:i', strtotime($timetable->ending_time)) : 'N/A' }}</td>
+</tr>
+</tbody>
+</table>
+
+<div class="footer">
+    <div>System Generated Report</div>
+    <div>{{ $printedAt ?? date('d M Y, h:i A') }}</div>
+</div>
+
+<div class="signature">
+    <div>Prepared By</div>
+    <div>Checked By</div>
+    <div>Approved By</div>
+</div>
+
+</div>
+
+<script>
+window.onload = function () {
+    setTimeout(function () {
+        window.print();
+    }, 400);
+};
+</script>
 </body>
 </html>

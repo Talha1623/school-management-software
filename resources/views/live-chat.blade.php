@@ -3,19 +3,17 @@
 @section('title', 'Live Chat')
 
 @section('content')
-<div class="row">
-    <div class="col-12">
-        <!-- Page Header -->
-        <div class="d-flex align-items-center mb-4">
+<div class="admin-live-chat-page">
+        <div class="admin-live-chat-top d-flex align-items-center mb-3">
             <h2 class="mb-0 fs-20 fw-semibold text-dark me-2">Live Chat</h2>
             <span class="material-symbols-outlined text-secondary" style="font-size: 20px;">chat</span>
         </div>
 
-        <!-- Live Chat Container -->
-        <div class="card bg-white border border-white rounded-10 p-4">
-            <div class="row">
+        <div class="card bg-white border border-white rounded-10 p-3 p-md-4 admin-live-chat-card">
+            <div class="row g-0 admin-live-chat-row">
                 <!-- Chat List Sidebar -->
-                <div class="col-md-4 border-end">
+                <div class="col-md-4 border-end admin-live-chat-sidebar">
+                    <div class="admin-live-chat-sidebar-top">
                     <div class="d-flex align-items-center justify-content-between mb-3">
                         <h5 class="mb-0 fs-16 fw-semibold">Recipients</h5>
                     </div>
@@ -73,12 +71,14 @@
                             <input type="text" class="form-control border-start-0" placeholder="Search recipients..." id="teacher-search-input" oninput="filterTeachers()">
                         </div>
                     </div>
+                    </div>
 
                     <!-- Chat List -->
-                    <div class="chat-list" style="max-height: 600px; overflow-y: auto;" id="teacher-list">
+                    <div class="chat-list" id="teacher-list">
                         @foreach($teachers as $t)
                             @php
                                 $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'teacher' && $selectedRecipient->id === $t->id;
+                                $unreadCount = ($unreadBySender ?? [])['teacher:'.$t->id] ?? 0;
                             @endphp
                             <a href="{{ route('live-chat', ['recipient_type' => 'teacher', 'recipient_id' => $t->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
                                class="text-decoration-none text-dark">
@@ -94,6 +94,9 @@
                                         <div class="flex-grow-1">
                                             <div class="d-flex justify-content-between align-items-start mb-1">
                                                 <h6 class="mb-0 fs-14 fw-semibold">{{ $t->name }}</h6>
+                                                @if($unreadCount > 0)
+                                                    <span class="badge bg-danger rounded-pill chat-unread-pill">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                                                @endif
                                             </div>
                                             <p class="mb-0 text-muted fs-12" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                 {{ $t->designation ?? 'Teacher' }} @if($t->campus) - {{ $t->campus }} @endif
@@ -106,6 +109,7 @@
                         @foreach($accountants as $a)
                             @php
                                 $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'accountant' && $selectedRecipient->id === $a->id;
+                                $unreadCount = ($unreadBySender ?? [])['accountant:'.$a->id] ?? 0;
                             @endphp
                             <a href="{{ route('live-chat', ['recipient_type' => 'accountant', 'recipient_id' => $a->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
                                class="text-decoration-none text-dark">
@@ -121,6 +125,9 @@
                                         <div class="flex-grow-1">
                                             <div class="d-flex justify-content-between align-items-start mb-1">
                                                 <h6 class="mb-0 fs-14 fw-semibold">{{ $a->name ?? 'Accountant' }}</h6>
+                                                @if($unreadCount > 0)
+                                                    <span class="badge bg-danger rounded-pill chat-unread-pill">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                                                @endif
                                             </div>
                                             <p class="mb-0 text-muted fs-12" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                 Accountant @if($a->campus) - {{ $a->campus }} @endif
@@ -133,6 +140,7 @@
                         @foreach($students as $s)
                             @php
                                 $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'student' && $selectedRecipient->id === $s->id;
+                                $unreadCount = ($unreadBySender ?? [])['student:'.$s->id] ?? 0;
                             @endphp
                             <a href="{{ route('live-chat', ['recipient_type' => 'student', 'recipient_id' => $s->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
                                class="text-decoration-none text-dark">
@@ -148,6 +156,9 @@
                                         <div class="flex-grow-1">
                                             <div class="d-flex justify-content-between align-items-start mb-1">
                                                 <h6 class="mb-0 fs-14 fw-semibold">{{ $s->student_name ?? 'Student' }}</h6>
+                                                @if($unreadCount > 0)
+                                                    <span class="badge bg-danger rounded-pill chat-unread-pill">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                                                @endif
                                             </div>
                                             <p class="mb-0 text-muted fs-12" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                 Student @if($s->student_code) - {{ $s->student_code }} @endif
@@ -160,6 +171,7 @@
                         @foreach($parents as $p)
                             @php
                                 $isActive = isset($selectedRecipient) && $selectedRecipient && ($selectedType ?? '') === 'parent' && $selectedRecipient->id === $p->id;
+                                $unreadCount = ($unreadBySender ?? [])['parent:'.$p->id] ?? 0;
                             @endphp
                             <a href="{{ route('live-chat', ['recipient_type' => 'parent', 'recipient_id' => $p->id, 'campus' => $selectedCampus ?? null, 'class' => $selectedClass ?? null, 'section' => $selectedSection ?? null]) }}"
                                class="text-decoration-none text-dark">
@@ -175,6 +187,9 @@
                                         <div class="flex-grow-1">
                                             <div class="d-flex justify-content-between align-items-start mb-1">
                                                 <h6 class="mb-0 fs-14 fw-semibold">{{ $p->name ?? 'Parent' }}</h6>
+                                                @if($unreadCount > 0)
+                                                    <span class="badge bg-danger rounded-pill chat-unread-pill">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                                                @endif
                                             </div>
                                             <p class="mb-0 text-muted fs-12" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                 Parent @if($p->id_card_number) - {{ $p->id_card_number }} @endif
@@ -191,10 +206,10 @@
                 </div>
 
                 <!-- Chat Area -->
-                <div class="col-md-8">
-                    <div class="d-flex flex-column" style="height: 700px;">
+                <div class="col-md-8 admin-live-chat-main">
+                    <div class="admin-live-chat-panel d-flex flex-column">
                         <!-- Chat Header -->
-                        <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
+                        <div class="admin-live-chat-header d-flex align-items-center justify-content-between p-3 border-bottom">
                             <div class="d-flex align-items-center">
                                 <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white me-3" style="width: 40px; height: 40px;">
                                     <span class="material-symbols-outlined">person</span>
@@ -224,7 +239,7 @@
                         </div>
 
                         <!-- Messages Area -->
-                        <div class="flex-grow-1 p-3" style="overflow-y: auto; background-color: #f8f9fa;" id="chat-messages-area">
+                        <div class="admin-live-chat-messages flex-grow-1 p-3" id="chat-messages-area">
                             @if(isset($selectedRecipient) && $selectedRecipient)
                                 @forelse($messages as $msg)
                                     @php
@@ -285,7 +300,7 @@
                         </div>
 
                         <!-- Message Input -->
-                        <div class="p-3 border-top">
+                        <div class="admin-live-chat-composer p-3 border-top">
                             @if(isset($selectedRecipient) && $selectedRecipient)
                                 <form action="{{ route('live-chat.send') }}" method="POST" enctype="multipart/form-data" id="admin-chat-form">
                                     @csrf
@@ -319,16 +334,112 @@
                 </div>
             </div>
         </div>
-    </div>
 </div>
 
 <style>
+.admin-live-chat-page {
+    height: calc(100dvh - 118px);
+    max-height: calc(100dvh - 118px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body:has(.admin-live-chat-page) .main-content-container {
+    overflow: hidden !important;
+}
+
+.admin-live-chat-top {
+    flex-shrink: 0;
+}
+
+.admin-live-chat-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.admin-live-chat-row {
+    flex: 1;
+    min-height: 0;
+}
+
+.admin-live-chat-sidebar,
+.admin-live-chat-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+}
+
+.admin-live-chat-sidebar-top {
+    flex-shrink: 0;
+}
+
+.admin-live-chat-sidebar .chat-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.admin-live-chat-panel {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+}
+
+.admin-live-chat-header,
+.admin-live-chat-composer {
+    flex-shrink: 0;
+}
+
+.admin-live-chat-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+}
+
+.admin-live-chat-messages::-webkit-scrollbar,
+.admin-live-chat-sidebar .chat-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.admin-live-chat-messages::-webkit-scrollbar-thumb,
+.admin-live-chat-sidebar .chat-list::-webkit-scrollbar-thumb {
+    background: #ced4da;
+    border-radius: 4px;
+}
+
 .chat-item:hover {
     background-color: #f8f9fa !important;
 }
 
 .cursor-pointer {
     cursor: pointer;
+}
+
+.chat-unread-pill {
+    font-size: 11px;
+    min-width: 20px;
+}
+
+@media (max-width: 767.98px) {
+    .admin-live-chat-page {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .admin-live-chat-sidebar .chat-list {
+        max-height: 280px;
+    }
+
+    .admin-live-chat-panel {
+        min-height: 420px;
+    }
 }
 </style>
 

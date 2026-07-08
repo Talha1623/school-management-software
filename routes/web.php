@@ -37,6 +37,7 @@ Route::prefix('staff')->name('staff.')->group(function () {
         // Live chat (permission-based)
         Route::get('/chat', [App\Http\Controllers\MessagingController::class, 'index'])->name('chat');
         Route::post('/chat/send', [App\Http\Controllers\MessagingController::class, 'send'])->name('chat.send');
+        Route::get('/chat/unread-count', [App\Http\Controllers\ChatController::class, 'unreadCount'])->name('chat.unread-count');
     });
 });
 
@@ -52,6 +53,7 @@ Route::prefix('accountant')->name('accountant.')->group(function () {
 
         Route::get('/chat', [App\Http\Controllers\MessagingController::class, 'index'])->name('chat');
         Route::post('/chat/send', [App\Http\Controllers\MessagingController::class, 'send'])->name('chat.send');
+        Route::get('/chat/unread-count', [App\Http\Controllers\ChatController::class, 'unreadCount'])->name('chat.unread-count');
         Route::post('/notifications/mark-all-read', [App\Http\Controllers\ChatController::class, 'markAccountantNotificationsAsRead'])->name('notifications.mark-all-read');
         Route::get('/change-password', [App\Http\Controllers\AccountantAuthController::class, 'changePassword'])->name('change-password');
         Route::put('/change-password', [App\Http\Controllers\AccountantAuthController::class, 'updatePassword'])->name('change-password.update');
@@ -201,6 +203,7 @@ Route::prefix('student')->name('student.')->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\StudentAuthController::class, 'dashboard'])->name('dashboard');
         Route::get('/chat', [App\Http\Controllers\MessagingController::class, 'index'])->name('chat');
         Route::post('/chat/send', [App\Http\Controllers\MessagingController::class, 'send'])->name('chat.send');
+        Route::get('/chat/unread-count', [App\Http\Controllers\ChatController::class, 'unreadCount'])->name('chat.unread-count');
     });
 });
 
@@ -228,6 +231,7 @@ Route::prefix('platform-admin')->name('platform-admin.')->group(function () {
         Route::get('/schools', [App\Http\Controllers\PlatformSchoolController::class, 'index'])->name('schools.index');
         Route::post('/schools', [App\Http\Controllers\PlatformSchoolController::class, 'store'])->name('schools.store');
         Route::patch('/schools/{school}/student-limit', [App\Http\Controllers\PlatformSchoolController::class, 'updateStudentLimit'])->name('schools.update-student-limit');
+        Route::patch('/schools/{school}/database-credentials', [App\Http\Controllers\PlatformSchoolController::class, 'updateDatabaseCredentials'])->name('schools.update-database-credentials');
         Route::patch('/schools/{school}/status', [App\Http\Controllers\PlatformSchoolController::class, 'toggleStatus'])->name('schools.toggle-status');
         Route::delete('/schools/{school}', [App\Http\Controllers\PlatformSchoolController::class, 'destroy'])->name('schools.destroy');
     });
@@ -403,10 +407,11 @@ Route::get('/staff/job-inquiry', [App\Http\Controllers\JobInquiryController::cla
 Route::post('/staff/job-inquiry', [App\Http\Controllers\JobInquiryController::class, 'store'])->name('staff.job-inquiry.store');
 Route::get('/staff/job-inquiry/print', [App\Http\Controllers\JobInquiryController::class, 'print'])->name('staff.job-inquiry.print');
 Route::delete('/staff/job-inquiry/delete-all', [App\Http\Controllers\JobInquiryController::class, 'deleteAll'])->name('staff.job-inquiry.delete-all');
+Route::get('/staff/job-inquiry/export/{format}', [App\Http\Controllers\JobInquiryController::class, 'export'])->name('staff.job-inquiry.export');
+Route::get('/staff/job-inquiry/{job_inquiry}/cv', [App\Http\Controllers\JobInquiryController::class, 'downloadCv'])->name('staff.job-inquiry.cv');
 Route::get('/staff/job-inquiry/{job_inquiry}', [App\Http\Controllers\JobInquiryController::class, 'show'])->name('staff.job-inquiry.show');
 Route::put('/staff/job-inquiry/{job_inquiry}', [App\Http\Controllers\JobInquiryController::class, 'update'])->name('staff.job-inquiry.update');
 Route::delete('/staff/job-inquiry/{job_inquiry}', [App\Http\Controllers\JobInquiryController::class, 'destroy'])->name('staff.job-inquiry.destroy');
-Route::get('/staff/job-inquiry/export/{format}', [App\Http\Controllers\JobInquiryController::class, 'export'])->name('staff.job-inquiry.export');
 Route::post('/staff/job-inquiry/{job_inquiry}/appoint', [App\Http\Controllers\JobInquiryController::class, 'appoint'])->name('staff.job-inquiry.appoint');
 
 Route::get('/dashboard/lms', [DashboardController::class, 'lms'])->name('dashboard.lms');
@@ -825,57 +830,12 @@ Route::post('/fee-payment/full-payment', function (\Illuminate\Http\Request $req
         ], 404);
     }
     
-    // Calculate pending fees from generated records
-    $generatedFeesQuery = \App\Models\StudentPayment::where('student_code', $studentCode)
-        ->whereIn('method', ['Generated', 'Installment'])
-        ->whereNotNull('payment_title');
-    if (!empty($generatedId)) {
-        $generatedFeesQuery->where('id', $generatedId);
-    } elseif (!empty($paymentTitle)) {
-        $generatedFeesQuery->where('payment_title', $paymentTitle);
-    }
-    $generatedFees = $generatedFeesQuery->get();
-    $paidFees = \App\Models\StudentPayment::where('student_code', $studentCode)
-        ->where('method', '!=', 'Generated')
-        ->where('method', '!=', 'Installment')
-        ->when(!empty($paymentTitle), function ($query) use ($paymentTitle) {
-            $query->where('payment_title', $paymentTitle);
-        })
-        ->get();
-
-    $generatedByTitle = $generatedFees->groupBy('payment_title');
-    $paidByTitle = $paidFees->groupBy('payment_title');
-    $pendingByTitle = [];
-
-    foreach ($generatedByTitle as $title => $items) {
-        $generatedAmount = $items->sum(function ($item) {
-            return (float) ($item->payment_amount ?? 0) - (float) ($item->discount ?? 0);
-        });
-        $generatedLate = $items->sum(function ($item) {
-            return (float) ($item->late_fee ?? 0);
-        });
-        $paidAmount = $paidByTitle->get($title, collect())->sum(function ($item) {
-            $amount = (float) ($item->payment_amount ?? 0);
-            $late = (float) ($item->late_fee ?? 0);
-            $principal = max(0, $amount - $late);
-
-            return $principal + (float) ($item->discount ?? 0);
-        });
-        $paidLate = $paidByTitle->get($title, collect())->sum(function ($item) {
-            return (float) ($item->late_fee ?? 0);
-        });
-
-        $remainingAmount = max(0, $generatedAmount - $paidAmount);
-        $remainingLate = max(0, $generatedLate - $paidLate);
-
-        if ($remainingAmount > 0 || $remainingLate > 0) {
-            $pendingByTitle[] = [
-                'title' => $title,
-                'amount' => $remainingAmount,
-                'late_fee' => $remainingLate,
-            ];
-        }
-    }
+    $generatedIdInt = is_numeric($generatedId) ? (int) $generatedId : null;
+    $pendingByTitle = \App\Services\FeePaymentWebTables::pendingFullPaymentLinesForStudent(
+        $student,
+        ! empty($paymentTitle) ? (string) $paymentTitle : null,
+        $generatedIdInt
+    );
 
     // Fallback for Transport Fee when no generated record exists.
     // UI can show unpaid transport (from student.transport_fare) even without a Generated row.
@@ -923,7 +883,6 @@ Route::post('/fee-payment/full-payment', function (\Illuminate\Http\Request $req
         }
     }
 
-    $generatedIdInt = is_numeric($generatedId) ? (int) $generatedId : null;
     $payments = [];
     foreach ($pendingByTitle as $pending) {
         if (($pending['amount'] ?? 0) <= 0 && ($pending['late_fee'] ?? 0) <= 0) {
@@ -952,7 +911,7 @@ Route::post('/fee-payment/full-payment', function (\Illuminate\Http\Request $req
             $paymentAmount = round($paymentAmount + $lateFeeAmount, 2);
         }
 
-        $rowGeneratedId = count($pendingByTitle) === 1 ? $generatedIdInt : null;
+        $rowGeneratedId = $pending['generated_id'] ?? (count($pendingByTitle) === 1 ? $generatedIdInt : null);
         $existingGenerated = \App\Services\FeePaymentWebTables::findGeneratedRowForTitle(
             $student,
             $title,
@@ -1403,6 +1362,8 @@ Route::post('/attendance/staff/store', [App\Http\Controllers\StaffAttendanceCont
 Route::get('/staff/attendance/overview', [App\Http\Controllers\StaffAttendanceController::class, 'overview'])->name('staff.attendance.overview');
 
 Route::get('/attendance/barcode', function () {
+    app(\App\Services\AutoStudentAttendanceService::class)->runIfDue();
+
     return view('attendance.barcode');
 })->name('attendance.barcode');
 Route::post('/attendance/barcode/scan', [App\Http\Controllers\StudentAttendanceController::class, 'scanBarcode'])
@@ -2117,8 +2078,8 @@ Route::get('/reports/admission-data/print', [App\Http\Controllers\AdmissionDataR
 Route::get('/reports/admission-data/get-classes-by-campus', [App\Http\Controllers\AdmissionDataReportController::class, 'getClassesByCampus'])->name('reports.admission-data.get-classes-by-campus');
 Route::get('/reports/admission-data/get-sections-by-class', [App\Http\Controllers\AdmissionDataReportController::class, 'getSectionsByClass'])->name('reports.admission-data.get-sections-by-class');
 
-// Stock & Inventory Routes
-Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(function () {
+// Stock & Inventory Routes — Point of Sale (Admin & Super Admin)
+Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function () {
     Route::get('/stock/point-of-sale', [App\Http\Controllers\PointOfSaleController::class, 'index'])->name('stock.point-of-sale');
     Route::post('/stock/point-of-sale/search-product', [App\Http\Controllers\PointOfSaleController::class, 'searchProduct'])->name('stock.point-of-sale.search-product');
     Route::post('/stock/point-of-sale/store-sale', [App\Http\Controllers\PointOfSaleController::class, 'storeSale'])->name('stock.point-of-sale.store-sale');
@@ -3246,6 +3207,7 @@ Route::middleware([App\Http\Middleware\AdminMiddleware::class])->group(function 
     
     // Live Chat (permission-based for all allowed roles)
     Route::get('/live-chat', [App\Http\Controllers\ChatController::class, 'index'])->name('live-chat');
+    Route::get('/live-chat/unread-count', [App\Http\Controllers\ChatController::class, 'unreadCount'])->name('live-chat.unread-count');
     Route::post('/live-chat/send', [App\Http\Controllers\ChatController::class, 'send'])->name('live-chat.send');
     Route::post('/live-chat/teacher/{teacherId}', [App\Http\Controllers\ChatController::class, 'sendToTeacher'])->name('live-chat.send-teacher');
     Route::post('/notifications/mark-all-read', [App\Http\Controllers\ChatController::class, 'markAllAsRead'])->name('notifications.mark-all-read');
@@ -3287,9 +3249,8 @@ Route::middleware([App\Http\Middleware\SuperAdminMiddleware::class])->group(func
         return view('settings.email');
     })->name('settings.email');
     
-    Route::get('/settings/payment', function () {
-        return view('settings.payment');
-    })->name('settings.payment');
+    Route::get('/settings/payment', [App\Http\Controllers\GeneralSettingsController::class, 'payment'])->name('settings.payment');
+    Route::post('/settings/payment', [App\Http\Controllers\GeneralSettingsController::class, 'updatePayment'])->name('settings.payment.store');
     
     Route::get('/settings/exam', [App\Http\Controllers\ExamSettingsController::class, 'index'])->name('settings.exam');
     Route::post('/settings/exam', [App\Http\Controllers\ExamSettingsController::class, 'update'])->name('settings.exam.store');

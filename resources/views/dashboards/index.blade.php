@@ -3,6 +3,9 @@
 @section('title', 'Admission Management Dashboard')
 
 @section('content')
+@php
+    $formatMoney = fn ($amount) => $settings->formatCurrency($amount);
+@endphp
 <!-- Combined Container with Single Border -->
 <div class="mb-4" style="border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; background-color: #f8f9fa;">
     <!-- Top Action Buttons Bar -->
@@ -194,7 +197,7 @@
                         <h6 class="mb-1 fw-medium text-white" style="font-size: 12px; line-height: 1.2;">Student with Highest Dues</h6>
                         <p class="mb-0 text-white" style="font-size: 11px; line-height: 1.2;">
                             <span class="badge bg-danger" style="width: 6px; height: 6px; padding: 0; border-radius: 50%; display: inline-block; margin-right: 4px;"></span>
-                            {{ $studentWithHighestDue->student_code ?? 'N/A' }} | {{ $studentWithHighestDue->student_name ?? 'N/A' }} - Due: {{ number_format($highestDueAmount ?? 0, 2) }}
+                            {{ $studentWithHighestDue->student_code ?? 'N/A' }} | {{ $studentWithHighestDue->student_name ?? 'N/A' }} - Due: {{ $formatMoney($highestDueAmount ?? 0) }}
                         </p>
                     </div>
                 </div>
@@ -229,7 +232,7 @@
                     </div>
                     <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $unpaidInvoicesCount ?? 0 }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Unpaid Invoices</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">Amount: {{ number_format($unpaidInvoicesAmount ?? 0, 2) }}</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">Amount: {{ $formatMoney($unpaidInvoicesAmount ?? 0) }}</p>
                     <a href="{{ route('reports.unpaid-invoices') }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
@@ -239,9 +242,9 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_downward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($incomeToday ?? 0, 2) }}</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $formatMoney($incomeToday ?? 0) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Income Today</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($incomeThisMonth ?? 0, 2) }}</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ $formatMoney($incomeThisMonth ?? 0) }}</p>
                     <a href="{{ route('reports.detailed-income', ['filter_date' => \Carbon\Carbon::now()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
@@ -251,9 +254,9 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_upward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($expenseToday ?? 0, 2) }}</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $formatMoney($expenseToday ?? 0) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Expense Today</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($expenseThisMonth ?? 0, 2) }}</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ $formatMoney($expenseThisMonth ?? 0) }}</p>
                     <a href="{{ route('reports.detailed-expense', ['filter_date' => \Carbon\Carbon::now()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
@@ -263,9 +266,9 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">payments</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($profitToday ?? 0, 2) }}</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $formatMoney($profitToday ?? 0) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Profit Today</h6>
-                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ number_format($profitThisMonth ?? 0, 2) }}</p>
+                    <p class="text-white mb-2" style="font-size: 12px; opacity: 0.9;">This Month: {{ $formatMoney($profitThisMonth ?? 0) }}</p>
                     <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
             </div>
@@ -276,7 +279,7 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_downward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($yearlyIncome ?? 0, 2) }}</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $formatMoney($yearlyIncome ?? 0) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Yearly Income</h6>
                     <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
@@ -287,7 +290,7 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">arrow_upward_circle</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($yearlyExpense ?? 0, 2) }}</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $formatMoney($yearlyExpense ?? 0) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Yearly Expenses</h6>
                     <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
@@ -298,7 +301,7 @@
                     <div class="position-absolute" style="right: -10px; top: -10px; opacity: 0.1;">
                         <span class="material-symbols-outlined" style="font-size: 80px;">pie_chart</span>
                     </div>
-                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ number_format($yearlyProfit ?? 0, 2) }}</h2>
+                    <h2 class="text-white mb-1 fw-bold" style="font-size: 32px;">{{ $formatMoney($yearlyProfit ?? 0) }}</h2>
                     <h6 class="text-white mb-2" style="font-size: 13px; font-weight: 500;">Profit This Year</h6>
                     <a href="{{ route('reports.income-expense', ['filter_from_date' => \Carbon\Carbon::now()->startOfYear()->format('Y-m-d'), 'filter_to_date' => \Carbon\Carbon::now()->endOfYear()->format('Y-m-d')]) }}" class="btn btn-sm text-white p-0 border-0" style="font-size: 12px; text-decoration: none;">More info <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_forward</span></a>
                 </div>
@@ -570,17 +573,17 @@
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge bg-danger text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> {{ number_format($row['generated'], 2) }}
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">account_balance_wallet</span> {{ $formatMoney($row['generated']) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge {{ $row['paid_amount'] > 0 ? 'bg-success' : 'bg-danger' }} text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> {{ number_format($row['paid_amount'], 2) }}
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> {{ $formatMoney($row['paid_amount']) }}
                                 </span>
                             </td>
                             <td style="padding: 12px;">
                                 <span class="badge {{ $row['balance'] <= 0 ? 'bg-success' : 'bg-danger' }} text-white rounded-pill" style="padding: 6px 10px; font-size: 11px;">
-                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> {{ number_format($row['balance'], 2) }}
+                                    <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">check</span> {{ $formatMoney($row['balance']) }}
                                 </span>
                             </td>
                         </tr>
@@ -598,9 +601,9 @@
                             <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalAbsentToday ?? 0) }}</td>
                             <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalOnLeave ?? 0) }}</td>
                             <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalExpected ?? 0) }}</td>
-                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalGenerated ?? 0, 2) }}</td>
-                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalPaidAmount ?? 0, 2) }}</td>
-                            <td class="text-dark fw-bold" style="padding: 12px;">{{ number_format($totalBalance ?? 0, 2) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ $formatMoney($totalGenerated ?? 0) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ $formatMoney($totalPaidAmount ?? 0) }}</td>
+                            <td class="text-dark fw-bold" style="padding: 12px;">{{ $formatMoney($totalBalance ?? 0) }}</td>
                         </tr>
                         @endif
                     </tbody>
@@ -680,6 +683,22 @@ var staffLeaveData = @json($staffLeaveData);
 var monthlyIncomeData = @json($monthlyIncomeData);
 var monthlyExpenseData = @json($monthlyExpenseData);
 var monthlyLabelsData = @json($monthlyLabelsData);
+var dashboardCurrencyCode = @json($settings->currencyCode());
+var dashboardCurrencySymbol = @json($settings->currencySymbol());
+
+function formatDashboardCurrency(val, decimals = 2) {
+    const amount = Number(val || 0).toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+
+    if (dashboardCurrencyCode === 'USD') return '$' + amount;
+    if (dashboardCurrencyCode === 'EUR') return '€' + amount;
+    if (dashboardCurrencyCode === 'GBP') return '£' + amount;
+    if (dashboardCurrencyCode === 'AED') return 'AED ' + amount;
+
+    return 'PKR ' + amount;
+}
 
 function initializeCharts() {
     // Admissions Overview Pie Chart
@@ -770,7 +789,7 @@ function initializeCharts() {
             tooltip: {
                 y: {
                     formatter: function(val) {
-                        return val.toFixed(1);
+                        return formatDashboardCurrency(val, 2);
                     }
                 }
             }
@@ -899,7 +918,7 @@ function initializeCharts() {
             tooltip: {
                 y: {
                     formatter: function(val) {
-                        return val.toFixed(0);
+                        return formatDashboardCurrency(val, 0);
                     }
                 }
             }

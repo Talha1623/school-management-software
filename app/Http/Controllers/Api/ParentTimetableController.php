@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\Timetable;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -11,6 +12,114 @@ use Carbon\Carbon;
 
 class ParentTimetableController extends Controller
 {
+    /**
+     * @return array<int, string>
+     */
+    private function getStaticSubjects(): array
+    {
+        return [
+            '[Assembly]',
+            '[Lunch Break]',
+            '[Free Time]',
+            '[Lab Active]',
+            '[physicial/sports/activity]',
+            '[singing class]',
+            '[material arts class]',
+            '[Library Activity]',
+            '[chilligraphy class]',
+            '[other fun activities]',
+        ];
+    }
+
+    private function isStaticSubject(string $subject): bool
+    {
+        return in_array($subject, $this->getStaticSubjects(), true);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function buildSubjectTeacherMap(string $class, string $section, ?string $campus): array
+    {
+        $classNorm = strtolower(trim($class));
+        $sectionNorm = strtolower(trim($section));
+        $campusNorm = $campus !== null ? strtolower(trim($campus)) : '';
+
+        $query = Subject::query()
+            ->whereNotNull('teacher')
+            ->where('teacher', '!=', '');
+
+        if ($classNorm !== '') {
+            $query->whereRaw('LOWER(TRIM(class)) = ?', [$classNorm]);
+        }
+        if ($sectionNorm !== '') {
+            $query->whereRaw('LOWER(TRIM(section)) = ?', [$sectionNorm]);
+        }
+        if ($campusNorm !== '') {
+            $query->where(function ($q) use ($campusNorm) {
+                $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campusNorm])
+                    ->orWhereNull('campus')
+                    ->orWhereRaw("TRIM(COALESCE(campus, '')) = ''");
+            });
+        }
+
+        return $query->get()->reduce(function (array $carry, Subject $row) {
+            $subjectKey = strtolower(trim((string) ($row->subject_name ?? '')));
+            $campusKey = strtolower(trim((string) ($row->campus ?? '')));
+            $teacherName = trim((string) ($row->teacher ?? ''));
+            if ($subjectKey === '' || $teacherName === '') {
+                return $carry;
+            }
+
+            $subjectCampusKey = $subjectKey . '|' . $campusKey;
+            if (!isset($carry[$subjectCampusKey])) {
+                $carry[$subjectCampusKey] = $teacherName;
+            }
+            if (!isset($carry[$subjectKey])) {
+                $carry[$subjectKey] = $teacherName;
+            }
+
+            return $carry;
+        }, []);
+    }
+
+    private function resolveTeacherName(Timetable $timetable, array $subjectTeacherMap): ?string
+    {
+        if ($this->isStaticSubject((string) $timetable->subject)) {
+            return null;
+        }
+
+        $subjectKey = strtolower(trim((string) ($timetable->subject ?? '')));
+        $campusKey = strtolower(trim((string) ($timetable->campus ?? '')));
+
+        return $subjectTeacherMap[$subjectKey . '|' . $campusKey]
+            ?? $subjectTeacherMap[$subjectKey]
+            ?? null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatTimetableRow(Timetable $timetable, array $subjectTeacherMap): array
+    {
+        $teacherName = $this->resolveTeacherName($timetable, $subjectTeacherMap);
+
+        return [
+            'id' => $timetable->id,
+            'campus' => $timetable->campus ?? null,
+            'class' => $timetable->class,
+            'section' => $timetable->section,
+            'subject' => $timetable->subject,
+            'teacher' => $teacherName,
+            'teacher_name' => $teacherName,
+            'day' => $timetable->day,
+            'starting_time' => $timetable->starting_time,
+            'ending_time' => $timetable->ending_time,
+            'starting_time_formatted' => Carbon::parse($timetable->starting_time)->format('h:i A'),
+            'ending_time_formatted' => Carbon::parse($timetable->ending_time)->format('h:i A'),
+        ];
+    }
+
     /**
      * Get Timetable for Student's Class
      * Returns timetable for the student's class/section for a specific date
@@ -173,21 +282,12 @@ class ParentTimetableController extends Controller
             ->orderBy('starting_time', 'asc')
             ->get();
 
+            $subjectTeacherMap = $this->buildSubjectTeacherMap($studentClass, $studentSection, $student->campus);
+
             // Format timetable data
-            $timetableData = $timetables->map(function($timetable) use ($timetableDate) {
-                return [
-                    'id' => $timetable->id,
-                    'campus' => $timetable->campus ?? null,
-                    'class' => $timetable->class,
-                    'section' => $timetable->section,
-                    'subject' => $timetable->subject,
-                    'day' => $timetable->day,
-                    'starting_time' => $timetable->starting_time,
-                    'ending_time' => $timetable->ending_time,
-                    'starting_time_formatted' => Carbon::parse($timetable->starting_time)->format('h:i A'),
-                    'ending_time_formatted' => Carbon::parse($timetable->ending_time)->format('h:i A'),
-                ];
-            });
+            $timetableData = $timetables->map(
+                fn (Timetable $timetable) => $this->formatTimetableRow($timetable, $subjectTeacherMap)
+            );
 
             // Group by day for better organization
             $timetableByDay = [];
@@ -259,20 +359,9 @@ class ParentTimetableController extends Controller
             foreach ($days as $day) {
                 $dayTimetables = $allTimetables->filter(function($timetable) use ($day) {
                     return strtolower(trim($timetable->day)) === strtolower($day);
-                })->map(function($timetable) {
-                    return [
-                        'id' => $timetable->id,
-                        'campus' => $timetable->campus ?? null,
-                        'class' => $timetable->class,
-                        'section' => $timetable->section,
-                        'subject' => $timetable->subject,
-                        'day' => $timetable->day,
-                        'starting_time' => $timetable->starting_time,
-                        'ending_time' => $timetable->ending_time,
-                        'starting_time_formatted' => Carbon::parse($timetable->starting_time)->format('h:i A'),
-                        'ending_time_formatted' => Carbon::parse($timetable->ending_time)->format('h:i A'),
-                    ];
-                })->values();
+                })->map(
+                    fn (Timetable $timetable) => $this->formatTimetableRow($timetable, $subjectTeacherMap)
+                )->values();
                 
                 if ($dayTimetables->isNotEmpty()) {
                     $timetableByDay[$day] = $dayTimetables->toArray();

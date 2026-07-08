@@ -22,16 +22,32 @@ class CpanelProvisioningService
 
     private function createDatabaseUser(string $dbUser, string $dbPassword): void
     {
-        $this->call('Mysql', 'create_user', [
+        $this->guardAgainstLandlordCredentials($dbUser);
+
+        $payload = $this->call('Mysql', 'create_user', [
             'name' => $dbUser,
             'password' => $dbPassword,
         ], true);
 
-        // If user already exists, create_user is ignored; force password sync for reliable login.
-        $this->call('Mysql', 'set_password', [
-            'user' => $dbUser,
-            'password' => $dbPassword,
-        ]);
+        $errors = data_get($payload, 'errors', []);
+        $errorText = is_array($errors) ? implode(' | ', $errors) : (string) $errors;
+
+        // Never reset password on an existing user — on shared hosting that may be the main app DB user.
+        if (str_contains(strtolower($errorText), 'already exists')) {
+            throw new RuntimeException(
+                'Database user "' . $dbUser . '" already exists. Choose a unique tenant DB username (e.g. school_' . preg_replace('/^[^_]+_/', '', $dbUser) . ').'
+            );
+        }
+    }
+
+    private function guardAgainstLandlordCredentials(string $dbUser): void
+    {
+        $landlordUser = strtolower(trim((string) env('DB_USERNAME', '')));
+        if ($landlordUser !== '' && strtolower($dbUser) === $landlordUser) {
+            throw new RuntimeException(
+                'Tenant database user cannot be the same as the main application database user (' . $landlordUser . ').'
+            );
+        }
     }
 
     private function grantAllPrivileges(string $database, string $dbUser): void

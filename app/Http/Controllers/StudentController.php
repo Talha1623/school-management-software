@@ -654,8 +654,8 @@ class StudentController extends Controller
             $validated['photo'] = $photoPath;
         }
 
-        // Handle discounted_student select (0/1)
-        $validated['discounted_student'] = ($request->input('discounted_student') === '1');
+        // Discount is managed from Admission / Parent Wallet — not editable on Edit Student.
+        unset($validated['discounted_student'], $validated['discount_amount'], $validated['discount_reason']);
 
         if (!empty($validated['transport_route']) && empty($validated['transport_fare'])) {
             $transportQuery = Transport::where('route_name', $validated['transport_route']);
@@ -673,25 +673,6 @@ class StudentController extends Controller
         }
 
         $student->update($validated);
-
-        if (!empty($student->student_code)) {
-            $discountAmount = (float) ($request->input('discount_amount') ?? 0);
-            $discountReason = trim((string) ($request->input('discount_reason') ?? ''));
-            if ($validated['discounted_student'] && $discountAmount > 0) {
-                $discountTitle = $discountReason !== '' ? $discountReason : 'Admission Discount';
-                \App\Models\StudentDiscount::updateOrCreate(
-                    [
-                        'student_code' => $student->student_code,
-                        'discount_title' => $discountTitle,
-                    ],
-                    [
-                        'discount_amount' => $discountAmount,
-                        'created_by' => auth()->check() ? (auth()->user()->name ?? null) : null,
-                    ]
-                );
-                $student->update(['discount_reason' => $discountTitle]);
-            }
-        }
 
         return redirect()
             ->route('student.information')

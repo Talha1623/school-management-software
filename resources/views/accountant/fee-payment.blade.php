@@ -3,6 +3,9 @@
 @section('title', 'Fee Payment - Accountant')
 
 @section('content')
+@php
+    $formatMoney = fn ($amount) => $settings->formatCurrency($amount);
+@endphp
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-4 mb-4">
@@ -30,7 +33,7 @@
                     <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3); min-height: 140px; display: flex; flex-direction: column; justify-content: center;">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <div class="stat-number text-white fw-bold mb-2" style="font-size: 36px; line-height: 1;">{{ number_format($incomeToday ?? 0, 2) }}</div>
+                                <div class="stat-number text-white fw-bold mb-2" style="font-size: 36px; line-height: 1;">{{ $formatMoney($incomeToday ?? 0) }}</div>
                                 <div class="stat-label text-white fw-semibold" style="font-size: 16px;">Income Today</div>
                             </div>
                             <div class="stat-icon" style="opacity: 0.3; position: absolute; right: 15px; top: 15px;">
@@ -45,7 +48,7 @@
                     <div class="stat-card" style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3); min-height: 140px; display: flex; flex-direction: column; justify-content: center;">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <div class="stat-number text-white fw-bold mb-2" style="font-size: 36px; line-height: 1;">{{ number_format($expenseToday ?? 0, 2) }}</div>
+                                <div class="stat-number text-white fw-bold mb-2" style="font-size: 36px; line-height: 1;">{{ $formatMoney($expenseToday ?? 0) }}</div>
                                 <div class="stat-label text-white fw-semibold" style="font-size: 16px;">Expense Today</div>
                             </div>
                             <div class="stat-icon" style="opacity: 0.3; position: absolute; right: 15px; top: 15px;">
@@ -60,7 +63,7 @@
                     <div class="stat-card" style="background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3); min-height: 140px; display: flex; flex-direction: column; justify-content: center;">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <div class="stat-number text-white fw-bold mb-2" style="font-size: 36px; line-height: 1;">{{ number_format($balanceToday ?? 0, 2) }}</div>
+                                <div class="stat-number text-white fw-bold mb-2" style="font-size: 36px; line-height: 1;">{{ $formatMoney($balanceToday ?? 0) }}</div>
                                 <div class="stat-label text-white fw-semibold" style="font-size: 16px;">Balance Today</div>
                             </div>
                             <div class="stat-icon" style="opacity: 0.3; position: absolute; right: 15px; top: 15px;">
@@ -703,6 +706,8 @@
 </style>
 
 <script>
+@include('partials.currency-format-js')
+
 function localTodayDateString() {
     const now = new Date();
     const year = now.getFullYear();
@@ -785,7 +790,7 @@ function renderStatusCell(due, paidForStatus, studentCode, studentName, isInstal
 
     if (statusLabel === 'Late Due' || (principal <= 0.01 && lateRem > 0.01 && dueAmt > 0.01)) {
         return `
-            <button class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Fee paid — late fee still due: ${lateRem.toFixed(2)}">
+            <button class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Fee paid — late fee still due: ${formatFeeCurrency(lateRem)}">
                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">schedule</span>
                 <span style="color: white;">Late Due</span>
             </button>
@@ -803,7 +808,7 @@ function renderStatusCell(due, paidForStatus, studentCode, studentName, isInstal
 
     if (statusLabel === 'Unpaid' || paid <= 0.01) {
         return `
-            <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${studentCode}', '${studentName}', ${dueAmt})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${dueAmt.toFixed(2)}">
+            <button class="btn btn-sm btn-danger" onclick="viewUnpaid('${studentCode}', '${studentName}', ${dueAmt})" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ${formatFeeCurrency(dueAmt)}">
                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span>
                 <span style="color: white;">Unpaid</span>
             </button>
@@ -904,19 +909,19 @@ function searchByName() {
                             ${fee.title || 'N/A'}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${total.toFixed(2)}
+                            ${formatFeeCurrency(total)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${discount.toFixed(2)}
+                            ${formatFeeCurrency(discount)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${lateFee.toFixed(2)}
+                            ${formatFeeCurrency(lateFee)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${paidDisplay.toFixed(2)}
+                            ${formatFeeCurrency(paidDisplay)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${due.toFixed(2)}
+                            ${formatFeeCurrency(due)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
                             ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name, isInstallment, principalDue, remainingLate, feeStatus)}
@@ -986,11 +991,11 @@ function searchByName() {
                 const totalRow = document.createElement('tr');
                 totalRow.innerHTML = `
                     <td colspan="4" style="padding: 8px 12px; font-size: 13px;" class="text-end fw-semibold">Total</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.total.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.discount.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.late.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.paid.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.due.toFixed(2)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.total)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.discount)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.late)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.paid)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.due)}</td>
                     <td colspan="3"></td>
                 `;
                 searchResultsBody.appendChild(totalRow);
@@ -1100,8 +1105,8 @@ function viewUnpaid(studentCode, studentName, unpaidAmount) {
                                  onmouseover="this.style.borderColor='#003471'; this.style.boxShadow='0 2px 8px rgba(0,52,113,0.2)'"
                                  onmouseout="this.style.borderColor='#e0e7ff'; this.style.boxShadow='none'">
                                 <div class="fw-semibold" style="color: #003471; font-size: 14px; margin-bottom: 6px;">${fee.title}</div>
-                                <div style="color: #6c757d; font-size: 12px; margin-bottom: 4px;">Total: Rs. ${total.toFixed(2)}</div>
-                                <div style="color: #dc3545; font-size: 14px; font-weight: 600; margin-bottom: 10px;">Due: Rs. ${remaining.toFixed(2)}</div>
+                                <div style="color: #6c757d; font-size: 12px; margin-bottom: 4px;">Total: ${formatFeeCurrency(total)}</div>
+                                <div style="color: #dc3545; font-size: 14px; font-weight: 600; margin-bottom: 10px;">Due: ${formatFeeCurrency(remaining)}</div>
                                 <button class="btn btn-sm btn-warning w-100" onclick="openPartialPaymentFromCard('${studentCode}', '${studentName || ''}', '${fee.title.replace(/'/g, "\\'")}', ${remaining}, '${student.campus || ''}', ${fee.generated_id ? fee.generated_id : 'null'}, ${generatedFee})" style="padding: 6px 12px; font-size: 12px; color: white !important;">
                                     <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">account_balance_wallet</span>
                                     <span style="color: white;">Partial Payment</span>
@@ -1251,7 +1256,7 @@ function takePayment(studentCode, studentName, paymentType = 'full', studentData
             : null;
         const lateOnly = principalDue !== null && principalDue <= 0.01 && remainingLate > 0.01;
         const confirmMsg = lateOnly
-            ? `Fee is already paid; only late fee (Rs. ${remainingLate.toFixed(2)}) remains. Waive late fee and mark as paid for ${studentName} (${studentCode})?`
+            ? `Fee is already paid; only late fee (${formatFeeCurrency(remainingLate)}) remains. Waive late fee and mark as paid for ${studentName} (${studentCode})?`
             : `Pay principal only (no late fee) for ${studentName} (${studentCode})?`;
         if (!confirm(confirmMsg)) {
             return;
@@ -1340,7 +1345,7 @@ function openPartialPaymentModal(studentCode, studentName, studentData) {
     window.partialPaymentGeneratedFee = generatedFee;
     window.partialPaymentBaseDue = dueAmount;
     
-    document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
+    document.getElementById('partial_due_amount').value = formatFeeCurrency(dueAmount);
     document.getElementById('partial_fee_title').value = studentData.fee_title || '';
     document.getElementById('partial_student_code').value = studentCode;
     document.getElementById('partial_generated_id').value = studentData.generated_id || '';
@@ -1460,7 +1465,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     window.partialPaymentGeneratedFee = generatedFee;
                     window.partialPaymentBaseDue = dueAmount;
-                    document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
+                    document.getElementById('partial_due_amount').value = formatFeeCurrency(dueAmount);
                     if (window.partialPaymentStudentData.fee_title) {
                         document.getElementById('partial_fee_title').value = window.partialPaymentStudentData.fee_title;
                     }
@@ -1496,7 +1501,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             
                             window.partialPaymentGeneratedFee = generatedFee;
                             window.partialPaymentBaseDue = dueAmount;
-                            document.getElementById('partial_due_amount').value = 'Rs. ' + dueAmount.toFixed(2);
+                            document.getElementById('partial_due_amount').value = formatFeeCurrency(dueAmount);
                             updatePartialDueAmountPreview();
                         }
                     })
@@ -1583,13 +1588,13 @@ function updatePaymentStatusWithData(studentCode, hasUnpaid, unpaidAmount) {
                         statusButton.className = 'btn btn-sm btn-danger';
                         statusButton.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span><span style="color: white;">Unpaid</span>';
                         statusButton.onclick = function() { viewUnpaid(studentCode, '', unpaidAmount); };
-                        statusButton.title = 'Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2);
+                        statusButton.title = 'Unpaid Amount: ' + formatFeeCurrency(unpaidAmount);
                     }
                 } else {
                         if (!hasUnpaid || unpaidAmount <= 0) {
                         statusCell.innerHTML = '<button class="btn btn-sm btn-success" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Payment completed"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">check_circle</span><span style="color: white;">Paid</span></button>';
                         } else {
-                        statusCell.innerHTML = '<button class="btn btn-sm btn-danger" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ' + parseFloat(unpaidAmount || 0).toFixed(2) + '"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span><span style="color: white;">Unpaid</span></button>';
+                        statusCell.innerHTML = '<button class="btn btn-sm btn-danger" style="padding: 4px 12px; font-size: 12px; color: white !important;" title="Unpaid Amount: ' + formatFeeCurrency(unpaidAmount) + '"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; color: white;">warning</span><span style="color: white;">Unpaid</span></button>';
                     }
                 }
             }
@@ -1649,15 +1654,15 @@ function recalculateStudentLatestPaymentTotals(studentCode) {
     });
     const amountCell = document.querySelector(`[data-student-total="${studentCode}"]`);
     if (amountCell) {
-        amountCell.textContent = sumAmount.toFixed(2);
+        amountCell.textContent = formatFeeCurrency(sumAmount);
     }
     const lateCell = document.querySelector(`[data-student-total-late="${studentCode}"]`);
     if (lateCell) {
-        lateCell.textContent = sumLate.toFixed(2);
+        lateCell.textContent = formatFeeCurrency(sumLate);
     }
     const discCell = document.querySelector(`[data-student-total-discount="${studentCode}"]`);
     if (discCell) {
-        discCell.textContent = sumDiscount.toFixed(2);
+        discCell.textContent = formatFeeCurrency(sumDiscount);
     }
 }
 
@@ -1764,13 +1769,14 @@ function addLatestPaymentRow(payment) {
     const { date, time } = parsePaymentDateTime(payment.payment_date);
     const gross = parseFloat(payment.payment_amount || 0) || 0;
     const late = parseFloat(payment.late_fee || 0) || 0;
-    const feeExclLate = Math.max(0, gross - late);
+    // Fee column = cash received (same as Student Payment "Payment Amount" field).
+    const feePaid = gross;
     const disc = parseFloat(payment.discount || 0) || 0;
     const row = document.createElement('tr');
     row.setAttribute('data-key', key);
     row.setAttribute('data-payment-id', payment.id != null ? String(payment.id) : '');
     row.setAttribute('data-student-code', studentCode);
-    row.setAttribute('data-amount', feeExclLate.toFixed(2));
+    row.setAttribute('data-amount', feePaid.toFixed(2));
     row.setAttribute('data-late', late.toFixed(2));
     row.setAttribute('data-discount', disc.toFixed(2));
     row.innerHTML = `
@@ -1787,13 +1793,13 @@ function addLatestPaymentRow(payment) {
             ${payment.payment_title || 'N/A'}
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
-            <strong style="color: #28a745;">${feeExclLate.toFixed(2)}</strong>
+            <strong style="color: #28a745;">${formatFeeCurrency(feePaid)}</strong>
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
-            ${late > 0 ? `<span style="color: #dc3545; font-weight: 600;">${late.toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
+            ${late > 0 ? `<span style="color: #dc3545; font-weight: 600;">${formatFeeCurrency(late)}</span>` : `<span style="color: #6c757d;">${formatFeeCurrency(0)}</span>`}
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
-            ${disc > 0 ? `<span style="color: #ff9800; font-weight: 600;">${disc.toFixed(2)}</span>` : '<span style="color: #6c757d;">0.00</span>'}
+            ${disc > 0 ? `<span style="color: #ff9800; font-weight: 600;">${formatFeeCurrency(disc)}</span>` : `<span style="color: #6c757d;">${formatFeeCurrency(0)}</span>`}
         </td>
         <td style="padding: 8px 12px; font-size: 13px;">
             ${date}
@@ -1852,6 +1858,20 @@ function refreshLatestPaymentsForStudent(studentCode) {
         console.error('Error loading payment history:', error);
     });
 }
+
+const initialLatestPayments = @json($latestPayments ?? []);
+
+function loadInitialLatestPayments() {
+    if (!Array.isArray(initialLatestPayments) || initialLatestPayments.length === 0) {
+        return;
+    }
+
+    for (let i = initialLatestPayments.length - 1; i >= 0; i -= 1) {
+        addLatestPaymentRow(initialLatestPayments[i]);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadInitialLatestPayments);
 
 function renderLatestPaymentsForStudents(students) {
     const container = document.getElementById('latestPaymentsContainer');
@@ -2058,7 +2078,7 @@ function updatePartialDueAmountPreview() {
 
     const dueField = document.getElementById('partial_due_amount');
     if (dueField) {
-        dueField.value = 'Rs. ' + remainingDue.toFixed(2);
+        dueField.value = formatFeeCurrency(remainingDue);
     }
 }
 
@@ -2241,19 +2261,19 @@ function searchByCNIC() {
                             ${fee.title || 'N/A'}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${total.toFixed(2)}
+                            ${formatFeeCurrency(total)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${discount.toFixed(2)}
+                            ${formatFeeCurrency(discount)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${lateFee.toFixed(2)}
+                            ${formatFeeCurrency(lateFee)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${paidDisplay.toFixed(2)}
+                            ${formatFeeCurrency(paidDisplay)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;">
-                            ${due.toFixed(2)}
+                            ${formatFeeCurrency(due)}
                         </td>
                         <td style="padding: 8px 12px; font-size: 13px;" class="status-cell">
                             ${isEmptyFee ? '<span class="badge bg-secondary">N/A</span>' : renderStatusCell(due, paidForStatus, student.student_code, student.student_name, isInstallment, principalDue, remainingLate, feeStatus)}
@@ -2304,11 +2324,11 @@ function searchByCNIC() {
                 const totalRow = document.createElement('tr');
                 totalRow.innerHTML = `
                     <td colspan="4" style="padding: 8px 12px; font-size: 13px;" class="text-end fw-semibold">Total</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.total.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.discount.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.late.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.paid.toFixed(2)}</td>
-                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${grandTotals.due.toFixed(2)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.total)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.discount)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.late)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.paid)}</td>
+                    <td style="padding: 8px 12px; font-size: 13px;" class="fw-semibold">${formatFeeCurrency(grandTotals.due)}</td>
                     <td colspan="3"></td>
                 `;
                 searchResultsBody.appendChild(totalRow);
@@ -2440,8 +2460,8 @@ function makeInstallment(studentCode, studentName, selectedFeeData = null) {
                              onmouseover="this.style.borderColor='#003471'; this.style.boxShadow='0 2px 8px rgba(0,52,113,0.2)'"
                              onmouseout="this.style.borderColor='#e0e7ff'; this.style.boxShadow='none'">
                             <div class="fw-semibold" style="color: #003471; font-size: 13px; margin-bottom: 4px;">${fee.title}</div>
-                            <div style="color: #6c757d; font-size: 11px;">Total: Rs. ${total.toFixed(2)}</div>
-                            <div style="color: #dc3545; font-size: 12px; font-weight: 600;">Due: Rs. ${remaining.toFixed(2)}</div>
+                            <div style="color: #6c757d; font-size: 11px;">Total: ${formatFeeCurrency(total)}</div>
+                            <div style="color: #dc3545; font-size: 12px; font-weight: 600;">Due: ${formatFeeCurrency(remaining)}</div>
                         </div>
                     `;
                     feeCardsRow.appendChild(cardCol);
@@ -2764,7 +2784,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 notification.className = 'alert alert-info alert-dismissible fade show';
                 notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
                 notification.innerHTML = `
-                    <strong>Fee Calculator Payment:</strong> Processing partial payment for ${paymentData.students.length} student(s). Total Amount: ${paymentData.totalAmount.toFixed(2)}, Payment Amount: ${paymentData.paymentAmount.toFixed(2)}
+                    <strong>Fee Calculator Payment:</strong> Processing partial payment for ${paymentData.students.length} student(s). Total Amount: ${formatFeeCurrency(paymentData.totalAmount)}, Payment Amount: ${formatFeeCurrency(paymentData.paymentAmount)}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 `;
                 document.body.appendChild(notification);

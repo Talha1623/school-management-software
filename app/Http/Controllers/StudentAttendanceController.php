@@ -15,6 +15,7 @@ use App\Models\Message;
 use App\Models\StudentNotification;
 use App\Models\StudentDeviceToken;
 use App\Services\FirebasePushService;
+use App\Services\AutoStudentAttendanceService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Collection;
@@ -78,6 +79,8 @@ class StudentAttendanceController extends Controller
      */
     public function index(Request $request): View
     {
+        app(AutoStudentAttendanceService::class)->runIfDue();
+
         // Get filter values
         $filterCampus = $request->get('filter_campus');
         $filterType = $request->get('filter_type');
@@ -434,6 +437,8 @@ class StudentAttendanceController extends Controller
      */
     public function scanBarcode(Request $request)
     {
+        app(AutoStudentAttendanceService::class)->runIfDue();
+
         $this->mergeBarcodeScanBodyIntoRequest($request);
 
         $validated = $request->validate([

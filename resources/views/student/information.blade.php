@@ -118,14 +118,6 @@
                             <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">picture_as_pdf</span>
                             <span>PDF</span>
                         </a>
-                        <form action="{{ route('student.information.delete-all') }}?{{ http_build_query(request()->except(['page', 'per_page'])) }}" method="POST" class="d-inline delete-all-form" onsubmit="return confirm('Are you sure you want to delete ALL filtered students? This action cannot be undone!');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-sm px-2 py-1 export-btn delete-all-btn">
-                                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">delete_sweep</span>
-                                <span>Delete All</span>
-                            </button>
-                        </form>
                     </div>
                     @endif
                     
@@ -277,9 +269,6 @@
                                             <a href="{{ route('student.edit', $student->id) }}" class="btn btn-sm btn-warning px-2 py-1" title="Edit Student">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">edit</span>
                                             </a>
-                                            <button type="button" class="btn btn-sm btn-danger px-2 py-1" onclick="deleteStudent({{ $student->id }}, '{{ $student->student_name }}', '{{ $student->student_code }}')" title="Delete Student">
-                                                <span class="material-symbols-outlined" style="font-size: 14px; color: white;">delete</span>
-                                            </button>
                                             <div class="dropdown student-action-dropdown">
                                                 <button class="btn btn-sm btn-secondary px-2 py-1 no-caret" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More Actions">
                                                     <span class="material-symbols-outlined" style="font-size: 14px; color: white;">pie_chart</span>
@@ -871,7 +860,7 @@ function deactivateStudent(studentId, studentName) {
     });
 }
 
-// Delete student
+// Reactivate passout student
 function reactivateStudent(studentId, studentName, previousClass, previousSection) {
     let confirmMessage;
     
@@ -918,56 +907,6 @@ function reactivateStudent(studentId, studentName, previousClass, previousSectio
     });
 }
 
-function deleteStudent(studentId, studentName, studentCode) {
-    if (confirm(`Are you sure you want to delete student "${studentName}" (${studentCode})? This action cannot be undone!`)) {
-        fetch(`{{ route('student.delete', ':id') }}`.replace(':id', studentId), {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);
-                loadStudentInfo(window.location.href, { pushState: false });
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while deleting the student.');
-        });
-    }
-}
-
-document.addEventListener('submit', function(event) {
-    const form = event.target.closest('.delete-all-form');
-    if (!form) return;
-    event.preventDefault();
-    if (!confirm('Are you sure you want to delete ALL filtered students? This action cannot be undone!')) {
-        return;
-    }
-    const formData = new FormData(form);
-    fetch(form.action, {
-        method: 'POST',
-        headers: {
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json'
-        },
-        body: formData
-    })
-    .then(() => {
-        loadStudentInfo(window.location.href, { pushState: false });
-    })
-    .catch(() => {
-        window.location.href = form.action;
-    });
-});
 </script>
 
 <style>
@@ -1010,18 +949,6 @@ document.addEventListener('submit', function(event) {
     
     .export-btn:active {
         transform: translateY(0);
-    }
-    
-    .delete-all-btn {
-        background-color: #dc3545;
-        color: white;
-    }
-    
-    .delete-all-btn:hover {
-        background-color: #c82333;
-        color: white;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
     }
 
     .student-action-dropdown .no-caret::after {

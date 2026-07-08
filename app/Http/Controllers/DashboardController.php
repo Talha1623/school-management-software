@@ -13,6 +13,7 @@ use App\Models\Campus;
 use App\Models\Task;
 use App\Models\GeneralSetting;
 use App\Models\PlatformSchool;
+use App\Services\AutoStudentAttendanceService;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -20,6 +21,8 @@ class DashboardController extends Controller
 {
     public function index()
     {
+        app(AutoStudentAttendanceService::class)->runIfDue();
+
         $today = Carbon::today();
         $startOfMonth = Carbon::now()->startOfMonth();
         $endOfMonth = Carbon::now()->endOfMonth();
@@ -416,6 +419,7 @@ class DashboardController extends Controller
         ];
         
         return view('dashboards.index', compact(
+            'settings',
             'unpaidInvoicesCount',
             'unpaidInvoicesAmount',
             'incomeToday',

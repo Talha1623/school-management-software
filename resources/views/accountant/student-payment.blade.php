@@ -182,6 +182,8 @@
 </style>
 
 <script>
+let selectedFeeDue = 0;
+
 function searchStudent() {
     const studentCodeInput = document.getElementById('student_code');
     const studentCode = studentCodeInput.value.trim();
@@ -193,6 +195,7 @@ function resetForm() {
     document.getElementById('studentInfo').style.display = 'none';
     document.getElementById('studentName').textContent = '';
     resetGeneratedFees();
+    selectedFeeDue = 0;
 }
 
 function resetGeneratedFees() {
@@ -212,10 +215,14 @@ function applyGeneratedFees(fees) {
     fees.forEach(fee => {
         const option = document.createElement('option');
         const amount = Number(fee.payment_amount || 0).toFixed(2);
+        const late = Number(fee.late_fee || 0);
         option.value = fee.id;
-        option.textContent = `${fee.payment_title} - ${amount}`;
+        option.textContent = late > 0
+            ? `${fee.payment_title} - ${amount} (incl. late ${late.toFixed(2)})`
+            : `${fee.payment_title} - ${amount}`;
         option.dataset.title = fee.payment_title || '';
         option.dataset.amount = fee.payment_amount || 0;
+        option.dataset.lateFee = late;
         generatedFeeSelect.appendChild(option);
     });
     generatedFeeSelect.disabled = false;
@@ -280,6 +287,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const generatedFeeSelect = document.getElementById('generated_fee_select');
     const paymentTitleInput = document.getElementById('payment_title');
     const paymentAmountInput = document.getElementById('payment_amount');
+    const discountInput = document.getElementById('discount');
     const generatedIdInput = document.getElementById('generated_id');
     let searchTimer = null;
 
@@ -310,14 +318,40 @@ document.addEventListener('DOMContentLoaded', function() {
             if (generatedIdInput) {
                 generatedIdInput.value = '';
             }
+            selectedFeeDue = 0;
             return;
         }
         paymentTitleInput.value = selectedOption.dataset.title;
-        paymentAmountInput.value = selectedOption.dataset.amount || '';
+        selectedFeeDue = parseFloat(selectedOption.dataset.amount || 0) || 0;
+        paymentAmountInput.value = selectedFeeDue > 0 ? selectedFeeDue.toFixed(2) : '';
+        if (discountInput) {
+            discountInput.value = '0';
+        }
         if (generatedIdInput) {
             generatedIdInput.value = selectedOption.value || '';
         }
     });
+
+    function syncPaymentFromDiscount() {
+        if (!discountInput || !paymentAmountInput || selectedFeeDue <= 0) {
+            return;
+        }
+        let discount = Math.max(0, parseFloat(discountInput.value || 0) || 0);
+        if (discount > selectedFeeDue) {
+            discount = selectedFeeDue;
+            discountInput.value = discount.toFixed(2);
+        }
+        const cashDue = Math.max(0, selectedFeeDue - discount);
+        const currentPayment = parseFloat(paymentAmountInput.value || 0) || 0;
+        if (currentPayment >= selectedFeeDue - 0.01 || currentPayment + discount > selectedFeeDue + 0.01) {
+            paymentAmountInput.value = cashDue.toFixed(2);
+        }
+    }
+
+    if (discountInput) {
+        discountInput.addEventListener('input', syncPaymentFromDiscount);
+        discountInput.addEventListener('change', syncPaymentFromDiscount);
+    }
 });
 
 // Auto-search when student code is entered and Enter is pressed

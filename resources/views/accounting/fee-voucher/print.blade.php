@@ -19,6 +19,7 @@
             $notice = 'This is a computer generated fee voucher';
         }
         $feeHistoryMonthOrder = ['December', 'November', 'October', 'September', 'August', 'July', 'June', 'May', 'April', 'March', 'February', 'January'];
+        $formatMoney = fn ($amount, int $decimals = 2) => $settings->formatCurrency($amount, $decimals);
     @endphp
     <style>
         * { box-sizing: border-box; }
@@ -271,34 +272,34 @@
                                     @php $amt = (float) ($fee['amount'] ?? 0); @endphp
                                     <tr>
                                         <td>{{ $fee['description'] ?? '' }}</td>
-                                        <td>{{ number_format($amt, 2) }}</td>
+                                        <td>{{ $formatMoney($amt, 2) }}</td>
                                     </tr>
                                 @endforeach
                                 <tr class="totals-row">
                                     <td><strong>CURRENT FEES SUBTOTAL</strong></td>
-                                    <td><strong>{{ number_format((float) ($v['current_fees_subtotal'] ?? 0), 0) }}</strong></td>
+                                    <td><strong>{{ $formatMoney((float) ($v['current_fees_subtotal'] ?? 0), 0) }}</strong></td>
                                 </tr>
                                 <tr class="totals-row">
                                     <td><strong>SUBTOTAL</strong></td>
-                                    <td><strong>{{ number_format((float) ($v['subtotal'] ?? 0), 0) }}</strong></td>
+                                    <td><strong>{{ $formatMoney((float) ($v['subtotal'] ?? 0), 0) }}</strong></td>
                                 </tr>
                                 <tr>
                                     <td>LATE FEE (PREVIOUS DUES)</td>
-                                    <td>{{ number_format((float) ($v['late_fee'] ?? 0), 0) }}</td>
+                                    <td>{{ $formatMoney((float) ($v['late_fee'] ?? 0), 0) }}</td>
                                 </tr>
                                 <tr class="totals-row">
                                     <td><strong>TOTAL:</strong></td>
-                                    <td><strong>{{ number_format((float) ($v['total'] ?? 0), 0) }}</strong></td>
+                                    <td><strong>{{ $formatMoney((float) ($v['total'] ?? 0), 0) }}</strong></td>
                                 </tr>
                                 <tr class="totals-row">
                                     <td><strong>AFTER DUE DATE:</strong></td>
-                                    <td><strong>{{ number_format((float) ($v['after_due_date'] ?? 0), 0) }}</strong></td>
+                                    <td><strong>{{ $formatMoney((float) ($v['after_due_date'] ?? 0), 0) }}</strong></td>
                                 </tr>
                             </tbody>
                         </table>
 
                         <div class="summary-line">
-                            <strong>Total Amount</strong> {{ number_format((float) ($v['total'] ?? 0), 0) }}
+                            <strong>Total Amount</strong> {{ $formatMoney((float) ($v['total'] ?? 0), 0) }}
                         </div>
                         <div class="summary-line">
                             <strong>Voucher Validity:</strong>
@@ -332,14 +333,14 @@
                                     <td>Total</td>
                                     @foreach ($feeHistoryMonthOrder as $m)
                                         @php $h = ($v['fee_history'] ?? [])[$m] ?? ['total' => 0, 'paid' => 0]; @endphp
-                                        <td>{{ number_format((float) ($h['total'] ?? 0), 0) }}</td>
+                                        <td>{{ $formatMoney((float) ($h['total'] ?? 0), 0) }}</td>
                                     @endforeach
                                 </tr>
                                 <tr>
                                     <td>Paid</td>
                                     @foreach ($feeHistoryMonthOrder as $m)
                                         @php $h = ($v['fee_history'] ?? [])[$m] ?? ['total' => 0, 'paid' => 0]; @endphp
-                                        <td>{{ number_format((float) ($h['paid'] ?? 0), 0) }}</td>
+                                        <td>{{ $formatMoney((float) ($h['paid'] ?? 0), 0) }}</td>
                                     @endforeach
                                 </tr>
                             </tbody>

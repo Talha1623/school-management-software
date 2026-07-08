@@ -89,7 +89,7 @@ class StudentPaymentController extends Controller
      * gross cash in payment_amount with late_fee as the late slice (principal paid = max(0, amount - late)).
      * Fee Payment partial modal sends payment_amount as total cash received (principal + late combined).
      */
-    private function applyLedgerGrossFromPrincipal(array &$validated, float $lateFee, string $method, ?float $remainingDueBeforePayment = null): void
+    private function applyLedgerGrossFromPrincipal(array &$validated, float $lateFee, string $method, ?float $remainingDueBeforePayment = null, bool $preserveEnteredCash = false): void
     {
         if ($this->isWalletMethod($method)) {
             return;
@@ -105,6 +105,13 @@ class StudentPaymentController extends Controller
             $unpaidLate,
             $remainingDueBeforePayment
         );
+
+        if ($preserveEnteredCash) {
+            $validated['payment_amount'] = $cash;
+            $validated['late_fee'] = $latePaid;
+
+            return;
+        }
 
         $validated['payment_amount'] = $gross;
         $validated['late_fee'] = $latePaid;
@@ -152,6 +159,29 @@ class StudentPaymentController extends Controller
         }
 
         return auth()->user()->name ?? null;
+    }
+
+    private function studentPaymentRedirectRoute(): string
+    {
+        if (auth()->guard('accountant')->check()) {
+            return 'accountant.direct-payment.student';
+        }
+
+        return 'accounting.direct-payment.student';
+    }
+
+    private function redirectAfterStudentPayment(Request $request, string $successMessage): RedirectResponse
+    {
+        $route = $this->studentPaymentRedirectRoute();
+        $params = [];
+
+        if ($request->filled('student_code')) {
+            $params['student_code'] = $request->input('student_code');
+        }
+
+        return redirect()
+            ->route($route, $params)
+            ->with('success', $successMessage);
     }
 
     private function notifyAdminsAboutAccountantFeePayment(StudentPayment $payment, ?Student $student, string $paymentStatus): void
@@ -269,125 +299,8 @@ class StudentPaymentController extends Controller
             ]);
         }
 
-        // Use the same logic as Fee Payment search results
-        // Include both "Generated" and "Installment" methods as unpaid fees
-        $generatedFees = StudentPayment::where('student_code', $studentCode)
-            ->whereIn('method', ['Generated', 'Installment'])
-            ->get();
-        
-        // Exclude "Installment" method from paid fees - installments are unpaid fees
-        $paidFees = StudentPayment::where('student_code', $studentCode)
-            ->where('method', '!=', 'Generated')
-            ->where('method', '!=', 'Installment')
-            ->get();
-
-        // Get StudentDiscount records for this student
-        $studentDiscounts = \App\Models\StudentDiscount::where('student_code', $studentCode)
-            ->get();
-        $totalStudentDiscount = $studentDiscounts->sum(function($discount) {
-            return (float) ($discount->discount_amount ?? 0);
-        });
-
-        $unpaidGeneratedFees = [];
-        $totalDue = 0;
-        $generatedByTitle = $generatedFees->groupBy('payment_title');
-        $paidByTitle = $paidFees->groupBy('payment_title');
-
-        // Collect all installment titles and their base fee titles
-        // If installments exist for a fee, exclude the original fee title
-        $installmentBaseTitles = [];
-        foreach ($generatedByTitle as $title => $items) {
-            if (preg_match('/^(.+)\/\d+$/', $title, $matches)) {
-                $baseTitle = $matches[1];
-                $installmentBaseTitles[$baseTitle] = true;
-            }
-        }
-
-        foreach ($generatedByTitle as $title => $items) {
-            $latestGenerated = $items->sortByDesc('id')->first();
-            // Check if this is an installment (title ends with /number)
-            $isInstallment = preg_match('/\/\d+$/', $title);
-            
-            // Skip original fee title if installments exist for it
-            if (!$isInstallment && isset($installmentBaseTitles[$title])) {
-                continue;
-            }
-            
-            // Check if this is a monthly fee (title starts with "Monthly Fee - ")
-            $isMonthlyFee = str_starts_with($title, 'Monthly Fee - ');
-
-            $paidForTitle = StudentPayment::paidLedgerRowsForLatestGeneratedTitle(
-                $paidByTitle->get($title, collect()),
-                $latestGenerated
-            );
-
-            // Calculate original amount (before discount) from generated records
-            $originalAmount = $items->sum(function ($item) {
-                return (float) ($item->payment_amount ?? 0);
-            });
-            
-            $generatedLate = $items->sum(function ($item) {
-                return (float) ($item->late_fee ?? 0);
-            });
-            
-            $generatedDiscount = $items->sum(function ($item) {
-                return (float) ($item->discount ?? 0);
-            });
-            
-            // Discount from payment records (for regular fees or additional discounts on installments)
-            $paidDiscount = $paidForTitle->sum(function ($item) {
-                return (float) ($item->discount ?? 0);
-            });
-            
-            // Apply StudentDiscount to monthly fees
-            // Student discount should NOT be applied to installments - only to full (non-installment) fees
-            $appliedStudentDiscount = 0;
-            if ($isMonthlyFee && $totalStudentDiscount > 0 && !$isInstallment) {
-                // Only apply student discount to regular (non-installment) monthly fees
-                $appliedStudentDiscount = round($totalStudentDiscount, 2);
-            }
-            
-            // Total discount = generated discount (for installments) + payment discount + student discount (only for non-installment fees)
-            $totalDiscount = $generatedDiscount + $paidDiscount + $appliedStudentDiscount;
-            
-            // Generated Fee = Original Amount - Total Discount + Late Fee
-            $generatedFee = max(0, $originalAmount - $totalDiscount) + $generatedLate;
-            
-            // Calculate paid amounts
-            $paidAmountOnly = $paidForTitle->sum(function ($item) {
-                $amount = (float) ($item->payment_amount ?? 0);
-                $late = (float) ($item->late_fee ?? 0);
-                return max(0, $amount - $late);
-            });
-            $paidLate = $paidForTitle->sum(function ($item) {
-                return (float) ($item->late_fee ?? 0);
-            });
-            
-            // Calculate remaining amounts
-            $remainingAmount = max(0, ($originalAmount - $totalDiscount) - $paidAmountOnly);
-            $remainingLate = max(0, $generatedLate - $paidLate);
-            $remainingTotal = $remainingAmount + $remainingLate;
-
-            // Only include if there's an unpaid balance (same as Fee Payment search)
-            if ($remainingTotal > 0) {
-                // Return in format expected by dropdown: id, payment_title, payment_amount, late_fee, payment_date, discount
-                // Use the latest generated record's ID and date, but calculate the remaining amount
-                $unpaidGeneratedFees[] = [
-                    'id' => $latestGenerated->id,
-                    'payment_title' => $title,
-                    'payment_amount' => round($remainingTotal, 2), // Remaining amount to pay
-                    'late_fee' => round($remainingLate, 2),
-                    'payment_date' => $latestGenerated->payment_date,
-                    'discount' => round($totalDiscount, 2),
-                ];
-                $totalDue += $remainingTotal;
-            }
-        }
-
-        // Sort by payment_date ascending (oldest first)
-        usort($unpaidGeneratedFees, function($a, $b) {
-            return strtotime($a['payment_date'] ?? '1970-01-01') - strtotime($b['payment_date'] ?? '1970-01-01');
-        });
+        $unpaidGeneratedFees = FeePaymentWebTables::unpaidGeneratedFeesForDropdown($student);
+        $totalDue = round(array_sum(array_column($unpaidGeneratedFees, 'payment_amount')), 2);
 
         // Get latest fee title if available
         $latestFee = !empty($unpaidGeneratedFees) ? $unpaidGeneratedFees[0] : null;
@@ -543,46 +456,25 @@ class StudentPaymentController extends Controller
         }
 
         if ($existingFee) {
-            $generatedLate = StudentPayment::ledgerActive()
-                ->where('student_code', $validated['student_code'])
-                ->where('payment_title', $validated['payment_title'])
-                ->whereIn('method', ['Generated', 'Installment'])
-                ->sum('late_fee');
-            $paidFeesForTitle = StudentPayment::ledgerActive()
-                ->where('student_code', $validated['student_code'])
-                ->where('payment_title', $validated['payment_title'])
-                ->whereNotIn('method', ['Generated', 'Installment'])
-                ->get();
-            $paidFeesForTitle = StudentPayment::paidLedgerRowsForLatestGeneratedTitle($paidFeesForTitle, $existingFee);
-            $paidLate = (float) $paidFeesForTitle->sum(function ($item) {
-                return (float) ($item->late_fee ?? 0);
-            });
-            $lateFee = max(0, (float) $generatedLate - $paidLate);
+            if (! $student) {
+                $student = Student::where('student_code', $validated['student_code'])->first();
+            }
 
-            $totalStudentDiscount = (float) StudentDiscount::where('student_code', $validated['student_code'])
-                ->get()
-                ->sum(fn ($discount) => (float) ($discount->discount_amount ?? 0));
+            $dueParts = $student
+                ? FeePaymentWebTables::outstandingDuePartsForTitle($student, (string) $validated['payment_title'])
+                : ['late_fee' => 0.0, 'total' => 0.0];
 
-            $remainingDueBeforePayment = StudentPayment::remainingDueForTitle(
-                $validated['student_code'],
-                $validated['payment_title'],
-                $totalStudentDiscount
-            );
-            $maxPayableWithThisRequest = round($remainingDueBeforePayment, 2);
+            $lateFee = max(0, round((float) ($dueParts['late_fee'] ?? 0), 2));
+            $remainingDueBeforePayment = round((float) ($dueParts['total'] ?? 0), 2);
+            $maxPayableWithThisRequest = $remainingDueBeforePayment;
 
             $paymentAmount = round((float) ($validated['payment_amount'] ?? 0), 2);
             $discountAmount = round((float) ($validated['discount'] ?? 0), 2);
 
-            // Payment + discount both reduce due (not additive beyond remaining due).
-            $maxDiscountAllowed = max(0, round($maxPayableWithThisRequest - $paymentAmount, 2));
-            $maxPaymentAllowed = max(0, round($maxPayableWithThisRequest - $discountAmount, 2));
-            $totalCredit = round($paymentAmount + $discountAmount, 2);
-
-            if ($discountAmount > $maxDiscountAllowed + 0.02) {
+            if ($discountAmount > $maxPayableWithThisRequest + 0.02) {
                 $errorMessage = $maxPayableWithThisRequest <= 0.02
                     ? 'No due amount remains to apply a discount.'
-                    : 'Discount cannot be greater than ' . number_format($maxDiscountAllowed, 2)
-                        . ' (remaining due after payment amount).';
+                    : 'Discount cannot be greater than ' . number_format($maxPayableWithThisRequest, 2) . '.';
 
                 if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
                     return response()->json([
@@ -597,38 +489,20 @@ class StudentPaymentController extends Controller
                     ->withErrors(['discount' => $errorMessage]);
             }
 
-            if ($paymentAmount > $maxPaymentAllowed + 0.02) {
-                $errorMessage = 'Payment Amount cannot be greater than ' . number_format($maxPaymentAllowed, 2)
-                    . ($discountAmount > 0 ? ' (remaining due after discount).' : '.');
-
-                if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => $errorMessage,
-                    ], 422);
-                }
-
-                return redirect()
-                    ->back()
-                    ->withInput()
-                    ->withErrors(['payment_amount' => $errorMessage]);
+            // When discount is added on top of full due, cash to collect = due - discount.
+            $maxCashAfterDiscount = max(0, round($maxPayableWithThisRequest - $discountAmount, 2));
+            if ($paymentAmount > $maxCashAfterDiscount + 0.02) {
+                $paymentAmount = $maxCashAfterDiscount;
             }
 
+            $totalCredit = round($paymentAmount + $discountAmount, 2);
             if ($totalCredit > $maxPayableWithThisRequest + 0.02) {
-                $errorMessage = 'Payment Amount and Discount combined cannot be greater than the current Due Amount.';
-
-                if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => $errorMessage,
-                    ], 422);
-                }
-
-                return redirect()
-                    ->back()
-                    ->withInput()
-                    ->withErrors(['payment_amount' => $errorMessage]);
+                $paymentAmount = max(0, round($maxPayableWithThisRequest - $discountAmount, 2));
+                $totalCredit = round($paymentAmount + $discountAmount, 2);
             }
+
+            $validated['payment_amount'] = $paymentAmount;
+            $validated['discount'] = $discountAmount;
 
             $isPartialPayment = $maxPayableWithThisRequest > 0 && $totalCredit < $maxPayableWithThisRequest - 0.02;
 
@@ -686,9 +560,7 @@ class StudentPaymentController extends Controller
                     ]);
                 }
 
-                return redirect()
-                    ->route('accounting.direct-payment.student')
-                    ->with('success', $successMessage);
+                return $this->redirectAfterStudentPayment($request, $successMessage);
             }
 
             $walletResponse = $this->applyWalletPayment(
@@ -702,7 +574,13 @@ class StudentPaymentController extends Controller
             if ($walletResponse) {
                 return $walletResponse;
             }
-            $this->applyLedgerGrossFromPrincipal($validated, $lateFee, $originalMethod, $remainingDueBeforePayment);
+            $this->applyLedgerGrossFromPrincipal(
+                $validated,
+                $lateFee,
+                $originalMethod,
+                $remainingDueBeforePayment,
+                preserveEnteredCash: true
+            );
 
             // Update the existing generated fee record with actual payment details
             // Ensure campus is persisted (some older generated rows were created without campus),
@@ -717,9 +595,10 @@ class StudentPaymentController extends Controller
                 'method' => $validated['method'],
                 'payment_date' => $validated['payment_date'],
                 'sms_notification' => $validated['sms_notification'],
-                'late_fee' => $lateFee,
+                'late_fee' => $validated['late_fee'] ?? $lateFee,
                 'accountant' => $this->resolveRecordingAccountantName(),
             ]);
+            $existingFee->touch();
 
             $successMessage = 'Payment recorded successfully!';
             if ($lateFee > 0) {
@@ -750,9 +629,7 @@ class StudentPaymentController extends Controller
                 ]);
             }
 
-            return redirect()
-                ->route('accounting.direct-payment.student')
-                ->with('success', $successMessage);
+            return $this->redirectAfterStudentPayment($request, $successMessage);
         }
         
         // Add late_fee to validated data
@@ -824,9 +701,7 @@ class StudentPaymentController extends Controller
             ]);
         }
 
-        return redirect()
-            ->route('accounting.direct-payment.student')
-            ->with('success', $successMessage);
+        return $this->redirectAfterStudentPayment($request, $successMessage);
         } catch (\Exception $e) {
             // Catch any unexpected exceptions and return JSON response
             if ($request->ajax() || $request->wantsJson() || $request->header('Accept') === 'application/json' || $request->header('X-Requested-With') === 'XMLHttpRequest') {

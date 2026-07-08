@@ -3,9 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Models\PlatformSchool;
+use App\Services\TenantDatabaseService;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -50,28 +50,13 @@ class TenantDatabaseMiddleware
             return redirect()->to($target);
         }
 
-        Config::set('database.connections.tenant', [
-            'driver' => 'mysql',
-            'host' => $school->db_host ?: env('DB_HOST', '127.0.0.1'),
-            'port' => $school->db_port ?: env('DB_PORT', '3306'),
-            'database' => $school->db_database,
-            'username' => $school->db_username,
-            'password' => $school->db_password ?? '',
-            'unix_socket' => env('DB_SOCKET', ''),
-            'charset' => env('DB_CHARSET', 'utf8mb4'),
-            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'strict' => true,
-            'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                \PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
-        ]);
+        try {
+            app(TenantDatabaseService::class)->connect($school);
+        } catch (\Throwable $exception) {
+            abort(503, $exception->getMessage());
+        }
 
-        DB::purge('tenant');
         DB::setDefaultConnection('tenant');
-        DB::connection('tenant')->getPdo();
 
         return $next($request);
     }

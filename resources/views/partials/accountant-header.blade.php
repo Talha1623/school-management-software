@@ -212,13 +212,15 @@
                                 if (Auth::guard('accountant')->check()) {
                                     $accountantUser = Auth::guard('accountant')->user();
                                     if ($accountantUser) {
-                                        $accountantNotifUnread = \App\Models\Message::where('from_type', 'accountant')
+                                        $accountantIncomingFromTypes = ['admin', 'super_admin', 'staff_notification', 'accountant'];
+
+                                        $accountantNotifUnread = \App\Models\Message::whereIn('from_type', $accountantIncomingFromTypes)
                                             ->where('to_type', 'accountant')
                                             ->where('to_id', $accountantUser->id)
                                             ->whereNull('read_at')
                                             ->count();
 
-                                        $accountantNotifications = \App\Models\Message::where('from_type', 'accountant')
+                                        $accountantNotifications = \App\Models\Message::whereIn('from_type', $accountantIncomingFromTypes)
                                             ->where('to_type', 'accountant')
                                             ->where('to_id', $accountantUser->id)
                                             ->whereNull('read_at')
@@ -226,12 +228,33 @@
                                             ->limit(10)
                                             ->get()
                                             ->map(function ($message) {
-                                                $accountant = \App\Models\Accountant::find($message->from_id);
+                                                if (in_array($message->from_type, ['admin', 'super_admin', 'staff_notification'], true)) {
+                                                    $admin = \App\Models\AdminRole::find($message->from_id);
+                                                    $senderName = $admin?->name ?? 'Admin';
+                                                    $recipientType = 'admin';
+                                                    $recipientId = $message->from_id;
+                                                } else {
+                                                    $accountant = \App\Models\Accountant::find($message->from_id);
+                                                    $senderName = $accountant?->name ?? 'Accountant';
+                                                    $recipientType = 'accountant';
+                                                    $recipientId = $message->from_id;
+                                                }
+
+                                                $messageText = strtolower((string) $message->text);
+                                                if (str_contains($messageText, 'noticeboard')) {
+                                                    $href = route('school.noticeboard');
+                                                } elseif (str_contains($messageText, 'task')) {
+                                                    $href = route('accountant.task-management');
+                                                } else {
+                                                    $href = route('accountant.chat', [
+                                                        'recipient_type' => $recipientType,
+                                                        'recipient_id' => $recipientId,
+                                                    ]);
+                                                }
 
                                                 return [
-                                                    'recipient_type' => 'accountant',
-                                                    'recipient_id' => $message->from_id,
-                                                    'sender_name' => $accountant?->name ?? 'Accountant',
+                                                    'href' => $href,
+                                                    'sender_name' => $senderName,
                                                     'text' => $message->text
                                                         ? (strlen($message->text) > 80 ? substr($message->text, 0, 80) . '...' : $message->text)
                                                         : 'Notification',
@@ -261,7 +284,7 @@
                                     @if($accountantNotifications->count() > 0)
                                         @foreach($accountantNotifications as $notification)
                                             <div class="notification-menu unseen">
-                                                <a href="{{ route('accountant.chat', ['recipient_type' => $notification['recipient_type'], 'recipient_id' => $notification['recipient_id']]) }}" class="dropdown-item">
+                                                <a href="{{ $notification['href'] }}" class="dropdown-item">
                                                     <div class="d-flex align-items-center">
                                                         <div class="flex-shrink-0">
                                                             <i class="material-symbols-outlined text-primary">notifications</i>

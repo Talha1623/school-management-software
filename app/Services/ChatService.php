@@ -124,9 +124,15 @@ class ChatService
                     ->where('to_id', $peerId);
             })->orWhere(function ($q) use ($actor, $peerType, $peerId) {
                 $q->where('from_type', $peerType)
-                    ->where('from_id', $peerId)
-                    ->where('to_type', $actor->messageType)
-                    ->where('to_id', $actor->id);
+                    ->where('from_id', $peerId);
+
+                if (in_array($actor->messageType, ['admin', 'super_admin'], true)) {
+                    $q->whereIn('to_type', ['admin', 'super_admin'])
+                        ->where('to_id', $actor->id);
+                } else {
+                    $q->where('to_type', $actor->messageType)
+                        ->where('to_id', $actor->id);
+                }
             });
 
             $this->appendLegacyAdminSuperAdminClauses($outer, $actor, $peer, $peerType, $peerId);
@@ -140,8 +146,17 @@ class ChatService
         Message::query()
             ->where('from_type', $peerType)
             ->where('from_id', $peerId)
-            ->where('to_type', $actor->messageType)
-            ->where('to_id', $actor->id)
+            ->when(
+                in_array($actor->messageType, ['admin', 'super_admin'], true),
+                function ($q) use ($actor) {
+                    $q->whereIn('to_type', ['admin', 'super_admin'])
+                        ->where('to_id', $actor->id);
+                },
+                function ($q) use ($actor) {
+                    $q->where('to_type', $actor->messageType)
+                        ->where('to_id', $actor->id);
+                }
+            )
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
 
@@ -156,6 +171,21 @@ class ChatService
                     ->whereNull('read_at')
                     ->update(['read_at' => now()]);
             }
+        }
+
+        if ($actor->messageType === 'teacher' && in_array($peerType, ['admin', 'super_admin'], true)) {
+            $admin = AdminRole::find($peerId);
+            $fromTypes = ['admin'];
+            if ($admin && $admin->super_admin) {
+                $fromTypes[] = 'super_admin';
+            }
+            Message::query()
+                ->whereIn('from_type', $fromTypes)
+                ->where('from_id', $peerId)
+                ->where('to_type', 'teacher')
+                ->where('to_id', $actor->id)
+                ->whereNull('read_at')
+                ->update(['read_at' => now()]);
         }
 
         if ($actor->messageType === 'super_admin') {

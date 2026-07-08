@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Test;
 use App\Models\Staff;
+use App\Models\AdminRole;
 use App\Models\ClassModel;
 use App\Models\Section;
 use App\Models\Subject;
@@ -263,6 +264,44 @@ class TestController extends Controller
             });
     }
 
+    private function notifyAdminsAboutStaffTestList(array $validated): void
+    {
+        $staff = Auth::guard('staff')->user();
+        if (!$staff) {
+            return;
+        }
+
+        $text = sprintf(
+            '%s uploaded test list "%s" for %s - %s. Subject: %s. Type: %s. Campus: %s. Date: %s. Session: %s.',
+            $staff->name ?? 'Staff',
+            $validated['test_name'],
+            $validated['for_class'],
+            $validated['section'],
+            $validated['subject'],
+            $validated['test_type'],
+            $validated['campus'],
+            $validated['date'],
+            $validated['session']
+        );
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($staff, $text) {
+                Message::create([
+                    'from_type' => 'staff_notification',
+                    'from_id' => $staff->id,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
+    }
+
     /**
      * Display a listing of tests.
      */
@@ -475,7 +514,12 @@ class TestController extends Controller
         }
 
         Test::create($validated);
-        $this->notifyStaffAboutCreatedTest($validated);
+
+        if (Auth::guard('staff')->check() && $staff) {
+            $this->notifyAdminsAboutStaffTestList($validated);
+        } else {
+            $this->notifyStaffAboutCreatedTest($validated);
+        }
 
         return redirect()
             ->route('test.list')

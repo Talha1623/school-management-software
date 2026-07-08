@@ -3,10 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Noticeboard;
+use App\Models\AdminRole;
+use App\Models\Accountant;
 use App\Models\ClassModel;
+use App\Models\Message;
 use App\Models\Section;
 use App\Models\Campus;
 use App\Models\GeneralSetting;
+use App\Models\Staff;
 use App\Services\MobilePushNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -111,6 +115,89 @@ class NoticeboardController extends Controller
         }
     }
 
+    private function notifyPortalsAboutNoticeboard(Noticeboard $noticeboard): void
+    {
+        if (strcasecmp(trim((string) ($noticeboard->show_on ?? '')), 'Yes') !== 0) {
+            return;
+        }
+
+        $publisher = Auth::guard('admin')->user();
+        if (!$publisher) {
+            return;
+        }
+
+        $publisherId = (int) $publisher->id;
+        $campus = trim((string) ($noticeboard->campus ?? ''));
+        $dateLabel = $noticeboard->date
+            ? $noticeboard->date->format('d-m-Y')
+            : now()->format('d-m-Y');
+
+        $text = sprintf(
+            '%s published school noticeboard "%s". Campus: %s. Date: %s.',
+            $publisher->name ?? 'Admin',
+            $noticeboard->title ?? 'Notice',
+            $campus !== '' ? $campus : 'All',
+            $dateLabel
+        );
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($publisherId, $text) {
+                if ((int) $admin->id === $publisherId) {
+                    return;
+                }
+
+                Message::create([
+                    'from_type' => 'staff_notification',
+                    'from_id' => $publisherId,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
+
+        $staffQuery = Staff::query()->orderBy('id');
+        if ($campus !== '') {
+            $staffQuery->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower($campus)]);
+        }
+
+        $staffQuery->get()->each(function (Staff $staff) use ($publisherId, $text) {
+            Message::create([
+                'from_type' => 'admin',
+                'from_id' => $publisherId,
+                'to_type' => 'teacher',
+                'to_id' => $staff->id,
+                'text' => $text,
+                'attachment_path' => null,
+                'attachment_type' => null,
+                'read_at' => null,
+            ]);
+        });
+
+        $accountantQuery = Accountant::query()->orderBy('id');
+        if ($campus !== '') {
+            $accountantQuery->whereRaw('LOWER(TRIM(COALESCE(campus, ""))) = ?', [strtolower($campus)]);
+        }
+
+        $accountantQuery->get()->each(function (Accountant $accountant) use ($publisherId, $text) {
+            Message::create([
+                'from_type' => 'admin',
+                'from_id' => $publisherId,
+                'to_type' => 'accountant',
+                'to_id' => $accountant->id,
+                'text' => $text,
+                'attachment_path' => null,
+                'attachment_type' => null,
+                'read_at' => null,
+            ]);
+        });
+    }
+
     /**
      * Store a newly created noticeboard.
      */
@@ -144,6 +231,8 @@ class NoticeboardController extends Controller
             } catch (\Throwable $e) {
                 report($e);
             }
+
+            $this->notifyPortalsAboutNoticeboard($noticeboard);
         }
 
         return redirect()
@@ -190,6 +279,8 @@ class NoticeboardController extends Controller
             } catch (\Throwable $e) {
                 report($e);
             }
+
+            $this->notifyPortalsAboutNoticeboard($noticeboard->fresh());
         }
 
         return redirect()

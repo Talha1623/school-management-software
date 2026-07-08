@@ -350,23 +350,7 @@ class FeeVoucherBuilder
             ->orderBy('payment_date', 'asc')
             ->get();
 
-        $feeHistory = [];
-        $months = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December',
-        ];
-
-        foreach ($months as $month) {
-            $paymentTitle = "Monthly Fee - {$month} {$currentYear}";
-            $payment = StudentPayment::where('student_code', $student->student_code)
-                ->where('payment_title', $paymentTitle)
-                ->first();
-
-            $feeHistory[$month] = [
-                'total' => $payment ? (float) $payment->payment_amount : 0,
-                'paid' => $payment && $payment->method !== 'Generated' ? (float) $payment->payment_amount : 0,
-            ];
-        }
+        $feeHistory = FeePaymentWebTables::monthlyFeeHistoryForStudent($student, $currentYear);
 
         $today = Carbon::today();
 
@@ -453,8 +437,12 @@ class FeeVoucherBuilder
 
         $subtotal = round((float) $outstandingRows->sum(fn ($row) => (float) ($row['amount'] ?? 0)), 2);
         $currentFeesSubtotal = round(max(0, $subtotal - $arrearsAmount), 2);
-        $lateFee = round((float) $outstandingRows->sum(fn ($row) => (float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0)), 2);
+        $lateFee = round((float) ($searchResults['totals']['late_fee'] ?? $outstandingRows->sum(
+            fn ($row) => (float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0)
+        )), 2);
         $totalBeforeWallet = round((float) ($searchResults['totals']['due'] ?? 0), 2);
+        $afterDueLate = FeePaymentWebTables::projectedAfterDueLateTotal($student, $outstandingRows->all());
+        $totalAfterDueBeforeWallet = round(max(0, $subtotal + $afterDueLate), 2);
 
         $walletKey = $this->walletKeyForStudent($student);
         if (!array_key_exists($walletKey, $walletPool)) {
@@ -462,6 +450,7 @@ class FeeVoucherBuilder
         }
         $walletCredit = $walletPool[$walletKey];
         $walletApplied = min($walletCredit, $totalBeforeWallet);
+        $walletAppliedAfterDue = min($walletCredit, $totalAfterDueBeforeWallet);
         if ($walletApplied > 0) {
             $pendingFeesList->push([
                 'description' => 'Advance Fee / Wallet Credit',
@@ -471,6 +460,7 @@ class FeeVoucherBuilder
         }
 
         $total = max(0, round($totalBeforeWallet - $walletApplied, 2));
+        $afterDueDate = max(0, round($totalAfterDueBeforeWallet - $walletAppliedAfterDue, 2));
 
         return [
             'student' => $student,
@@ -482,7 +472,7 @@ class FeeVoucherBuilder
             'wallet_credit' => $walletCredit,
             'wallet_applied' => $walletApplied,
             'total' => $total,
-            'after_due_date' => $total,
+            'after_due_date' => $afterDueDate,
             'due_date' => $dueDate,
             'voucher_validity' => $voucherValidity,
             'voucher_number' => $voucherNumber,

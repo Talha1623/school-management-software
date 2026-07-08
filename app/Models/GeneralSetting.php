@@ -44,4 +44,33 @@ class GeneralSetting extends Model
             'timezone' => 'Asia/Karachi',
         ]);
     }
+
+    public function currencyCode(): string
+    {
+        return strtoupper(trim((string) ($this->currency ?: 'PKR')));
+    }
+
+    public function currencySymbol(): string
+    {
+        return match ($this->currencyCode()) {
+            'USD' => '$',
+            'EUR' => '€',
+            'GBP' => '£',
+            'AED' => 'د.إ',
+            default => '₨',
+        };
+    }
+
+    public function formatCurrency(float|int|string|null $amount, int $decimals = 2): string
+    {
+        $formatted = number_format((float) $amount, $decimals);
+
+        return match ($this->currencyCode()) {
+            'USD' => '$' . $formatted,
+            'EUR' => '€' . $formatted,
+            'GBP' => '£' . $formatted,
+            'AED' => 'AED ' . $formatted,
+            default => 'PKR ' . $formatted,
+        };
+    }
 }

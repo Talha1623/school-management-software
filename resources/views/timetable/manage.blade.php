@@ -220,7 +220,7 @@
                                                 <a href="{{ route('timetable.edit', $timetable) }}" class="btn btn-sm btn-primary" title="Edit">
                                                     <span class="material-symbols-outlined" style="font-size: 16px; color: white;">edit</span>
                                                 </a>
-                                                <a href="{{ route('timetable.terminal-print', $timetable) }}" class="btn btn-sm btn-success" title="Terminal Print" target="_blank">
+                                                <a href="{{ route('timetable.terminal-print', $timetable) }}" class="btn btn-sm btn-success" title="Print Timetable" target="_blank">
                                                     <span class="material-symbols-outlined" style="font-size: 16px; color: white;">print</span>
                                                 </a>
                                                 <form action="{{ route('timetable.destroy', $timetable) }}" method="POST" class="d-inline timetable-delete-form" data-timetable-id="{{ $timetable->id }}">

@@ -9,6 +9,7 @@ use App\Models\Subject;
 use App\Models\Timetable;
 use App\Models\SalarySetting;
 use App\Services\MobilePushNotificationService;
+use App\Services\AutoStudentAttendanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -27,6 +28,8 @@ class StaffAttendanceController extends Controller
      */
     public function index(Request $request): View
     {
+        app(AutoStudentAttendanceService::class)->runIfDue();
+
         $campus = $request->get('campus');
         $staffCategory = $request->get('staff_category');
         $type = $request->get('type');
@@ -1188,6 +1191,7 @@ class StaffAttendanceController extends Controller
      */
     public function scanIdCardGate(Request $request): JsonResponse
     {
+        app(AutoStudentAttendanceService::class)->runIfDue();
         $this->mergeScanInputsIntoRequest($request);
 
         $staff = $this->resolveStaffFromCardScan($request);

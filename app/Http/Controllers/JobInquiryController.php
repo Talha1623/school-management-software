@@ -9,9 +9,12 @@ use App\Models\GeneralSetting;
 use App\Services\CampusCodeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Illuminate\Validation\ValidationException;
 
 class JobInquiryController extends Controller
 {
@@ -88,31 +91,12 @@ class JobInquiryController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'father_husband_name' => ['nullable', 'string', 'max:255'],
-            'campus' => ['nullable', 'string', 'max:255'],
-            'gender' => ['nullable', 'string', 'in:Male,Female,Other'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'qualification' => ['nullable', 'string', 'max:255'],
-            'birthday' => ['nullable', 'date'],
-            'marital_status' => ['nullable', 'string', 'in:Single,Married,Divorced,Widowed'],
-            'applied_for_designation' => ['nullable', 'string', 'max:255'],
-            'salary_type' => ['nullable', 'string', 'max:255'],
-            'salary_demand' => ['nullable', 'numeric', 'min:0'],
-            'salary' => ['nullable', 'numeric', 'min:0'],
-            'absent_fees' => ['nullable', 'numeric', 'min:0'],
-            'late_fees' => ['nullable', 'numeric', 'min:0'],
-            'early_exit_fees' => ['nullable', 'numeric', 'min:0'],
-            'free_absent' => ['nullable', 'integer', 'min:0', 'max:30'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'home_address' => ['nullable', 'string'],
-            'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
-        ]);
+        $validated = $this->validateInquiry($request);
+        unset($validated['cv_resume']);
 
-        // Handle file upload
-        if ($request->hasFile('cv_resume')) {
-            $validated['cv_resume'] = $request->file('cv_resume')->store('job-inquiries/cv', 'public');
+        $cvPath = $this->storeCvResume($request);
+        if ($cvPath !== null) {
+            $validated['cv_resume'] = $cvPath;
         }
 
         JobInquiry::create($validated);
@@ -120,6 +104,26 @@ class JobInquiryController extends Controller
         return redirect()
             ->route('staff.job-inquiry')
             ->with('success', 'Job inquiry added successfully!');
+    }
+
+    /**
+     * Download / open stored CV (works even when public/storage link is missing).
+     */
+    public function downloadCv(JobInquiry $job_inquiry)
+    {
+        $path = trim((string) ($job_inquiry->cv_resume ?? ''));
+        if ($path === '' || !Storage::disk('public')->exists($path)) {
+            return redirect()
+                ->route('staff.job-inquiry')
+                ->with('error', 'CV file not found for this inquiry.');
+        }
+
+        $absolutePath = Storage::disk('public')->path($path);
+        $downloadName = basename($path);
+
+        return response()->file($absolutePath, [
+            'Content-Disposition' => 'inline; filename="' . $downloadName . '"',
+        ]);
     }
 
     /**
@@ -155,7 +159,30 @@ class JobInquiryController extends Controller
      */
     public function update(Request $request, JobInquiry $job_inquiry): RedirectResponse
     {
-        $validated = $request->validate([
+        $validated = $this->validateInquiry($request, true);
+        unset($validated['cv_resume']);
+
+        $cvPath = $this->storeCvResume($request);
+        if ($cvPath !== null) {
+            if ($job_inquiry->cv_resume) {
+                Storage::disk('public')->delete($job_inquiry->cv_resume);
+            }
+            $validated['cv_resume'] = $cvPath;
+        }
+
+        $job_inquiry->update($validated);
+
+        return redirect()
+            ->route('staff.job-inquiry')
+            ->with('success', 'Job inquiry updated successfully!');
+    }
+
+    /**
+     * Shared validation for create/update.
+     */
+    private function validateInquiry(Request $request, bool $forUpdate = false): array
+    {
+        return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'father_husband_name' => ['nullable', 'string', 'max:255'],
             'campus' => ['nullable', 'string', 'max:255'],
@@ -165,7 +192,9 @@ class JobInquiryController extends Controller
             'birthday' => ['nullable', 'date'],
             'marital_status' => ['nullable', 'string', 'in:Single,Married,Divorced,Widowed'],
             'applied_for_designation' => ['nullable', 'string', 'max:255'],
-            'salary_type' => ['nullable', 'string', 'in:full time,per hour,lecture'],
+            'salary_type' => $forUpdate
+                ? ['nullable', 'string', 'in:full time,per hour,lecture']
+                : ['nullable', 'string', 'max:255'],
             'salary_demand' => ['nullable', 'numeric', 'min:0'],
             'salary' => ['nullable', 'numeric', 'min:0'],
             'absent_fees' => ['nullable', 'numeric', 'min:0'],
@@ -174,23 +203,59 @@ class JobInquiryController extends Controller
             'free_absent' => ['nullable', 'integer', 'min:0', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'home_address' => ['nullable', 'string'],
-            'cv_resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
+            // Avoid strict mime sniffing (fails on many servers for PDF/DOC).
+            'cv_resume' => ['nullable', 'file', 'max:5120'],
         ]);
+    }
 
-        // Handle file upload
-        if ($request->hasFile('cv_resume')) {
-            // Delete old CV if exists
-            if ($job_inquiry->cv_resume) {
-                Storage::disk('public')->delete($job_inquiry->cv_resume);
-            }
-            $validated['cv_resume'] = $request->file('cv_resume')->store('job-inquiries/cv', 'public');
+    /**
+     * Store CV/resume on the public disk. Returns path or null when no file was sent.
+     *
+     * @throws ValidationException
+     */
+    private function storeCvResume(Request $request): ?string
+    {
+        $file = $request->file('cv_resume');
+
+        // User selected a file but PHP rejected it (size/tmp/permissions).
+        if ($file === null && $request->files->has('cv_resume')) {
+            throw ValidationException::withMessages([
+                'cv_resume' => 'CV upload failed. File may be too large (max 5MB) or server upload limit is too low.',
+            ]);
         }
 
-        $job_inquiry->update($validated);
+        if (!$file instanceof UploadedFile) {
+            return null;
+        }
 
-        return redirect()
-            ->route('staff.job-inquiry')
-            ->with('success', 'Job inquiry updated successfully!');
+        if (!$file->isValid()) {
+            throw ValidationException::withMessages([
+                'cv_resume' => 'CV upload failed: ' . ($file->getErrorMessage() ?: 'invalid file.'),
+            ]);
+        }
+
+        $extension = strtolower((string) $file->getClientOriginalExtension());
+        if (!in_array($extension, ['pdf', 'doc', 'docx'], true)) {
+            throw ValidationException::withMessages([
+                'cv_resume' => 'CV must be a PDF, DOC, or DOCX file.',
+            ]);
+        }
+
+        $disk = Storage::disk('public');
+        if (!$disk->exists('job-inquiries/cv')) {
+            $disk->makeDirectory('job-inquiries/cv');
+        }
+
+        $filename = Str::uuid()->toString() . '.' . $extension;
+        $path = $file->storeAs('job-inquiries/cv', $filename, 'public');
+
+        if (!$path || !$disk->exists($path)) {
+            throw ValidationException::withMessages([
+                'cv_resume' => 'Could not save CV file. Please check storage permissions (storage/app/public).',
+            ]);
+        }
+
+        return $path;
     }
 
     /**

@@ -169,6 +169,9 @@
     </style>
 </head>
 <body>
+    @php
+        $formatMoney = fn ($amount) => $settings->formatCurrency($amount);
+    @endphp
     <div class="receipt-container">
         <div class="header">
             <div class="school-name">ROYAL GRAMMAR SCHOOL</div>
@@ -262,20 +265,20 @@
             {{-- Salary breakdown --}}
             <div class="amount-row">
                 <span class="amount-label">Basic Salary:</span>
-                <span class="info-value">{{ number_format($salary->basic ?? 0, 2) }}</span>
+                <span class="info-value">{{ $formatMoney($salary->basic ?? 0) }}</span>
             </div>
             
             @if(($salary->bonus_amount ?? 0) > 0)
             <div class="amount-row">
                 <span class="amount-label">Bonus:</span>
-                <span class="info-value" style="color: #28a745;">+ {{ number_format($salary->bonus_amount ?? 0, 2) }}</span>
+                <span class="info-value" style="color: #28a745;">+ {{ $formatMoney($salary->bonus_amount ?? 0) }}</span>
             </div>
             @endif
             
             @if(($salary->deduction_amount ?? 0) > 0)
             <div class="amount-row">
                 <span class="amount-label">Deduction:</span>
-                <span class="info-value" style="color: #dc3545;">- {{ number_format($salary->deduction_amount ?? 0, 2) }}</span>
+                <span class="info-value" style="color: #dc3545;">- {{ $formatMoney($salary->deduction_amount ?? 0) }}</span>
             </div>
             @endif
             
@@ -286,24 +289,24 @@
             @if($salary->loan_repayment > 0)
             <div class="amount-row">
                 <span class="amount-label">Loan Repayment:</span>
-                <span class="info-value" style="color: #dc3545;">- {{ number_format($salary->loan_repayment ?? 0, 2) }}</span>
+                <span class="info-value" style="color: #dc3545;">- {{ $formatMoney($salary->loan_repayment ?? 0) }}</span>
             </div>
             @endif
             
             <div class="amount-row" style="border-top: 1px solid #003471; margin-top: 10px; padding-top: 10px;">
                 <span class="amount-label">Salary Generated:</span>
-                <span class="info-value" style="font-weight: bold; font-size: 18px;">{{ number_format($generatedDisplay, 2) }}</span>
+                <span class="info-value" style="font-weight: bold; font-size: 18px;">{{ $formatMoney($generatedDisplay) }}</span>
             </div>
             
             <div class="amount-row" style="border-top: 2px solid #003471; margin-top: 15px; padding-top: 15px;">
                 <span class="amount-label">Amount Paid:</span>
-                <span class="amount-value">{{ number_format($amountPaidDisplay, 2) }}</span>
+                <span class="amount-value">{{ $formatMoney($amountPaidDisplay) }}</span>
             </div>
             
             @if($salary->loan_repayment > 0)
             <div class="amount-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
                 <span class="amount-label">Note:</span>
-                <span class="info-value" style="font-style: italic;">Loan repayment of {{ number_format($salary->loan_repayment ?? 0, 2) }} has been deducted from your salary.</span>
+                <span class="info-value" style="font-style: italic;">Loan repayment of {{ $formatMoney($salary->loan_repayment ?? 0) }} has been deducted from your salary.</span>
             </div>
             @endif
         </div>

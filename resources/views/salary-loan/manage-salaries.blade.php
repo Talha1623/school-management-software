@@ -3,6 +3,9 @@
 @section('title', 'Manage Salaries')
 
 @section('content')
+@php
+    $formatMoney = fn ($amount) => $settings->formatCurrency($amount);
+@endphp
 <div class="row">
     <div class="col-12">
         <div class="card bg-white border border-white rounded-10 p-3 mb-4">
@@ -198,7 +201,7 @@
                                             <span class="badge bg-danger text-white">{{ $salary->early_exit ?? 0 }}</span>
                                         </td>
                                         <td>
-                                            <strong class="text-primary">{{ number_format($salary->basic, 2) }}</strong>
+                                            <strong class="text-primary">{{ $formatMoney($salary->basic) }}</strong>
                                             <div>
                                                 <span class="badge bg-light text-dark" style="font-size: 10px;">
                                                     {{ $salary->staff->salary_type ?? 'full time' }}
@@ -217,16 +220,16 @@
                                                     <div><strong>Classes:</strong> {{ $salary->total_classes ?? 0 }}</div>
                                                     <div style="margin-top: 3px; padding: 4px 6px; background-color: #e8f5e9; border-radius: 4px; border-left: 3px solid #28a745;">
                                                         <strong style="color: #28a745; font-size: 10px;">
-                                                            {{ number_format($salary->basic, 2) }} × {{ number_format($totalHours, 2) }}
+                                                            {{ $formatMoney($salary->basic) }} × {{ number_format($totalHours, 2) }}
                                                             <br>
-                                                            = {{ number_format($salary->grossSalaryGenerated(), 2) }}
+                                                            = {{ $formatMoney($salary->grossSalaryGenerated()) }}
                                                         </strong>
                                                     </div>
                                                 </div>
                                             @endif
                                         </td>
                                         <td>
-                                            <strong class="text-success">{{ number_format($salary->grossSalaryGenerated(), 2) }}</strong>
+                                            <strong class="text-success">{{ $formatMoney($salary->grossSalaryGenerated()) }}</strong>
                                         </td>
                                         <td>
                                             @php
@@ -235,10 +238,10 @@
                                                     $displayAmountPaid = max(0, (float) ($salary->salary_generated ?? 0) + (float) ($salary->bonus_amount ?? 0) - (float) ($salary->deduction_amount ?? 0));
                                                 }
                                             @endphp
-                                            <strong class="text-info">{{ number_format($displayAmountPaid, 2) }}</strong>
+                                            <strong class="text-info">{{ $formatMoney($displayAmountPaid) }}</strong>
                                         </td>
                                         <td>
-                                            <strong class="text-warning">{{ number_format($salary->loan_repayment, 2) }}</strong>
+                                            <strong class="text-warning">{{ $formatMoney($salary->loan_repayment) }}</strong>
                                         </td>
                                         <td class="text-end">
                                             <div class="d-inline-flex gap-1">
@@ -876,6 +879,8 @@
 </style>
 
 <script>
+@include('partials.currency-format-js')
+
 function localTodayDateString() {
     const now = new Date();
     const year = now.getFullYear();
@@ -1033,7 +1038,7 @@ function openPaymentModal(salaryId) {
         const basic = parseFloat(data.basic || 0);
         const basicInput = document.getElementById('payment_basic');
         basicInput.setAttribute('data-basic', basic);
-        basicInput.value = `₹${basic.toFixed(2)}`;
+        basicInput.value = formatFeeCurrency(basic);
         
         const grossGenerated = parseFloat(data.gross_salary_generated ?? data.salary_generated ?? 0);
         const suggestedAmountPaid = parseFloat(data.suggested_amount_paid ?? 0);
@@ -1074,13 +1079,13 @@ function openPaymentModal(salaryId) {
             const absentFees = parseFloat(data.fees.absent_fees || 0);
             const earlyExitFees = parseFloat(data.fees.early_exit_fees || 0);
             
-            document.getElementById('payment_late_fees').value = `₹${lateFees.toFixed(2)}`;
-            document.getElementById('payment_absent_fees').value = `₹${absentFees.toFixed(2)}`;
-            document.getElementById('payment_early_exit_fees').value = `₹${earlyExitFees.toFixed(2)}`;
+            document.getElementById('payment_late_fees').value = formatFeeCurrency(lateFees);
+            document.getElementById('payment_absent_fees').value = formatFeeCurrency(absentFees);
+            document.getElementById('payment_early_exit_fees').value = formatFeeCurrency(earlyExitFees);
         } else {
-            document.getElementById('payment_late_fees').value = '₹0.00';
-            document.getElementById('payment_absent_fees').value = '₹0.00';
-            document.getElementById('payment_early_exit_fees').value = '₹0.00';
+            document.getElementById('payment_late_fees').value = formatFeeCurrency(0);
+            document.getElementById('payment_absent_fees').value = formatFeeCurrency(0);
+            document.getElementById('payment_early_exit_fees').value = formatFeeCurrency(0);
         }
         
         if (amountPaid <= 0) {

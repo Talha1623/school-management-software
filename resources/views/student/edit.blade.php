@@ -15,7 +15,6 @@
     };
     $generateAdmissionFeeValue = $yesNoValue(old('generate_admission_fee', $student->generate_admission_fee ?? ''));
     $generateOtherFeeValue = $yesNoValue(old('generate_other_fee', $student->generate_other_fee ?? ''));
-    $discountedStudentValue = $yesNoValue(old('discounted_student', $student->discounted_student ?? false));
     $discountAmountValue = old('discount_amount', optional($studentDiscount)->discount_amount ?? '');
     $discountReasonValue = old('discount_reason', $student->discount_reason ?: (optional($studentDiscount)->discount_title ?? ''));
 @endphp
@@ -246,11 +245,12 @@
                             </div>
                             
                             <div class="mb-2">
-                                <label for="discounted_student" class="form-label mb-0 fs-13 fw-medium">Discounted Student?</label>
-                                <select class="form-select form-select-sm" id="discounted_student" name="discounted_student" style="height: 32px; font-size: 13px;" onchange="toggleDiscountFields()">
-                                    <option value="0" {{ $discountedStudentValue === '0' ? 'selected' : '' }}>No</option>
-                                    <option value="1" {{ $discountedStudentValue === '1' ? 'selected' : '' }}>Yes</option>
-                                </select>
+                                <span class="form-label mb-0 fs-13 fw-medium d-block">Discounted Student?</span>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light border-end-0 py-1" style="height: 32px;"><span class="material-symbols-outlined" style="font-size: 16px;">percent</span></span>
+                                    <span class="form-control border-start-0 py-1 d-flex align-items-center bg-light text-muted" style="height: 32px; font-size: 13px;">No</span>
+                                </div>
+                                <input type="hidden" id="discounted_student" name="discounted_student" value="0">
                             </div>
 
                             <div class="mb-2" id="discount_amount_container" style="display: none;">
@@ -520,28 +520,6 @@ function loadFeeTypesByCampus(campusValue, selectedFeeType = '') {
         .catch(error => console.error('Error loading fee types:', error));
 }
 
-function toggleDiscountFields() {
-    const discountedStudent = document.getElementById('discounted_student');
-    const discountAmountContainer = document.getElementById('discount_amount_container');
-    const discountReasonContainer = document.getElementById('discount_reason_container');
-
-    if (!discountedStudent || !discountAmountContainer) {
-        return;
-    }
-
-    if (discountedStudent.value === '1') {
-        discountAmountContainer.style.display = 'block';
-        if (discountReasonContainer) {
-            discountReasonContainer.style.display = 'block';
-        }
-    } else {
-        discountAmountContainer.style.display = 'none';
-        if (discountReasonContainer) {
-            discountReasonContainer.style.display = 'none';
-        }
-    }
-}
-
 function toggleAdmissionFeeAmount() {
     const generateAdmissionFee = document.getElementById('generate_admission_fee');
     const admissionFeeAmountContainer = document.getElementById('admission_fee_amount_container');
@@ -620,7 +598,6 @@ function toggleOtherFeeAmount() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    toggleDiscountFields();
     toggleAdmissionFeeAmount();
     toggleOtherFeeFields();
 

@@ -31,20 +31,17 @@
                 if ($isStaff) {
                     $staffUser = Auth::guard('staff')->user();
                     if ($staffUser) {
-                        $staffUnreadChatCount = \App\Models\Message::where('to_type', 'teacher')
-                            ->where('to_id', $staffUser->id)
-                            ->whereNull('read_at')
-                            ->count();
+                        $staffUnreadChatCount = \App\Models\Message::unreadLiveChatCount('teacher', (int) $staffUser->id);
                     }
                 }
 
                 if ($isAdmin) {
                     $adminUser = Auth::guard('admin')->user();
                     if ($adminUser) {
-                        $adminUnreadChatCount = \App\Models\Message::where('to_type', 'admin')
-                            ->where('to_id', $adminUser->id)
-                            ->whereNull('read_at')
-                            ->count();
+                        $adminUnreadChatCount = \App\Models\Message::unreadLiveChatCountForAdminInbox(
+                            (int) $adminUser->id,
+                            ! empty($adminUser->super_admin)
+                        );
                     }
                 }
             @endphp
@@ -195,7 +192,9 @@
                         <span class="material-symbols-outlined menu-icon">chat</span>
                         <span class="title">Live Chat</span>
                         @if($staffUnreadChatCount > 0)
-                            <span class="badge bg-danger ms-auto" style="font-size: 11px; min-width: 20px;">{{ $staffUnreadChatCount }}</span>
+                            <span class="badge bg-danger ms-auto live-chat-unread-badge" data-live-chat-badge style="font-size: 11px; min-width: 20px;">{{ $staffUnreadChatCount > 99 ? '99+' : $staffUnreadChatCount }}</span>
+                        @else
+                            <span class="badge bg-danger ms-auto live-chat-unread-badge d-none" data-live-chat-badge style="font-size: 11px; min-width: 20px;">0</span>
                         @endif
                     </a>
                 </li>
@@ -1496,7 +1495,9 @@
                             <span class="material-symbols-outlined menu-icon">chat</span>
                             <span class="title">Live Chat</span>
                             @if($adminUnreadChatCount > 0)
-                                <span class="badge bg-danger ms-auto" style="font-size: 11px; min-width: 20px;">{{ $adminUnreadChatCount }}</span>
+                                <span class="badge bg-danger ms-auto live-chat-unread-badge" data-live-chat-badge style="font-size: 11px; min-width: 20px;">{{ $adminUnreadChatCount > 99 ? '99+' : $adminUnreadChatCount }}</span>
+                            @else
+                                <span class="badge bg-danger ms-auto live-chat-unread-badge d-none" data-live-chat-badge style="font-size: 11px; min-width: 20px;">0</span>
                             @endif
                         </a>
                     </li>

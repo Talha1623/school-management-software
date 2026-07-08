@@ -119,6 +119,7 @@
                                     @php
                                         $isActive = ($selectedType ?? '') === $contact['type'] && (int) ($selectedId ?? 0) === (int) $contact['id'];
                                         $style = $contactStyles[$contact['type']] ?? $contactStyles['teacher'];
+                                        $unreadCount = ($unreadBySender ?? [])[$contact['type'].':'.$contact['id']] ?? 0;
                                         $linkParams = array_filter([
                                             'recipient_type' => $contact['type'],
                                             'recipient_id' => $contact['id'],
@@ -138,7 +139,9 @@
                                                 <span class="lc-contact-name">{{ $contact['name'] }}</span>
                                                 <span class="lc-contact-meta">{{ $contact['subtitle'] }}</span>
                                             </div>
-                                            @if($isActive)
+                                            @if($unreadCount > 0)
+                                                <span class="badge bg-danger rounded-pill lc-unread-pill">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                                            @elseif($isActive)
                                                 <span class="lc-active-dot"></span>
                                             @endif
                                         </div>
@@ -279,6 +282,19 @@
     --lc-bg: #f4f6f9;
     --lc-radius: 12px;
     --lc-shadow: 0 2px 12px rgba(0, 52, 113, 0.06);
+    height: calc(100dvh - 118px);
+    max-height: calc(100dvh - 118px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body:has(.live-chat-page) .main-content-container {
+    overflow: hidden !important;
+}
+
+.lc-page-header {
+    flex-shrink: 0;
 }
 
 .lc-page-icon {
@@ -299,17 +315,31 @@
     box-shadow: var(--lc-shadow);
     border: 1px solid var(--lc-border);
     overflow: hidden;
-    min-height: 720px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.lc-shell > .row {
+    flex: 1;
+    min-height: 0;
 }
 
 .lc-sidebar {
     border-right: 1px solid var(--lc-border);
     background: #fafbfc;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
 }
 .lc-sidebar-inner {
     display: flex;
     flex-direction: column;
-    height: 720px;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
     padding: 20px 16px 16px;
 }
 
@@ -454,6 +484,7 @@
 
 .lc-contact-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     margin: 0 -4px;
     padding: 0 4px;
@@ -528,6 +559,11 @@
     background: #22c55e;
     flex-shrink: 0;
 }
+.lc-unread-pill {
+    font-size: 11px;
+    min-width: 20px;
+    flex-shrink: 0;
+}
 
 .lc-empty-side {
     text-align: center;
@@ -537,22 +573,32 @@
 .lc-empty-side .material-symbols-outlined { font-size: 40px; }
 .lc-empty-side p { font-size: 13px; margin: 8px 0 0; }
 
-.lc-main { background: #fff; }
+.lc-main {
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+}
 .lc-chat-panel {
     display: flex;
     flex-direction: column;
-    height: 720px;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
 }
 
 .lc-chat-header {
     padding: 18px 24px;
     border-bottom: 1px solid var(--lc-border);
     background: #fff;
+    flex-shrink: 0;
 }
 .lc-chat-status { font-size: 12px; color: #868e96; }
 
 .lc-messages {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 20px 24px;
     background: var(--lc-bg);
@@ -665,6 +711,7 @@
     padding: 16px 24px 20px;
     border-top: 1px solid var(--lc-border);
     background: #fff;
+    flex-shrink: 0;
 }
 .lc-composer-disabled {
     display: flex;
@@ -753,10 +800,16 @@
 .contact-group-section.hidden-group { display: none; }
 
 @media (max-width: 991.98px) {
+    .live-chat-page {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
     .lc-shell { min-height: auto; }
     .lc-sidebar-inner, .lc-chat-panel { height: auto; min-height: 480px; }
     .lc-sidebar { border-right: none; border-bottom: 1px solid var(--lc-border); }
-    .lc-contact-list { max-height: 280px; }
+    .lc-contact-list { max-height: 280px; flex: none; }
 }
 </style>
 

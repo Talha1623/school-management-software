@@ -32,6 +32,18 @@ use Illuminate\Support\Facades\Storage;
                 </div>
             @endif
 
+            @if($errors->any())
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <strong>CV / form error:</strong>
+                    <ul class="mb-0 mt-1">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+
             <!-- Job Inquiry Statistics Cards -->
             <div class="row g-2 mb-4">
                 <!-- Total Inquiries Card -->
@@ -256,7 +268,7 @@ use Illuminate\Support\Facades\Storage;
                                     </td>
                                     <td style="padding: 12px 15px; font-size: 14px;">
                                         @if($inquiry->cv_resume)
-                                            <a href="{{ Storage::url($inquiry->cv_resume) }}" target="_blank" class="btn btn-sm btn-info px-2 py-1" title="View CV">
+                                            <a href="{{ route('staff.job-inquiry.cv', $inquiry) }}" target="_blank" class="btn btn-sm btn-info px-2 py-1" title="View CV">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; color: white;">description</span>
                                             </a>
                                         @else
@@ -570,9 +582,12 @@ use Illuminate\Support\Facades\Storage;
                                 <span class="input-group-text" style="background-color: #f0f4ff; border-color: #e0e7ff; color: #003471;">
                                     <span class="material-symbols-outlined" style="font-size: 14px;">description</span>
                                 </span>
-                                <input type="file" class="form-control inquiry-input" name="cv_resume" id="cv_resume" accept=".pdf,.doc,.docx" style="font-size: 12px;">
+                                <input type="file" class="form-control inquiry-input" name="cv_resume" id="cv_resume" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="font-size: 12px;">
                             </div>
                             <small class="text-muted" style="font-size: 10px;">Max size: 5MB (PDF, DOC, DOCX)</small>
+                            @error('cv_resume')
+                                <div class="text-danger" style="font-size: 11px;">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
                 </div>

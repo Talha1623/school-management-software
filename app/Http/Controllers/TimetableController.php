@@ -984,10 +984,26 @@ class TimetableController extends Controller
     }
 
     /**
-     * Terminal Print - Thermal Printer Friendly View
+     * Print a single timetable row (A4 letterhead from General Settings — not thermal).
      */
     public function terminalPrint(Timetable $timetable)
     {
-        return view('timetable.terminal-print', compact('timetable'));
+        if (strpos((string) $timetable->subject, '[') === 0) {
+            $timetable->assigned_teacher = null;
+        } else {
+            $resolved = $this->resolveAssignedTeacher(
+                (string) $timetable->subject,
+                $timetable->campus,
+                $timetable->class,
+                $timetable->section
+            );
+            $timetable->assigned_teacher = $resolved['teacher'];
+        }
+
+        return view('timetable.terminal-print', [
+            'timetable' => $timetable,
+            'settings' => GeneralSetting::getSettings(),
+            'printedAt' => now()->format('d M Y, h:i A'),
+        ]);
     }
 }

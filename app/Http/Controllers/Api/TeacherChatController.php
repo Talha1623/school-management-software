@@ -11,12 +11,14 @@ use App\Models\Student;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
 class TeacherChatController extends Controller
 {
     /**
-     * Directory for chat: super admin, colleague teachers, and students (each with parent info).
+     * Chat directory: super admin, school admins, and students (with parent info).
+     * Colleague staff/teachers are not listed here.
      *
      * GET /api/teacher/chat/contacts
      */
@@ -42,32 +44,66 @@ class TeacherChatController extends Controller
         }
 
         $students = $query->orderBy('student_name')->limit($limit)->get();
-        $studentsPayload = $students->map(fn (Student $student) => $this->formatStudentContactRow($student));
+        $conversationStats = $this->buildConversationStatsMap($teacher, $students);
 
-        $superAdmin = AdminRole::where('super_admin', true)->first() ?? AdminRole::orderBy('id')->first();
-        $superAdminPayload = $superAdmin ? $this->formatAdminContactRow($superAdmin) : null;
+        $studentsPayload = $students
+            ->map(fn (Student $student) => $this->enrichContactWithConversationStats(
+                $this->formatStudentContactRow($student),
+                'student',
+                (int) $student->id,
+                $conversationStats
+            ));
 
-        $teachersQuery = Staff::query()
-            ->where('id', '!=', $teacher->id)
-            ->where(function ($q) {
-                $q->whereNull('status')
-                    ->orWhereRaw('LOWER(TRIM(status)) = ?', ['active']);
+        $superAdminsPayload = AdminRole::query()
+            ->where('super_admin', true)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (AdminRole $admin) => $this->enrichContactWithConversationStats(
+                $this->formatAdminContactRow($admin),
+                'admin',
+                (int) $admin->id,
+                $conversationStats
+            ));
+
+        $adminsPayload = AdminRole::query()
+            ->where(function (Builder $q) {
+                $q->where('super_admin', false)->orWhereNull('super_admin');
             })
-            ->orderBy('name');
+            ->orderBy('name')
+            ->get()
+            ->map(fn (AdminRole $admin) => $this->enrichContactWithConversationStats(
+                $this->formatAdminContactRow($admin),
+                'admin',
+                (int) $admin->id,
+                $conversationStats
+            ));
 
-        if ($teacher->campus) {
-            $teachersQuery->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($teacher->campus))]);
-        }
+        $superAdminPayload = $superAdminsPayload->first()
+            ?? $adminsPayload->first();
 
-        $teachersPayload = $teachersQuery->get()->map(fn (Staff $s) => $this->formatTeacherContactRow($s));
+        $superAdminsPayload = $this->sortContactsByRecentActivity($superAdminsPayload, 'name');
+        $adminsPayload = $this->sortContactsByRecentActivity(
+            $adminsPayload->reject(fn (array $row) => $superAdminsPayload->contains(fn (array $super) => (int) $super['id'] === (int) $row['id'])),
+            'name'
+        );
+        $studentsPayload = $this->sortContactsByRecentActivity($studentsPayload, 'student_name');
+
+        $recentContacts = collect()
+            ->merge($superAdminsPayload->map(fn (array $row) => $this->wrapRecentContact($row, 'super_admin')))
+            ->merge($adminsPayload->map(fn (array $row) => $this->wrapRecentContact($row, 'admin')))
+            ->merge($studentsPayload->map(fn (array $row) => $this->wrapRecentContact($row, 'student')));
+
+        $recentContacts = $this->sortContactsByRecentActivity($recentContacts, 'name')->values();
 
         return response()->json([
             'success' => true,
             'message' => 'Chat contacts loaded successfully.',
             'data' => [
                 'super_admin' => $superAdminPayload,
-                'teachers' => $teachersPayload,
+                'super_admins' => $superAdminsPayload->values(),
+                'admins' => $adminsPayload->values(),
                 'students' => $studentsPayload,
+                'recent_contacts' => $recentContacts,
                 'students_truncated' => $students->count() >= $limit,
                 'limit' => $limit,
             ],
@@ -117,6 +153,9 @@ class TeacherChatController extends Controller
 
         $numericId = (int) $id;
         $type = strtolower(trim($type));
+        if ($type === 'super_admin') {
+            $type = 'admin';
+        }
         $allowedTypes = ['admin', 'student', 'parent', 'teacher'];
         if (!in_array($type, $allowedTypes, true)) {
             return response()->json([
@@ -325,6 +364,7 @@ class TeacherChatController extends Controller
                 'admin_inbox_hint' => $adminInboxHint,
                 'messages' => $messageBlock['messages'],
                 'unread_count' => $messageBlock['unread_count'],
+                'total_unread_count' => $messageBlock['total_unread_count'],
                 'messages_limit' => $messageBlock['messages_limit'],
                 'messages_truncated' => $messageBlock['messages_truncated'],
             ],
@@ -434,11 +474,7 @@ class TeacherChatController extends Controller
                         ->where('to_type', 'teacher')->where('to_id', $teacherId);
                 });
             });
-            $unreadBase->where('from_type', 'admin')
-                ->where('from_id', $adminId)
-                ->where('to_type', 'teacher')
-                ->where('to_id', $teacherId)
-                ->whereNull('read_at');
+            $this->applyAdminToTeacherUnread($unreadBase, $teacherId, $adminId);
         } elseif ($peerType === null || $peerType === 'admin') {
             $this->applyTeacherOwnInboxMessages($messagesBase, $teacherId);
             $this->applyTeacherOwnInboxUnread($unreadBase, $teacherId);
@@ -455,6 +491,18 @@ class TeacherChatController extends Controller
 
         $unreadCount = (clone $unreadBase)->count();
         $messages = (clone $messagesBase)->orderBy('created_at', 'asc')->paginate($perPage);
+
+        $shouldMarkRead = $peerType === null
+            || ($peerType === 'admin' && $peerIdForResponse === null)
+            || ($peerType !== null && $peerIdForResponse !== null);
+
+        if ($shouldMarkRead) {
+            $markResult = $this->markThreadAsRead($teacher, $peerType, $peerIdForResponse);
+            if ($markResult instanceof JsonResponse) {
+                return $markResult;
+            }
+            $unreadCount = 0;
+        }
 
         $resolvedPeerType = $peerType;
         if ($resolvedPeerType === null || ($resolvedPeerType === 'admin' && $peerIdForResponse === null)) {
@@ -488,6 +536,7 @@ class TeacherChatController extends Controller
                 ],
                 'messages' => $data,
                 'unread_count' => $unreadCount,
+                'total_unread_count' => $this->totalUnreadForTeacher($teacher),
                 'pagination' => [
                     'current_page' => $messages->currentPage(),
                     'last_page' => $messages->lastPage(),
@@ -676,6 +725,30 @@ class TeacherChatController extends Controller
     }
 
     /**
+     * GET /api/teacher/chat/unread-count
+     */
+    public function unreadCount(Request $request): JsonResponse
+    {
+        $staff = $request->user();
+        if (!$staff instanceof Staff) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied. Staff authentication required.',
+                'token' => null,
+            ], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Unread chat count loaded successfully.',
+            'data' => [
+                'unread_count' => $this->totalUnreadForTeacher($staff),
+            ],
+            'token' => $request->user()?->currentAccessToken()?->token ?? null,
+        ], 200);
+    }
+
+    /**
      * POST /api/teacher/chat/messages/read
      * Optional: peer_type + peer_id to mark a specific thread as read.
      */
@@ -696,12 +769,42 @@ class TeacherChatController extends Controller
         if ($peerType === '') {
             $peerType = null;
         }
+        if ($peerType === 'super_admin') {
+            $peerType = 'admin';
+        }
         $peerIdRaw = $request->input('peer_id', $request->query('peer_id'));
+        $peerId = ($peerIdRaw !== null && $peerIdRaw !== '' && ctype_digit((string) $peerIdRaw))
+            ? (int) $peerIdRaw
+            : null;
 
+        $result = $this->markThreadAsRead($teacher, $peerType, $peerId);
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Messages marked as read.',
+            'data' => [
+                'updated' => $result['updated'],
+                'thread_unread_count' => 0,
+                'unread_count' => $result['total_unread_count'],
+                'total_unread_count' => $result['total_unread_count'],
+                'peer_type' => $peerType,
+                'peer_id' => $peerId,
+            ],
+            'token' => $request->user()?->currentAccessToken()?->token ?? null,
+        ], 200);
+    }
+
+    /**
+     * @return array{updated: int, total_unread_count: int}|JsonResponse
+     */
+    private function markThreadAsRead(Staff $teacher, ?string $peerType, ?int $peerId): array|JsonResponse
+    {
         $q = Message::query()->whereNull('read_at');
 
-        if ($peerType === 'teacher' && $peerIdRaw !== null && $peerIdRaw !== '' && ctype_digit((string) $peerIdRaw)) {
-            $peerId = (int) $peerIdRaw;
+        if ($peerType === 'teacher' && $peerId !== null) {
             $deny = $this->validateStaffPeer($teacher, $peerId);
             if ($deny) {
                 return $deny;
@@ -710,19 +813,17 @@ class TeacherChatController extends Controller
                 ->where('from_id', $peerId)
                 ->where('to_type', 'teacher')
                 ->where('to_id', $teacher->id);
-        } elseif ($peerType === 'parent' && $peerIdRaw !== null && $peerIdRaw !== '' && ctype_digit((string) $peerIdRaw)) {
-            $parentId = (int) $peerIdRaw;
-            $deny = $this->assertTeacherMayChatWithParent($teacher, $parentId);
+        } elseif ($peerType === 'parent' && $peerId !== null) {
+            $deny = $this->assertTeacherMayChatWithParent($teacher, $peerId);
             if ($deny) {
                 return $deny;
             }
             $q->where('from_type', 'parent')
-                ->where('from_id', $parentId)
+                ->where('from_id', $peerId)
                 ->where('to_type', 'teacher')
                 ->where('to_id', $teacher->id);
-        } elseif ($peerType === 'student' && $peerIdRaw !== null && $peerIdRaw !== '' && ctype_digit((string) $peerIdRaw)) {
-            $studentId = (int) $peerIdRaw;
-            $student = Student::find($studentId);
+        } elseif ($peerType === 'student' && $peerId !== null) {
+            $student = Student::find($peerId);
             if (!$student || !$this->teacherCanAccessStudent($teacher, $student)) {
                 return response()->json([
                     'success' => false,
@@ -730,9 +831,9 @@ class TeacherChatController extends Controller
                     'token' => null,
                 ], 403);
             }
-            $q->where(function ($inner) use ($teacher, $studentId, $student) {
-                $inner->where(function ($q2) use ($teacher, $studentId) {
-                    $q2->where('from_type', 'student')->where('from_id', $studentId)
+            $q->where(function ($inner) use ($teacher, $peerId, $student) {
+                $inner->where(function ($q2) use ($teacher, $peerId) {
+                    $q2->where('from_type', 'student')->where('from_id', $peerId)
                         ->where('to_type', 'teacher')->where('to_id', $teacher->id);
                 });
                 if ($student->parent_account_id) {
@@ -742,31 +843,62 @@ class TeacherChatController extends Controller
                     });
                 }
             });
-        } elseif ($peerType === 'admin' && $peerIdRaw !== null && $peerIdRaw !== '' && ctype_digit((string) $peerIdRaw)) {
-            $adminId = (int) $peerIdRaw;
-            $q->where('from_type', 'admin')
-                ->where('from_id', $adminId)
-                ->where('to_type', 'teacher')
-                ->where('to_id', $teacher->id);
+        } elseif ($peerType === 'admin' && $peerId !== null) {
+            if (!AdminRole::find($peerId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Admin not found.',
+                    'token' => null,
+                ], 404);
+            }
+            $this->applyAdminToTeacherMarkRead($q, (int) $teacher->id, $peerId);
         } else {
             $q->where(function ($inner) use ($teacher) {
                 $inner->where(function ($q2) use ($teacher) {
-                    $q2->where('from_type', 'admin')->where('to_type', 'teacher')->where('to_id', $teacher->id);
+                    $q2->whereIn('from_type', ['admin', 'super_admin'])
+                        ->where('to_type', 'teacher')
+                        ->where('to_id', $teacher->id);
                 })->orWhere(function ($q2) use ($teacher) {
-                    $q2->where('from_type', 'parent')->where('to_type', 'teacher')->where('to_id', $teacher->id);
+                    $q2->where('from_type', 'parent')
+                        ->where('to_type', 'teacher')
+                        ->where('to_id', $teacher->id);
                 });
             });
         }
 
-        $updated = $q->update(['read_at' => now()]);
+        $updated = (int) $q->update(['read_at' => now()]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Messages marked as read.',
-            'data' => [
-                'updated' => (int) $updated,
-            ],
-        ], 200);
+        return [
+            'updated' => $updated,
+            'total_unread_count' => $this->totalUnreadForTeacher($teacher),
+        ];
+    }
+
+    private function totalUnreadForTeacher(Staff $teacher): int
+    {
+        return Message::unreadLiveChatCount('teacher', (int) $teacher->id);
+    }
+
+    private function applyAdminToTeacherMarkRead(Builder $q, int $teacherId, int $adminId): void
+    {
+        $admin = AdminRole::find($adminId);
+        $q->where('to_type', 'teacher')->where('to_id', $teacherId);
+        $q->where(function ($from) use ($adminId, $admin) {
+            $from->where(function ($f) use ($adminId) {
+                $f->where('from_type', 'admin')->where('from_id', $adminId);
+            });
+            if ($admin && $admin->super_admin) {
+                $from->orWhere(function ($f) use ($adminId) {
+                    $f->where('from_type', 'super_admin')->where('from_id', $adminId);
+                });
+            }
+        });
+    }
+
+    private function applyAdminToTeacherUnread(Builder $unreadBase, int $teacherId, int $adminId): void
+    {
+        $this->applyAdminToTeacherMarkRead($unreadBase, $teacherId, $adminId);
+        $unreadBase->whereNull('read_at');
     }
 
     private function teacherCanAccessStudent(Staff $teacher, Student $student): bool
@@ -903,11 +1035,7 @@ class TeacherChatController extends Controller
                         ->where('to_type', 'teacher')->where('to_id', $teacherId);
                 });
             });
-            $unreadBase->where('from_type', 'admin')
-                ->where('from_id', $numericId)
-                ->where('to_type', 'teacher')
-                ->where('to_id', $teacherId)
-                ->whereNull('read_at');
+            $this->applyAdminToTeacherUnread($unreadBase, $teacherId, $numericId);
         } elseif ($type === 'teacher') {
             $peerId = $numericId;
             if ($teacherId === $peerId) {
@@ -935,7 +1063,6 @@ class TeacherChatController extends Controller
         }
 
         $totalCount = (clone $messagesBase)->count();
-        $unreadCount = (clone $unreadBase)->count();
         $messages = (clone $messagesBase)
             ->orderBy('created_at', 'desc')
             ->limit($limit)
@@ -943,9 +1070,22 @@ class TeacherChatController extends Controller
             ->sortBy('created_at')
             ->values();
 
+        $markPeerType = $type;
+        $markPeerId = $numericId;
+        if ($type === 'teacher' && $teacherId === $numericId) {
+            $markPeerType = null;
+            $markPeerId = null;
+        }
+
+        $markResult = $this->markThreadAsRead($teacher, $markPeerType, $markPeerId);
+        if ($markResult instanceof JsonResponse) {
+            $markResult = ['updated' => 0, 'total_unread_count' => $this->totalUnreadForTeacher($teacher)];
+        }
+
         return [
             'messages' => $messages->map(fn (Message $m) => $this->formatMessageRow($m, $teacher))->values()->all(),
-            'unread_count' => $unreadCount,
+            'unread_count' => 0,
+            'total_unread_count' => $markResult['total_unread_count'],
             'messages_limit' => $limit,
             'messages_truncated' => $totalCount > $limit,
         ];
@@ -974,9 +1114,13 @@ class TeacherChatController extends Controller
     {
         $unreadBase->where(function ($q) use ($teacherId) {
             $q->where(function ($q2) use ($teacherId) {
-                $q2->where('from_type', 'admin')->where('to_type', 'teacher')->where('to_id', $teacherId);
+                $q2->whereIn('from_type', ['admin', 'super_admin'])
+                    ->where('to_type', 'teacher')
+                    ->where('to_id', $teacherId);
             })->orWhere(function ($q2) use ($teacherId) {
-                $q2->where('from_type', 'parent')->where('to_type', 'teacher')->where('to_id', $teacherId);
+                $q2->where('from_type', 'parent')
+                    ->where('to_type', 'teacher')
+                    ->where('to_id', $teacherId);
             });
         })->whereNull('read_at');
     }
@@ -1210,6 +1354,182 @@ class TeacherChatController extends Controller
             'photo' => $student->photo ? asset('storage/' . $student->photo) : null,
             'parent' => $parent,
         ];
+    }
+
+    /**
+     * @return array<string, array{unread_count: int, last_message_at: ?string, last_message_text: ?string, has_unread: bool}>
+     */
+    private function buildConversationStatsMap(Staff $teacher, Collection $students): array
+    {
+        $teacherId = (int) $teacher->id;
+        $parentToStudentIds = $students
+            ->filter(fn (Student $student) => $student->parent_account_id)
+            ->groupBy('parent_account_id')
+            ->map(fn (Collection $group) => $group->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+        $stats = [];
+
+        $messages = Message::query()
+            ->forLiveChat()
+            ->where(function (Builder $query) use ($teacherId) {
+                $query->where(function (Builder $incoming) use ($teacherId) {
+                    $incoming->where('to_type', 'teacher')->where('to_id', $teacherId);
+                })->orWhere(function (Builder $outgoing) use ($teacherId) {
+                    $outgoing->where('from_type', 'teacher')->where('from_id', $teacherId);
+                });
+            })
+            ->orderByDesc('created_at')
+            ->limit(10000)
+            ->get(['from_type', 'from_id', 'to_type', 'to_id', 'text', 'read_at', 'created_at']);
+
+        foreach ($messages as $message) {
+            $peerKeys = $this->conversationPeerKeysForMessage($message, $teacherId, $parentToStudentIds);
+
+            foreach ($peerKeys as $peerKey) {
+                if (! isset($stats[$peerKey])) {
+                    $stats[$peerKey] = [
+                        'unread_count' => 0,
+                        'last_message_at' => null,
+                        'last_message_text' => $message->text,
+                        'has_unread' => false,
+                    ];
+                }
+
+                if ($stats[$peerKey]['last_message_at'] === null) {
+                    $stats[$peerKey]['last_message_at'] = $message->created_at?->format('Y-m-d H:i:s');
+                    $stats[$peerKey]['last_message_text'] = $message->text;
+                }
+
+                if ($message->to_type === 'teacher'
+                    && (int) $message->to_id === $teacherId
+                    && $message->read_at === null
+                    && $this->incomingMessageMatchesPeerKey($message, $teacherId, $peerKey, $parentToStudentIds)) {
+                    $stats[$peerKey]['unread_count']++;
+                    $stats[$peerKey]['has_unread'] = true;
+                }
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @param  array<string, array{unread_count: int, last_message_at: ?string, last_message_text: ?string, has_unread: bool}>  $stats
+     * @return array<string, mixed>
+     */
+    private function enrichContactWithConversationStats(array $contact, string $peerType, int $peerId, array $stats): array
+    {
+        $peerKey = "{$peerType}:{$peerId}";
+        $meta = $stats[$peerKey] ?? [
+            'unread_count' => 0,
+            'last_message_at' => null,
+            'last_message_text' => null,
+            'has_unread' => false,
+        ];
+
+        return array_merge($contact, $meta);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortContactsByRecentActivity(Collection $contacts, string $nameField): Collection
+    {
+        return $contacts->sort(function (array $a, array $b) use ($nameField) {
+            $unreadA = (int) ($a['unread_count'] ?? 0);
+            $unreadB = (int) ($b['unread_count'] ?? 0);
+            if ($unreadA !== $unreadB) {
+                return $unreadB <=> $unreadA;
+            }
+
+            $timeA = (string) ($a['last_message_at'] ?? '');
+            $timeB = (string) ($b['last_message_at'] ?? '');
+            if ($timeA !== $timeB) {
+                return strcmp($timeB, $timeA);
+            }
+
+            $nameA = (string) ($a[$nameField] ?? $a['name'] ?? $a['student_name'] ?? '');
+            $nameB = (string) ($b[$nameField] ?? $b['name'] ?? $b['student_name'] ?? '');
+
+            return strcasecmp($nameA, $nameB);
+        })->values();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function wrapRecentContact(array $contact, string $contactType): array
+    {
+        return [
+            'contact_type' => $contactType,
+            'chat_peer' => $contact['chat_peer'] ?? null,
+            'name' => $contact['name'] ?? $contact['student_name'] ?? null,
+            'unread_count' => (int) ($contact['unread_count'] ?? 0),
+            'has_unread' => (bool) ($contact['has_unread'] ?? false),
+            'last_message_at' => $contact['last_message_at'] ?? null,
+            'last_message_text' => $contact['last_message_text'] ?? null,
+            'contact' => $contact,
+        ];
+    }
+
+    /**
+     * @param  Collection<int|string, list<int>>  $parentToStudentIds
+     * @return list<string>
+     */
+    private function conversationPeerKeysForMessage(Message $message, int $teacherId, Collection $parentToStudentIds): array
+    {
+        $keys = [];
+
+        if ($message->from_type === 'teacher' && (int) $message->from_id === $teacherId) {
+            $peerType = $this->normalizePeerType((string) $message->to_type);
+            if ($peerType !== null) {
+                $keys[] = "{$peerType}:{$message->to_id}";
+            }
+
+            return array_values(array_unique($keys));
+        }
+
+        if ($message->to_type !== 'teacher' || (int) $message->to_id !== $teacherId) {
+            return [];
+        }
+
+        if ($message->from_type === 'parent') {
+            $studentIds = $parentToStudentIds->get((int) $message->from_id, []);
+            foreach ($studentIds as $studentId) {
+                $keys[] = "student:{$studentId}";
+            }
+            $keys[] = 'parent:' . (int) $message->from_id;
+
+            return array_values(array_unique($keys));
+        }
+
+        $peerType = $this->normalizePeerType((string) $message->from_type);
+        if ($peerType !== null) {
+            $keys[] = "{$peerType}:{$message->from_id}";
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    /**
+     * @param  Collection<int|string, list<int>>  $parentToStudentIds
+     */
+    private function incomingMessageMatchesPeerKey(
+        Message $message,
+        int $teacherId,
+        string $peerKey,
+        Collection $parentToStudentIds
+    ): bool {
+        return in_array($peerKey, $this->conversationPeerKeysForMessage($message, $teacherId, $parentToStudentIds), true);
+    }
+
+    private function normalizePeerType(string $type): ?string
+    {
+        return match ($type) {
+            'admin', 'super_admin' => 'admin',
+            'teacher', 'parent', 'student' => $type,
+            default => null,
+        };
     }
 }
 

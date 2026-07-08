@@ -257,6 +257,17 @@ use Illuminate\Support\Facades\Storage;
                                         </div>
                                     </div>
                                 </div>
+                                <div class="col-md-6">
+                                    <div class="info-item">
+                                        <div class="info-label">
+                                            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">payments</span>
+                                            Salary
+                                        </div>
+                                        <div class="info-value">
+                                            <strong style="color: #003471;">Rs. {{ number_format($job_inquiry->salary ?? 0, 2) }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -331,7 +342,7 @@ use Illuminate\Support\Facades\Storage;
                                             CV/Resume
                                         </div>
                                         <div class="info-value">
-                                            <a href="{{ Storage::url($job_inquiry->cv_resume) }}" target="_blank" class="btn btn-sm btn-primary">
+                                            <a href="{{ route('staff.job-inquiry.cv', $job_inquiry) }}" target="_blank" class="btn btn-sm btn-primary">
                                                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">download</span>
                                                 Download CV/Resume
                                             </a>

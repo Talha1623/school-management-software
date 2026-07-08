@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\GeneralSetting;
+use App\Services\AutoStudentAttendanceService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,13 +16,21 @@ class AutomationSettingsController extends Controller
     {
         $settings = GeneralSetting::getSettings();
         $automation = $this->automationSettings($settings);
+        $attendanceAutomation = app(AutoStudentAttendanceService::class);
 
-        return view('settings.automation', compact('automation'));
+        app(AutoStudentAttendanceService::class)->runIfDue();
+
+        return view('settings.automation', [
+            'automation' => $automation,
+            'schoolStartTime' => $attendanceAutomation->formattedSchoolStartTime(),
+            'attendanceCutoffTime' => $attendanceAutomation->formattedCutoffTime(),
+        ]);
     }
 
     public function update(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'attendance_automation_mode' => ['nullable', 'string', 'in:enabled,manual'],
             'attendance_time_limit' => ['nullable', 'integer', 'min:0'],
             'fee_reminder_days' => ['nullable', 'integer', 'min:0'],
             'late_fee_percentage' => ['nullable', 'numeric', 'min:0'],
@@ -32,9 +41,11 @@ class AutomationSettingsController extends Controller
         $settings = GeneralSetting::getSettings();
         $this->ensureAutomationColumn();
 
+        $attendanceMode = $validated['attendance_automation_mode'] ?? 'manual';
+
         $settings->automation_settings = [
-            'auto_attendance' => $request->boolean('auto_attendance'),
-            'auto_absent' => $request->boolean('auto_absent'),
+            'auto_attendance' => $attendanceMode === 'enabled',
+            'auto_absent' => false,
             'attendance_time_limit' => $validated['attendance_time_limit'] ?? null,
             'auto_notify_absent' => $request->boolean('auto_notify_absent'),
             'auto_notify_fee' => $request->boolean('auto_notify_fee'),
@@ -47,6 +58,8 @@ class AutomationSettingsController extends Controller
             'backup_time' => $validated['backup_time'] ?? '02:00',
         ];
         $settings->save();
+
+        app(AutoStudentAttendanceService::class)->runIfDue();
 
         return redirect()
             ->route('settings.automation')

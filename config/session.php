@@ -73,7 +73,9 @@ return [
     |
     */
 
-    'connection' => env('SESSION_CONNECTION'),
+    // Always store sessions on the main platform DB so login/CSRF works even when
+    // tenant DB credentials or the tenant `sessions` table are misconfigured.
+    'connection' => env('SESSION_CONNECTION', 'landlord'),
 
     /*
     |--------------------------------------------------------------------------

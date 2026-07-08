@@ -23,15 +23,7 @@ class TestScheduleController extends Controller
         $campuses = $this->resolveCampuses();
         $classes = collect();
 
-        // Get test types
-        $testTypes = Test::whereNotNull('test_type')->distinct()->pluck('test_type')->sort()->values();
-
-        if ($testTypes->isEmpty()) {
-            $testTypes = collect(['Quiz', 'Mid Term', 'Final Term', 'Assignment', 'Project', 'Oral Test', 'Daily Test', 'Weekly Test', 'Monthly Test']);
-        } else {
-            $defaultTypes = ['Daily Test', 'Weekly Test', 'Monthly Test'];
-            $testTypes = $testTypes->merge($defaultTypes)->unique()->sort()->values();
-        }
+        $testTypes = $this->resolveTestTypes();
 
         $testsQuery = Test::query()
             ->when($request->filled('filter_campus'), function ($query) use ($request) {
@@ -41,6 +33,9 @@ class TestScheduleController extends Controller
         $this->applyTeacherScope($testsQuery);
 
         $tests = $testsQuery->orderBy('date', 'asc')->get();
+        $tests->each(function (Test $test) {
+            $test->test_type = $this->formatTestTypeLabel($test->test_type);
+        });
 
         return view('test.schedule', compact(
             'campuses',
@@ -178,7 +173,7 @@ class TestScheduleController extends Controller
                 $query->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($filterSection))]);
             }
             if ($filterTestType) {
-                $query->where('test_type', $filterTestType);
+                $query->whereRaw('LOWER(TRIM(test_type)) = ?', [strtolower(trim((string) $filterTestType))]);
             }
             if ($filterFromDate) {
                 $query->whereDate('date', '>=', $filterFromDate);
@@ -198,7 +193,7 @@ class TestScheduleController extends Controller
                     'for_class' => $test->for_class,
                     'section' => $test->section,
                     'subject' => $test->subject,
-                    'test_type' => $test->test_type,
+                    'test_type' => $this->formatTestTypeLabel($test->test_type),
                     'date' => $test->date ? date('d M Y', strtotime($test->date)) : 'N/A',
                     'date_raw' => $test->date ? $test->date->format('Y-m-d') : null,
                 ];
@@ -313,5 +308,34 @@ class TestScheduleController extends Controller
                 $campusQuery->orWhereRaw('LOWER(TRIM(campus)) = ?', [$campusKey]);
             }
         });
+    }
+
+    private function resolveTestTypes(): \Illuminate\Support\Collection
+    {
+        return collect([
+            'Daily Test',
+            'Weekly Test',
+            'Monthly Test',
+        ]);
+    }
+
+    private function formatTestTypeLabel(?string $testType): string
+    {
+        $normalized = strtolower(trim(preg_replace('/\s+/', ' ', (string) $testType)));
+        if ($normalized === '') {
+            return 'N/A';
+        }
+
+        $words = explode(' ', $normalized);
+        $wordCount = count($words);
+        if ($wordCount >= 2 && $wordCount % 2 === 0) {
+            $firstHalf = array_slice($words, 0, (int) ($wordCount / 2));
+            $secondHalf = array_slice($words, (int) ($wordCount / 2));
+            if ($firstHalf === $secondHalf) {
+                $normalized = implode(' ', $firstHalf);
+            }
+        }
+
+        return ucwords($normalized);
     }
 }

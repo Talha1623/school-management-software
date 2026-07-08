@@ -36,7 +36,10 @@
                 <div class="col-md-3">
                     <label for="filter_fee_type" class="form-label mb-1 fs-12 fw-semibold" style="color: #003471;">Fee Type</label>
                     <select class="form-select form-select-sm" id="filter_fee_type" style="height: 32px;" disabled>
-                        <option value="">Select Campus First</option>
+                        <option value="">All Fee Types</option>
+                        @foreach($bulkFeeTypes as $feeTypeOption)
+                            <option value="{{ $feeTypeOption['value'] }}">{{ $feeTypeOption['label'] }}</option>
+                        @endforeach
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -161,54 +164,26 @@ document.addEventListener('DOMContentLoaded', function() {
         sectionSelect.disabled = true;
     }
 
-    function loadFeeTypesByCampus(campus) {
+    function enableBulkFeeTypeFilter(campus) {
         const feeTypeSelect = document.getElementById('filter_fee_type');
         if (!feeTypeSelect) {
             return;
         }
 
         if (!campus || campus === '') {
-            feeTypeSelect.innerHTML = '<option value="">Select Campus First</option>';
+            feeTypeSelect.value = '';
             feeTypeSelect.disabled = true;
             return;
         }
 
-        feeTypeSelect.innerHTML = '<option value="">All</option>';
         feeTypeSelect.disabled = false;
-
-        fetch(`{{ route('accountant.custom-fee.get-fee-types-by-campus', [], false) }}?campus=${encodeURIComponent(campus)}`, {
-            credentials: 'same-origin',
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.fee_types && data.fee_types.length > 0) {
-                data.fee_types.forEach(feeType => {
-                    const option = document.createElement('option');
-                    option.value = feeType;
-                    option.textContent = feeType;
-                    feeTypeSelect.appendChild(option);
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error loading fee types:', error);
-        });
     }
 
     function loadClassesForCampus() {
         const campus = campusSelect.value;
 
         resetClassesAndSections();
-        loadFeeTypesByCampus(campus);
+        enableBulkFeeTypeFilter(campus);
 
         if (!campus) {
             return;
@@ -353,16 +328,17 @@ function renderBulkFees(items) {
     items.forEach(item => {
         const row = document.createElement('tr');
         row.dataset.generatedId = item.generated_id || '';
+        row.dataset.baseAmount = formatNumber(item.amount);
         row.innerHTML = `
             <td>${escapeHtml(item.student_code)}</td>
             <td class="text-danger fw-semibold">${escapeHtml(item.student_name)}</td>
             <td>${escapeHtml(item.parent_name)}</td>
             <td>${escapeHtml(item.payment_title)}</td>
-            <td><input type="number" class="form-control form-control-sm bulk-input" value="${formatNumber(item.amount)}" disabled></td>
-            <td><input type="number" class="form-control form-control-sm bulk-input" value="${formatNumber(item.late_fee)}"></td>
+            <td><input type="number" class="form-control form-control-sm bulk-input principal-input" value="${formatNumber(item.amount)}" disabled></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm bulk-input late-fee-input" value="${formatNumber(item.late_fee)}"></td>
             <td><input type="number" class="form-control form-control-sm bulk-input total-due-input" value="${formatNumber(item.total_due)}" readonly></td>
-            <td><input type="number" class="form-control form-control-sm bulk-input payment-input" value="${formatNumber(item.payment)}"></td>
-            <td><input type="number" class="form-control form-control-sm bulk-input discount-input" value="${formatNumber(item.discount)}"></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm bulk-input payment-input" value="${formatNumber(item.payment)}"></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm bulk-input discount-input" value="${formatNumber(item.discount)}"></td>
             <td><input type="date" class="form-control form-control-sm bulk-input" value="${item.payment_date}"></td>
             <td>
                 <select class="form-select form-select-sm bulk-select fully-paid-select">
@@ -372,7 +348,68 @@ function renderBulkFees(items) {
             </td>
         `;
         tbody.appendChild(row);
+        syncBulkPaymentRow(row);
     });
+}
+
+function getBulkRowInputs(row) {
+    return {
+        principalInput: row.querySelector('.principal-input'),
+        lateFeeInput: row.querySelector('.late-fee-input'),
+        totalDueInput: row.querySelector('.total-due-input'),
+        paymentInput: row.querySelector('.payment-input'),
+        discountInput: row.querySelector('.discount-input'),
+        fullyPaidSelect: row.querySelector('.fully-paid-select'),
+    };
+}
+
+function syncBulkPaymentRow(row, options = {}) {
+    const { forceFullPay = false, fromPaymentInput = false } = options;
+    const {
+        principalInput,
+        lateFeeInput,
+        totalDueInput,
+        paymentInput,
+        discountInput,
+        fullyPaidSelect,
+    } = getBulkRowInputs(row);
+
+    if (!principalInput || !lateFeeInput || !totalDueInput || !paymentInput || !discountInput) {
+        return;
+    }
+
+    const principalDue = parseFloat(row.dataset.baseAmount || principalInput.value || 0) || 0;
+    const lateFee = Math.max(0, parseFloat(lateFeeInput.value || 0) || 0);
+    let discount = Math.max(0, parseFloat(discountInput.value || 0) || 0);
+    const fullDue = Math.max(0, principalDue + lateFee);
+
+    if (discount > fullDue) {
+        discount = fullDue;
+        discountInput.value = discount.toFixed(2);
+    }
+
+    const maxPayment = Math.max(0, fullDue - discount);
+
+    if (forceFullPay || (fullyPaidSelect?.value === 'Yes' && !fromPaymentInput)) {
+        paymentInput.value = maxPayment.toFixed(2);
+    } else {
+        let currentPayment = parseFloat(paymentInput.value || 0) || 0;
+        if (currentPayment < 0) {
+            currentPayment = 0;
+            paymentInput.value = '0';
+        }
+        if (currentPayment > maxPayment + 0.01) {
+            paymentInput.value = maxPayment.toFixed(2);
+        }
+    }
+
+    const payment = parseFloat(paymentInput.value || 0) || 0;
+    const remainingDue = Math.max(0, maxPayment - payment);
+    totalDueInput.value = remainingDue.toFixed(2);
+
+    if (fullyPaidSelect) {
+        fullyPaidSelect.value = remainingDue <= 0.01 && maxPayment > 0 ? 'Yes' : 'No';
+    }
 }
 
 function formatNumber(value) {
@@ -395,31 +432,16 @@ document.addEventListener('input', function(event) {
         return;
     }
 
-    if (
-        !event.target.classList.contains('payment-input') &&
-        !event.target.classList.contains('discount-input') &&
-        !event.target.classList.contains('bulk-input')
-    ) {
+    if (event.target.classList.contains('payment-input')) {
+        syncBulkPaymentRow(row, { fromPaymentInput: true });
         return;
     }
 
-    const amountInput = row.querySelector('input[disabled]');
-    const lateFeeInput = row.querySelector('td:nth-child(6) input');
-    const totalDueInput = row.querySelector('.total-due-input');
-    const paymentInput = row.querySelector('.payment-input');
-    const discountInput = row.querySelector('.discount-input');
-    const fullyPaidSelect = row.querySelector('.fully-paid-select');
-
-    const amount = parseFloat(amountInput?.value || 0) || 0;
-    const lateFee = parseFloat(lateFeeInput?.value || 0) || 0;
-    const payment = parseFloat(paymentInput?.value || 0) || 0;
-    const discount = parseFloat(discountInput?.value || 0) || 0;
-
-    const totalDue = Math.max(amount + lateFee - payment - discount, 0);
-    totalDueInput.value = totalDue.toFixed(2);
-
-    if (fullyPaidSelect) {
-        fullyPaidSelect.value = totalDue <= 0 ? 'Yes' : 'No';
+    if (
+        event.target.classList.contains('discount-input') ||
+        event.target.classList.contains('late-fee-input')
+    ) {
+        syncBulkPaymentRow(row);
     }
 });
 
@@ -431,28 +453,13 @@ document.addEventListener('change', function(event) {
     if (!row) {
         return;
     }
-    const amountInput = row.querySelector('input[disabled]');
-    const lateFeeInput = row.querySelector('td:nth-child(6) input');
-    const paymentInput = row.querySelector('.payment-input');
-    const discountInput = row.querySelector('.discount-input');
-    const totalDueInput = row.querySelector('.total-due-input');
-
-    const amount = parseFloat(amountInput?.value || 0) || 0;
-    const lateFee = parseFloat(lateFeeInput?.value || 0) || 0;
-    const discount = parseFloat(discountInput?.value || 0) || 0;
-
-    if (event.target.value === 'Yes') {
-        const fullPayment = Math.max(amount + lateFee - discount, 0);
-        paymentInput.value = fullPayment.toFixed(2);
-        totalDueInput.value = '0.00';
-    }
+    syncBulkPaymentRow(row, { forceFullPay: event.target.value === 'Yes' });
 });
 
 function saveBulkPayments() {
     const rows = Array.from(document.querySelectorAll('#bulkFeeBody tr'));
     const items = rows.map(row => {
-        const amountInput = row.querySelector('input[disabled]');
-        const lateFeeInput = row.querySelector('td:nth-child(6) input');
+        const lateFeeInput = row.querySelector('.late-fee-input');
         const paymentInput = row.querySelector('.payment-input');
         const discountInput = row.querySelector('.discount-input');
         const dateInput = row.querySelector('input[type="date"]');
@@ -464,7 +471,7 @@ function saveBulkPayments() {
             late_fee: parseFloat(lateFeeInput?.value || 0) || 0,
             payment_date: dateInput?.value || ''
         };
-    }).filter(item => item.generated_id);
+    }).filter(item => item.generated_id && (item.payment > 0 || item.late_fee > 0));
 
     if (!items.length) {
         alert('No rows to save.');

@@ -279,10 +279,14 @@ document.addEventListener('DOMContentLoaded', function() {
         fees.forEach(fee => {
             const option = document.createElement('option');
             const amount = Number(fee.payment_amount || 0).toFixed(2);
+            const late = Number(fee.late_fee || 0);
             option.value = fee.id;
-            option.textContent = `${fee.payment_title} - ${amount}`;
+            option.textContent = late > 0
+                ? `${fee.payment_title} - ${amount} (incl. late ${late.toFixed(2)})`
+                : `${fee.payment_title} - ${amount}`;
             option.dataset.title = fee.payment_title || '';
             option.dataset.amount = fee.payment_amount || 0;
+            option.dataset.lateFee = late;
             generatedFeeSelect.appendChild(option);
         });
         generatedFeeSelect.disabled = false;

@@ -9,6 +9,11 @@ cd "$ROOT"
 
 echo "Deploy cleanup in: $ROOT"
 
+if command -v composer >/dev/null 2>&1 && [ -f composer.lock ]; then
+  echo "Installing PHP dependencies..."
+  composer install --no-dev --optimize-autoloader --no-interaction
+fi
+
 php artisan optimize:clear
 php artisan config:cache
 php artisan route:cache

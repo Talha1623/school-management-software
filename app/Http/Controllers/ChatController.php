@@ -132,6 +132,8 @@ class ChatController extends Controller
 
         $selectedRecipient = null;
         $messages = collect();
+        $isSuperAdmin = ! empty($admin->super_admin);
+        $unreadBySender = Message::unreadCountsBySenderForAdminInbox((int) $admin->id, $isSuperAdmin);
 
         if (in_array($selectedType, ['teacher', 'student', 'parent', 'accountant'], true) && $selectedId > 0) {
             if ($selectedType === 'teacher') {
@@ -146,17 +148,23 @@ class ChatController extends Controller
 
             if ($selectedRecipient) {
                 $messages = Message::query()
-                    ->where(function ($outer) use ($admin, $selectedType, $selectedRecipient) {
+                    ->where(function ($outer) use ($admin, $selectedType, $selectedRecipient, $isSuperAdmin) {
                         $outer->where(function ($q) use ($admin, $selectedType, $selectedRecipient) {
                             $q->where('from_type', 'admin')
                                 ->where('from_id', $admin->id)
                                 ->where('to_type', $selectedType)
                                 ->where('to_id', $selectedRecipient->id);
-                        })->orWhere(function ($q) use ($admin, $selectedType, $selectedRecipient) {
+                        })->orWhere(function ($q) use ($admin, $selectedType, $selectedRecipient, $isSuperAdmin) {
                             $q->where('from_type', $selectedType)
-                                ->where('from_id', $selectedRecipient->id)
-                                ->where('to_type', 'admin')
-                                ->where('to_id', $admin->id);
+                                ->where('from_id', $selectedRecipient->id);
+
+                            if ($isSuperAdmin) {
+                                $q->whereIn('to_type', ['admin', 'super_admin'])
+                                    ->where('to_id', $admin->id);
+                            } else {
+                                $q->where('to_type', 'admin')
+                                    ->where('to_id', $admin->id);
+                            }
                         });
                     })
                     ->forLiveChat()
@@ -181,9 +189,14 @@ class ChatController extends Controller
                     });
 
                 // Mark all unread messages from selected recipient to this admin as read
-                Message::where('from_type', $selectedType)
+                Message::query()
+                    ->where('from_type', $selectedType)
                     ->where('from_id', $selectedRecipient->id)
-                    ->where('to_type', 'admin')
+                    ->when($isSuperAdmin, function ($q) {
+                        $q->whereIn('to_type', ['admin', 'super_admin']);
+                    }, function ($q) {
+                        $q->where('to_type', 'admin');
+                    })
                     ->where('to_id', $admin->id)
                     ->whereNull('read_at')
                     ->update(['read_at' => now()]);
@@ -204,8 +217,41 @@ class ChatController extends Controller
             'selectedSection',
             'selectedType',
             'selectedRecipient',
-            'messages'
+            'messages',
+            'unreadBySender'
         ));
+    }
+
+    /**
+     * Unread live-chat message count for the current user (sidebar badge polling).
+     */
+    public function unreadCount(): JsonResponse
+    {
+        $admin = Auth::guard('admin')->user();
+        if ($admin) {
+            return response()->json([
+                'count' => Message::unreadLiveChatCountForAdminInbox(
+                    (int) $admin->id,
+                    ! empty($admin->super_admin)
+                ),
+            ]);
+        }
+
+        $staff = Auth::guard('staff')->user();
+        if ($staff) {
+            return response()->json([
+                'count' => Message::unreadLiveChatCount('teacher', (int) $staff->id),
+            ]);
+        }
+
+        $accountant = Auth::guard('accountant')->user();
+        if ($accountant) {
+            return response()->json([
+                'count' => Message::unreadLiveChatCount('accountant', (int) $accountant->id),
+            ]);
+        }
+
+        return response()->json(['count' => 0], 401);
     }
 
     /**
@@ -456,8 +502,14 @@ class ChatController extends Controller
         }
 
         // Mark all unread messages from teachers to this admin as read
+        $isSuperAdmin = ! empty($admin->super_admin);
+
         Message::whereIn('from_type', ['teacher', 'student', 'parent', 'accountant', 'accountant_notification', 'staff_notification'])
-            ->where('to_type', 'admin')
+            ->when($isSuperAdmin, function ($q) {
+                $q->whereIn('to_type', ['admin', 'super_admin']);
+            }, function ($q) {
+                $q->where('to_type', 'admin');
+            })
             ->where('to_id', $admin->id)
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
@@ -476,9 +528,9 @@ class ChatController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        Message::where('from_type', 'accountant')
-            ->where('to_type', 'accountant')
+        Message::where('to_type', 'accountant')
             ->where('to_id', $accountant->id)
+            ->whereIn('from_type', ['admin', 'super_admin', 'staff_notification', 'accountant'])
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
 

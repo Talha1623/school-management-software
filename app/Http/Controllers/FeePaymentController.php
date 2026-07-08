@@ -8,6 +8,8 @@ use App\Models\ManagementExpense;
 use App\Models\Campus;
 use App\Models\ClassModel;
 use App\Models\Section;
+use App\Models\GeneralSetting;
+use App\Services\FeePaymentWebTables;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -48,23 +50,10 @@ class FeePaymentController extends Controller
         // Calculate Balance Today
         $balanceToday = $incomeToday - $expenseToday;
         
-        // Get latest payments with student information (only actual payments, not generated)
-        $latestPayments = StudentPayment::join('students', function ($join) {
-                $join->on(\DB::raw('LOWER(TRIM(student_payments.student_code))'), '=', \DB::raw('LOWER(TRIM(students.student_code))'));
-            })
-            ->whereNotNull('student_payments.method')
-            ->whereNotIn('student_payments.method', ['Generated', 'Installment']) // Actual payments only (not unpaid fee stubs)
-            ->whereNotNull('students.student_code')
-            ->select(
-                'student_payments.*',
-                'students.student_name',
-                'students.father_name',
-                'students.class',
-                'students.section'
-            )
-            ->orderBy('student_payments.created_at', 'desc')
-            ->limit(10)
-            ->get();
+        // Latest payments: payment_date order (includes Student Payment full-pay row updates)
+        $latestPayments = collect(FeePaymentWebTables::latestPaymentsGlobal(10)['rows'] ?? [])
+            ->map(fn (array $row) => FeePaymentWebTables::mapLatestPaymentRowForWeb($row))
+            ->values();
         
         // Get campuses for Partial Payment modal
         $campuses = Campus::orderBy('campus_name', 'asc')->get();
@@ -79,7 +68,10 @@ class FeePaymentController extends Controller
             }
         }
         
+        $settings = GeneralSetting::getSettings();
+        
         return view('fee-payment', compact(
+            'settings',
             'unpaidInvoices',
             'incomeToday',
             'expenseToday',

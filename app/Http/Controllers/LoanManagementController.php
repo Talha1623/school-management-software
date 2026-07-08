@@ -4,15 +4,74 @@ namespace App\Http\Controllers;
 
 use App\Models\Loan;
 use App\Models\Staff;
+use App\Models\AdminRole;
+use App\Models\Message;
 use App\Models\GeneralSetting;
 use App\Services\StaffLoanRepaymentService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class LoanManagementController extends Controller
 {
+    private function notifyAboutNewLoan(Loan $loan): void
+    {
+        $publisher = Auth::guard('admin')->user();
+        if (!$publisher) {
+            return;
+        }
+
+        $staff = Staff::find($loan->staff_id);
+        if (!$staff) {
+            return;
+        }
+
+        $publisherId = (int) $publisher->id;
+        $text = sprintf(
+            '%s added a loan for %s. Requested: %s. Approved: %s. Instalments: %d. Status: %s.',
+            $publisher->name ?? 'Admin',
+            $staff->name ?? 'Staff',
+            number_format((float) ($loan->requested_amount ?? 0), 2),
+            number_format((float) ($loan->approved_amount ?? 0), 2),
+            (int) ($loan->repayment_instalments ?? 0),
+            $loan->status ?? 'Approved'
+        );
+
+        Message::create([
+            'from_type' => 'admin',
+            'from_id' => $publisherId,
+            'to_type' => 'teacher',
+            'to_id' => (int) $staff->id,
+            'text' => $text,
+            'attachment_path' => null,
+            'attachment_type' => null,
+            'read_at' => null,
+        ]);
+
+        AdminRole::query()
+            ->select('id')
+            ->orderBy('id')
+            ->get()
+            ->each(function (AdminRole $admin) use ($publisherId, $text) {
+                if ((int) $admin->id === $publisherId) {
+                    return;
+                }
+
+                Message::create([
+                    'from_type' => 'staff_notification',
+                    'from_id' => $publisherId,
+                    'to_type' => 'admin',
+                    'to_id' => $admin->id,
+                    'text' => $text,
+                    'attachment_path' => null,
+                    'attachment_type' => null,
+                    'read_at' => null,
+                ]);
+            });
+    }
+
     /**
      * Display a listing of loans.
      */
@@ -107,10 +166,12 @@ class LoanManagementController extends Controller
             $validated['initial_approved_amount'] = max($requested, $approved);
         }
 
-        Loan::create($validated);
+        $loan = Loan::create($validated);
 
         app(StaffLoanRepaymentService::class)->syncStaffLoanBalances((int) $validated['staff_id']);
         app(GenerateSalaryController::class)->syncPendingSalariesForStaff((int) $validated['staff_id']);
+
+        $this->notifyAboutNewLoan($loan);
 
         return redirect()
             ->route('salary-loan.loan-management')

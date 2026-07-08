@@ -95,12 +95,13 @@
                                 if (Auth::guard('admin')->check()) {
                                     $admin = Auth::guard('admin')->user();
                                     if ($admin) {
+                                        $isSuperAdmin = ! empty($admin->super_admin);
                                         $mailUnreadCount = \App\Models\Message::query()
-                                            ->unreadChatToAdmin((int) $admin->id)
+                                            ->unreadChatToAdmin((int) $admin->id, $isSuperAdmin)
                                             ->count();
 
                                         $mailMessages = \App\Models\Message::query()
-                                            ->unreadChatToAdmin((int) $admin->id)
+                                            ->unreadChatToAdmin((int) $admin->id, $isSuperAdmin)
                                             ->orderBy('created_at', 'desc')
                                             ->limit(10)
                                             ->get()
@@ -222,7 +223,9 @@
                                                     $recipientType = 'accountant';
                                                 } elseif ($message->from_type === 'staff_notification') {
                                                     $sender = \App\Models\Staff::find($message->from_id);
-                                                    $senderName = $sender?->name ?? 'Staff';
+                                                    $senderName = $sender?->name
+                                                        ?? \App\Models\AdminRole::find($message->from_id)?->name
+                                                        ?? 'Staff';
                                                     $recipientType = 'staff_notification';
                                                 } else {
                                                     $sender = \App\Models\Staff::find($message->from_id);
@@ -236,6 +239,10 @@
                                                         $notificationHref = route('expense-management.add');
                                                     } elseif (str_contains($messageText, 'transport fee')) {
                                                         $notificationHref = route('accounting.generate-transport-fee');
+                                                    } elseif (str_contains($messageText, 'custom payment')) {
+                                                        $notificationHref = route('accounting.direct-payment.custom');
+                                                    } elseif (str_contains($messageText, 'bulk fee payment')) {
+                                                        $notificationHref = route('accounting.parent-wallet.bulk-fee-payment');
                                                     } elseif (str_contains($messageText, 'fee payment')) {
                                                         $notificationHref = route('fee-payment');
                                                     } elseif (str_contains($messageText, 'task')) {
@@ -245,6 +252,16 @@
                                                     } else {
                                                         $notificationHref = route('accounting.generate-custom-fee');
                                                     }
+                                                } elseif ($message->from_type === 'staff_notification' && str_contains($messageText, 'assigned you a new task')) {
+                                                    $notificationHref = route('task-management');
+                                                } elseif ($message->from_type === 'staff_notification' && str_contains($messageText, 'noticeboard')) {
+                                                    $notificationHref = route('school.noticeboard');
+                                                } elseif ($message->from_type === 'staff_notification' && (str_contains($messageText, 'added a loan') || str_contains($messageText, 'loan for'))) {
+                                                    $notificationHref = route('salary-loan.loan-management');
+                                                } elseif ($message->from_type === 'staff_notification' && str_contains($messageText, 'test list')) {
+                                                    $notificationHref = route('test.list');
+                                                } elseif ($message->from_type === 'staff_notification' && str_contains($messageText, 'task')) {
+                                                    $notificationHref = route('task-management');
                                                 } else {
                                                     $notificationHref = route('live-chat', [
                                                         'recipient_type' => $recipientType,
@@ -286,12 +303,23 @@
                                                     $senderName = $admin?->name ?? 'Admin';
                                                 }
 
+                                                $messageText = strtolower((string) $message->text);
+                                                if (str_contains($messageText, 'assigned you a new task') || str_contains($messageText, 'task')) {
+                                                    $href = route('task-management');
+                                                } elseif (str_contains($messageText, 'noticeboard')) {
+                                                    $href = route('school.noticeboard');
+                                                } elseif (str_contains($messageText, 'added a loan') || str_contains($messageText, 'loan for')) {
+                                                    $href = route('salary-loan.loan-management');
+                                                } else {
+                                                    $href = '#';
+                                                }
+
                                                 return [
                                                     'id' => 'message-' . $message->id,
                                                     'recipient_type' => 'admin',
                                                     'recipient_id' => $message->from_id,
                                                     'sender_name' => $senderName,
-                                                    'href' => '#',
+                                                    'href' => $href,
                                                     'full_text' => $message->text ?: 'Attachment sent',
                                                     'text' => $message->text
                                                         ? (strlen($message->text) > 80 ? substr($message->text, 0, 80) . '...' : $message->text)

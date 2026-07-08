@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Salary;
 use App\Models\Campus;
 use App\Models\Staff;
+use App\Models\GeneralSetting;
 use App\Services\MobilePushNotificationService;
 use App\Services\StaffLoanRepaymentService;
 use Carbon\Carbon;
@@ -74,8 +75,9 @@ class ManageSalariesController extends Controller
         
         $campuses = $this->campusOptionsForFilter();
         $selectedCampus = $request->get('campus');
+        $settings = GeneralSetting::getSettings();
 
-        return view('salary-loan.manage-salaries', compact('salaries', 'campuses', 'selectedCampus'));
+        return view('salary-loan.manage-salaries', compact('salaries', 'campuses', 'selectedCampus', 'settings'));
     }
 
     /**
@@ -112,13 +114,15 @@ class ManageSalariesController extends Controller
             if ($absentFeePerAbsent !== null && $absentFeePerAbsent >= 0) {
                 $absentFeesTotal = $absentFeePerAbsent * $deductibleAbsents;
             } else {
-                // Use daily rate calculation
-                $daysInMonth = 30;
+                // Use real calendar days for that month (28/29/30/31)
+                $monthNumber = (int) ($this->getMonthNumber($salary->salary_month));
+                $yearNumber = (int) $salary->year;
                 try {
-                    $monthNumber = $this->getMonthNumber($salary->salary_month);
-                    $daysInMonth = \Carbon\Carbon::createFromDate($salary->year, $monthNumber, 1)->daysInMonth;
+                    $daysInMonth = ($monthNumber >= 1 && $monthNumber <= 12 && $yearNumber >= 2000)
+                        ? \Carbon\Carbon::createFromDate($yearNumber, $monthNumber, 1)->daysInMonth
+                        : (int) \Carbon\Carbon::now()->daysInMonth;
                 } catch (\Exception $e) {
-                    $daysInMonth = 30;
+                    $daysInMonth = (int) \Carbon\Carbon::now()->daysInMonth;
                 }
                 $dailyRate = $daysInMonth > 0 ? (($salary->basic ?? 0) / $daysInMonth) : 0;
                 $absentFeesTotal = $dailyRate * $deductibleAbsents;
@@ -187,15 +191,16 @@ class ManageSalariesController extends Controller
         $this->syncPendingSalaryLoan($salary);
         $salary->refresh();
 
-        $loanRepayment = $this->loanRepaymentService->calculate($salary->staff_id, $salary->id);
+        $bonusAmount = (float) ($validated['bonus_amount'] ?? 0);
+        $deductionAmount = (float) ($validated['deduction_amount'] ?? 0);
+
+        // Gross attendance salary (own amount) — loan is only in loan_repayment.
+        $grossFromForm = max(0, (float) $validated['generated_salary']);
+        $loanRepayment = $this->loanRepaymentService->calculate((int) $salary->staff_id, (int) $salary->id);
         if ($loanRepayment <= 0 && isset($validated['loan_repayment'])) {
             $loanRepayment = (float) $validated['loan_repayment'];
         }
 
-        $bonusAmount = (float) ($validated['bonus_amount'] ?? 0);
-        $deductionAmount = (float) ($validated['deduction_amount'] ?? 0);
-
-        $grossFromForm = max(0, (float) $validated['generated_salary']);
         $netSalary = max(0, $grossFromForm - $loanRepayment + $bonusAmount - $deductionAmount);
         $totalDue = $netSalary;
 
@@ -215,7 +220,7 @@ class ManageSalariesController extends Controller
         $updates = [
             'amount_paid' => $finalAmountPaid,
             'loan_repayment' => $loanRepayment,
-            'salary_generated' => $netSalary,
+            'salary_generated' => $grossFromForm,
             'discount' => 0,
             'bonus_amount' => $bonusAmount,
             'deduction_amount' => $deductionAmount,
@@ -472,7 +477,9 @@ class ManageSalariesController extends Controller
         $calculateAttendanceMethod->setAccessible(true);
         $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
         
-        return view('salary-loan.print-receipt', compact('salary', 'attendanceSummary'));
+        $settings = GeneralSetting::getSettings();
+
+        return view('salary-loan.print-receipt', compact('salary', 'attendanceSummary', 'settings'));
     }
 
     /**
@@ -499,7 +506,9 @@ class ManageSalariesController extends Controller
         $calculateAttendanceMethod->setAccessible(true);
         $attendanceSummary = $calculateAttendanceMethod->invoke($generateController, $salary->staff_id, (int) $salary->year, $monthNumber);
         
-        return view('salary-loan.print-receipt-thermal', compact('salary', 'attendanceSummary'));
+        $settings = GeneralSetting::getSettings();
+
+        return view('salary-loan.print-receipt-thermal', compact('salary', 'attendanceSummary', 'settings'));
     }
 
     /**

@@ -146,6 +146,9 @@
     </style>
 </head>
 <body>
+    @php
+        $formatMoney = fn ($amount) => $settings->formatCurrency($amount);
+    @endphp
     <div class="receipt">
         <div class="header">
             <div class="school-name">ROYAL GRAMMAR SCHOOL</div>
@@ -243,33 +246,33 @@
 
         <div class="flex-row">
             <span>Basic Salary:</span>
-            <span>{{ number_format($salary->basic ?? 0, 2) }}</span>
+            <span>{{ $formatMoney($salary->basic ?? 0) }}</span>
         </div>
 
         @if(($salary->bonus_amount ?? 0) > 0)
         <div class="flex-row">
             <span>Bonus:</span>
-            <span>+ {{ number_format($salary->bonus_amount ?? 0, 2) }}</span>
+            <span>+ {{ $formatMoney($salary->bonus_amount ?? 0) }}</span>
         </div>
         @endif
 
         @if(($salary->deduction_amount ?? 0) > 0)
         <div class="flex-row">
             <span>Deduction:</span>
-            <span>- {{ number_format($salary->deduction_amount ?? 0, 2) }}</span>
+            <span>- {{ $formatMoney($salary->deduction_amount ?? 0) }}</span>
         </div>
         @endif
 
         @if($salary->loan_repayment > 0)
         <div class="flex-row">
             <span>Loan Repayment:</span>
-            <span>- {{ number_format($salary->loan_repayment ?? 0, 2) }}</span>
+            <span>- {{ $formatMoney($salary->loan_repayment ?? 0) }}</span>
         </div>
         @endif
 
         <div class="flex-row" style="border-top: 1px dashed #000; margin-top: 4px; padding-top: 4px; font-weight: bold;">
             <span>Salary Generated:</span>
-            <span>{{ number_format($generatedDisplay, 2) }}</span>
+            <span>{{ $formatMoney($generatedDisplay) }}</span>
         </div>
 
         <div class="divider"></div>
@@ -283,7 +286,7 @@
 
         <div class="total-box">
             <span>Amount Paid:</span>
-            <span>{{ number_format($amountPaidDisplay, 2) }}</span>
+            <span>{{ $formatMoney($amountPaidDisplay) }}</span>
         </div>
     </div>
 

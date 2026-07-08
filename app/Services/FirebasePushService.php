@@ -234,9 +234,20 @@ class FirebasePushService
 
     private function deactivateToken(string $token): void
     {
-        StudentDeviceToken::where('fcm_token', $token)->update(['is_active' => false]);
-        ParentDeviceToken::where('fcm_token', $token)->update(['is_active' => false]);
-        StaffDeviceToken::where('fcm_token', $token)->update(['is_active' => false]);
+        foreach ([
+            [StudentDeviceToken::class, 'student_device_tokens'],
+            [ParentDeviceToken::class, 'parent_device_tokens'],
+            [StaffDeviceToken::class, 'staff_device_tokens'],
+        ] as [$model, $table]) {
+            try {
+                if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                    continue;
+                }
+                $model::where('fcm_token', $token)->update(['is_active' => false]);
+            } catch (\Throwable $e) {
+                Log::warning("Failed to deactivate token on {$table}", ['error' => $e->getMessage()]);
+            }
+        }
     }
 }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AdminRole;
 use App\Models\PlatformSchool;
 use App\Services\CpanelProvisioningService;
+use App\Services\TenantDatabaseService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -86,6 +87,14 @@ class PlatformSchoolController extends Controller
         if ($autoProvisionEnabled) {
             $validated['db_database'] = $this->withCpanelPrefix($validated['db_database']);
             $validated['db_username'] = $this->withCpanelPrefix($validated['db_username']);
+
+            try {
+                $this->assertTenantCredentialsAreIsolated($validated['db_database'], $validated['db_username']);
+            } catch (\InvalidArgumentException $exception) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['db_username' => $exception->getMessage()]);
+            }
         }
 
         $baseDomain = (string) config('platform.base_domain');
@@ -252,6 +261,33 @@ class PlatformSchoolController extends Controller
             ->with('success', 'Student limit updated successfully.');
     }
 
+    public function updateDatabaseCredentials(Request $request, PlatformSchool $school): RedirectResponse
+    {
+        $validated = $request->validate([
+            'db_host' => ['required', 'string', 'max:255'],
+            'db_port' => ['required', 'numeric'],
+            'db_database' => ['required', 'string', 'max:255'],
+            'db_username' => ['required', 'string', 'max:255'],
+            'db_password' => ['required', 'string', 'max:255'],
+        ]);
+
+        $connectionName = 'tenant_credentials_test';
+
+        try {
+            app(TenantDatabaseService::class)->testCredentials($validated, $connectionName);
+        } catch (\Throwable $exception) {
+            return redirect()
+                ->route('platform-admin.schools.index')
+                ->with('error', 'Database connection failed for ' . $school->subdomain . '. In cPanel: add user to database with ALL PRIVILEGES, reset password, then save the same password here.');
+        }
+
+        $school->update($validated);
+
+        return redirect()
+            ->route('platform-admin.schools.index')
+            ->with('success', 'Database credentials updated for ' . $school->subdomain . '.');
+    }
+
     public function destroy(PlatformSchool $school): RedirectResponse
     {
         $tenantDatabase = str_replace('`', '``', (string) $school->db_database);
@@ -294,5 +330,23 @@ class PlatformSchoolController extends Controller
         }
 
         return $requiredPrefix . ltrim($normalized, '_');
+    }
+
+    private function assertTenantCredentialsAreIsolated(string $dbDatabase, string $dbUsername): void
+    {
+        $landlordDatabase = strtolower(trim((string) env('DB_DATABASE', '')));
+        $landlordUsername = strtolower(trim((string) env('DB_USERNAME', '')));
+
+        if ($landlordDatabase !== '' && strtolower($dbDatabase) === $landlordDatabase) {
+            throw new \InvalidArgumentException(
+                'Tenant database name cannot be the same as the main application database (' . $landlordDatabase . ').'
+            );
+        }
+
+        if ($landlordUsername !== '' && strtolower($dbUsername) === $landlordUsername) {
+            throw new \InvalidArgumentException(
+                'Tenant database user cannot be the same as the main application database user (' . $landlordUsername . ').'
+            );
+        }
     }
 }

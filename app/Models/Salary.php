@@ -311,16 +311,12 @@ class Salary extends Model
     }
 
     /**
-     * Gross generated salary (attendance-based amount before loan deduction).
+     * Attendance-based generated salary (own amount, before loan).
+     * Stored in salary_generated — loan is only in loan_repayment.
      */
     public function grossSalaryGenerated(): float
     {
-        return round(max(0,
-            (float) ($this->salary_generated ?? 0)
-            + (float) ($this->loan_repayment ?? 0)
-            - (float) ($this->bonus_amount ?? 0)
-            + (float) ($this->deduction_amount ?? 0)
-        ), 2);
+        return round(max(0, (float) ($this->salary_generated ?? 0)), 2);
     }
 
     /**
