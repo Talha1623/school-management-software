@@ -520,8 +520,6 @@ class FeePaymentWebTables
      */
     private static function applyMonthlyAutoLateFeeToBaseRows(Student $student, array $feeRows, Collection $generatedFees): array
     {
-        $today = Carbon::today();
-
         foreach ($feeRows as &$row) {
             $title = (string) ($row['title'] ?? '');
             if (!preg_match('/^Monthly Fee - (\w+) (\d{4})$/i', $title, $matches)) {
@@ -530,6 +528,7 @@ class FeePaymentWebTables
 
             $principalDue = (float) ($row['amount'] ?? 0);
             $remainingLate = (float) ($row['remaining_late'] ?? 0);
+            // Only auto-apply when unpaid principal remains and no late is already counted.
             if ($principalDue <= 0.0001 || $remainingLate > 0.0001) {
                 continue;
             }
@@ -542,6 +541,16 @@ class FeePaymentWebTables
             }
 
             $configuredLate = self::configuredMonthlyLateFeeAmount($student, $matches[1], $matches[2]);
+            if ($configuredLate === null) {
+                // Fallback: if MonthlyFee settings row is missing, use generated row due date + campus month late fee.
+                $configuredLate = self::lateFeeFromGeneratedDueDateFallback(
+                    $student,
+                    $title,
+                    $matches[1],
+                    $matches[2],
+                    $generatedFees
+                );
+            }
             if ($configuredLate === null) {
                 continue;
             }
@@ -557,6 +566,57 @@ class FeePaymentWebTables
     }
 
     /**
+     * When monthly_fees row isn't found/matched, still apply late fee after generated due date.
+     *
+     * @param Collection<int, StudentPayment> $generatedFees
+     */
+    private static function lateFeeFromGeneratedDueDateFallback(
+        Student $student,
+        string $title,
+        string $month,
+        string $year,
+        Collection $generatedFees
+    ): ?float {
+        $generated = $generatedFees
+            ->filter(fn ($fee) => strcasecmp(trim((string) ($fee->payment_title ?? '')), $title) === 0)
+            ->sortByDesc('id')
+            ->first();
+
+        $dueDate = $generated?->payment_date
+            ? Carbon::parse($generated->payment_date)
+            : null;
+        if (!$dueDate || !Carbon::today()->gt($dueDate->copy()->startOfDay())) {
+            return null;
+        }
+
+        $rawLate = self::rawMonthlyLateFeeAmount($student, $month, $year);
+        if ($rawLate !== null) {
+            return $rawLate;
+        }
+
+        // Last resort: any monthly_fees late_fee for this month/year on same campus (any class/section).
+        $campus = strtolower(trim((string) ($student->campus ?? '')));
+        $any = MonthlyFee::query()
+            ->whereRaw('LOWER(TRIM(fee_month)) = ?', [strtolower($month)])
+            ->where(function ($q) use ($year) {
+                $q->where('fee_year', $year)
+                    ->orWhereRaw('CAST(fee_year AS CHAR) = ?', [(string) $year]);
+            })
+            ->when($campus !== '', fn ($q) => $q->whereRaw('LOWER(TRIM(campus)) = ?', [$campus]))
+            ->where('late_fee', '>', 0)
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$any) {
+            return null;
+        }
+
+        $configuredLate = (float) ($any->late_fee ?? 0);
+
+        return $configuredLate > 0.0001 ? round($configuredLate, 2) : null;
+    }
+
+    /**
      * Configured monthly late fee when overdue (null if not applicable).
      */
     public static function configuredMonthlyLateFeeForTitle(Student $student, string $baseTitle): ?float
@@ -569,19 +629,60 @@ class FeePaymentWebTables
     }
 
     /**
+     * Find monthly fee settings for a student month/year.
+     * Prefer exact campus+class+section match, then class-only / campus-only fallbacks
+     * so late fee still applies when section casing or empty section differs.
+     */
+    public static function findMonthlyFeeRecord(Student $student, string $month, string|int $year): ?MonthlyFee
+    {
+        $month = trim($month);
+        $year = (string) $year;
+        if ($month === '' || $year === '') {
+            return null;
+        }
+
+        $campus = strtolower(trim((string) ($student->campus ?? '')));
+        $class = strtolower(trim((string) ($student->class ?? '')));
+        $section = strtolower(trim((string) ($student->section ?? '')));
+
+        $base = MonthlyFee::query()
+            ->whereRaw('LOWER(TRIM(fee_month)) = ?', [strtolower($month)])
+            ->where(function ($q) use ($year) {
+                $q->where('fee_year', $year)
+                    ->orWhereRaw('CAST(fee_year AS CHAR) = ?', [$year]);
+            });
+
+        $exact = (clone $base)
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [$campus])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [$class])
+            ->whereRaw('LOWER(TRIM(section)) = ?', [$section])
+            ->orderByDesc('id')
+            ->first();
+        if ($exact) {
+            return $exact;
+        }
+
+        $classMatch = (clone $base)
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [$campus])
+            ->whereRaw('LOWER(TRIM(class)) = ?', [$class])
+            ->orderByDesc('id')
+            ->first();
+        if ($classMatch) {
+            return $classMatch;
+        }
+
+        return (clone $base)
+            ->whereRaw('LOWER(TRIM(campus)) = ?', [$campus])
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
      * @internal
      */
     private static function configuredMonthlyLateFeeAmount(Student $student, string $month, string $year): ?float
     {
-        $monthlyFeeRecord = MonthlyFee::where('fee_month', $month)
-            ->where('fee_year', $year)
-            ->where(function ($q) use ($student) {
-                $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus ?? ''))])
-                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class ?? ''))])
-                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section ?? ''))]);
-            })
-            ->first();
-
+        $monthlyFeeRecord = self::findMonthlyFeeRecord($student, $month, $year);
         if (!$monthlyFeeRecord) {
             return null;
         }
@@ -606,15 +707,7 @@ class FeePaymentWebTables
      */
     public static function rawMonthlyLateFeeAmount(Student $student, string $month, string $year): ?float
     {
-        $monthlyFeeRecord = MonthlyFee::where('fee_month', $month)
-            ->where('fee_year', $year)
-            ->where(function ($q) use ($student) {
-                $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus ?? ''))])
-                    ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class ?? ''))])
-                    ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section ?? ''))]);
-            })
-            ->first();
-
+        $monthlyFeeRecord = self::findMonthlyFeeRecord($student, $month, $year);
         if (!$monthlyFeeRecord) {
             return null;
         }

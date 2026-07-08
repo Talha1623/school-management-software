@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AdvanceFee;
 use App\Models\ClassModel;
 use App\Models\GeneralSetting;
-use App\Models\MonthlyFee;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\StudentPayment;
@@ -354,8 +353,13 @@ class FeeVoucherBuilder
 
         $today = Carbon::today();
 
-        $latestDueDate = null;
-        if ($pendingPayments->isNotEmpty()) {
+        // Prefer configured monthly due date for the selected voucher month.
+        $monthlyFeeRecord = FeePaymentWebTables::findMonthlyFeeRecord($student, $vouchersFor, $currentYear);
+        $latestDueDate = $monthlyFeeRecord?->due_date
+            ? Carbon::parse($monthlyFeeRecord->due_date)
+            : null;
+
+        if (!$latestDueDate && $pendingPayments->isNotEmpty()) {
             $maxDate = $pendingPayments->max(fn ($payment) => $payment->payment_date ? Carbon::parse($payment->payment_date) : null);
             if ($maxDate) {
                 $latestDueDate = $maxDate;
@@ -363,18 +367,7 @@ class FeeVoucherBuilder
         }
 
         if (!$latestDueDate) {
-            $monthlyFeeRecord = MonthlyFee::where('fee_month', $vouchersFor)
-                ->where('fee_year', $currentYear)
-                ->where(function ($q) use ($student) {
-                    $q->whereRaw('LOWER(TRIM(campus)) = ?', [strtolower(trim($student->campus ?? ''))])
-                        ->whereRaw('LOWER(TRIM(class)) = ?', [strtolower(trim($student->class ?? ''))])
-                        ->whereRaw('LOWER(TRIM(section)) = ?', [strtolower(trim($student->section ?? ''))]);
-                })
-                ->first();
-
-            $latestDueDate = $monthlyFeeRecord
-                ? Carbon::parse($monthlyFeeRecord->due_date)
-                : Carbon::now()->addDays(15);
+            $latestDueDate = Carbon::now()->addDays(15);
         }
 
         $dueDate = $latestDueDate;
@@ -395,6 +388,7 @@ class FeeVoucherBuilder
         $arrearsAmount = 0.0;
         $arrearsFees = collect();
         $currentFees = collect();
+        $appliedLateSum = 0.0;
 
         foreach ($outstandingRows as $row) {
             $feeTitle = (string) ($row['fee_type'] ?? '');
@@ -403,7 +397,9 @@ class FeeVoucherBuilder
             }
 
             $principalDue = round((float) ($row['amount'] ?? 0), 2);
-            if ($principalDue <= 0.0001) {
+            $remainingLate = round((float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0), 2);
+            $rowDue = round((float) ($row['due'] ?? ($principalDue + $remainingLate)), 2);
+            if ($principalDue <= 0.0001 && $remainingLate <= 0.0001 && $rowDue <= 0.0001) {
                 continue;
             }
 
@@ -413,14 +409,19 @@ class FeeVoucherBuilder
                 && $paymentDate
                 && Carbon::parse($paymentDate)->lt($today);
 
+            // Student Vouchers should show the same Due as Fee Payment on the line item:
+            // principal + remaining late (if any).
+            $lineAmount = round(max(0, $principalDue) + max(0, $remainingLate), 2);
+            $appliedLateSum += max(0, $remainingLate);
+
             $line = [
                 'description' => $description,
-                'amount' => $principalDue,
+                'amount' => $lineAmount,
                 'sort_order' => $isArrear ? 0 : (preg_match('/^(Monthly Fee|Transport Fee) - /i', $feeTitle) ? 1 : 2),
             ];
 
             if ($isArrear) {
-                $arrearsAmount += $principalDue;
+                $arrearsAmount += max(0, $principalDue);
                 $arrearsFees->push($line);
             } else {
                 $currentFees->push($line);
@@ -435,32 +436,31 @@ class FeeVoucherBuilder
             ])
             ->values();
 
-        $subtotal = round((float) $outstandingRows->sum(fn ($row) => (float) ($row['amount'] ?? 0)), 2);
+        $subtotal = round((float) $pendingFeesList->sum(fn ($fee) => (float) ($fee['amount'] ?? 0)), 2);
         $currentFeesSubtotal = round(max(0, $subtotal - $arrearsAmount), 2);
-        $lateFee = round((float) ($searchResults['totals']['late_fee'] ?? $outstandingRows->sum(
-            fn ($row) => (float) ($row['remaining_late'] ?? $row['late_fee'] ?? 0)
-        )), 2);
-        $totalBeforeWallet = round((float) ($searchResults['totals']['due'] ?? 0), 2);
+
+        // Late fee is already included in the line items above.
+        $lateFee = 0.0;
+
+        $totalBeforeWallet = round((float) ($searchResults['totals']['due'] ?? $subtotal), 2);
+        if ($totalBeforeWallet < $subtotal - 0.01) {
+            $totalBeforeWallet = $subtotal;
+        }
+
+        // After due date = principal + late already due + any configured late not yet triggered.
         $afterDueLate = FeePaymentWebTables::projectedAfterDueLateTotal($student, $outstandingRows->all());
-        $totalAfterDueBeforeWallet = round(max(0, $subtotal + $afterDueLate), 2);
+        $additionalLateAfterDue = max(0, round($afterDueLate - $appliedLateSum, 2));
+        $totalAfterDueBeforeWallet = round(max(0, $subtotal + $additionalLateAfterDue), 2);
 
-        $walletKey = $this->walletKeyForStudent($student);
-        if (!array_key_exists($walletKey, $walletPool)) {
-            $walletPool[$walletKey] = $this->availableWalletCreditForStudent($student);
-        }
-        $walletCredit = $walletPool[$walletKey];
-        $walletApplied = min($walletCredit, $totalBeforeWallet);
-        $walletAppliedAfterDue = min($walletCredit, $totalAfterDueBeforeWallet);
-        if ($walletApplied > 0) {
-            $pendingFeesList->push([
-                'description' => 'Advance Fee / Wallet Credit',
-                'amount' => -$walletApplied,
-            ]);
-            $walletPool[$walletKey] = max(0, round($walletCredit - $walletApplied, 2));
-        }
+        // Important: Voucher "due" must match the same due shown in Fee Payment.
+        // Fee Payment search totals (due/late) do NOT subtract wallet credit,
+        // so we do not apply wallet credit here either.
+        $walletCredit = 0.0;
+        $walletApplied = 0.0;
+        $walletAppliedAfterDue = 0.0;
 
-        $total = max(0, round($totalBeforeWallet - $walletApplied, 2));
-        $afterDueDate = max(0, round($totalAfterDueBeforeWallet - $walletAppliedAfterDue, 2));
+        $total = max(0, round($totalBeforeWallet, 2));
+        $afterDueDate = max(0, round($totalAfterDueBeforeWallet, 2));
 
         return [
             'student' => $student,

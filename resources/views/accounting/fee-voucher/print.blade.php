@@ -283,10 +283,6 @@
                                     <td><strong>SUBTOTAL</strong></td>
                                     <td><strong>{{ $formatMoney((float) ($v['subtotal'] ?? 0), 0) }}</strong></td>
                                 </tr>
-                                <tr>
-                                    <td>LATE FEE (PREVIOUS DUES)</td>
-                                    <td>{{ $formatMoney((float) ($v['late_fee'] ?? 0), 0) }}</td>
-                                </tr>
                                 <tr class="totals-row">
                                     <td><strong>TOTAL:</strong></td>
                                     <td><strong>{{ $formatMoney((float) ($v['total'] ?? 0), 0) }}</strong></td>
